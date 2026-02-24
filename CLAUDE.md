@@ -20,6 +20,21 @@ ZeroLink is a zero-knowledge secret sharing tool with end-to-end encryption. Use
 3. **Deliver** — RSA-OAEP hybrid encryption wraps the symmetric key; ciphertext stored in Cloudflare KV
 4. **Decrypt** — Recipient loads URL fragment; derives key; decrypts in-browser; link burns after first read
 
+## Design
+
+Figma Make file (React source + design system): https://www.figma.com/make/TrGpBuZS0cvhJaT9ecHrsd/UI-Design-for-ZeroLink
+
+**This is a Figma Make file** — not a static design, but actual generated React code. Use `get_design_context` with fileKey `TrGpBuZS0cvhJaT9ecHrsd` to read source files directly via MCP.
+
+Key resources in the Make file:
+- `ZEROLINK_README.md` — product definition, user flows, design system spec
+- `guidelines/Guidelines.md` — visual guidelines
+- `src/styles/theme.css` — color tokens (neon-purple, neon-magenta, neon-cyan, neon-green, neon-orange)
+- `src/app/pages/` — CreateChannel, UnlockAndLock, ManageAndDeliver page implementations
+- `src/app/components/` — GlassCard, NeonButton, SafetyCode, PassphraseInput, SecurityProfileCard, StatusBadge
+
+Design language: dark glassmorphism (`#0a0a0f` background), neon edge glow, Tailwind CSS v4, Radix UI primitives.
+
 ## Tech Stack
 - **Language**: TypeScript (strict mode)
 - **Frontend**: React 18 + Vite 5 + Zustand + React Router v6 + Zod
