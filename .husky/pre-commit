@@ -1,6 +1,2 @@
-# 运行 lint-staged（仅检查 staged 文件）
 pnpm lint-staged
-
-# 类型检查（全量）
-# 注意：如果还没有创建 packages，这个会失败，先注释掉
-# pnpm typecheck
+pnpm typecheck
