@@ -9,6 +9,7 @@ Read and follow these skills before writing any code:
 - .claude/skills/playwright-testing/SKILL.md
 - .claude/skills/session-management/SKILL.md
 - .claude/skills/code-review/SKILL.md
+- .claude/skills/commit-hygiene/SKILL.md
 
 ## Project Overview
 ZeroLink is a zero-knowledge secret sharing tool with end-to-end encryption. Users share secrets (passwords, API keys, private messages) via single-use links. The server never sees plaintext or private keys. No accounts required.
