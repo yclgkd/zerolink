@@ -32,6 +32,7 @@ import {
   type CommitLockChallengeParams,
   type CommitLockParams,
   LOCK_CHALLENGE_KEY_PREFIX,
+  NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
   SecretVault,
   type SecretVaultEnv,
@@ -215,21 +216,119 @@ function createChannelRecord(state: ChannelState = CHANNEL_STATE.WAITING): Chann
 function createMockState(initialRecord?: ChannelRecord): {
   state: DurableObjectState;
   snapshot: Map<string, unknown>;
+  getAlarm: () => number | null;
 } {
   const snapshot = new Map<string, unknown>();
+  let scheduledAlarm: number | null = null;
   if (initialRecord) {
     snapshot.set(CHANNEL_RECORD_KEY, structuredClone(initialRecord));
   }
 
   const storage = {
-    async get<T = unknown>(key: string): Promise<T | undefined> {
+    async get<T = unknown>(key: string | string[]): Promise<T | Map<string, T> | undefined> {
+      if (Array.isArray(key)) {
+        const values = new Map<string, T>();
+        for (const entryKey of key) {
+          if (snapshot.has(entryKey)) {
+            values.set(entryKey, snapshot.get(entryKey) as T);
+          }
+        }
+        return values;
+      }
+
       return snapshot.get(key) as T | undefined;
     },
-    async put<T>(key: string, value: T): Promise<void> {
-      snapshot.set(key, structuredClone(value));
+    async list<T = unknown>(options?: DurableObjectListOptions): Promise<Map<string, T>> {
+      let keys = [...snapshot.keys()];
+      const prefix = options?.prefix;
+      const start = options?.start;
+      const startAfter = options?.startAfter;
+      const end = options?.end;
+      const reverse = options?.reverse ?? false;
+      const limit = options?.limit;
+
+      if (prefix !== undefined) {
+        keys = keys.filter((key) => key.startsWith(prefix));
+      }
+
+      keys.sort((left, right) => left.localeCompare(right));
+
+      keys = keys.filter((key) => {
+        if (start !== undefined) {
+          if (!reverse && key < start) {
+            return false;
+          }
+          if (reverse && key > start) {
+            return false;
+          }
+        }
+
+        if (startAfter !== undefined) {
+          if (!reverse && key <= startAfter) {
+            return false;
+          }
+          if (reverse && key >= startAfter) {
+            return false;
+          }
+        }
+
+        if (end !== undefined) {
+          if (!reverse && key >= end) {
+            return false;
+          }
+          if (reverse && key <= end) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (reverse) {
+        keys.reverse();
+      }
+
+      if (typeof limit === 'number') {
+        keys = keys.slice(0, limit);
+      }
+
+      const listed = new Map<string, T>();
+      for (const key of keys) {
+        listed.set(key, snapshot.get(key) as T);
+      }
+      return listed;
     },
-    async delete(key: string): Promise<boolean> {
+    async put<T>(key: string | Record<string, T>, value?: T): Promise<void> {
+      if (typeof key === 'string') {
+        snapshot.set(key, structuredClone(value));
+        return;
+      }
+
+      for (const [entryKey, entryValue] of Object.entries(key)) {
+        snapshot.set(entryKey, structuredClone(entryValue));
+      }
+    },
+    async delete(key: string | string[]): Promise<boolean | number> {
+      if (Array.isArray(key)) {
+        let deleted = 0;
+        for (const entryKey of key) {
+          if (snapshot.delete(entryKey)) {
+            deleted += 1;
+          }
+        }
+        return deleted;
+      }
+
       return snapshot.delete(key);
+    },
+    async getAlarm(): Promise<number | null> {
+      return scheduledAlarm;
+    },
+    async setAlarm(scheduledTime: number | Date): Promise<void> {
+      scheduledAlarm = scheduledTime instanceof Date ? scheduledTime.getTime() : scheduledTime;
+    },
+    async deleteAlarm(): Promise<void> {
+      scheduledAlarm = null;
     },
   } as unknown as DurableObjectStorage;
 
@@ -241,7 +340,11 @@ function createMockState(initialRecord?: ChannelRecord): {
     blockConcurrencyWhile: async <T>(callback: () => Promise<T>): Promise<T> => callback(),
   } as unknown as DurableObjectState;
 
-  return { state, snapshot };
+  return {
+    state,
+    snapshot,
+    getAlarm: () => scheduledAlarm,
+  };
 }
 
 const RP_ID = 'zerolink.test';
@@ -295,6 +398,10 @@ function createAssertionFixture(credentialId: Base64Url): AssertionJSON {
       userHandle: null,
     },
   };
+}
+
+function createNonceIndexKey(expiresAt: UnixMs, nonce: Base64Url): string {
+  return `${NONCE_INDEX_KEY_PREFIX}${String(expiresAt).padStart(16, '0')}:${nonce}`;
 }
 
 async function computeCompoundChallengeValue(
@@ -653,7 +760,7 @@ describe('SecretVault compound/delete flow', () => {
     const lockedRecord = new SecretVaultStateMachine(
       createChannelRecord(CHANNEL_STATE.WAITING)
     ).commitLock(lockParams);
-    const { state, snapshot } = createMockState(lockedRecord);
+    const { state, snapshot, getAlarm } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
     const begin = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
     const intent = createUpdateIntent(
@@ -687,6 +794,7 @@ describe('SecretVault compound/delete flow', () => {
       },
     });
 
+    const commitAt = now + 1_000;
     await vault.commitCompound(
       {
         uuid: lockedRecord.uuid,
@@ -694,7 +802,7 @@ describe('SecretVault compound/delete flow', () => {
         intentHash,
         intent,
       },
-      now + 1_000
+      commitAt
     );
 
     const updated = await vault.getRecord();
@@ -702,17 +810,23 @@ describe('SecretVault compound/delete flow', () => {
       usedAt: UnixMs;
       expiresAt: UnixMs;
     };
+    const nonceIndexKey = [...snapshot.keys()].find(
+      (key) => key.startsWith(NONCE_INDEX_KEY_PREFIX) && key.endsWith(`:${intent.nonce}`)
+    );
     const consumedChallenge = snapshot.get(COMPOUND_CHALLENGE_KEY) as {
       consumedAt?: UnixMs;
     };
+    const expectedNonceExpiry = asUnixMs(commitAt + NONCE_TTL_MS);
 
     expect(updated.state).toBe(CHANNEL_STATE.DELIVERED);
     expect(updated.version).toBe(lockedRecord.version + 1);
     expect(updated.cipherBundle).toEqual(intent.cipherBundle);
     expect(updated.deliveredAt).toBe(intent.timestamp);
     expect(updated.adminCredential.signCount).toBe(7);
-    expect(nonceRecord.expiresAt).toBe(asUnixMs(now + 1_000 + NONCE_TTL_MS));
+    expect(nonceRecord.expiresAt).toBe(expectedNonceExpiry);
+    expect(nonceIndexKey).toBe(createNonceIndexKey(expectedNonceExpiry, intent.nonce));
     expect(consumedChallenge.consumedAt).toBeDefined();
+    expect(getAlarm()).toBe(Number(expectedNonceExpiry));
   });
 
   it('commits delete intent and transitions to deleted', async () => {
@@ -821,6 +935,45 @@ describe('SecretVault compound/delete flow', () => {
         now
       )
     ).rejects.toMatchObject({ code: 'NONCE_REPLAY' });
+  });
+
+  it('alarm removes expired nonce keys and keeps active ones', async () => {
+    const now = 1_730_001_450_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state, snapshot, getAlarm } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    const expiredNonce = asBase64Url('nonce_expired_01');
+    const activeNonce = asBase64Url('nonce_active_01');
+    const expiredAt = asUnixMs(now - 1_000);
+    const activeAt = asUnixMs(now + 20_000);
+
+    snapshot.set(`${NONCE_KEY_PREFIX}${expiredNonce}`, {
+      nonce: expiredNonce,
+      usedAt: asUnixMs(now - 2_000),
+      expiresAt: expiredAt,
+    });
+    snapshot.set(`${NONCE_KEY_PREFIX}${activeNonce}`, {
+      nonce: activeNonce,
+      usedAt: asUnixMs(now),
+      expiresAt: activeAt,
+    });
+    snapshot.set(createNonceIndexKey(expiredAt, expiredNonce), {
+      nonce: expiredNonce,
+      expiresAt: expiredAt,
+    });
+    snapshot.set(createNonceIndexKey(activeAt, activeNonce), {
+      nonce: activeNonce,
+      expiresAt: activeAt,
+    });
+
+    await vault.alarm(now);
+
+    expect(snapshot.get(`${NONCE_KEY_PREFIX}${expiredNonce}`)).toBeUndefined();
+    expect(snapshot.get(createNonceIndexKey(expiredAt, expiredNonce))).toBeUndefined();
+    expect(snapshot.get(`${NONCE_KEY_PREFIX}${activeNonce}`)).toBeDefined();
+    expect(snapshot.get(createNonceIndexKey(activeAt, activeNonce))).toBeDefined();
+    expect(getAlarm()).toBe(Number(activeAt));
   });
 
   it('rejects compound commit with timestamp out of allowed skew', async () => {

@@ -86,6 +86,11 @@ interface StoredCompoundChallenge {
   consumedAt?: UnixMs;
 }
 
+interface NonceIndexRecord {
+  nonce: Base64Url;
+  expiresAt: UnixMs;
+}
+
 interface LooseAssertionJson {
   id: Base64Url;
   rawId: Base64Url;
@@ -134,12 +139,25 @@ export const CHANNEL_RECORD_KEY = 'channel_record' as const;
 export const LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
 export const COMPOUND_CHALLENGE_KEY = 'compound_challenge_active' as const;
 export const NONCE_KEY_PREFIX = 'nonce:' as const;
+export const NONCE_INDEX_KEY_PREFIX = 'nonce_index:' as const;
 
 const LOCK_CHALLENGE_ID_BYTES = 16;
 const COMPOUND_CHALLENGE_ID_BYTES = 16;
+const NONCE_INDEX_TIMESTAMP_WIDTH = 16;
+const NONCE_SWEEP_BATCH_SIZE = 128;
+const NONCE_SWEEP_RETRY_DELAY_MS = 1_000;
 
 function lockChallengeStorageKey(id: Base64Url): string {
   return `${LOCK_CHALLENGE_KEY_PREFIX}${id}`;
+}
+
+function nonceStorageKey(nonce: Base64Url): string {
+  return `${NONCE_KEY_PREFIX}${nonce}`;
+}
+
+function nonceIndexStorageKey(expiresAt: UnixMs, nonce: Base64Url): string {
+  const paddedExpiresAt = String(expiresAt).padStart(NONCE_INDEX_TIMESTAMP_WIDTH, '0');
+  return `${NONCE_INDEX_KEY_PREFIX}${paddedExpiresAt}:${nonce}`;
 }
 
 export class SecretVaultStateMachine {
@@ -277,6 +295,13 @@ export class SecretVault {
     return this.notFound();
   }
 
+  async alarm(now: number = Date.now()): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      await this.sweepExpiredNonces(now);
+      await this.scheduleNextNonceCleanup(now);
+    });
+  }
+
   async initialize(record: ChannelRecord): Promise<ChannelRecord> {
     await this.saveRecord(record);
     return record;
@@ -373,14 +398,17 @@ export class SecretVault {
       }
 
       // Nonce replay check
-      const nonceKey = `${NONCE_KEY_PREFIX}${intent.nonce}`;
+      const nonceKey = nonceStorageKey(intent.nonce);
       const existingNonce = await this.ctx.storage.get<NonceRecord>(nonceKey);
       if (existingNonce) {
         if (existingNonce.expiresAt > now) {
           throw new StateTransitionError('NONCE_REPLAY', 'nonce already consumed');
         }
 
-        await this.ctx.storage.delete(nonceKey);
+        await this.ctx.storage.delete([
+          nonceKey,
+          nonceIndexStorageKey(existingNonce.expiresAt, existingNonce.nonce),
+        ]);
       }
 
       // Intent hash verification
@@ -437,12 +465,19 @@ export class SecretVault {
         });
       }
 
-      // Store nonce with TTL
-      await this.ctx.storage.put(nonceKey, {
+      // Store nonce with TTL and track it in a sweep-friendly index.
+      const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
+      const nonceRecord: NonceRecord = {
         nonce: intent.nonce,
         usedAt: asUnixMs(now),
-        expiresAt: asUnixMs(now + NONCE_TTL_MS),
-      });
+        expiresAt: nonceExpiresAt,
+      };
+      await this.ctx.storage.put(nonceKey, nonceRecord);
+      await this.ctx.storage.put(nonceIndexStorageKey(nonceExpiresAt, intent.nonce), {
+        nonce: intent.nonce,
+        expiresAt: nonceExpiresAt,
+      } satisfies NonceIndexRecord);
+      await this.ensureNonceCleanupAlarm(nonceExpiresAt);
 
       // Mark challenge consumed
       await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, {
@@ -541,6 +576,111 @@ export class SecretVault {
       await this.saveRecord(next);
       return next;
     });
+  }
+
+  private async ensureNonceCleanupAlarm(expiresAt: UnixMs): Promise<void> {
+    const scheduledAt = await this.ctx.storage.getAlarm();
+    const targetAt = Number(expiresAt);
+    if (scheduledAt === null || scheduledAt > targetAt) {
+      await this.ctx.storage.setAlarm(targetAt);
+    }
+  }
+
+  private async sweepExpiredNonces(now: number): Promise<void> {
+    const nonceIndexes = await this.ctx.storage.list<NonceIndexRecord>({
+      prefix: NONCE_INDEX_KEY_PREFIX,
+      limit: NONCE_SWEEP_BATCH_SIZE,
+    });
+    if (nonceIndexes.size === 0) {
+      return;
+    }
+
+    const keysToDelete: string[] = [];
+    for (const [indexKey, indexRecord] of nonceIndexes) {
+      const resolved = this.resolveNonceIndexEntry(indexKey, indexRecord);
+      if (!resolved) {
+        keysToDelete.push(indexKey);
+        continue;
+      }
+      if (resolved.expiresAt > now) {
+        break;
+      }
+
+      keysToDelete.push(indexKey, nonceStorageKey(resolved.nonce));
+    }
+
+    if (keysToDelete.length > 0) {
+      await this.ctx.storage.delete(keysToDelete);
+    }
+  }
+
+  private async scheduleNextNonceCleanup(now: number): Promise<void> {
+    while (true) {
+      const firstEntry = await this.readEarliestNonceIndexEntry();
+      if (!firstEntry) {
+        await this.ctx.storage.deleteAlarm();
+        return;
+      }
+
+      const [indexKey, indexRecord] = firstEntry;
+      const resolved = this.resolveNonceIndexEntry(indexKey, indexRecord);
+      if (!resolved) {
+        await this.ctx.storage.delete(indexKey);
+        continue;
+      }
+
+      const nextAlarmAt =
+        resolved.expiresAt <= now ? now + NONCE_SWEEP_RETRY_DELAY_MS : resolved.expiresAt;
+      await this.ctx.storage.setAlarm(nextAlarmAt);
+      return;
+    }
+  }
+
+  private async readEarliestNonceIndexEntry(): Promise<
+    [string, NonceIndexRecord | undefined] | undefined
+  > {
+    const nonceIndexes = await this.ctx.storage.list<NonceIndexRecord>({
+      prefix: NONCE_INDEX_KEY_PREFIX,
+      limit: 1,
+    });
+    const firstEntry = nonceIndexes.entries().next().value;
+    if (!firstEntry) {
+      return undefined;
+    }
+
+    return [firstEntry[0], firstEntry[1]];
+  }
+
+  private resolveNonceIndexEntry(
+    indexKey: string,
+    indexRecord: NonceIndexRecord | undefined
+  ): { nonce: Base64Url; expiresAt: number } | undefined {
+    if (
+      indexRecord &&
+      typeof indexRecord.nonce === 'string' &&
+      Number.isFinite(indexRecord.expiresAt)
+    ) {
+      return {
+        nonce: indexRecord.nonce,
+        expiresAt: Number(indexRecord.expiresAt),
+      };
+    }
+
+    const suffix = indexKey.slice(NONCE_INDEX_KEY_PREFIX.length);
+    const separator = suffix.indexOf(':');
+    if (separator <= 0 || separator === suffix.length - 1) {
+      return undefined;
+    }
+
+    const expiresAt = Number.parseInt(suffix.slice(0, separator), 10);
+    if (!Number.isFinite(expiresAt)) {
+      return undefined;
+    }
+
+    return {
+      nonce: suffix.slice(separator + 1) as Base64Url,
+      expiresAt,
+    };
   }
 
   private async loadRecord(): Promise<ChannelRecord> {

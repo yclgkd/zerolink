@@ -8,6 +8,7 @@ export interface MockAssertionParams {
   rpOrigin: string;
   challenge: Base64Url;
   signCount: number;
+  authenticatorFlags?: number;
 }
 
 export interface MockAssertionResult {
@@ -23,7 +24,7 @@ export interface MockAssertionResult {
 export async function createMockAssertion(
   params: MockAssertionParams
 ): Promise<MockAssertionResult> {
-  const { credentialId, rpId, rpOrigin, challenge, signCount } = params;
+  const { credentialId, rpId, rpOrigin, challenge, signCount, authenticatorFlags = 0x05 } = params;
 
   // Generate a P-256 keypair
   const keyPair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
@@ -50,7 +51,7 @@ export async function createMockAssertion(
   const rpIdHash = new Uint8Array(
     await crypto.subtle.digest('SHA-256', toArrayBufferBytes(toUtf8Bytes(rpId)))
   );
-  const flags = 0x01; // UP flag set
+  const flags = authenticatorFlags; // Defaults to UP + UV
   const signCountBytes = new Uint8Array(4);
   new DataView(signCountBytes.buffer).setUint32(0, signCount, false);
 

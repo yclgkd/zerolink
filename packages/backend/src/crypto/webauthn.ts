@@ -32,6 +32,7 @@ const RP_ID_HASH_LENGTH = 32;
 const FLAGS_OFFSET = 32;
 const SIGN_COUNT_OFFSET = 33;
 const UP_FLAG_BIT = 0x01;
+const UV_FLAG_BIT = 0x04;
 
 /**
  * Verifies a WebAuthn assertion against stored credential data.
@@ -39,7 +40,7 @@ const UP_FLAG_BIT = 0x01;
  * Steps (per PRD Appendix H):
  * 1. credentialId match
  * 2. Decode clientDataJSON; check type, origin, challenge
- * 3. Parse authenticatorData; verify rpIdHash, UP flag
+ * 3. Parse authenticatorData; verify rpIdHash, UP+UV flags
  * 4. Construct signedData = authenticatorData || SHA-256(clientDataJSON)
  * 5. Verify ECDSA P-256 signature with stored public key
  * 6. Check signCount regression (warn, don't hard-block)
@@ -92,6 +93,9 @@ export async function verifyAssertion(params: WebAuthnVerifyParams): Promise<Web
   const flags = authData[FLAGS_OFFSET];
   if (flags === undefined || (flags & UP_FLAG_BIT) === 0) {
     return { ok: false, error: 'user presence flag not set' };
+  }
+  if ((flags & UV_FLAG_BIT) === 0) {
+    return { ok: false, error: 'user verification flag not set' };
   }
 
   // Extract signCount (4 bytes, big-endian)

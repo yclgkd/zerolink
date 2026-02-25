@@ -175,8 +175,36 @@ describe('verifyAssertion', () => {
       rpOrigin: RP_ORIGIN,
     });
 
-    // Either rpIdHash or UP flag check will fail
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({ ok: false, error: 'user presence flag not set' });
+  });
+
+  it('rejects when UV flag is not set', async () => {
+    const challenge = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+    const { assertion, publicKeySpki } = await createMockAssertion({
+      credentialId: CREDENTIAL_ID,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge,
+      signCount: 5,
+      authenticatorFlags: 0x01, // UP only, UV missing
+    });
+
+    const storedCredential: StoredCredential = {
+      credentialId: CREDENTIAL_ID,
+      publicKey: publicKeySpki,
+      signCount: 1,
+      aaguid: AAGUID,
+    };
+
+    const result = await verifyAssertion({
+      assertion,
+      expectedChallenge: challenge,
+      storedCredential,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+    });
+
+    expect(result).toEqual({ ok: false, error: 'user verification flag not set' });
   });
 });
 
