@@ -4,17 +4,26 @@ import type {
   ChannelState,
   CipherBundle,
   HexString,
+  LockChallenge,
   RSAPublicKeyJWK,
   UnixMs,
   UUID,
 } from '@zerolink/shared';
-import { CHANNEL_STATE, CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
+import {
+  CHALLENGE_TTL_MS,
+  CHANNEL_STATE,
+  CHANNEL_TTL_MS,
+  DOMAIN,
+  SECURITY_PROFILE,
+} from '@zerolink/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
   CHANNEL_RECORD_KEY,
   type CommitDeliveryParams,
+  type CommitLockChallengeParams,
   type CommitLockParams,
+  LOCK_CHALLENGE_KEY_PREFIX,
   SecretVault,
   type SecretVaultEnv,
   SecretVaultStateMachine,
@@ -35,6 +44,72 @@ function asHex(value: string): HexString {
 
 function asUnixMs(value: number): UnixMs {
   return value as UnixMs;
+}
+
+function toUtf8Bytes(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
+}
+
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return merged;
+}
+
+function bytesToBinary(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+
+  for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+
+  return binary;
+}
+
+function binaryToBytes(binary: string): Uint8Array {
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+function encodeBase64Url(bytes: Uint8Array): Base64Url {
+  return btoa(bytesToBinary(bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/u, '') as Base64Url;
+}
+
+function decodeBase64Url(value: string): Uint8Array {
+  const base64 = value.replaceAll('-', '+').replaceAll('_', '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return binaryToBytes(atob(padded));
+}
+
+function toArrayBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(bytes);
+}
+
+async function sha256Hex(chunks: readonly Uint8Array[]): Promise<HexString> {
+  const digest = await crypto.subtle.digest('SHA-256', toArrayBufferBytes(concatBytes(chunks)));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+    ''
+  ) as HexString;
+}
+
+function createLockKey(): Base64Url {
+  return encodeBase64Url(Uint8Array.from([1, 35, 69, 103, 137, 171, 205, 239]));
 }
 
 function createReceiverJwk(): RSAPublicKeyJWK {
@@ -89,7 +164,7 @@ function createChannelRecord(state: ChannelState = CHANNEL_STATE.WAITING): Chann
       signCount: 1,
       aaguid: asBase64Url('aaguid-value'),
     },
-    lockKey: asBase64Url('lock-key'),
+    lockKey: createLockKey(),
     version: 0,
   };
 }
@@ -109,6 +184,9 @@ function createMockState(initialRecord?: ChannelRecord): {
     },
     async put<T>(key: string, value: T): Promise<void> {
       snapshot.set(key, structuredClone(value));
+    },
+    async delete(key: string): Promise<boolean> {
+      return snapshot.delete(key);
     },
   } as unknown as DurableObjectStorage;
 
@@ -141,6 +219,20 @@ function expectStateTransitionError(
       expect(error.code).toBe(expectedCode);
     }
   }
+}
+
+async function computeLockProof(
+  uuid: UUID,
+  challenge: LockChallenge,
+  lockKey: Base64Url
+): Promise<HexString> {
+  return sha256Hex([
+    toUtf8Bytes(DOMAIN.LOCK_PROOF),
+    toUtf8Bytes(uuid),
+    decodeBase64Url(challenge.id),
+    decodeBase64Url(challenge.challenge),
+    decodeBase64Url(lockKey),
+  ]);
 }
 
 describe('SecretVaultStateMachine', () => {
@@ -226,7 +318,7 @@ describe('SecretVaultStateMachine', () => {
   });
 });
 
-describe('SecretVault durable object wrapper', () => {
+describe('SecretVault lock challenge flow', () => {
   it('initializes and reads the stored channel record', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
@@ -238,45 +330,202 @@ describe('SecretVault durable object wrapper', () => {
     expect(loaded).toEqual(record);
   });
 
-  it('persists waiting -> locked -> delivered -> deleted transition chain', async () => {
-    const { state, snapshot } = createMockState(createChannelRecord(CHANNEL_STATE.WAITING));
+  it('issues and stores lock challenge on beginLockChallenge', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state, snapshot } = createMockState(record);
     const vault = new SecretVault(state, env);
 
-    const locked = await vault.commitLock(createCommitLockParams());
-    expect(locked.state).toBe(CHANNEL_STATE.LOCKED);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const storedChallenge = snapshot.get(
+      `${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`
+    ) as LockChallenge;
 
-    const delivered = await vault.commitDelivery(createCommitDeliveryParams());
-    expect(delivered.state).toBe(CHANNEL_STATE.DELIVERED);
-    expect(delivered.version).toBe(1);
-
-    const deleted = await vault.commitDelete();
-    expect(deleted.state).toBe(CHANNEL_STATE.DELETED);
-
-    const stored = snapshot.get(CHANNEL_RECORD_KEY) as ChannelRecord;
-    expect(stored.state).toBe(CHANNEL_STATE.DELETED);
-    expect(stored.version).toBe(1);
+    expect(challenge.expiresAt).toBe(asUnixMs(now + CHALLENGE_TTL_MS));
+    expect(storedChallenge.id).toBe(challenge.id);
+    expect(decodeBase64Url(challenge.challenge).byteLength).toBe(32);
   });
 
-  it('throws RECORD_NOT_FOUND when transitioning before initialization', async () => {
-    const { state } = createMockState();
+  it('commits lock challenge successfully and transitions waiting to locked', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const lockProof = await computeLockProof(record.uuid, challenge, record.lockKey);
+    const commitParams: CommitLockChallengeParams = {
+      uuid: record.uuid,
+      lockChallengeId: challenge.id,
+      lockProof,
+      receiverPubJwk: lockParams.receiverPubJwk,
+      receiverPubFpr: lockParams.receiverPubFpr,
+      lockedAt: lockParams.lockedAt,
+    };
+
+    await vault.commitLockChallenge(commitParams, now + 1_000);
+
+    const updated = await vault.getRecord();
+    const storedChallenge = snapshot.get(`${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`) as {
+      consumedAt?: UnixMs;
+    };
+    expect(updated.state).toBe(CHANNEL_STATE.LOCKED);
+    expect(updated.receiver?.pubFpr).toBe(lockParams.receiverPubFpr);
+    expect(storedChallenge.consumedAt).toBeDefined();
+  });
+
+  it('rejects commit when challenge is missing', async () => {
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state } = createMockState(record);
     const vault = new SecretVault(state, env);
 
-    await expect(vault.commitDelete()).rejects.toMatchObject({
-      code: 'RECORD_NOT_FOUND',
+    await expect(
+      vault.commitLockChallenge({
+        uuid: record.uuid,
+        lockChallengeId: asBase64Url('missing-id'),
+        lockProof: asHex('00'),
+        receiverPubJwk: lockParams.receiverPubJwk,
+        receiverPubFpr: lockParams.receiverPubFpr,
+        lockedAt: lockParams.lockedAt,
+      })
+    ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
+  });
+
+  it('rejects commit when challenge is expired', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const lockProof = await computeLockProof(record.uuid, challenge, record.lockKey);
+
+    await expect(
+      vault.commitLockChallenge(
+        {
+          uuid: record.uuid,
+          lockChallengeId: challenge.id,
+          lockProof,
+          receiverPubJwk: lockParams.receiverPubJwk,
+          receiverPubFpr: lockParams.receiverPubFpr,
+          lockedAt: lockParams.lockedAt,
+        },
+        now + CHALLENGE_TTL_MS + 1
+      )
+    ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
+    expect(snapshot.get(`${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`)).toBeUndefined();
+  });
+
+  it('rejects replay commit for consumed challenge', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const lockProof = await computeLockProof(record.uuid, challenge, record.lockKey);
+    const params: CommitLockChallengeParams = {
+      uuid: record.uuid,
+      lockChallengeId: challenge.id,
+      lockProof,
+      receiverPubJwk: lockParams.receiverPubJwk,
+      receiverPubFpr: lockParams.receiverPubFpr,
+      lockedAt: lockParams.lockedAt,
+    };
+
+    const challengeKey = `${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`;
+    const storedChallenge = snapshot.get(challengeKey) as {
+      id: Base64Url;
+      challenge: Base64Url;
+      expiresAt: UnixMs;
+    };
+    snapshot.set(challengeKey, {
+      ...storedChallenge,
+      consumedAt: asUnixMs(now + 500),
+    });
+
+    await expect(vault.commitLockChallenge(params, now + 1_000)).rejects.toMatchObject({
+      code: 'CHALLENGE_CONSUMED',
     });
   });
 
-  it('returns 501 from fetch while api-level wiring is not implemented', async () => {
+  it('rejects commit when lock proof is invalid', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+
+    await expect(
+      vault.commitLockChallenge(
+        {
+          uuid: record.uuid,
+          lockChallengeId: challenge.id,
+          lockProof: asHex('00'),
+          receiverPubJwk: lockParams.receiverPubJwk,
+          receiverPubFpr: lockParams.receiverPubFpr,
+          lockedAt: lockParams.lockedAt,
+        },
+        now + 1_000
+      )
+    ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
+  });
+
+  it('returns 405 for non-POST method in fetch', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
 
-    const response = await vault.fetch(new Request('https://zerolink.test/do/secret-vault'));
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/lock_begin', { method: 'GET' })
+    );
     const payload = (await response.json()) as { ok: false; code: string };
 
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(405);
     expect(payload).toEqual({
       ok: false,
-      code: 'NOT_IMPLEMENTED',
+      code: 'METHOD_NOT_ALLOWED',
+    });
+  });
+
+  it('returns 404 for unknown fetch path', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/unknown_path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({
+      ok: false,
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('returns 400 for invalid lock_begin payload', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/lock_begin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uuid: 'invalid' }),
+      })
+    );
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(400);
+    expect(payload).toEqual({
+      ok: false,
+      code: 'BAD_REQUEST',
     });
   });
 });
