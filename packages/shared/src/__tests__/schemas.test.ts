@@ -26,23 +26,22 @@ import {
   LockBeginResponseSchema,
   LockChallengeSchema,
   LockCommitRequestSchema,
-  LockCommitResponseSchema,
   ManageIntentSchema,
   Pbkdf2ParamsSchema,
   PublicStatusResponseSchema,
-  RSAPublicKeyJWKSchema,
   ReceiverIdentitySchema,
+  RSAPublicKeyJWKSchema,
   SafetyCodeColorSchema,
   SafetyCodeEmojiSchema,
   SafetyCodeSchema,
   SecurityProfileSchema,
   StoredCredentialSchema,
-  UUIDSchema,
   UnixMsSchema,
   UpdateIntentSchema,
+  UUIDSchema,
   WrappedPrivateKeySchema,
 } from '../schemas.ts';
-import type { Base64Url, HexString, UUID, UnixMs } from '../types.ts';
+import type { Base64Url, HexString, UnixMs, UUID } from '../types.ts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

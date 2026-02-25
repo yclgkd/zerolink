@@ -1,7 +1,16 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
-  "organizeImports": {
-    "enabled": true
+  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   },
   "linter": {
     "enabled": true,
@@ -10,7 +19,7 @@
       "suspicious": {
         "noExplicitAny": "error",
         "noDebugger": "error",
-        "noConsoleLog": "warn"
+        "noConsole": "warn"
       },
       "security": {
         "noDangerouslySetInnerHtml": "error"
@@ -18,10 +27,6 @@
       "correctness": {
         "noUnusedVariables": "error",
         "useExhaustiveDependencies": "warn"
-      },
-      "complexity": {
-        "noBannedTypes": "error",
-        "noUselessFragments": "error"
       },
       "style": {
         "noNonNullAssertion": "warn",
@@ -51,6 +56,7 @@
     }
   },
   "files": {
-    "ignore": ["node_modules", "dist", "build", ".turbo", "coverage", "*.min.js", "pnpm-lock.yaml"]
+    "ignoreUnknown": true,
+    "includes": ["**", "!pnpm-lock.yaml"]
   }
 }

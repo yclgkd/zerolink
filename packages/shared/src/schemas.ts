@@ -13,8 +13,8 @@ import type {
   HexString,
   SafetyCodeColor,
   SafetyCodeEmoji,
-  UUID,
   UnixMs,
+  UUID,
 } from './types.ts';
 
 // ─── Design Note ──────────────────────────────────────────────────────────────

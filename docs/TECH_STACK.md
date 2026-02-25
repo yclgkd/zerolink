@@ -98,7 +98,7 @@
 ```json
 {
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0"
+    "@biomejs/biome": "^2.4.4"
   }
 }
 ```
@@ -756,9 +756,18 @@ export default defineConfig({
 ```json
 // biome.json（根目录）
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
-  "organizeImports": {
-    "enabled": true
+  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   },
   "linter": {
     "enabled": true,
@@ -789,6 +798,10 @@ export default defineConfig({
       "trailingCommas": "es5",
       "semicolons": "always"
     }
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["**", "!templates/**", "!pnpm-lock.yaml"]
   }
 }
 ```
@@ -1060,15 +1073,15 @@ packages/backend/
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @zerolink/frontend test:e2e",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome check .",
-    "format": "biome format --write .",
+    "lint": "biome check package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
+    "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
     "prepare": "husky",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
+    "@biomejs/biome": "^2.4.4",
     "@changesets/cli": "^2.27.0",
     "@commitlint/cli": "^19.5.0",
     "@commitlint/config-conventional": "^19.5.0",
