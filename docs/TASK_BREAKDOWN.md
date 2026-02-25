@@ -33,8 +33,8 @@ Last Updated: 2026-02-25
 | ZL-010 | backend-lock-challenge | `lock_begin/lock_commit` 挑战响应逻辑 | ZL-003, ZL-009 | 4 | 强模型 |
 | ZL-011 | backend-compound-delete | `compound_begin/commit`, `delete_commit` | ZL-003, ZL-009 | 4 | 强模型 |
 | ZL-012 | frontend-app-shell-routing | `App.tsx`, 路由树, MSW 基础架构初始化 | None | 2 | 基础/中配模型 |
-| ZL-013 | frontend-theme-tokens | `src/styles/theme.css` + design tokens | ZL-012 | 2 | 基础/中配模型 |
-| ZL-014 | frontend-layout-primitives | `GlassCard/NeonButton/StatusBadge` 等基础组件 | ZL-013 | 3 | 中配模型 |
+| ZL-013 | frontend-theme-tokens | `src/styles/globals.css`（Tailwind v4 tokens）+ shadcn/ui 基础接入 | ZL-012 | 2 | 基础/中配模型 |
+| ZL-014 | frontend-layout-primitives | 基于 shadcn/ui 组合 `Card/Button/Badge` 等页面基础块 | ZL-013 | 3 | 中配模型 |
 | ZL-015 | frontend-security-profile-card | `SecurityProfileCard` 组件与交互 | ZL-014 | 2 | 基础/中配模型 |
 | ZL-016 | frontend-passphrase-input | `PassphraseInput` 组件（强度/可见性/校验） | ZL-014 | 3 | 中配模型 |
 | ZL-017 | frontend-safety-code | `SafetyCode` 组件（emoji/color blocks/raw hex） | ZL-014, ZL-002 | 3 | 中配模型 |
@@ -135,6 +135,7 @@ Last Updated: 2026-02-25
 
 ### ZL-013 frontend-theme-tokens
 - Out of Scope: 不改路由/状态管理
+- DoD Contracts: Tailwind v4 + shadcn/ui 初始化完成，页面不再依赖手写 BEM 样式类
 - DoD Commands:
   - `pnpm --filter frontend typecheck`
   - `pnpm --filter frontend build`
