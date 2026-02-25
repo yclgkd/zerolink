@@ -12,9 +12,9 @@
     "test:e2e": "pnpm --filter @zerolink/frontend test:e2e",
     "test:coverage": "pnpm -r test -- --coverage",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
+    "lint": "biome check package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
+    "lint:fix": "biome check --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
+    "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
     "clean": "pnpm -r exec rm -rf dist build .turbo node_modules",
     "prepare": "husky",
     "changeset": "changeset",
@@ -22,7 +22,7 @@
     "changeset:publish": "pnpm build && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.4",
     "@changesets/cli": "^2.29.8",
     "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2",
@@ -31,8 +31,12 @@
     "typescript": "^5.9.3"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,md}": ["biome check --write --no-errors-on-unmatched"],
-    "!(templates)/*.json": ["biome check --write --no-errors-on-unmatched"]
+    "*.{ts,tsx,js,jsx,md}": [
+      "biome check --write --no-errors-on-unmatched"
+    ],
+    "!(templates)/*.json": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   },
   "engines": {
     "node": ">=20.0.0",
