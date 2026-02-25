@@ -28,28 +28,37 @@ function AppShellLayout(): ReactElement {
   const manageDemoPath = ROUTE_PATTERN.MANAGE.replace(':uuid', DEMO_UUID);
 
   return (
-    <main data-testid="app-shell" style={{ margin: '0 auto', maxWidth: 960, padding: 24 }}>
-      <header>
-        <h1>ZeroLink</h1>
-        <p>Frontend app shell routing scaffold.</p>
+    <main className="app-shell" data-testid="app-shell">
+      <header className="app-shell__header">
+        <h1 className="app-shell__title">ZeroLink</h1>
+        <p className="app-shell__subtitle">Frontend app shell routing scaffold.</p>
         <nav aria-label="Primary">
-          <ul style={{ display: 'flex', gap: 16, listStyle: 'none', margin: 0, padding: 0 }}>
+          <ul className="app-shell__nav-list">
             <li>
-              <Link to="/">Create</Link>
+              <Link className="app-shell__nav-link" to="/">
+                Create
+              </Link>
             </li>
             <li>
-              <Link to={shareDemoPath}>Share</Link>
+              <Link className="app-shell__nav-link" to={shareDemoPath}>
+                Share
+              </Link>
             </li>
             <li>
-              <Link to={manageDemoPath}>Manage</Link>
+              <Link className="app-shell__nav-link" to={manageDemoPath}>
+                Manage
+              </Link>
             </li>
           </ul>
         </nav>
-        <p>
-          Current route: <code data-testid="current-path">{location.pathname}</code>
+        <p className="app-shell__path">
+          Current route:{' '}
+          <code className="app-shell__path-code" data-testid="current-path">
+            {location.pathname}
+          </code>
         </p>
       </header>
-      <section>
+      <section className="app-shell__content">
         <Outlet />
       </section>
     </main>
