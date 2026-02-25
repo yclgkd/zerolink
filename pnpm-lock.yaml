@@ -109,6 +109,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.0.1
       zod:
         specifier: ^4.3.6
         version: 4.3.6
