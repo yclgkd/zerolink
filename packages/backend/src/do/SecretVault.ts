@@ -1,10 +1,14 @@
 import type {
+  AssertionJSON,
   Base64Url,
   ChannelRecord,
   CipherBundle,
+  CompoundChallenge,
   HexString,
   LockChallenge,
   LockCommitRequest,
+  ManageIntent,
+  NonceRecord,
   RSAPublicKeyJWK,
   UnixMs,
 } from '@zerolink/shared';
@@ -12,14 +16,33 @@ import {
   CHALLENGE_BYTES,
   CHALLENGE_TTL_MS,
   CHANNEL_STATE,
+  CompoundBeginRequestSchema,
+  CompoundCommitRequestSchema,
+  computeIntentHash,
   DOMAIN,
   LockBeginRequestSchema,
   LockCommitRequestSchema,
+  NONCE_TTL_MS,
+  TIMESTAMP_SKEW_MS,
 } from '@zerolink/shared';
+
+import {
+  asUnixMs,
+  constantTimeEqual,
+  decodeBase64Url,
+  encodeBase64Url,
+  getCryptoApi,
+  sha256Bytes,
+  sha256Hex,
+  toUtf8Bytes,
+} from '../crypto/bytes.ts';
+import { verifyAssertion } from '../crypto/webauthn.ts';
 
 export interface SecretVaultEnv {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
+  RP_ID: string;
+  RP_ORIGIN: string;
 }
 
 export interface CommitLockParams {
@@ -42,11 +65,42 @@ export interface CommitLockChallengeParams {
   lockedAt: UnixMs;
 }
 
+export interface CompoundCommitParams {
+  uuid: string;
+  assertion: AssertionJSON;
+  intentHash: HexString;
+  intent: ManageIntent;
+}
+
 interface StoredLockChallenge {
   id: Base64Url;
   challenge: Base64Url;
   expiresAt: UnixMs;
   consumedAt?: UnixMs;
+}
+
+interface StoredCompoundChallenge {
+  id: Base64Url;
+  seed: Base64Url;
+  expiresAt: UnixMs;
+  consumedAt?: UnixMs;
+}
+
+interface NonceIndexRecord {
+  nonce: Base64Url;
+  expiresAt: UnixMs;
+}
+
+interface LooseAssertionJson {
+  id: Base64Url;
+  rawId: Base64Url;
+  type: 'public-key';
+  response: {
+    clientDataJSON: Base64Url;
+    authenticatorData: Base64Url;
+    signature: Base64Url;
+    userHandle?: Base64Url | null | undefined;
+  };
 }
 
 interface ErrorResponse {
@@ -64,7 +118,12 @@ type StateTransitionErrorCode =
   | 'RECORD_NOT_FOUND'
   | 'CHALLENGE_INVALID'
   | 'CHALLENGE_CONSUMED'
-  | 'LOCK_FORBIDDEN';
+  | 'LOCK_FORBIDDEN'
+  | 'VERSION_MISMATCH'
+  | 'NONCE_REPLAY'
+  | 'TIMESTAMP_OUT_OF_RANGE'
+  | 'ASSERTION_INVALID'
+  | 'INTENT_HASH_MISMATCH';
 
 export class StateTransitionError extends Error {
   readonly code: StateTransitionErrorCode;
@@ -78,109 +137,27 @@ export class StateTransitionError extends Error {
 
 export const CHANNEL_RECORD_KEY = 'channel_record' as const;
 export const LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
+export const COMPOUND_CHALLENGE_KEY = 'compound_challenge_active' as const;
+export const NONCE_KEY_PREFIX = 'nonce:' as const;
+export const NONCE_INDEX_KEY_PREFIX = 'nonce_index:' as const;
 
 const LOCK_CHALLENGE_ID_BYTES = 16;
-const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
-const encoder = new TextEncoder();
-
-function asUnixMs(value: number): UnixMs {
-  return value as UnixMs;
-}
-
-function getCryptoApi(): Crypto {
-  const cryptoApi = globalThis.crypto;
-  if (!cryptoApi?.subtle) {
-    throw new Error('WebCrypto is not available');
-  }
-  return cryptoApi;
-}
-
-function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const merged = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return merged;
-}
-
-function bytesToHex(bytes: Uint8Array): HexString {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('') as HexString;
-}
-
-function bytesToBinary(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  let binary = '';
-
-  for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-
-  return binary;
-}
-
-function binaryToBytes(binary: string): Uint8Array {
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
-
-function encodeBase64Url(bytes: Uint8Array): Base64Url {
-  return btoa(bytesToBinary(bytes))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/u, '') as Base64Url;
-}
-
-function decodeBase64Url(value: string): Uint8Array {
-  if (!BASE64URL_PATTERN.test(value)) {
-    throw new Error('invalid base64url');
-  }
-
-  const base64 = value.replaceAll('-', '+').replaceAll('_', '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-
-  return binaryToBytes(atob(padded));
-}
-
-function constantTimeEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  let mismatch = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-
-  return mismatch === 0;
-}
-
-function toArrayBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(bytes);
-}
-
-async function sha256Hex(chunks: readonly Uint8Array[]): Promise<HexString> {
-  const cryptoApi = getCryptoApi();
-  const merged = concatBytes(chunks);
-  const digest = await cryptoApi.subtle.digest('SHA-256', toArrayBufferBytes(merged));
-  return bytesToHex(new Uint8Array(digest));
-}
-
-function toUtf8Bytes(value: string): Uint8Array {
-  return encoder.encode(value);
-}
+const COMPOUND_CHALLENGE_ID_BYTES = 16;
+const NONCE_INDEX_TIMESTAMP_WIDTH = 16;
+const NONCE_SWEEP_BATCH_SIZE = 128;
+const NONCE_SWEEP_RETRY_DELAY_MS = 1_000;
 
 function lockChallengeStorageKey(id: Base64Url): string {
   return `${LOCK_CHALLENGE_KEY_PREFIX}${id}`;
+}
+
+function nonceStorageKey(nonce: Base64Url): string {
+  return `${NONCE_KEY_PREFIX}${nonce}`;
+}
+
+function nonceIndexStorageKey(expiresAt: UnixMs, nonce: Base64Url): string {
+  const paddedExpiresAt = String(expiresAt).padStart(NONCE_INDEX_TIMESTAMP_WIDTH, '0');
+  return `${NONCE_INDEX_KEY_PREFIX}${paddedExpiresAt}:${nonce}`;
 }
 
 export class SecretVaultStateMachine {
@@ -286,10 +263,11 @@ export class SecretVaultStateMachine {
 
 export class SecretVault {
   private readonly ctx: DurableObjectState;
+  private readonly env: SecretVaultEnv;
 
-  constructor(ctx: DurableObjectState, _env: SecretVaultEnv) {
+  constructor(ctx: DurableObjectState, env: SecretVaultEnv) {
     this.ctx = ctx;
-    void _env;
+    this.env = env;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -306,7 +284,22 @@ export class SecretVault {
       return this.handleLockCommit(request);
     }
 
+    if (url.pathname === '/compound_begin') {
+      return this.handleCompoundBegin(request);
+    }
+
+    if (url.pathname === '/compound_commit') {
+      return this.handleCompoundCommit(request);
+    }
+
     return this.notFound();
+  }
+
+  async alarm(now: number = Date.now()): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      await this.sweepExpiredNonces(now);
+      await this.scheduleNextNonceCleanup(now);
+    });
   }
 
   async initialize(record: ChannelRecord): Promise<ChannelRecord> {
@@ -332,6 +325,177 @@ export class SecretVault {
 
   async expire(): Promise<ChannelRecord> {
     return this.applyTransition((machine) => machine.expire());
+  }
+
+  async beginCompoundChallenge(
+    uuid: string,
+    now: number = Date.now()
+  ): Promise<{
+    challenge: CompoundChallenge;
+    receiverPubFpr?: HexString;
+    receiverPubJwk?: RSAPublicKeyJWK;
+    currentVersion: number;
+  }> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const record = await this.loadRecord();
+      this.assertNonTerminal(record);
+      this.assertUuidMatch(record.uuid, uuid);
+
+      const cryptoApi = getCryptoApi();
+      const id = encodeBase64Url(
+        cryptoApi.getRandomValues(new Uint8Array(COMPOUND_CHALLENGE_ID_BYTES))
+      );
+      const seed = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES)));
+      const expiresAt = asUnixMs(now + CHALLENGE_TTL_MS);
+      const stored: StoredCompoundChallenge = { id, seed, expiresAt };
+
+      await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, stored);
+
+      const response: {
+        challenge: CompoundChallenge;
+        currentVersion: number;
+        receiverPubFpr?: HexString;
+        receiverPubJwk?: RSAPublicKeyJWK;
+      } = {
+        challenge: { id: stored.id, seed: stored.seed, expiresAt: stored.expiresAt },
+        currentVersion: record.version,
+      };
+      if (record.receiver) {
+        response.receiverPubFpr = record.receiver.pubFpr;
+        response.receiverPubJwk = record.receiver.pubJwk;
+      }
+
+      return response;
+    });
+  }
+
+  async commitCompound(params: CompoundCommitParams, now: number = Date.now()): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const record = await this.loadRecord();
+      this.assertNonTerminal(record);
+      this.assertUuidMatch(record.uuid, params.uuid);
+
+      const { intent } = params;
+      if (intent.uuid !== record.uuid) {
+        throw new StateTransitionError('LOCK_FORBIDDEN', 'intent uuid mismatch');
+      }
+
+      // Version check
+      if (intent.version !== record.version) {
+        throw new StateTransitionError(
+          'VERSION_MISMATCH',
+          `expected version ${record.version}, got ${intent.version}`
+        );
+      }
+
+      // Timestamp skew check
+      const skew = Math.abs(intent.timestamp - now);
+      if (skew > TIMESTAMP_SKEW_MS) {
+        throw new StateTransitionError(
+          'TIMESTAMP_OUT_OF_RANGE',
+          `timestamp skew ${skew}ms exceeds ${TIMESTAMP_SKEW_MS}ms`
+        );
+      }
+
+      // Nonce replay check
+      const nonceKey = nonceStorageKey(intent.nonce);
+      const existingNonce = await this.ctx.storage.get<NonceRecord>(nonceKey);
+      if (existingNonce) {
+        if (existingNonce.expiresAt > now) {
+          throw new StateTransitionError('NONCE_REPLAY', 'nonce already consumed');
+        }
+
+        await this.ctx.storage.delete([
+          nonceKey,
+          nonceIndexStorageKey(existingNonce.expiresAt, existingNonce.nonce),
+        ]);
+      }
+
+      // Intent hash verification
+      const computedHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
+      if (!constantTimeEqual(computedHash, params.intentHash)) {
+        throw new StateTransitionError('INTENT_HASH_MISMATCH', 'intent hash does not match');
+      }
+
+      // Load and validate compound challenge
+      const challenge = await this.ctx.storage.get<StoredCompoundChallenge>(COMPOUND_CHALLENGE_KEY);
+      if (!challenge) {
+        throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge not found');
+      }
+      if (challenge.consumedAt !== undefined) {
+        throw new StateTransitionError('CHALLENGE_CONSUMED', 'compound challenge already consumed');
+      }
+      if (challenge.expiresAt <= now) {
+        await this.ctx.storage.delete(COMPOUND_CHALLENGE_KEY);
+        throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge expired');
+      }
+
+      // Derive expected WebAuthn challenge:
+      // SHA-256("GLv2.5" || uuid || challengeId || intentHash || seed) → base64url
+      const expectedChallengeBytes = await sha256Bytes([
+        toUtf8Bytes(DOMAIN.CHALLENGE),
+        toUtf8Bytes(record.uuid),
+        decodeBase64Url(challenge.id),
+        toUtf8Bytes(params.intentHash),
+        decodeBase64Url(challenge.seed),
+      ]);
+      const expectedChallengeB64u = encodeBase64Url(expectedChallengeBytes);
+
+      // Verify WebAuthn assertion
+      const verifyResult = await verifyAssertion({
+        assertion: params.assertion,
+        expectedChallenge: expectedChallengeB64u,
+        storedCredential: record.adminCredential,
+        rpId: this.env.RP_ID,
+        rpOrigin: this.env.RP_ORIGIN,
+      });
+      if (!verifyResult.ok) {
+        throw new StateTransitionError('ASSERTION_INVALID', verifyResult.error);
+      }
+
+      // Apply state transition
+      const machine = new SecretVaultStateMachine(record);
+      let nextRecord: ChannelRecord;
+      if (intent.op === 'delete') {
+        nextRecord = machine.commitDelete();
+      } else {
+        nextRecord = machine.commitDelivery({
+          cipherBundle: intent.cipherBundle,
+          deliveredAt: intent.timestamp,
+        });
+      }
+
+      // Store nonce with TTL and track it in a sweep-friendly index.
+      const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
+      const nonceRecord: NonceRecord = {
+        nonce: intent.nonce,
+        usedAt: asUnixMs(now),
+        expiresAt: nonceExpiresAt,
+      };
+      await this.ctx.storage.put(nonceKey, nonceRecord);
+      await this.ctx.storage.put(nonceIndexStorageKey(nonceExpiresAt, intent.nonce), {
+        nonce: intent.nonce,
+        expiresAt: nonceExpiresAt,
+      } satisfies NonceIndexRecord);
+      await this.ensureNonceCleanupAlarm(nonceExpiresAt);
+
+      // Mark challenge consumed
+      await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, {
+        ...challenge,
+        consumedAt: asUnixMs(now),
+      });
+
+      // Update signCount on credential
+      const updatedRecord: ChannelRecord = {
+        ...nextRecord,
+        adminCredential: {
+          ...nextRecord.adminCredential,
+          signCount: verifyResult.newSignCount,
+        },
+      };
+
+      await this.saveRecord(updatedRecord);
+    });
   }
 
   async beginLockChallenge(uuid: string, now: number = Date.now()): Promise<LockChallenge> {
@@ -414,6 +578,111 @@ export class SecretVault {
     });
   }
 
+  private async ensureNonceCleanupAlarm(expiresAt: UnixMs): Promise<void> {
+    const scheduledAt = await this.ctx.storage.getAlarm();
+    const targetAt = Number(expiresAt);
+    if (scheduledAt === null || scheduledAt > targetAt) {
+      await this.ctx.storage.setAlarm(targetAt);
+    }
+  }
+
+  private async sweepExpiredNonces(now: number): Promise<void> {
+    const nonceIndexes = await this.ctx.storage.list<NonceIndexRecord>({
+      prefix: NONCE_INDEX_KEY_PREFIX,
+      limit: NONCE_SWEEP_BATCH_SIZE,
+    });
+    if (nonceIndexes.size === 0) {
+      return;
+    }
+
+    const keysToDelete: string[] = [];
+    for (const [indexKey, indexRecord] of nonceIndexes) {
+      const resolved = this.resolveNonceIndexEntry(indexKey, indexRecord);
+      if (!resolved) {
+        keysToDelete.push(indexKey);
+        continue;
+      }
+      if (resolved.expiresAt > now) {
+        break;
+      }
+
+      keysToDelete.push(indexKey, nonceStorageKey(resolved.nonce));
+    }
+
+    if (keysToDelete.length > 0) {
+      await this.ctx.storage.delete(keysToDelete);
+    }
+  }
+
+  private async scheduleNextNonceCleanup(now: number): Promise<void> {
+    while (true) {
+      const firstEntry = await this.readEarliestNonceIndexEntry();
+      if (!firstEntry) {
+        await this.ctx.storage.deleteAlarm();
+        return;
+      }
+
+      const [indexKey, indexRecord] = firstEntry;
+      const resolved = this.resolveNonceIndexEntry(indexKey, indexRecord);
+      if (!resolved) {
+        await this.ctx.storage.delete(indexKey);
+        continue;
+      }
+
+      const nextAlarmAt =
+        resolved.expiresAt <= now ? now + NONCE_SWEEP_RETRY_DELAY_MS : resolved.expiresAt;
+      await this.ctx.storage.setAlarm(nextAlarmAt);
+      return;
+    }
+  }
+
+  private async readEarliestNonceIndexEntry(): Promise<
+    [string, NonceIndexRecord | undefined] | undefined
+  > {
+    const nonceIndexes = await this.ctx.storage.list<NonceIndexRecord>({
+      prefix: NONCE_INDEX_KEY_PREFIX,
+      limit: 1,
+    });
+    const firstEntry = nonceIndexes.entries().next().value;
+    if (!firstEntry) {
+      return undefined;
+    }
+
+    return [firstEntry[0], firstEntry[1]];
+  }
+
+  private resolveNonceIndexEntry(
+    indexKey: string,
+    indexRecord: NonceIndexRecord | undefined
+  ): { nonce: Base64Url; expiresAt: number } | undefined {
+    if (
+      indexRecord &&
+      typeof indexRecord.nonce === 'string' &&
+      Number.isFinite(indexRecord.expiresAt)
+    ) {
+      return {
+        nonce: indexRecord.nonce,
+        expiresAt: Number(indexRecord.expiresAt),
+      };
+    }
+
+    const suffix = indexKey.slice(NONCE_INDEX_KEY_PREFIX.length);
+    const separator = suffix.indexOf(':');
+    if (separator <= 0 || separator === suffix.length - 1) {
+      return undefined;
+    }
+
+    const expiresAt = Number.parseInt(suffix.slice(0, separator), 10);
+    if (!Number.isFinite(expiresAt)) {
+      return undefined;
+    }
+
+    return {
+      nonce: suffix.slice(separator + 1) as Base64Url,
+      expiresAt,
+    };
+  }
+
   private async loadRecord(): Promise<ChannelRecord> {
     const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
     if (!record) {
@@ -492,6 +761,49 @@ export class SecretVault {
     }
   }
 
+  private async handleCompoundBegin(request: Request): Promise<Response> {
+    const body = await this.readJsonBody(request);
+    if (body === null) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    const parsed = CompoundBeginRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    try {
+      const result = await this.beginCompoundChallenge(parsed.data.uuid);
+      return this.jsonResponse({ ok: true, ...result }, 200);
+    } catch (error) {
+      return this.mapError(error);
+    }
+  }
+
+  private async handleCompoundCommit(request: Request): Promise<Response> {
+    const body = await this.readJsonBody(request);
+    if (body === null) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    const parsed = CompoundCommitRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    try {
+      await this.commitCompound({
+        uuid: parsed.data.uuid,
+        assertion: this.normalizeAssertion(parsed.data.assertion),
+        intentHash: parsed.data.intentHash,
+        intent: parsed.data.intent,
+      });
+      return this.jsonResponse({ ok: true }, 200);
+    } catch (error) {
+      return this.mapError(error);
+    }
+  }
+
   private async handleLockCommit(request: Request): Promise<Response> {
     const body = await this.readJsonBody(request);
     if (body === null) {
@@ -530,6 +842,25 @@ export class SecretVault {
     };
   }
 
+  private normalizeAssertion(assertion: LooseAssertionJson): AssertionJSON {
+    const { userHandle, ...restResponse } = assertion.response;
+
+    if (userHandle === undefined) {
+      return {
+        ...assertion,
+        response: restResponse,
+      };
+    }
+
+    return {
+      ...assertion,
+      response: {
+        ...restResponse,
+        userHandle,
+      },
+    };
+  }
+
   private mapError(error: unknown): Response {
     if (error instanceof StateTransitionError) {
       return this.mapStateTransitionError(error);
@@ -555,8 +886,26 @@ export class SecretVault {
     ) {
       return this.jsonError('LOCK_FORBIDDEN', 403);
     }
+    if (error.code === 'VERSION_MISMATCH' || error.code === 'NONCE_REPLAY') {
+      return this.jsonError(error.code, 409);
+    }
+    if (error.code === 'TIMESTAMP_OUT_OF_RANGE' || error.code === 'INTENT_HASH_MISMATCH') {
+      return this.jsonError(error.code, 400);
+    }
+    if (error.code === 'ASSERTION_INVALID') {
+      return this.jsonError('ASSERTION_INVALID', 403);
+    }
 
     return this.jsonError('INTERNAL_ERROR', 500);
+  }
+
+  private assertNonTerminal(record: ChannelRecord): void {
+    if (record.state === CHANNEL_STATE.DELETED || record.state === CHANNEL_STATE.EXPIRED) {
+      throw new StateTransitionError(
+        'TERMINAL_STATE',
+        `operation forbidden for terminal state ${record.state}`
+      );
+    }
   }
 
   private assertWaitingState(record: ChannelRecord): void {

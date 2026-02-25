@@ -1,8 +1,15 @@
-import { LockBeginRequestSchema, LockCommitRequestSchema } from '@zerolink/shared';
+import {
+  CompoundBeginRequestSchema,
+  CompoundCommitRequestSchema,
+  LockBeginRequestSchema,
+  LockCommitRequestSchema,
+} from '@zerolink/shared';
 
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
+  RP_ID: string;
+  RP_ORIGIN: string;
 }
 
 type ApiMethod = 'GET' | 'POST';
@@ -18,13 +25,14 @@ const ALLOW_HEADERS = 'Content-Type, Authorization';
 const CORS_ALLOW_ORIGIN = '*';
 const LOCK_BEGIN_PATH = /^\/api\/lock_begin\/([^/]+)$/u;
 const LOCK_COMMIT_PATH = /^\/api\/lock_commit\/([^/]+)$/u;
+const COMPOUND_BEGIN_PATH = /^\/api\/manage\/compound_begin\/([^/]+)$/u;
+const COMPOUND_COMMIT_PATH = /^\/api\/manage\/compound_commit\/([^/]+)$/u;
+const DELETE_COMMIT_PATH = /^\/api\/delete_commit\/([^/]+)$/u;
 
 const API_ROUTES: readonly ApiRoute[] = [
   { method: 'GET', pattern: /^\/api\/public\/[^/]+$/u },
   { method: 'POST', pattern: /^\/api\/create_begin\/[^/]+$/u },
   { method: 'POST', pattern: /^\/api\/create_finish\/[^/]+$/u },
-  { method: 'POST', pattern: /^\/api\/manage\/compound_begin\/[^/]+$/u },
-  { method: 'POST', pattern: /^\/api\/manage\/compound_commit\/[^/]+$/u },
 ];
 
 function isApiPath(pathname: string): boolean {
@@ -107,7 +115,7 @@ function toJsonObject(value: unknown): Record<string, unknown> | null {
 async function forwardToSecretVault(
   env: Env,
   uuid: string,
-  path: '/lock_begin' | '/lock_commit',
+  path: '/lock_begin' | '/lock_commit' | '/compound_begin' | '/compound_commit',
   payload: Record<string, unknown>
 ): Promise<Response> {
   try {
@@ -178,6 +186,55 @@ async function handleLockCommit(
   return forwardToSecretVault(env, pathnameUuid, '/lock_commit', parsed.data);
 }
 
+async function handleCompoundBegin(
+  request: Request,
+  env: Env,
+  pathnameUuid: string
+): Promise<Response> {
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  const parsed = CompoundBeginRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  if (parsed.data.uuid !== pathnameUuid) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  return forwardToSecretVault(env, pathnameUuid, '/compound_begin', parsed.data);
+}
+
+async function handleCompoundCommit(
+  request: Request,
+  env: Env,
+  pathnameUuid: string,
+  deleteOnly: boolean
+): Promise<Response> {
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  const parsed = CompoundCommitRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  if (parsed.data.uuid !== pathnameUuid || parsed.data.intent.uuid !== pathnameUuid) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  if (deleteOnly && parsed.data.intent.op !== 'delete') {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsed.data);
+}
+
 async function handleApiRequest(request: Request, pathname: string, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return preflight();
@@ -199,6 +256,33 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     }
 
     return handleLockCommit(request, env, lockCommitMatch[1] ?? '');
+  }
+
+  const compoundBeginMatch = pathname.match(COMPOUND_BEGIN_PATH);
+  if (compoundBeginMatch) {
+    if (request.method !== 'POST') {
+      return methodNotAllowed('POST');
+    }
+
+    return handleCompoundBegin(request, env, compoundBeginMatch[1] ?? '');
+  }
+
+  const compoundCommitMatch = pathname.match(COMPOUND_COMMIT_PATH);
+  if (compoundCommitMatch) {
+    if (request.method !== 'POST') {
+      return methodNotAllowed('POST');
+    }
+
+    return handleCompoundCommit(request, env, compoundCommitMatch[1] ?? '', false);
+  }
+
+  const deleteCommitMatch = pathname.match(DELETE_COMMIT_PATH);
+  if (deleteCommitMatch) {
+    if (request.method !== 'POST') {
+      return methodNotAllowed('POST');
+    }
+
+    return handleCompoundCommit(request, env, deleteCommitMatch[1] ?? '', true);
   }
 
   const route = API_ROUTES.find((candidate) => candidate.pattern.test(pathname));

@@ -13,3 +13,7 @@ new_classes = ["SecretVault"]
 [[kv_namespaces]]
 binding = "SECRETS_KV"
 id = "replace-with-kv-namespace-id"
+
+[vars]
+RP_ID = "zerolink.test"
+RP_ORIGIN = "https://zerolink.test"

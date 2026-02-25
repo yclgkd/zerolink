@@ -1,29 +1,39 @@
 import type {
+  AssertionJSON,
   Base64Url,
   ChannelRecord,
   ChannelState,
   CipherBundle,
+  DeleteIntent,
   HexString,
   LockChallenge,
   RSAPublicKeyJWK,
   UnixMs,
+  UpdateIntent,
   UUID,
 } from '@zerolink/shared';
 import {
   CHALLENGE_TTL_MS,
   CHANNEL_STATE,
   CHANNEL_TTL_MS,
+  computeIntentHash,
   DOMAIN,
+  NONCE_TTL_MS,
   SECURITY_PROFILE,
+  TIMESTAMP_SKEW_MS,
 } from '@zerolink/shared';
 import { describe, expect, it } from 'vitest';
 
+import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
 import {
   CHANNEL_RECORD_KEY,
+  COMPOUND_CHALLENGE_KEY,
   type CommitDeliveryParams,
   type CommitLockChallengeParams,
   type CommitLockParams,
   LOCK_CHALLENGE_KEY_PREFIX,
+  NONCE_INDEX_KEY_PREFIX,
+  NONCE_KEY_PREFIX,
   SecretVault,
   type SecretVaultEnv,
   SecretVaultStateMachine,
@@ -149,6 +159,40 @@ function createCommitDeliveryParams(): CommitDeliveryParams {
   };
 }
 
+function createUpdateIntent(
+  uuid: UUID,
+  version: number,
+  timestamp: UnixMs,
+  nonce: Base64Url,
+  receiverPubFpr: HexString
+): UpdateIntent {
+  return {
+    op: 'update',
+    uuid,
+    version,
+    timestamp,
+    nonce,
+    receiverPubFpr,
+    cipherBundle: createCipherBundle(),
+    expireAt: null,
+  };
+}
+
+function createDeleteIntent(
+  uuid: UUID,
+  version: number,
+  timestamp: UnixMs,
+  nonce: Base64Url
+): DeleteIntent {
+  return {
+    op: 'delete',
+    uuid,
+    version,
+    timestamp,
+    nonce,
+  };
+}
+
 function createChannelRecord(state: ChannelState = CHANNEL_STATE.WAITING): ChannelRecord {
   return {
     uuid: asUuid('abcdefghijklmnopqrstu'),
@@ -172,21 +216,119 @@ function createChannelRecord(state: ChannelState = CHANNEL_STATE.WAITING): Chann
 function createMockState(initialRecord?: ChannelRecord): {
   state: DurableObjectState;
   snapshot: Map<string, unknown>;
+  getAlarm: () => number | null;
 } {
   const snapshot = new Map<string, unknown>();
+  let scheduledAlarm: number | null = null;
   if (initialRecord) {
     snapshot.set(CHANNEL_RECORD_KEY, structuredClone(initialRecord));
   }
 
   const storage = {
-    async get<T = unknown>(key: string): Promise<T | undefined> {
+    async get<T = unknown>(key: string | string[]): Promise<T | Map<string, T> | undefined> {
+      if (Array.isArray(key)) {
+        const values = new Map<string, T>();
+        for (const entryKey of key) {
+          if (snapshot.has(entryKey)) {
+            values.set(entryKey, snapshot.get(entryKey) as T);
+          }
+        }
+        return values;
+      }
+
       return snapshot.get(key) as T | undefined;
     },
-    async put<T>(key: string, value: T): Promise<void> {
-      snapshot.set(key, structuredClone(value));
+    async list<T = unknown>(options?: DurableObjectListOptions): Promise<Map<string, T>> {
+      let keys = [...snapshot.keys()];
+      const prefix = options?.prefix;
+      const start = options?.start;
+      const startAfter = options?.startAfter;
+      const end = options?.end;
+      const reverse = options?.reverse ?? false;
+      const limit = options?.limit;
+
+      if (prefix !== undefined) {
+        keys = keys.filter((key) => key.startsWith(prefix));
+      }
+
+      keys.sort((left, right) => left.localeCompare(right));
+
+      keys = keys.filter((key) => {
+        if (start !== undefined) {
+          if (!reverse && key < start) {
+            return false;
+          }
+          if (reverse && key > start) {
+            return false;
+          }
+        }
+
+        if (startAfter !== undefined) {
+          if (!reverse && key <= startAfter) {
+            return false;
+          }
+          if (reverse && key >= startAfter) {
+            return false;
+          }
+        }
+
+        if (end !== undefined) {
+          if (!reverse && key >= end) {
+            return false;
+          }
+          if (reverse && key <= end) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (reverse) {
+        keys.reverse();
+      }
+
+      if (typeof limit === 'number') {
+        keys = keys.slice(0, limit);
+      }
+
+      const listed = new Map<string, T>();
+      for (const key of keys) {
+        listed.set(key, snapshot.get(key) as T);
+      }
+      return listed;
     },
-    async delete(key: string): Promise<boolean> {
+    async put<T>(key: string | Record<string, T>, value?: T): Promise<void> {
+      if (typeof key === 'string') {
+        snapshot.set(key, structuredClone(value));
+        return;
+      }
+
+      for (const [entryKey, entryValue] of Object.entries(key)) {
+        snapshot.set(entryKey, structuredClone(entryValue));
+      }
+    },
+    async delete(key: string | string[]): Promise<boolean | number> {
+      if (Array.isArray(key)) {
+        let deleted = 0;
+        for (const entryKey of key) {
+          if (snapshot.delete(entryKey)) {
+            deleted += 1;
+          }
+        }
+        return deleted;
+      }
+
       return snapshot.delete(key);
+    },
+    async getAlarm(): Promise<number | null> {
+      return scheduledAlarm;
+    },
+    async setAlarm(scheduledTime: number | Date): Promise<void> {
+      scheduledAlarm = scheduledTime instanceof Date ? scheduledTime.getTime() : scheduledTime;
+    },
+    async deleteAlarm(): Promise<void> {
+      scheduledAlarm = null;
     },
   } as unknown as DurableObjectStorage;
 
@@ -198,12 +340,21 @@ function createMockState(initialRecord?: ChannelRecord): {
     blockConcurrencyWhile: async <T>(callback: () => Promise<T>): Promise<T> => callback(),
   } as unknown as DurableObjectState;
 
-  return { state, snapshot };
+  return {
+    state,
+    snapshot,
+    getAlarm: () => scheduledAlarm,
+  };
 }
+
+const RP_ID = 'zerolink.test';
+const RP_ORIGIN = 'https://zerolink.test';
 
 const env: SecretVaultEnv = {
   SECRET_VAULT: {} as DurableObjectNamespace,
   SECRETS_KV: {} as KVNamespace,
+  RP_ID,
+  RP_ORIGIN,
 };
 
 function expectStateTransitionError(
@@ -233,6 +384,54 @@ async function computeLockProof(
     decodeBase64Url(challenge.challenge),
     decodeBase64Url(lockKey),
   ]);
+}
+
+function createAssertionFixture(credentialId: Base64Url): AssertionJSON {
+  return {
+    id: credentialId,
+    rawId: credentialId,
+    type: 'public-key',
+    response: {
+      clientDataJSON: asBase64Url('client_data'),
+      authenticatorData: asBase64Url('auth_data'),
+      signature: asBase64Url('signature_data'),
+      userHandle: null,
+    },
+  };
+}
+
+function createNonceIndexKey(expiresAt: UnixMs, nonce: Base64Url): string {
+  return `${NONCE_INDEX_KEY_PREFIX}${String(expiresAt).padStart(16, '0')}:${nonce}`;
+}
+
+async function computeCompoundChallengeValue(
+  uuid: UUID,
+  challengeId: Base64Url,
+  intentHash: HexString,
+  seed: Base64Url
+): Promise<Base64Url> {
+  const challengeHashHex = await sha256Hex([
+    toUtf8Bytes(DOMAIN.CHALLENGE),
+    toUtf8Bytes(uuid),
+    decodeBase64Url(challengeId),
+    toUtf8Bytes(intentHash),
+    decodeBase64Url(seed),
+  ]);
+
+  return encodeBase64Url(hexToBytes(challengeHashHex));
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < hex.length; index += 2) {
+    bytes[index / 2] = Number.parseInt(hex.slice(index, index + 2), 16);
+  }
+
+  return bytes;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value as Record<string, unknown>;
 }
 
 describe('SecretVaultStateMachine', () => {
@@ -527,5 +726,374 @@ describe('SecretVault lock challenge flow', () => {
       ok: false,
       code: 'BAD_REQUEST',
     });
+  });
+});
+
+describe('SecretVault compound/delete flow', () => {
+  it('issues and stores compound challenge with current version and receiver info', async () => {
+    const now = 1_730_001_000_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    const result = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const storedChallenge = snapshot.get(COMPOUND_CHALLENGE_KEY) as {
+      id: Base64Url;
+      seed: Base64Url;
+      expiresAt: UnixMs;
+    };
+
+    expect(result.currentVersion).toBe(lockedRecord.version);
+    expect(result.receiverPubFpr).toBe(lockParams.receiverPubFpr);
+    expect(result.receiverPubJwk).toEqual(lockParams.receiverPubJwk);
+    expect(result.challenge.id).toBe(storedChallenge.id);
+    expect(result.challenge.seed).toBe(storedChallenge.seed);
+    expect(result.challenge.expiresAt).toBe(asUnixMs(now + CHALLENGE_TTL_MS));
+  });
+
+  it('commits update intent and transitions locked to delivered', async () => {
+    const now = 1_730_001_100_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot, getAlarm } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    const begin = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now + 1_000),
+      asBase64Url('nonce_update_01'),
+      lockParams.receiverPubFpr
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+    const expectedChallenge = await computeCompoundChallengeValue(
+      lockedRecord.uuid,
+      begin.challenge.id,
+      intentHash,
+      begin.challenge.seed
+    );
+    const assertionFixture = await createMockAssertion({
+      credentialId: lockedRecord.adminCredential.credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: expectedChallenge,
+      signCount: 7,
+    });
+
+    snapshot.set(CHANNEL_RECORD_KEY, {
+      ...lockedRecord,
+      adminCredential: {
+        ...lockedRecord.adminCredential,
+        publicKey: assertionFixture.publicKeySpki,
+        signCount: 3,
+      },
+    });
+
+    const commitAt = now + 1_000;
+    await vault.commitCompound(
+      {
+        uuid: lockedRecord.uuid,
+        assertion: assertionFixture.assertion,
+        intentHash,
+        intent,
+      },
+      commitAt
+    );
+
+    const updated = await vault.getRecord();
+    const nonceRecord = snapshot.get(`${NONCE_KEY_PREFIX}${intent.nonce}`) as {
+      usedAt: UnixMs;
+      expiresAt: UnixMs;
+    };
+    const nonceIndexKey = [...snapshot.keys()].find(
+      (key) => key.startsWith(NONCE_INDEX_KEY_PREFIX) && key.endsWith(`:${intent.nonce}`)
+    );
+    const consumedChallenge = snapshot.get(COMPOUND_CHALLENGE_KEY) as {
+      consumedAt?: UnixMs;
+    };
+    const expectedNonceExpiry = asUnixMs(commitAt + NONCE_TTL_MS);
+
+    expect(updated.state).toBe(CHANNEL_STATE.DELIVERED);
+    expect(updated.version).toBe(lockedRecord.version + 1);
+    expect(updated.cipherBundle).toEqual(intent.cipherBundle);
+    expect(updated.deliveredAt).toBe(intent.timestamp);
+    expect(updated.adminCredential.signCount).toBe(7);
+    expect(nonceRecord.expiresAt).toBe(expectedNonceExpiry);
+    expect(nonceIndexKey).toBe(createNonceIndexKey(expectedNonceExpiry, intent.nonce));
+    expect(consumedChallenge.consumedAt).toBeDefined();
+    expect(getAlarm()).toBe(Number(expectedNonceExpiry));
+  });
+
+  it('commits delete intent and transitions to deleted', async () => {
+    const now = 1_730_001_200_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const begin = await vault.beginCompoundChallenge(record.uuid, now);
+    const intent = createDeleteIntent(
+      record.uuid,
+      record.version,
+      asUnixMs(now + 1_000),
+      asBase64Url('nonce_delete_01')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+    const expectedChallenge = await computeCompoundChallengeValue(
+      record.uuid,
+      begin.challenge.id,
+      intentHash,
+      begin.challenge.seed
+    );
+    const assertionFixture = await createMockAssertion({
+      credentialId: record.adminCredential.credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: expectedChallenge,
+      signCount: 9,
+    });
+
+    snapshot.set(CHANNEL_RECORD_KEY, {
+      ...record,
+      adminCredential: {
+        ...record.adminCredential,
+        publicKey: assertionFixture.publicKeySpki,
+      },
+    });
+
+    await vault.commitCompound(
+      {
+        uuid: record.uuid,
+        assertion: assertionFixture.assertion,
+        intentHash,
+        intent,
+      },
+      now + 1_000
+    );
+
+    const updated = await vault.getRecord();
+    expect(updated.state).toBe(CHANNEL_STATE.DELETED);
+  });
+
+  it('rejects compound commit with version mismatch', async () => {
+    const now = 1_730_001_300_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const intent = createUpdateIntent(
+      record.uuid,
+      record.version + 1,
+      asUnixMs(now),
+      asBase64Url('nonce_vm_01'),
+      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: record.uuid,
+          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'VERSION_MISMATCH' });
+  });
+
+  it('rejects compound commit with nonce replay', async () => {
+    const now = 1_730_001_400_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const intent = createUpdateIntent(
+      record.uuid,
+      record.version,
+      asUnixMs(now),
+      asBase64Url('nonce_replay_01'),
+      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+    snapshot.set(`${NONCE_KEY_PREFIX}${intent.nonce}`, {
+      nonce: intent.nonce,
+      usedAt: asUnixMs(now - 1),
+      expiresAt: asUnixMs(now + NONCE_TTL_MS),
+    });
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: record.uuid,
+          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'NONCE_REPLAY' });
+  });
+
+  it('alarm removes expired nonce keys and keeps active ones', async () => {
+    const now = 1_730_001_450_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state, snapshot, getAlarm } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    const expiredNonce = asBase64Url('nonce_expired_01');
+    const activeNonce = asBase64Url('nonce_active_01');
+    const expiredAt = asUnixMs(now - 1_000);
+    const activeAt = asUnixMs(now + 20_000);
+
+    snapshot.set(`${NONCE_KEY_PREFIX}${expiredNonce}`, {
+      nonce: expiredNonce,
+      usedAt: asUnixMs(now - 2_000),
+      expiresAt: expiredAt,
+    });
+    snapshot.set(`${NONCE_KEY_PREFIX}${activeNonce}`, {
+      nonce: activeNonce,
+      usedAt: asUnixMs(now),
+      expiresAt: activeAt,
+    });
+    snapshot.set(createNonceIndexKey(expiredAt, expiredNonce), {
+      nonce: expiredNonce,
+      expiresAt: expiredAt,
+    });
+    snapshot.set(createNonceIndexKey(activeAt, activeNonce), {
+      nonce: activeNonce,
+      expiresAt: activeAt,
+    });
+
+    await vault.alarm(now);
+
+    expect(snapshot.get(`${NONCE_KEY_PREFIX}${expiredNonce}`)).toBeUndefined();
+    expect(snapshot.get(createNonceIndexKey(expiredAt, expiredNonce))).toBeUndefined();
+    expect(snapshot.get(`${NONCE_KEY_PREFIX}${activeNonce}`)).toBeDefined();
+    expect(snapshot.get(createNonceIndexKey(activeAt, activeNonce))).toBeDefined();
+    expect(getAlarm()).toBe(Number(activeAt));
+  });
+
+  it('rejects compound commit with timestamp out of allowed skew', async () => {
+    const now = 1_730_001_500_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const intent = createUpdateIntent(
+      record.uuid,
+      record.version,
+      asUnixMs(now + TIMESTAMP_SKEW_MS + 1),
+      asBase64Url('nonce_time_01'),
+      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: record.uuid,
+          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'TIMESTAMP_OUT_OF_RANGE' });
+  });
+
+  it('rejects compound commit when intent hash mismatches', async () => {
+    const now = 1_730_001_600_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const intent = createUpdateIntent(
+      record.uuid,
+      record.version,
+      asUnixMs(now),
+      asBase64Url('nonce_hash_01'),
+      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    );
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: record.uuid,
+          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          intentHash: asHex('00'),
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'INTENT_HASH_MISMATCH' });
+  });
+
+  it('rejects compound commit when challenge is missing', async () => {
+    const now = 1_730_001_700_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const intent = createUpdateIntent(
+      record.uuid,
+      record.version,
+      asUnixMs(now),
+      asBase64Url('nonce_missing_01'),
+      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: record.uuid,
+          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
+  });
+
+  it('rejects compound commit when assertion is invalid', async () => {
+    const now = 1_730_001_800_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const begin = await vault.beginCompoundChallenge(record.uuid, now);
+    const intent = createUpdateIntent(
+      record.uuid,
+      record.version,
+      asUnixMs(now + 1_000),
+      asBase64Url('nonce_assert_01'),
+      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+    const wrongChallenge = await computeCompoundChallengeValue(
+      record.uuid,
+      begin.challenge.id,
+      intentHash,
+      begin.challenge.seed
+    );
+    const assertionFixture = await createMockAssertion({
+      credentialId: record.adminCredential.credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: wrongChallenge,
+      signCount: 5,
+    });
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: record.uuid,
+          assertion: createAssertionFixture(assertionFixture.assertion.id),
+          intentHash,
+          intent,
+        },
+        now + 1_000
+      )
+    ).rejects.toMatchObject({ code: 'ASSERTION_INVALID' });
   });
 });
