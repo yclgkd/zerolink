@@ -9,14 +9,14 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "test": "vitest",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "vitest": "^2.1.0"
+    "@types/node": "^25.3.0",
+    "vitest": "^4.0.18"
   }
 }
