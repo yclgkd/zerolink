@@ -1,7 +1,7 @@
 # ZeroLink 技术栈规范
 
 > **版本**: v1.0
-> **最后更新**: 2026-02-23
+> **最后更新**: 2026-02-25
 > **状态**: 规范确定，准备初始化项目
 
 ---
@@ -46,17 +46,17 @@
 
 ### 语言与框架
 
-#### React 18 + TypeScript
+#### React 19 + TypeScript
 
 ```json
 {
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "typescript": "^5.6.0"
   }
 }
@@ -81,8 +81,23 @@
 ```json
 {
   "devDependencies": {
-    "vite": "^5.4.0",
-    "@vitejs/plugin-react": "^4.3.0"
+    "vite": "^7.3.1",
+    "@vitejs/plugin-react": "^5.1.4"
+  }
+}
+```
+
+#### Tailwind CSS v4 + shadcn/ui
+
+```json
+{
+  "dependencies": {
+    "tailwindcss": "^4.2.1",
+    "@tailwindcss/vite": "^4.2.1",
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.5.0"
   }
 }
 ```
@@ -1140,26 +1155,32 @@ packages/backend/
   },
   "dependencies": {
     "@zerolink/shared": "workspace:*",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0",
-    "zod": "^3.23.8",
-    "zustand": "^4.5.0",
     "@noble/hashes": "^1.5.0",
-    "@github/webauthn-json": "^2.1.1"
+    "@github/webauthn-json": "^2.1.1",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@tailwindcss/vite": "^4.2.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.1",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "vite": "^5.4.0",
-    "vitest": "^2.1.0",
-    "@vitest/ui": "^2.1.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/jest-dom": "^6.5.0",
-    "@testing-library/user-event": "^14.5.2",
-    "@playwright/test": "^1.48.0",
-    "msw": "^2.4.0"
+    "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/ui": "^4.0.18",
+    "msw": "^2.12.10",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
   }
 }
 ```
@@ -1175,6 +1196,6 @@ packages/backend/
 
 ---
 
-**最后更新**: 2026-02-23
+**最后更新**: 2026-02-25
 **维护者**: ZeroLink Team
 **状态**: ✅ 规范确定，准备实施

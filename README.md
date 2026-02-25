@@ -45,6 +45,9 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 ## 技术栈
 
 ### 前端
+- React 19 + Vite 7 + React Router
+- Tailwind CSS v4 + shadcn/ui（基于 Radix primitives）
+- Zustand + Zod
 - Web Crypto API (AES-GCM, RSA-OAEP, SHA-256)
 - WebAuthn (FIDO2)
 - Argon2id (KDF)
