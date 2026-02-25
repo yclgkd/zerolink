@@ -37,6 +37,19 @@ export type UnixMs = number & { readonly _brand: 'UnixMs' };
 export type AdminMode = 'webauthn' | 'softkey';
 
 /**
+ * Receiver identity fields set atomically during lock_commit.
+ * Grouped to enforce the invariant that pubJwk, pubFpr, and lockedAt
+ * are always present or absent together.
+ */
+export interface ReceiverIdentity {
+  /** Receiver's RSA-OAEP-256 public key (JWK). */
+  pubJwk: RSAPublicKeyJWK;
+  /** SHA-256 of the SPKI-encoded public key (hex). Doubles as Safety Code input. */
+  pubFpr: HexString;
+  lockedAt: UnixMs;
+}
+
+/**
  * Full channel record persisted in Cloudflare KV by the Durable Object.
  * This is the server-side source of truth for a channel's lifecycle.
  * PRD §8 / ARCHITECTURE.md §"Data Model".
@@ -59,13 +72,11 @@ export interface ChannelRecord {
    */
   lockKey: Base64Url;
 
-  /** Receiver's RSA-OAEP-256 public key. Set after lock_commit. */
-  receiverPubJwk?: RSAPublicKeyJWK;
-
-  /** SHA-256 of the SPKI-encoded receiver public key (hex). Set after lock_commit. */
-  receiverPubFpr?: HexString;
-
-  lockedAt?: UnixMs;
+  /**
+   * Receiver identity — set atomically on lock_commit, always present together.
+   * Absent while state is 'waiting'; present for 'locked', 'delivered', 'deleted', 'expired'.
+   */
+  receiver?: ReceiverIdentity;
 
   /** Encrypted secret payload. Set after a successful compound_commit update. */
   cipherBundle?: CipherBundle;
@@ -103,18 +114,40 @@ export interface RSAPublicKeyJWK {
  * PRD Appendix A / SECURITY.md §"Argon2id".
  */
 export interface Argon2idParams {
+  readonly kdfType: 'argon2id';
+  /** Argon2id algorithm version. Current standard: 19 (0x13). RFC 9106 §3. */
+  readonly version: 19;
   /** Memory cost in KiB (64 MiB = 65 536). */
-  m: number;
+  readonly m: number;
   /** Time cost / iteration count (3). */
-  t: number;
+  readonly t: number;
   /** Parallelism factor (1; browser crypto workers are single-threaded). */
-  p: number;
+  readonly p: number;
   /** 128-bit random salt (base64url, 16 bytes). */
-  salt: Base64Url;
+  readonly salt: Base64Url;
 }
 
 /**
- * Receiver's RSA private key wrapped under an Argon2id-derived AES-256-GCM key.
+ * PBKDF2-SHA-256 parameters for the softkey compatibility fallback.
+ * Only usable under Standard security profile with explicit user acknowledgment.
+ * OWASP minimum: 600 000 iterations. PRD §"Softkey Fallback".
+ */
+export interface Pbkdf2Params {
+  readonly kdfType: 'pbkdf2';
+  /** Iteration count (≥ 600 000 per OWASP 2023). */
+  readonly iterations: number;
+  /** 128-bit random salt (base64url, 16 bytes). */
+  readonly salt: Base64Url;
+}
+
+/**
+ * Discriminated union of supported KDF parameter sets.
+ * The `kdfType` field acts as the discriminant for exhaustive switching.
+ */
+export type KdfParams = Argon2idParams | Pbkdf2Params;
+
+/**
+ * Receiver's RSA private key wrapped under a KDF-derived AES-256-GCM key.
  * Stored in browser IndexedDB; never leaves the receiver's device in cleartext.
  * PRD Appendix B / SECURITY.md §"Key Wrapping".
  */
@@ -123,7 +156,8 @@ export interface WrappedPrivateKey {
   encryptedKey: Base64Url;
   /** AES-GCM IV (12 bytes, base64url). */
   iv: Base64Url;
-  kdfParams: Argon2idParams;
+  /** KDF parameters used to derive the wrapping key. */
+  kdf: KdfParams;
 }
 
 /**
