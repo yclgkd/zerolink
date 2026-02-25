@@ -606,6 +606,30 @@ describe('CreateBeginResponseSchema', () => {
   });
 });
 
+describe('CreateFinishResponseSchema', () => {
+  it('accepts a valid create-finish response', () => {
+    const result = CreateFinishResponseSchema.parse({
+      ok: true,
+      shareUrl: '/s/abc123',
+      manageUrl: '/m/abc123',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.shareUrl).toBe('/s/abc123');
+  });
+
+  it('rejects empty shareUrl', () => {
+    expect(() =>
+      CreateFinishResponseSchema.parse({ ok: true, shareUrl: '', manageUrl: '/m/abc' })
+    ).toThrow();
+  });
+
+  it('rejects empty manageUrl', () => {
+    expect(() =>
+      CreateFinishResponseSchema.parse({ ok: true, shareUrl: '/s/abc', manageUrl: '' })
+    ).toThrow();
+  });
+});
+
 describe('CreateFinishRequestSchema', () => {
   it('accepts a valid create-finish request', () => {
     const result = CreateFinishRequestSchema.parse({

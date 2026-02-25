@@ -32,10 +32,11 @@ import type {
 
 // ─── Primitive Schemas ────────────────────────────────────────────────────────
 
-/** 21-character NanoID channel identifier. */
+/** 21-character NanoID channel identifier (base64url alphabet). */
 export const UUIDSchema = z
   .string()
   .length(UUID_LENGTH, `UUID must be exactly ${UUID_LENGTH} characters`)
+  .regex(/^[A-Za-z0-9_-]+$/, 'UUID must use the NanoID base64url alphabet')
   .transform((v) => v as UUID);
 
 /** URL-safe base64 string without padding (RFC 4648 §5). */
