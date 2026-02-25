@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from './App';
 import { bootstrapApp } from './bootstrap';
+import './styles/globals.css';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

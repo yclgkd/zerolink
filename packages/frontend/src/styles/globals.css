@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-neon-purple: var(--neon-purple);
+  --color-neon-magenta: var(--neon-magenta);
+  --color-neon-orange: var(--neon-orange);
+  --color-neon-cyan: var(--neon-cyan);
+  --color-neon-green: var(--neon-green);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+:root {
+  color-scheme: dark;
+  --font-size: 16px;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+
+  --background: #0a0a0f;
+  --foreground: #f8fafc;
+
+  --card: rgb(20 20 30 / 40%);
+  --card-foreground: #f8fafc;
+
+  --popover: #12121a;
+  --popover-foreground: #f8fafc;
+
+  --primary: #a855f7;
+  --primary-foreground: #ffffff;
+
+  --secondary: rgb(139 92 246 / 10%);
+  --secondary-foreground: #a855f7;
+
+  --muted: rgb(100 116 139 / 20%);
+  --muted-foreground: #94a3b8;
+
+  --accent: rgb(168 85 247 / 15%);
+  --accent-foreground: #f8fafc;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --border: rgb(139 92 246 / 20%);
+  --input: rgb(139 92 246 / 30%);
+  --input-background: rgb(139 92 246 / 5%);
+  --switch-background: rgb(139 92 246 / 30%);
+  --ring: rgb(168 85 247 / 50%);
+
+  --chart-1: #a855f7;
+  --chart-2: #ec4899;
+  --chart-3: #f97316;
+  --chart-4: #06b6d4;
+  --chart-5: #10b981;
+
+  --neon-purple: #a855f7;
+  --neon-magenta: #ec4899;
+  --neon-orange: #f97316;
+  --neon-cyan: #06b6d4;
+  --neon-green: #10b981;
+
+  --radius: 1rem;
+
+  --font-sans: "Sora", "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    margin: 0;
+    background-image:
+      radial-gradient(circle at 12% -18%, rgb(168 85 247 / 22%), transparent 42%),
+      radial-gradient(circle at 84% -20%, rgb(236 72 153 / 16%), transparent 48%),
+      linear-gradient(180deg, #0a0a0f 0%, #090b14 52%, #090a12 100%);
+    line-height: 1.5;
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label,
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  code {
+    @apply font-mono;
+  }
+}
