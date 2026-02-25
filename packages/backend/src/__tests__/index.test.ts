@@ -217,6 +217,22 @@ describe('backend worker routing + lock challenge forwarding', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('returns 400 when path UUID and body UUID do not match on lock_commit', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    const response = await dispatch(env, `/api/lock_commit/${VALID_UUID}`, 'POST', {
+      ...VALID_LOCK_COMMIT_BODY,
+      uuid: 'zzzzzzzzzzzzzzzzzzzzz',
+    });
+    const payload = (await response.json()) as ApiErrorResponse;
+
+    expect(response.status).toBe(400);
+    expect(payload.code).toBe('BAD_REQUEST');
+    expect(calls).toHaveLength(0);
+  });
+
   it('returns 400 for malformed JSON body on lock_commit', async () => {
     const { env, calls } = createMockEnv(async () => {
       return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
