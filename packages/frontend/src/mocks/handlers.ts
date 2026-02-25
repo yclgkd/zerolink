@@ -1,14 +1,21 @@
 import { CHANNEL_STATE, ROUTE_PATTERN } from '@zerolink/shared';
 import { HttpResponse, http } from 'msw';
 
+const API_PREFIX = '*/api';
 const MOCK_CHALLENGE_ID = 'bW9ja19jaGFsbGVuZ2VfaWQ';
 const MOCK_CHALLENGE = 'bW9ja19jaGFsbGVuZ2VfdmFsdWU';
 const MOCK_SEED = 'bW9ja19jb21wb3VuZF9zZWVk';
 const MOCK_B64U = 'bW9ja19iYXNlNjR1cmw';
 const MOCK_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
-interface UuidRequestBody {
+interface RequestBody {
   uuid?: unknown;
+  intent?: unknown;
+}
+
+interface IntentBody {
+  uuid?: unknown;
+  op?: unknown;
 }
 
 function badRequest() {
@@ -25,11 +32,11 @@ function getPathUuid(params: { uuid?: string | readonly string[] }): string | un
   return typeof params.uuid === 'string' ? params.uuid : undefined;
 }
 
-async function readJsonObject(request: Request): Promise<UuidRequestBody | null> {
+async function readJsonObject(request: Request): Promise<RequestBody | null> {
   try {
     const body = await request.json();
     if (typeof body === 'object' && body !== null && !Array.isArray(body)) {
-      return body as UuidRequestBody;
+      return body as RequestBody;
     }
   } catch {
     // fall through
@@ -38,7 +45,20 @@ async function readJsonObject(request: Request): Promise<UuidRequestBody | null>
   return null;
 }
 
-function hasUuidMismatch(pathUuid: string | undefined, body: UuidRequestBody | null): boolean {
+function getIntentBody(body: RequestBody | null): IntentBody | null {
+  if (!body) {
+    return null;
+  }
+
+  const intentValue = body.intent;
+  if (typeof intentValue === 'object' && intentValue !== null && !Array.isArray(intentValue)) {
+    return intentValue as IntentBody;
+  }
+
+  return null;
+}
+
+function hasUuidMismatch(pathUuid: string | undefined, body: RequestBody | null): boolean {
   if (!pathUuid || !body) {
     return true;
   }
@@ -46,8 +66,30 @@ function hasUuidMismatch(pathUuid: string | undefined, body: UuidRequestBody | n
   return body.uuid !== pathUuid;
 }
 
+function hasIntentUuidMismatch(pathUuid: string | undefined, body: RequestBody | null): boolean {
+  if (!pathUuid) {
+    return true;
+  }
+
+  const intent = getIntentBody(body);
+  if (!intent) {
+    return true;
+  }
+
+  return intent.uuid !== pathUuid;
+}
+
+function hasInvalidDeleteIntent(body: RequestBody | null): boolean {
+  const intent = getIntentBody(body);
+  if (!intent) {
+    return true;
+  }
+
+  return intent.op !== 'delete';
+}
+
 export const handlers = [
-  http.get('/api/public/:uuid', ({ params }) => {
+  http.get(`${API_PREFIX}/public/:uuid`, ({ params }) => {
     const pathUuid = getPathUuid(params);
     if (!pathUuid) {
       return badRequest();
@@ -59,7 +101,7 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/create_begin/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/create_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
     if (hasUuidMismatch(pathUuid, body)) {
@@ -82,7 +124,7 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/create_finish/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/create_finish/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
     if (hasUuidMismatch(pathUuid, body) || !pathUuid) {
@@ -99,7 +141,7 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/lock_begin/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/lock_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
     if (hasUuidMismatch(pathUuid, body)) {
@@ -116,7 +158,7 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/lock_commit/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/lock_commit/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
     if (hasUuidMismatch(pathUuid, body)) {
@@ -128,7 +170,7 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/manage/compound_begin/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/manage/compound_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
     if (hasUuidMismatch(pathUuid, body)) {
@@ -155,10 +197,10 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/manage/compound_commit/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/manage/compound_commit/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body)) {
+    if (hasUuidMismatch(pathUuid, body) || hasIntentUuidMismatch(pathUuid, body)) {
       return badRequest();
     }
 
@@ -167,10 +209,14 @@ export const handlers = [
     });
   }),
 
-  http.post('/api/delete_commit/:uuid', async ({ params, request }) => {
+  http.post(`${API_PREFIX}/delete_commit/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body)) {
+    if (
+      hasUuidMismatch(pathUuid, body) ||
+      hasIntentUuidMismatch(pathUuid, body) ||
+      hasInvalidDeleteIntent(body)
+    ) {
       return badRequest();
     }
 

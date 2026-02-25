@@ -24,9 +24,10 @@ export function isMockEnabled(search: string): boolean {
 
 export async function initializeMocking(
   search: string,
-  loadWorker: MockWorkerLoader = defaultWorkerLoader
+  loadWorker: MockWorkerLoader = defaultWorkerLoader,
+  isDevMode: boolean = import.meta.env.DEV
 ): Promise<void> {
-  if (!isMockEnabled(search)) {
+  if (!isDevMode || !isMockEnabled(search)) {
     return;
   }
 

@@ -45,6 +45,17 @@ describe('initializeMocking', () => {
     await initializeMocking('?mock=false', loadWorker);
     expect(loadWorker).not.toHaveBeenCalled();
   });
+
+  it('skips worker loading when not in dev mode', async () => {
+    const loadWorker = vi.fn(async () => ({
+      worker: {
+        start: async () => undefined,
+      },
+    }));
+
+    await initializeMocking('?mock=true', loadWorker, false);
+    expect(loadWorker).not.toHaveBeenCalled();
+  });
 });
 
 describe('bootstrapApp', () => {
