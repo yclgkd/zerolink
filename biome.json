@@ -57,6 +57,11 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!templates", "!pnpm-lock.yaml"]
+    "includes": [
+      "**",
+      "!templates",
+      "!pnpm-lock.yaml",
+      "!packages/frontend/public/mockServiceWorker.js"
+    ]
   }
 }
