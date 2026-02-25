@@ -11,7 +11,9 @@ export function ManagePage(): ReactElement {
     <Card className="border-border/70 bg-card/85" data-testid="page-manage">
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-2xl text-primary">Manage / Deliver</CardTitle>
+          <CardTitle asChild className="text-2xl text-primary">
+            <h2>Manage / Deliver</h2>
+          </CardTitle>
           <Badge className="border-primary/35 bg-primary/15 text-primary" variant="secondary">
             Sender
           </Badge>

@@ -8,7 +8,9 @@ export function NotFoundPage(): ReactElement {
   return (
     <Card className="border-border/70 bg-card/85" data-testid="page-not-found">
       <CardHeader className="gap-2">
-        <CardTitle className="text-2xl text-destructive">Page Not Found</CardTitle>
+        <CardTitle asChild className="text-2xl text-destructive">
+          <h2>Page Not Found</h2>
+        </CardTitle>
         <CardDescription className="text-muted-foreground">
           Check the URL and try again.
         </CardDescription>

@@ -11,7 +11,9 @@ export function SharePage(): ReactElement {
     <Card className="border-border/70 bg-card/85" data-testid="page-share">
       <CardHeader className="gap-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-2xl text-[var(--neon-cyan)]">Share / Unlock</CardTitle>
+          <CardTitle asChild className="text-2xl text-[var(--neon-cyan)]">
+            <h2>Share / Unlock</h2>
+          </CardTitle>
           <Badge
             className="border-[var(--neon-cyan)]/40 bg-[var(--neon-cyan)]/10 text-[var(--neon-cyan)]"
             variant="secondary"

@@ -90,8 +90,10 @@ function AppShellLayout(): ReactElement {
                 </span>
               </div>
               <div>
-                <CardTitle className="text-3xl tracking-tight md:text-4xl">
-                  Zero<span className="text-[var(--neon-orange)]">Link</span>
+                <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
+                  <h1>
+                    Zero<span className="text-[var(--neon-orange)]">Link</span>
+                  </h1>
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">Zero-Knowledge Secure Delivery</p>
               </div>
