@@ -1,0 +1,107 @@
+import {
+  type CreateBeginResponse,
+  type CreateFinishResponse,
+  SECURITY_PROFILE,
+  type SecurityProfile,
+} from '@zerolink/shared';
+import { create } from 'zustand';
+
+import {
+  type AsyncRequestState,
+  createErrorState,
+  createIdleRequestState,
+  createLoadingState,
+  createSuccessState,
+} from './request-state';
+
+/**
+ * State properties for the channel creation flow.
+ */
+export interface CreateStoreState {
+  selectedProfile: SecurityProfile;
+  webAuthnSupported: boolean;
+  showCompatibilityConfirm: boolean;
+  compatibilityAccepted: boolean;
+  createdProfile: SecurityProfile | null;
+  createBegin: AsyncRequestState<CreateBeginResponse>;
+  createFinish: AsyncRequestState<CreateFinishResponse>;
+}
+
+/**
+ * Action modifiers for the channel creation flow.
+ */
+export interface CreateStoreActions {
+  setSelectedProfile: (profile: SecurityProfile) => void;
+  setWebAuthnSupported: (supported: boolean) => void;
+  setShowCompatibilityConfirm: (show: boolean) => void;
+  setCompatibilityAccepted: (accepted: boolean) => void;
+  startCreateBegin: () => void;
+  completeCreateBegin: (payload: CreateBeginResponse) => void;
+  failCreateBegin: (errorCode: string) => void;
+  startCreateFinish: () => void;
+  completeCreateFinish: (payload: CreateFinishResponse) => void;
+  failCreateFinish: (errorCode: string) => void;
+  setCreatedProfile: (profile: SecurityProfile | null) => void;
+  resetCreateStore: () => void;
+}
+
+/**
+ * Combined store type for channel creation.
+ */
+export type CreateStore = CreateStoreState & CreateStoreActions;
+
+function createInitialState(): CreateStoreState {
+  return {
+    selectedProfile: SECURITY_PROFILE.STANDARD,
+    webAuthnSupported: false,
+    showCompatibilityConfirm: false,
+    compatibilityAccepted: false,
+    createdProfile: null,
+    createBegin: createIdleRequestState<CreateBeginResponse>(),
+    createFinish: createIdleRequestState<CreateFinishResponse>(),
+  };
+}
+
+/**
+ * Zustand store managing the sender-side channel creation process.
+ */
+export const useCreateStore = create<CreateStore>((set) => ({
+  ...createInitialState(),
+
+  setSelectedProfile: (profile) =>
+    set(() => ({
+      selectedProfile: profile,
+      showCompatibilityConfirm: false,
+      compatibilityAccepted: false,
+      createdProfile: null,
+      createBegin: createIdleRequestState<CreateBeginResponse>(),
+      createFinish: createIdleRequestState<CreateFinishResponse>(),
+    })),
+
+  setWebAuthnSupported: (supported) => set(() => ({ webAuthnSupported: supported })),
+
+  setShowCompatibilityConfirm: (show) => set(() => ({ showCompatibilityConfirm: show })),
+
+  setCompatibilityAccepted: (accepted) => set(() => ({ compatibilityAccepted: accepted })),
+
+  startCreateBegin: () => set(() => ({ createBegin: createLoadingState<CreateBeginResponse>() })),
+
+  completeCreateBegin: (payload) =>
+    set(() => ({ createBegin: createSuccessState<CreateBeginResponse>(payload) })),
+
+  failCreateBegin: (errorCode) =>
+    set(() => ({ createBegin: createErrorState<CreateBeginResponse>(errorCode) })),
+
+  startCreateFinish: () =>
+    set(() => ({ createFinish: createLoadingState<CreateFinishResponse>() })),
+
+  completeCreateFinish: (payload) =>
+    set(() => ({ createFinish: createSuccessState<CreateFinishResponse>(payload) })),
+
+  failCreateFinish: (errorCode) =>
+    set(() => ({ createFinish: createErrorState<CreateFinishResponse>(errorCode) })),
+
+  setCreatedProfile: (profile) => set(() => ({ createdProfile: profile })),
+
+  resetCreateStore: () => set(createInitialState()),
+}));
