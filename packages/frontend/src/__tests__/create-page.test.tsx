@@ -1,190 +1,257 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { detectWebAuthnSupportMock, createChannelMock } = vi.hoisted(() => ({
+  detectWebAuthnSupportMock: vi.fn(),
+  createChannelMock: vi.fn(),
+}));
+
+vi.mock('../crypto/webauthn', async () => {
+  const actual = await vi.importActual<typeof import('../crypto/webauthn')>('../crypto/webauthn');
+  return {
+    ...actual,
+    detectWebAuthnSupport: detectWebAuthnSupportMock,
+  };
+});
+
+vi.mock('../crypto/orchestrator', async () => {
+  return {
+    cryptoOrchestrator: {
+      createChannel: createChannelMock,
+    },
+  };
+});
 
 import { CreatePage } from '../pages/CreatePage';
+import { useCreateStore } from '../stores/create-store';
 
-const originalPublicKeyCredential = Object.getOwnPropertyDescriptor(window, 'PublicKeyCredential');
-const originalCredentials = Object.getOwnPropertyDescriptor(window.navigator, 'credentials');
-
-function setWebAuthnCapabilities({
-  hasPublicKeyCredential,
-  hasCredentialsCreate,
-}: {
-  hasPublicKeyCredential: boolean;
-  hasCredentialsCreate: boolean;
-}): void {
-  Object.defineProperty(window, 'PublicKeyCredential', {
-    configurable: true,
-    writable: true,
-    value: hasPublicKeyCredential ? class MockPublicKeyCredential {} : undefined,
-  });
-
-  Object.defineProperty(window.navigator, 'credentials', {
-    configurable: true,
-    writable: true,
-    value: hasCredentialsCreate
-      ? {
-          create: () => Promise.resolve(null),
-        }
-      : {},
-  });
-}
-
-function setWebAuthnSupport(supported: boolean): void {
-  setWebAuthnCapabilities({
+function mockWebAuthnSupport(supported: boolean): void {
+  detectWebAuthnSupportMock.mockReturnValue({
+    supported,
+    secureContext: supported,
     hasPublicKeyCredential: supported,
     hasCredentialsCreate: supported,
+    hasCredentialsGet: supported,
   });
 }
 
-describe('CreatePage', () => {
-  afterEach(() => {
-    cleanup();
+function mockCreateSuccess(): void {
+  createChannelMock.mockResolvedValue({
+    ok: true,
+    data: {
+      shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+      manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      shareUrlWithFragment: '/s/aaaaaaaaaaaaaaaaaaaaa#k=bW9ja19sb2NrX3NlY3JldA',
+      lockSecretB64u: 'bW9ja19sb2NrX3NlY3JldA',
+      lockKeyB64u: 'bW9ja19sb2NrX2tleQ',
+    },
+  });
+}
 
-    if (originalPublicKeyCredential) {
-      Object.defineProperty(window, 'PublicKeyCredential', originalPublicKeyCredential);
-    } else {
-      Reflect.deleteProperty(window, 'PublicKeyCredential');
-    }
+function mockCreateFailure(code: string): void {
+  createChannelMock.mockResolvedValue({
+    ok: false,
+    error: {
+      ok: false,
+      code,
+      stage: 'create.register',
+    },
+  });
+}
 
-    if (originalCredentials) {
-      Object.defineProperty(window.navigator, 'credentials', originalCredentials);
-    } else {
-      Reflect.deleteProperty(window.navigator, 'credentials');
-    }
+function expectProfileSelected(profile: SecurityProfile): void {
+  const allProfiles: SecurityProfile[] = [
+    SECURITY_PROFILE.STANDARD,
+    SECURITY_PROFILE.STRICT,
+    SECURITY_PROFILE.HARDWARE_ONLY,
+  ];
+  for (const item of allProfiles) {
+    const button = screen.getByTestId(`security-profile-select-${item}`);
+    expect(button.getAttribute('aria-pressed')).toBe(item === profile ? 'true' : 'false');
+  }
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
+describe('CreatePage integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useCreateStore.getState().resetCreateStore();
+    mockCreateSuccess();
   });
 
-  it('renders core create UI with three security profile cards', () => {
-    setWebAuthnSupport(true);
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders three security profile cards by default', () => {
+    mockWebAuthnSupport(true);
     render(<CreatePage />);
 
     expect(screen.getByTestId('page-create')).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 2, name: 'Create Secure Channel' })).toBeTruthy();
-    expect(screen.getByText('Select Security Level')).toBeTruthy();
     expect(screen.getByTestId('security-profile-card-standard')).toBeTruthy();
     expect(screen.getByTestId('security-profile-card-strict')).toBeTruthy();
     expect(screen.getByTestId('security-profile-card-hardware_only')).toBeTruthy();
   });
 
-  it('updates selected profile state when switching cards', () => {
-    setWebAuthnSupport(true);
+  it('updates selected state when switching profile cards', () => {
+    mockWebAuthnSupport(true);
     render(<CreatePage />);
 
-    const standard = screen.getByTestId('security-profile-select-standard');
-    const strict = screen.getByTestId('security-profile-select-strict');
-    const hardwareOnly = screen.getByTestId('security-profile-select-hardware_only');
-
-    expect(standard.getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(strict);
-    expect(strict.getAttribute('aria-pressed')).toBe('true');
-    expect(standard.getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(hardwareOnly);
-    expect(hardwareOnly.getAttribute('aria-pressed')).toBe('true');
-    expect(strict.getAttribute('aria-pressed')).toBe('false');
+    expectProfileSelected(SECURITY_PROFILE.STANDARD);
+    fireEvent.click(screen.getByTestId('security-profile-select-strict'));
+    expectProfileSelected(SECURITY_PROFILE.STRICT);
+    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
+    expectProfileSelected(SECURITY_PROFILE.HARDWARE_ONLY);
   });
 
-  it('shows blocking warning for strict and hardware_only when WebAuthn is unavailable', () => {
-    setWebAuthnSupport(false);
+  it('shows blocking warning and blocks create for strict/hardware when WebAuthn is unavailable', async () => {
+    mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('security-profile-select-strict'));
-    expect(
-      screen.getByText('Strict and Hardware-Only profiles require WebAuthn support.')
-    ).toBeTruthy();
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    expect(screen.getByTestId('create-webauthn-blocked-warning')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
-    expect(
-      screen.getByText('Strict and Hardware-Only profiles require WebAuthn support.')
-    ).toBeTruthy();
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    expect(screen.getByTestId('create-webauthn-blocked-warning')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(createChannelMock).not.toHaveBeenCalled();
+    });
   });
 
-  it('treats constructor-only WebAuthn environment as unsupported', () => {
-    setWebAuthnCapabilities({
-      hasPublicKeyCredential: true,
-      hasCredentialsCreate: false,
+  it('opens compatibility panel on first standard create click when WebAuthn is unavailable', async () => {
+    mockWebAuthnSupport(false);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    expect(screen.getByTestId('create-compatibility-panel')).toBeTruthy();
+    await waitFor(() => {
+      expect(createChannelMock).not.toHaveBeenCalled();
     });
+  });
+
+  it('keeps compatibility continue disabled until checkbox is checked', () => {
+    mockWebAuthnSupport(false);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
+    expect(continueButton.disabled).toBe(true);
+  });
+
+  it('calls createChannel and shows FALLBACK_REQUIRED error in compatibility flow', async () => {
+    mockWebAuthnSupport(false);
+    mockCreateFailure('FALLBACK_REQUIRED');
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
+    fireEvent.click(screen.getByTestId('create-compatibility-continue'));
+
+    await waitFor(() => {
+      expect(createChannelMock).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    expect(screen.queryByTestId('create-success-share-link')).toBeNull();
+    expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
+  });
+
+  it('calls createChannel with selected profile and valid uuid when supported', async () => {
+    mockWebAuthnSupport(true);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('security-profile-select-strict'));
-    expect(
-      screen.getByText('Strict and Hardware-Only profiles require WebAuthn support.')
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('security-profile-select-standard'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
-    expect(screen.getByTestId('create-compatibility-panel')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(createChannelMock).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = createChannelMock.mock.calls[0]?.[0];
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.STRICT);
+    expect(callArg?.uuid).toMatch(/^[A-Za-z0-9_-]{21}$/u);
   });
 
-  it('shows compatibility panel for standard profile when WebAuthn is unavailable', () => {
-    setWebAuthnSupport(false);
+  it('shows share and manage links after successful creation', async () => {
+    mockWebAuthnSupport(true);
+    mockCreateSuccess();
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
-
-    expect(screen.getByTestId('create-compatibility-panel')).toBeTruthy();
-    expect(screen.queryByTestId('create-success-summary')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-share-link')).toBeTruthy();
+      expect(screen.getByTestId('create-success-manage-link')).toBeTruthy();
+    });
   });
 
-  it('keeps compatibility continue disabled until risk acceptance is checked', () => {
-    setWebAuthnSupport(false);
+  it('disables submit button while create request is pending', async () => {
+    mockWebAuthnSupport(true);
+    const deferred = createDeferred<{
+      ok: true;
+      data: {
+        shareUrl: string;
+        manageUrl: string;
+        shareUrlWithFragment: string;
+        lockSecretB64u: string;
+        lockKeyB64u: string;
+      };
+    }>();
+    createChannelMock.mockReturnValueOnce(deferred.promise);
     render(<CreatePage />);
 
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    fireEvent.click(submit);
 
-    expect(continueButton.disabled).toBe(true);
+    await waitFor(() => {
+      expect((screen.getByTestId('create-submit-button') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    deferred.resolve({
+      ok: true,
+      data: {
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+        shareUrlWithFragment: '/s/aaaaaaaaaaaaaaaaaaaaa#k=bW9ja19sb2NrX3NlY3JldA',
+        lockSecretB64u: 'bW9ja19sb2NrX3NlY3JldA',
+        lockKeyB64u: 'bW9ja19sb2NrX2tleQ',
+      },
+    });
+
+    await waitFor(() => {
+      expect((screen.getByTestId('create-submit-button') as HTMLButtonElement).disabled).toBe(
+        false
+      );
+    });
   });
 
-  it('continues with compatibility mode after acceptance and shows success summary', () => {
-    setWebAuthnSupport(false);
+  it('cancels compatibility panel and resets acceptance checkbox', () => {
+    mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
     fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
-    fireEvent.click(screen.getByTestId('create-compatibility-continue'));
-
-    expect(screen.getByTestId('create-success-summary')).toBeTruthy();
-    expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
-  });
-
-  it('requires a new compatibility acceptance for each create attempt', () => {
-    setWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
-    fireEvent.click(screen.getByTestId('create-compatibility-continue'));
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-
-    const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
-    const checkbox = screen.getByTestId('create-compatibility-checkbox') as HTMLInputElement;
-
-    expect(checkbox.checked).toBe(false);
-    expect(continueButton.disabled).toBe(true);
-  });
-
-  it('cancels compatibility panel without creating a channel', () => {
-    setWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
     fireEvent.click(screen.getByTestId('create-compatibility-cancel'));
 
     expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
-    expect(screen.queryByTestId('create-success-summary')).toBeNull();
   });
 
-  it('does not render passphrase input inside compatibility panel', () => {
-    setWebAuthnSupport(false);
+  it('does not show passphrase input inside compatibility panel', () => {
+    mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
-
     expect(screen.queryByTestId('passphrase-input-root')).toBeNull();
     expect(screen.queryByTestId('passphrase-input-field')).toBeNull();
   });

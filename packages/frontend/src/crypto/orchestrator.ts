@@ -826,4 +826,19 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
 /**
  * Default singleton instance of the CryptoOrchestrator.
  */
-export const cryptoOrchestrator = createCryptoOrchestrator();
+let defaultCryptoOrchestrator: CryptoOrchestrator | null = null;
+
+function getDefaultCryptoOrchestrator(): CryptoOrchestrator {
+  if (!defaultCryptoOrchestrator) {
+    defaultCryptoOrchestrator = createCryptoOrchestrator();
+  }
+  return defaultCryptoOrchestrator;
+}
+
+export const cryptoOrchestrator: CryptoOrchestrator = {
+  createChannel: (input) => getDefaultCryptoOrchestrator().createChannel(input),
+  lockChannel: (input) => getDefaultCryptoOrchestrator().lockChannel(input),
+  deliverSecret: (input) => getDefaultCryptoOrchestrator().deliverSecret(input),
+  deleteChannel: (input) => getDefaultCryptoOrchestrator().deleteChannel(input),
+  decryptDelivered: (input) => getDefaultCryptoOrchestrator().decryptDelivered(input),
+};
