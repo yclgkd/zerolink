@@ -259,6 +259,41 @@ function DeliveredStep({
   );
 }
 
+function LoadingStep() {
+  return (
+    <section className="space-y-2" data-testid="share-step-loading">
+      <h3 className="text-base font-semibold text-foreground">Loading Channel State</h3>
+      <p className="text-xs text-muted-foreground">Fetching secure channel status for this link.</p>
+    </section>
+  );
+}
+
+function TerminalStep({
+  state,
+}: {
+  state: typeof CHANNEL_STATE.DELETED | typeof CHANNEL_STATE.EXPIRED;
+}) {
+  if (state === CHANNEL_STATE.DELETED) {
+    return (
+      <section className="space-y-2" data-testid="share-step-deleted">
+        <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
+        <p className="text-xs text-muted-foreground">
+          This channel has been destroyed and cannot be recovered.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-2" data-testid="share-step-expired">
+      <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
+      <p className="text-xs text-muted-foreground">
+        The channel exceeded its lifetime and is no longer valid for delivery.
+      </p>
+    </section>
+  );
+}
+
 function useSharePageState(uuid?: string) {
   const [step, setStep] = useState<SharePageStep>('onboarding');
   const [passphrase, setPassphrase] = useState('');
@@ -266,17 +301,45 @@ function useSharePageState(uuid?: string) {
   const [decryptFetchPayload, setDecryptFetchPayload] = useState<DecryptFetchResponse | null>(null);
   const [decryptFetchError, setDecryptFetchError] = useState<string | null>(null);
   const [decryptFetchAttempt, setDecryptFetchAttempt] = useState(0);
+  const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
+  const [publicStatusResolvedUuid, setPublicStatusResolvedUuid] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!uuid) return;
+    if (!uuid) {
+      setStep('onboarding');
+      setPassphrase('');
+      setChannelState(CHANNEL_STATE.WAITING);
+      setDecryptFetchPayload(null);
+      setDecryptFetchError(null);
+      setPublicStatusResolvedUuid(null);
+      setIsPublicStatusLoading(false);
+      return;
+    }
+
+    const currentUuid = uuid;
+
+    setStep('onboarding');
+    setPassphrase('');
+    setChannelState(CHANNEL_STATE.WAITING);
+    setDecryptFetchPayload(null);
+    setDecryptFetchError(null);
+    setPublicStatusResolvedUuid(null);
+    setIsPublicStatusLoading(true);
 
     let cancelled = false;
     async function loadChannelState(): Promise<void> {
       try {
-        const response = await fetch(`/api/public/${uuid}`);
+        const response = await fetch(`/api/public/${currentUuid}`);
         const payload = (await response.json()) as unknown;
         const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
-        if (!parsedPayload.success || cancelled) return;
+        if (cancelled) return;
+        if (!parsedPayload.success) {
+          setChannelState(CHANNEL_STATE.WAITING);
+          setStep('onboarding');
+          setPublicStatusResolvedUuid(currentUuid);
+          setIsPublicStatusLoading(false);
+          return;
+        }
 
         setChannelState(parsedPayload.data.state);
         if (parsedPayload.data.state === CHANNEL_STATE.WAITING) {
@@ -284,8 +347,15 @@ function useSharePageState(uuid?: string) {
         } else {
           setStep('locked');
         }
+        setPublicStatusResolvedUuid(currentUuid);
+        setIsPublicStatusLoading(false);
       } catch {
-        if (!cancelled) setChannelState(CHANNEL_STATE.WAITING);
+        if (!cancelled) {
+          setChannelState(CHANNEL_STATE.WAITING);
+          setStep('onboarding');
+          setPublicStatusResolvedUuid(currentUuid);
+          setIsPublicStatusLoading(false);
+        }
       }
     }
 
@@ -296,9 +366,7 @@ function useSharePageState(uuid?: string) {
   }, [uuid]);
 
   useEffect(() => {
-    void decryptFetchAttempt;
-
-    if (!uuid || channelState !== CHANNEL_STATE.DELIVERED) {
+    if (!uuid || publicStatusResolvedUuid !== uuid || channelState !== CHANNEL_STATE.DELIVERED) {
       setDecryptFetchPayload(null);
       setDecryptFetchError(null);
       return;
@@ -330,7 +398,7 @@ function useSharePageState(uuid?: string) {
     return () => {
       cancelled = true;
     };
-  }, [channelState, uuid, decryptFetchAttempt]);
+  }, [channelState, uuid, decryptFetchAttempt, publicStatusResolvedUuid]);
 
   return {
     step,
@@ -340,6 +408,7 @@ function useSharePageState(uuid?: string) {
     channelState,
     decryptFetchPayload,
     decryptFetchError,
+    isPublicStatusLoading,
     retryFetch: () => setDecryptFetchAttempt((n) => n + 1),
     canGenerate: passphrase.trim().length > 0,
   };
@@ -364,7 +433,9 @@ export function SharePage(): ReactElement {
       <PageCardContent className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
-        {state.channelState === CHANNEL_STATE.WAITING ? (
+        {state.isPublicStatusLoading ? <LoadingStep /> : null}
+
+        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.WAITING ? (
           <>
             {state.step === 'onboarding' ? (
               <OnboardingStep onContinue={() => state.setStep('lock')} />
@@ -382,14 +453,24 @@ export function SharePage(): ReactElement {
           </>
         ) : null}
 
-        {state.channelState === CHANNEL_STATE.LOCKED ? <LockedStep /> : null}
+        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.LOCKED ? (
+          <LockedStep />
+        ) : null}
 
-        {state.channelState === CHANNEL_STATE.DELIVERED ? (
+        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.DELIVERED ? (
           <DeliveredStep
             decryptFetchError={state.decryptFetchError}
             decryptFetchPayload={state.decryptFetchPayload}
             onRetry={state.retryFetch}
           />
+        ) : null}
+
+        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.DELETED ? (
+          <TerminalStep state={CHANNEL_STATE.DELETED} />
+        ) : null}
+
+        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.EXPIRED ? (
+          <TerminalStep state={CHANNEL_STATE.EXPIRED} />
         ) : null}
       </PageCardContent>
     </PageCard>
