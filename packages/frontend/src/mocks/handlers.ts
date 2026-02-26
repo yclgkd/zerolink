@@ -1,4 +1,11 @@
-import { CHANNEL_STATE, ROUTE_PATTERN } from '@zerolink/shared';
+import {
+  CHANNEL_STATE,
+  CreateBeginRequestSchema,
+  CreateBeginResponseSchema,
+  CreateFinishRequestSchema,
+  CreateFinishResponseSchema,
+  ROUTE_PATTERN,
+} from '@zerolink/shared';
 import { HttpResponse, http } from 'msw';
 
 const API_PREFIX = '*/api';
@@ -88,6 +95,24 @@ function hasInvalidDeleteIntent(body: RequestBody | null): boolean {
   return intent.op !== 'delete';
 }
 
+function getCreateBeginBody(body: RequestBody | null) {
+  if (!body) {
+    return null;
+  }
+
+  const result = CreateBeginRequestSchema.safeParse(body);
+  return result.success ? result.data : null;
+}
+
+function getCreateFinishBody(body: RequestBody | null) {
+  if (!body) {
+    return null;
+  }
+
+  const result = CreateFinishRequestSchema.safeParse(body);
+  return result.success ? result.data : null;
+}
+
 export const handlers = [
   http.get(`${API_PREFIX}/public/:uuid`, ({ params }) => {
     const pathUuid = getPathUuid(params);
@@ -104,11 +129,12 @@ export const handlers = [
   http.post(`${API_PREFIX}/create_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body)) {
+    const createBeginBody = getCreateBeginBody(body);
+    if (!pathUuid || !createBeginBody || createBeginBody.uuid !== pathUuid) {
       return badRequest();
     }
 
-    return HttpResponse.json({
+    const payload = {
       ok: true,
       creationOptions: {
         challenge: MOCK_CHALLENGE,
@@ -121,24 +147,37 @@ export const handlers = [
         timeout: 60_000,
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       },
-    });
+    };
+    const parsedPayload = CreateBeginResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
   }),
 
   http.post(`${API_PREFIX}/create_finish/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body) || !pathUuid) {
+    const createFinishBody = getCreateFinishBody(body);
+    if (!pathUuid || !createFinishBody || createFinishBody.uuid !== pathUuid) {
       return badRequest();
     }
 
     const shareUrl = `${ROUTE_PATTERN.SHARE.replace(':uuid', pathUuid)}#k=${MOCK_B64U}`;
     const manageUrl = ROUTE_PATTERN.MANAGE.replace(':uuid', pathUuid);
 
-    return HttpResponse.json({
+    const payload = {
       ok: true,
       shareUrl,
       manageUrl,
-    });
+    };
+    const parsedPayload = CreateFinishResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
   }),
 
   http.post(`${API_PREFIX}/lock_begin/:uuid`, async ({ params, request }) => {
