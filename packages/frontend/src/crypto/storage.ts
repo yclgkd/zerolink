@@ -1,5 +1,8 @@
 import type { HexString, UUID, WrappedPrivateKey } from '@zerolink/shared';
 
+/**
+ * Encapsulates the encrypted private key and receiver identity for a specific channel.
+ */
 export interface ReceiverKeyEnvelope {
   uuid: UUID | string;
   receiverPubFpr: HexString | string;
@@ -7,12 +10,18 @@ export interface ReceiverKeyEnvelope {
   updatedAt: number;
 }
 
+/**
+ * Persists receiver keys securely on the local device across browser sessions.
+ */
 export interface ReceiverKeyStorage {
   save: (envelope: ReceiverKeyEnvelope) => Promise<void>;
   load: (uuid: UUID | string) => Promise<ReceiverKeyEnvelope | null>;
   remove: (uuid: UUID | string) => Promise<void>;
 }
 
+/**
+ * Options to configure the underlying IndexedDB storage layer.
+ */
 export interface IndexedDbReceiverKeyStorageOptions {
   dbName?: string;
   storeName?: string;
@@ -60,17 +69,12 @@ async function withTransaction<T>(
   return operation(store);
 }
 
-/**
- * Creates the default IndexedDB-backed storage for wrapped receiver private keys.
- */
-export function createIndexedDbReceiverKeyStorage(
-  options: IndexedDbReceiverKeyStorageOptions = {}
-): ReceiverKeyStorage {
-  const dbName = options.dbName ?? 'zerolink-crypto';
-  const storeName = options.storeName ?? 'receiver-keys';
-  const version = options.version ?? 1;
-
-  const dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+function initializeDatabase(
+  dbName: string,
+  version: number,
+  storeName: string
+): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
     let idb: IDBFactory;
     try {
       idb = assertIndexedDbAvailable();
@@ -90,6 +94,19 @@ export function createIndexedDbReceiverKeyStorage(
     request.onerror = () =>
       reject(keyStorageError(`IndexedDB open failed for ${dbName}`, request.error));
   });
+}
+
+/**
+ * Creates the default IndexedDB-backed storage for wrapped receiver private keys.
+ */
+export function createIndexedDbReceiverKeyStorage(
+  options: IndexedDbReceiverKeyStorageOptions = {}
+): ReceiverKeyStorage {
+  const dbName = options.dbName ?? 'zerolink-crypto';
+  const storeName = options.storeName ?? 'receiver-keys';
+  const version = options.version ?? 1;
+
+  const dbPromise = initializeDatabase(dbName, version, storeName);
 
   return {
     async save(envelope) {
