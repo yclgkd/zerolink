@@ -169,6 +169,8 @@ describe('api client', () => {
     const client = createClient();
     const result = await client.deleteCommit({
       uuid: VALID_UUID,
+      assertion: VALID_ASSERTION,
+      intentHash: VALID_HEX,
       intent: {
         op: 'delete',
         uuid: VALID_UUID,
@@ -225,6 +227,40 @@ describe('api client', () => {
       timestamp: Date.now(),
       securityProfile: SECURITY_PROFILE.STANDARD,
     });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INVALID_REQUEST');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns INVALID_REQUEST for deleteCommit without assertion and does not call fetch', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+        }),
+        { status: 200 }
+      )
+    );
+    const client = createApiClient({
+      basePath: '/api',
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    const invalidDeleteInput = {
+      uuid: VALID_UUID,
+      intentHash: VALID_HEX,
+      intent: {
+        op: 'delete',
+        uuid: VALID_UUID,
+        version: 0,
+        timestamp: Date.now(),
+        nonce: VALID_B64U,
+      },
+    } as unknown as Parameters<typeof client.deleteCommit>[0];
+
+    const result = await client.deleteCommit(invalidDeleteInput);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;

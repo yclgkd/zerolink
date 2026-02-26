@@ -5,6 +5,7 @@ import { handlers } from '../mocks/handlers';
 
 const server = setupServer(...handlers);
 const BASE_URL = 'http://localhost';
+const VALID_UUID = 'aaaaaaaaaaaaaaaaaaaaa';
 const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
 const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
@@ -20,7 +21,7 @@ const VALID_ASSERTION = {
   },
 } as const;
 
-function validCompoundCommitPayload(uuid: string) {
+function validDeleteCompoundCommitPayload(uuid: string) {
   return {
     uuid,
     assertion: VALID_ASSERTION,
@@ -31,6 +32,31 @@ function validCompoundCommitPayload(uuid: string) {
       version: 0,
       timestamp: Date.now(),
       nonce: VALID_B64U,
+    },
+  };
+}
+
+function validUpdateCompoundCommitPayload(uuid: string) {
+  return {
+    uuid,
+    assertion: VALID_ASSERTION,
+    intentHash: VALID_HEX,
+    intent: {
+      op: 'update' as const,
+      uuid,
+      version: 0,
+      timestamp: Date.now(),
+      nonce: VALID_B64U,
+      receiverPubFpr: VALID_HEX,
+      cipherBundle: {
+        ciphertext: VALID_B64U,
+        iv: VALID_B64U,
+        aad: VALID_B64U,
+        encContentKey: VALID_B64U,
+        ciphertextHash: VALID_HEX,
+        padBlock: 4096,
+      },
+      expireAt: null,
     },
   };
 }
@@ -59,8 +85,8 @@ afterAll(() => {
 
 describe('mock handlers: manage and delete commit contracts', () => {
   it('rejects compound_commit when intent.uuid mismatches path uuid', async () => {
-    const response = await postJson('/api/manage/compound_commit/aaaaaaaaaaaaaaaaaaaaa', {
-      ...validCompoundCommitPayload('aaaaaaaaaaaaaaaaaaaaa'),
+    const response = await postJson(`/api/manage/compound_commit/${VALID_UUID}`, {
+      ...validDeleteCompoundCommitPayload(VALID_UUID),
       intent: {
         op: 'delete',
         uuid: 'bbbbbbbbbbbbbbbbbbbbb',
@@ -76,13 +102,10 @@ describe('mock handlers: manage and delete commit contracts', () => {
   });
 
   it('rejects delete_commit when intent.op is not delete', async () => {
-    const response = await postJson('/api/delete_commit/channel-a', {
-      uuid: 'channel-a',
-      intent: {
-        uuid: 'channel-a',
-        op: 'update',
-      },
-    });
+    const response = await postJson(
+      `/api/delete_commit/${VALID_UUID}`,
+      validUpdateCompoundCommitPayload(VALID_UUID)
+    );
     const payload = (await response.json()) as { ok: false; code: string };
 
     expect(response.status).toBe(400);
@@ -90,13 +113,10 @@ describe('mock handlers: manage and delete commit contracts', () => {
   });
 
   it('accepts delete_commit when intent.op is delete and uuids match', async () => {
-    const response = await postJson('/api/delete_commit/channel-a', {
-      uuid: 'channel-a',
-      intent: {
-        uuid: 'channel-a',
-        op: 'delete',
-      },
-    });
+    const response = await postJson(
+      `/api/delete_commit/${VALID_UUID}`,
+      validDeleteCompoundCommitPayload(VALID_UUID)
+    );
     const payload = (await response.json()) as { ok: true };
 
     expect(response.status).toBe(200);
@@ -105,8 +125,8 @@ describe('mock handlers: manage and delete commit contracts', () => {
 
   it('accepts compound_commit when body uuid and intent uuid both match path uuid', async () => {
     const response = await postJson(
-      '/api/manage/compound_commit/aaaaaaaaaaaaaaaaaaaaa',
-      validCompoundCommitPayload('aaaaaaaaaaaaaaaaaaaaa')
+      `/api/manage/compound_commit/${VALID_UUID}`,
+      validDeleteCompoundCommitPayload(VALID_UUID)
     );
     const payload = (await response.json()) as { ok: true };
 

@@ -33,11 +33,6 @@ interface RequestBody {
   intent?: unknown;
 }
 
-interface IntentBody {
-  uuid?: unknown;
-  op?: unknown;
-}
-
 function badRequest() {
   return HttpResponse.json(
     {
@@ -63,49 +58,6 @@ async function readJsonObject(request: Request): Promise<RequestBody | null> {
   }
 
   return null;
-}
-
-function getIntentBody(body: RequestBody | null): IntentBody | null {
-  if (!body) {
-    return null;
-  }
-
-  const intentValue = body.intent;
-  if (typeof intentValue === 'object' && intentValue !== null && !Array.isArray(intentValue)) {
-    return intentValue as IntentBody;
-  }
-
-  return null;
-}
-
-function hasUuidMismatch(pathUuid: string | undefined, body: RequestBody | null): boolean {
-  if (!pathUuid || !body) {
-    return true;
-  }
-
-  return body.uuid !== pathUuid;
-}
-
-function hasIntentUuidMismatch(pathUuid: string | undefined, body: RequestBody | null): boolean {
-  if (!pathUuid) {
-    return true;
-  }
-
-  const intent = getIntentBody(body);
-  if (!intent) {
-    return true;
-  }
-
-  return intent.uuid !== pathUuid;
-}
-
-function hasInvalidDeleteIntent(body: RequestBody | null): boolean {
-  const intent = getIntentBody(body);
-  if (!intent) {
-    return true;
-  }
-
-  return intent.op !== 'delete';
 }
 
 function getCreateBeginBody(body: RequestBody | null) {
@@ -364,10 +316,13 @@ export const handlers = [
   http.post(`${API_PREFIX}/delete_commit/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
+    const compoundCommitBody = getCompoundCommitBody(body);
     if (
-      hasUuidMismatch(pathUuid, body) ||
-      hasIntentUuidMismatch(pathUuid, body) ||
-      hasInvalidDeleteIntent(body)
+      !pathUuid ||
+      !compoundCommitBody ||
+      compoundCommitBody.uuid !== pathUuid ||
+      compoundCommitBody.intent.uuid !== pathUuid ||
+      compoundCommitBody.intent.op !== 'delete'
     ) {
       return badRequest();
     }

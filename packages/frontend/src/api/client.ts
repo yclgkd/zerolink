@@ -50,15 +50,12 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-const DeleteCommitRequestSchema = z
-  .object({
-    uuid: UUIDSchema,
-    intent: DeleteIntentSchema,
-  })
-  .refine((value) => value.intent.uuid === value.uuid, {
-    path: ['intent', 'uuid'],
-    message: 'intent.uuid must match uuid',
-  });
+const DeleteCommitRequestSchema = CompoundCommitRequestSchema.extend({
+  intent: DeleteIntentSchema,
+}).refine((value) => value.intent.uuid === value.uuid, {
+  path: ['intent', 'uuid'],
+  message: 'intent.uuid must match uuid',
+});
 
 const DeleteCommitResponseSchema = z.object({
   ok: z.literal(true),
