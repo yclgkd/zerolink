@@ -268,30 +268,37 @@ function LoadingStep() {
   );
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled terminal state: ${String(value)}`);
+}
+
 function TerminalStep({
   state,
 }: {
   state: typeof CHANNEL_STATE.DELETED | typeof CHANNEL_STATE.EXPIRED;
 }) {
-  if (state === CHANNEL_STATE.DELETED) {
-    return (
-      <section className="space-y-2" data-testid="share-step-deleted">
-        <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
-        <p className="text-xs text-muted-foreground">
-          This channel has been destroyed and cannot be recovered.
-        </p>
-      </section>
-    );
+  switch (state) {
+    case CHANNEL_STATE.DELETED:
+      return (
+        <section className="space-y-2" data-testid="share-step-deleted">
+          <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
+          <p className="text-xs text-muted-foreground">
+            This channel has been destroyed and cannot be recovered.
+          </p>
+        </section>
+      );
+    case CHANNEL_STATE.EXPIRED:
+      return (
+        <section className="space-y-2" data-testid="share-step-expired">
+          <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
+          <p className="text-xs text-muted-foreground">
+            The channel exceeded its lifetime and is no longer valid for delivery.
+          </p>
+        </section>
+      );
+    default:
+      return assertNever(state);
   }
-
-  return (
-    <section className="space-y-2" data-testid="share-step-expired">
-      <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
-      <p className="text-xs text-muted-foreground">
-        The channel exceeded its lifetime and is no longer valid for delivery.
-      </p>
-    </section>
-  );
 }
 
 function useSharePageState(uuid?: string) {
@@ -366,6 +373,8 @@ function useSharePageState(uuid?: string) {
   }, [uuid]);
 
   useEffect(() => {
+    void decryptFetchAttempt;
+
     if (!uuid || publicStatusResolvedUuid !== uuid || channelState !== CHANNEL_STATE.DELIVERED) {
       setDecryptFetchPayload(null);
       setDecryptFetchError(null);

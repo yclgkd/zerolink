@@ -12,6 +12,10 @@ const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
 const MOCK_TIMESTAMP = 1_700_000_000_000;
 
 function getFetchSpy(): ReturnType<typeof vi.fn> {
+  if (!vi.isMockFunction(globalThis.fetch)) {
+    throw new Error('global fetch is not mocked');
+  }
+
   return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
 }
 
