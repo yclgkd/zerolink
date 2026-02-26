@@ -55,31 +55,13 @@ describe('SecurityProfileCard', () => {
     expect(card.className).toContain('ring-neon-purple/60');
   });
 
-  it('calls onSelect once when card is clicked', () => {
+  it('calls onSelect once when select button is clicked', () => {
     const onSelect = vi.fn();
     render(<SecurityProfileCard onSelect={onSelect} profile="strict" selected={false} />);
 
-    fireEvent.click(screen.getByTestId('security-profile-card-strict'));
+    fireEvent.click(screen.getByTestId('security-profile-select-strict'));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith('strict');
-  });
-
-  it('calls onSelect on Enter key', () => {
-    const onSelect = vi.fn();
-    render(<SecurityProfileCard onSelect={onSelect} profile="standard" selected={false} />);
-
-    fireEvent.keyDown(screen.getByTestId('security-profile-card-standard'), { key: 'Enter' });
-    expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith('standard');
-  });
-
-  it('calls onSelect on Space key', () => {
-    const onSelect = vi.fn();
-    render(<SecurityProfileCard onSelect={onSelect} profile="standard" selected={false} />);
-
-    fireEvent.keyDown(screen.getByTestId('security-profile-card-standard'), { key: ' ' });
-    expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith('standard');
   });
 
   it('toggles details when learn more is clicked', () => {
@@ -109,10 +91,10 @@ describe('SecurityProfileCard', () => {
   it('updates aria attributes for selected and expanded state', () => {
     render(<SecurityProfileCard onSelect={() => {}} profile="standard" selected />);
 
-    const card = screen.getByTestId('security-profile-card-standard');
+    const selectProfile = screen.getByTestId('security-profile-select-standard');
     const learnMore = screen.getByTestId('security-profile-learn-more-standard');
 
-    expect(card.getAttribute('aria-pressed')).toBe('true');
+    expect(selectProfile.getAttribute('aria-pressed')).toBe('true');
     expect(learnMore.getAttribute('aria-expanded')).toBe('false');
 
     fireEvent.click(learnMore);

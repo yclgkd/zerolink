@@ -1,6 +1,5 @@
 import type { SecurityProfile } from '@zerolink/shared';
 import { KeyRound, type LucideIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
-import type { KeyboardEvent, MouseEvent } from 'react';
 import { useState } from 'react';
 
 import { cn } from '../../lib/utils';
@@ -75,10 +74,6 @@ export const SecurityProfileCardConfigs: Record<SecurityProfile, SecurityProfile
   },
 };
 
-function isSelectKey(key: string): boolean {
-  return key === 'Enter' || key === ' ';
-}
-
 export function SecurityProfileCard({
   profile,
   selected,
@@ -89,33 +84,18 @@ export function SecurityProfileCard({
   const config = SecurityProfileCardConfigs[profile];
   const Icon = config.icon;
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isSelectKey(event.key)) {
-      return;
-    }
-
-    event.preventDefault();
-    onSelect(profile);
-  };
-
-  const handleLearnMoreClick = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
+  const handleLearnMoreClick = () => {
     setExpanded((current) => !current);
   };
 
   return (
     <PageCard
-      aria-pressed={selected}
       className={cn(
-        'group h-full cursor-pointer transition',
+        'group h-full transition',
         selected ? config.selectedRingClass : 'ring-1 ring-transparent',
         className
       )}
       data-testid={`security-profile-card-${profile}`}
-      onClick={() => onSelect(profile)}
-      onKeyDown={handleKeyDown}
-      role="button"
-      tabIndex={0}
       tone={config.tone}
     >
       <PageCardHeader className="gap-2">
@@ -136,16 +116,31 @@ export function SecurityProfileCard({
             <li key={point}>{point}</li>
           ))}
         </ul>
-        <button
-          aria-expanded={expanded}
-          className="inline-flex text-xs font-medium text-primary hover:text-primary/80"
-          data-testid={`security-profile-learn-more-${profile}`}
-          onClick={handleLearnMoreClick}
-          onKeyDown={(event) => event.stopPropagation()}
-          type="button"
-        >
-          Learn more
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            aria-pressed={selected}
+            className={cn(
+              'inline-flex rounded-md border px-2.5 py-1.5 text-xs font-medium transition',
+              selected
+                ? 'border-primary/70 bg-primary/10 text-primary'
+                : 'border-border/70 bg-card/60 text-foreground hover:bg-card'
+            )}
+            data-testid={`security-profile-select-${profile}`}
+            onClick={() => onSelect(profile)}
+            type="button"
+          >
+            {selected ? 'Selected' : 'Select profile'}
+          </button>
+          <button
+            aria-expanded={expanded}
+            className="inline-flex text-xs font-medium text-primary hover:text-primary/80"
+            data-testid={`security-profile-learn-more-${profile}`}
+            onClick={handleLearnMoreClick}
+            type="button"
+          >
+            Learn more
+          </button>
+        </div>
         {expanded ? (
           <p data-testid={`security-profile-details-${profile}`} role="note">
             {config.details}
