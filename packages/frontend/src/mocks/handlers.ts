@@ -1,5 +1,9 @@
 import {
   CHANNEL_STATE,
+  CompoundBeginRequestSchema,
+  CompoundBeginResponseSchema,
+  CompoundCommitRequestSchema,
+  CompoundCommitResponseSchema,
   CreateBeginRequestSchema,
   CreateBeginResponseSchema,
   CreateFinishRequestSchema,
@@ -135,6 +139,24 @@ function getLockCommitBody(body: RequestBody | null) {
   return result.success ? result.data : null;
 }
 
+function getCompoundBeginBody(body: RequestBody | null) {
+  if (!body) {
+    return null;
+  }
+
+  const result = CompoundBeginRequestSchema.safeParse(body);
+  return result.success ? result.data : null;
+}
+
+function getCompoundCommitBody(body: RequestBody | null) {
+  if (!body) {
+    return null;
+  }
+
+  const result = CompoundCommitRequestSchema.safeParse(body);
+  return result.success ? result.data : null;
+}
+
 export const handlers = [
   http.get(`${API_PREFIX}/public/:uuid`, ({ params }) => {
     const pathUuid = getPathUuid(params);
@@ -248,11 +270,12 @@ export const handlers = [
   http.post(`${API_PREFIX}/manage/compound_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body)) {
+    const compoundBeginBody = getCompoundBeginBody(body);
+    if (!pathUuid || !compoundBeginBody || compoundBeginBody.uuid !== pathUuid) {
       return badRequest();
     }
 
-    return HttpResponse.json({
+    const payload = {
       ok: true,
       challenge: {
         id: MOCK_CHALLENGE_ID,
@@ -269,19 +292,37 @@ export const handlers = [
         key_ops: ['encrypt'],
       },
       currentVersion: 0,
-    });
+    };
+    const parsedPayload = CompoundBeginResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
   }),
 
   http.post(`${API_PREFIX}/manage/compound_commit/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body) || hasIntentUuidMismatch(pathUuid, body)) {
+    const compoundCommitBody = getCompoundCommitBody(body);
+    if (
+      !pathUuid ||
+      !compoundCommitBody ||
+      compoundCommitBody.uuid !== pathUuid ||
+      compoundCommitBody.intent.uuid !== pathUuid
+    ) {
       return badRequest();
     }
 
-    return HttpResponse.json({
+    const payload = {
       ok: true,
-    });
+    };
+    const parsedPayload = CompoundCommitResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
   }),
 
   http.post(`${API_PREFIX}/delete_commit/:uuid`, async ({ params, request }) => {
