@@ -5,6 +5,35 @@ import { handlers } from '../mocks/handlers';
 
 const server = setupServer(...handlers);
 const BASE_URL = 'http://localhost';
+const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
+const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+const VALID_ASSERTION = {
+  id: VALID_B64U,
+  rawId: VALID_B64U,
+  type: 'public-key',
+  response: {
+    clientDataJSON: VALID_B64U,
+    authenticatorData: VALID_B64U,
+    signature: VALID_B64U,
+    userHandle: null,
+  },
+} as const;
+
+function validCompoundCommitPayload(uuid: string) {
+  return {
+    uuid,
+    assertion: VALID_ASSERTION,
+    intentHash: VALID_HEX,
+    intent: {
+      op: 'delete' as const,
+      uuid,
+      version: 0,
+      timestamp: Date.now(),
+      nonce: VALID_B64U,
+    },
+  };
+}
 
 async function postJson(pathname: string, payload: Record<string, unknown>): Promise<Response> {
   return fetch(`${BASE_URL}${pathname}`, {
@@ -30,11 +59,14 @@ afterAll(() => {
 
 describe('mock handlers: manage and delete commit contracts', () => {
   it('rejects compound_commit when intent.uuid mismatches path uuid', async () => {
-    const response = await postJson('/api/manage/compound_commit/channel-a', {
-      uuid: 'channel-a',
+    const response = await postJson('/api/manage/compound_commit/aaaaaaaaaaaaaaaaaaaaa', {
+      ...validCompoundCommitPayload('aaaaaaaaaaaaaaaaaaaaa'),
       intent: {
-        uuid: 'channel-b',
-        op: 'update',
+        op: 'delete',
+        uuid: 'bbbbbbbbbbbbbbbbbbbbb',
+        version: 0,
+        timestamp: Date.now(),
+        nonce: VALID_B64U,
       },
     });
     const payload = (await response.json()) as { ok: false; code: string };
@@ -72,13 +104,10 @@ describe('mock handlers: manage and delete commit contracts', () => {
   });
 
   it('accepts compound_commit when body uuid and intent uuid both match path uuid', async () => {
-    const response = await postJson('/api/manage/compound_commit/channel-a', {
-      uuid: 'channel-a',
-      intent: {
-        uuid: 'channel-a',
-        op: 'update',
-      },
-    });
+    const response = await postJson(
+      '/api/manage/compound_commit/aaaaaaaaaaaaaaaaaaaaa',
+      validCompoundCommitPayload('aaaaaaaaaaaaaaaaaaaaa')
+    );
     const payload = (await response.json()) as { ok: true };
 
     expect(response.status).toBe(200);
