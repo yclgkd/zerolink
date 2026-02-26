@@ -245,6 +245,10 @@ describe('CreatePage integration', () => {
     fireEvent.click(screen.getByTestId('create-compatibility-cancel'));
 
     expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
+    expect(continueButton.disabled).toBe(true);
   });
 
   it('does not show passphrase input inside compatibility panel', () => {
