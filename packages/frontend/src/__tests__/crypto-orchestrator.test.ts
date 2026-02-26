@@ -164,7 +164,11 @@ describe('crypto orchestrator', () => {
       publicKey: {
         challenge: VALID_B64U,
         rp: { name: 'ZeroLink' },
-        user: { id: VALID_B64U, name: 'alice@example.com', displayName: 'Alice' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       },
     };
@@ -220,7 +224,11 @@ describe('crypto orchestrator', () => {
           publicKey: {
             challenge: VALID_B64U,
             rp: { name: 'ZeroLink' },
-            user: { id: VALID_B64U, name: 'alice@example.com', displayName: 'Alice' },
+            user: {
+              id: VALID_B64U,
+              name: 'alice@example.com',
+              displayName: 'Alice',
+            },
             pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
           },
         },
@@ -254,7 +262,9 @@ describe('crypto orchestrator', () => {
       dbName: 'test-orchestrator-lock',
       storeName: 'receiver-keys',
     });
-    const { orchestrator, apiClient } = createOrchestrator({ receiverKeyStorage: storage });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
 
     const lockBeginResponse: LockBeginResponse = {
       ok: true,
@@ -317,12 +327,16 @@ describe('crypto orchestrator', () => {
   it('returns KEY_STORAGE_ERROR when receiver key save fails and blocks lock commit', async () => {
     const receiverKeyStorage = {
       save: vi.fn(async () => {
-        throw Object.assign(new Error('db write failed'), { code: 'KEY_STORAGE_ERROR' });
+        throw Object.assign(new Error('db write failed'), {
+          code: 'KEY_STORAGE_ERROR',
+        });
       }),
       load: vi.fn(async () => null),
       remove: vi.fn(async () => {}),
     };
-    const { orchestrator, apiClient } = createOrchestrator({ receiverKeyStorage });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage,
+    });
 
     vi.mocked(apiClient.lockBegin).mockResolvedValue({
       ok: true,
@@ -365,7 +379,11 @@ describe('crypto orchestrator', () => {
       status: 200,
       data: {
         ok: true,
-        challenge: { id: VALID_B64U, seed: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
@@ -401,7 +419,11 @@ describe('crypto orchestrator', () => {
       status: 200,
       data: {
         ok: true,
-        challenge: { id: VALID_B64U, seed: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
         currentVersion: 0,
       },
     });
@@ -434,7 +456,11 @@ describe('crypto orchestrator', () => {
       status: 200,
       data: {
         ok: true,
-        challenge: { id: VALID_B64U, seed: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
@@ -468,7 +494,11 @@ describe('crypto orchestrator', () => {
       status: 200,
       data: {
         ok: true,
-        challenge: { id: VALID_B64U, seed: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
         currentVersion: 3,
       },
     });
@@ -496,14 +526,20 @@ describe('crypto orchestrator', () => {
       dbName: 'test-orchestrator-decrypt',
       storeName: 'receiver-keys',
     });
-    const { orchestrator, apiClient } = createOrchestrator({ receiverKeyStorage: storage });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
 
     vi.mocked(apiClient.lockBegin).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
         ok: true,
-        lockChallenge: { id: VALID_B64U, challenge: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        lockChallenge: {
+          id: VALID_B64U,
+          challenge: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
       },
     });
     vi.mocked(apiClient.lockCommit).mockResolvedValue({
@@ -524,7 +560,11 @@ describe('crypto orchestrator', () => {
       status: 200,
       data: {
         ok: true,
-        challenge: { id: VALID_B64U, seed: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
@@ -604,7 +644,31 @@ describe('crypto orchestrator', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when decrypt payload hash is invalid', async () => {
-    const { orchestrator, apiClient } = createOrchestrator();
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-integrity',
+      storeName: 'receiver-keys',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+
+    await storage.save({
+      uuid: VALID_UUID,
+      receiverPubFpr: VALID_HEX,
+      wrappedPrivateKey: {
+        encryptedKey: VALID_B64U,
+        iv: VALID_B64U,
+        kdf: {
+          kdfType: 'argon2id',
+          version: 19,
+          m: 65536,
+          t: 3,
+          p: 4,
+          salt: VALID_B64U,
+        },
+      },
+      updatedAt: Number(NOW),
+    });
 
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
