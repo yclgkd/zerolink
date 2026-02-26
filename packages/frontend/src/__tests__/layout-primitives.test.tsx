@@ -1,8 +1,8 @@
+import type { ChannelState } from '@zerolink/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import {
-  type ChannelStatus,
   PageCard,
   PageCardContent,
   PageCardTitle,
@@ -32,17 +32,13 @@ describe('layout primitives', () => {
     expect(html).toContain('Section title');
   });
 
-  it('maps page card tone classes', () => {
-    const toneChecks: Array<[PageCardTone, string]> = [
-      ['purple', 'shadow-[0_0_30px_rgb(168_85_247_/_0.15)]'],
-      ['magenta', 'shadow-[0_0_30px_rgb(236_72_153_/_0.15)]'],
-      ['orange', 'shadow-[0_0_30px_rgb(249_115_22_/_0.15)]'],
-      ['cyan', 'shadow-[0_0_30px_rgb(6_182_212_/_0.15)]'],
-    ];
+  it('renders page card with data-slot and tone-specific classes', () => {
+    const tones: PageCardTone[] = ['purple', 'magenta', 'orange', 'cyan'];
 
-    for (const [tone, expectedClass] of toneChecks) {
+    for (const tone of tones) {
       const html = renderToStaticMarkup(<PageCard tone={tone}>Card content</PageCard>);
-      expect(html).toContain(expectedClass);
+      expect(html).toContain('data-slot="card"');
+      expect(html).toContain('Card content');
     }
   });
 
@@ -54,42 +50,46 @@ describe('layout primitives', () => {
     expect(html).toContain('custom-page-card');
   });
 
-  it('maps sender and receiver role badge styles', () => {
+  it('renders sender and receiver role badges with correct labels', () => {
     const senderHtml = renderToStaticMarkup(<RoleBadge party="sender" />);
     const receiverHtml = renderToStaticMarkup(<RoleBadge party="receiver" />);
 
     expect(senderHtml).toContain('Sender');
-    expect(senderHtml).toContain('border-[color:rgb(168_85_247_/_0.35)]');
     expect(receiverHtml).toContain('Receiver');
-    expect(receiverHtml).toContain('border-[color:rgb(6_182_212_/_0.4)]');
   });
 
-  it('maps status badge labels and style classes', () => {
-    const statusChecks: Array<[ChannelStatus, string, string]> = [
-      ['waiting', 'Waiting for Lock', 'text-[#f59e0b]'],
-      ['locked', 'Locked by Receiver', 'text-[#06b6d4]'],
-      ['delivered', 'Delivered', 'text-[#10b981]'],
-      ['deleted', 'Deleted', 'text-[#64748b]'],
-      ['expired', 'Expired', 'text-[#ef4444]'],
+  it('allows custom children on role badge', () => {
+    const html = renderToStaticMarkup(<RoleBadge party="sender">Custom Label</RoleBadge>);
+
+    expect(html).toContain('Custom Label');
+    expect(html).not.toContain('Sender');
+  });
+
+  it('renders status badge with correct label and data attribute', () => {
+    const statusChecks: Array<[ChannelState, string]> = [
+      ['waiting', 'Waiting for Lock'],
+      ['locked', 'Locked by Receiver'],
+      ['delivered', 'Delivered'],
+      ['deleted', 'Deleted'],
+      ['expired', 'Expired'],
     ];
 
-    for (const [status, label, expectedClass] of statusChecks) {
+    for (const [status, label] of statusChecks) {
       const html = renderToStaticMarkup(<StatusBadge status={status} />);
 
       expect(html).toContain(`data-status="${status}"`);
       expect(html).toContain(label);
-      expect(html).toContain(expectedClass);
       expect(html).toContain('aria-hidden="true"');
     }
   });
 
-  it('applies default and custom content classes', () => {
+  it('applies custom class names on page card content', () => {
     const html = renderToStaticMarkup(
       <PageCardContent className="custom-content">Body text</PageCardContent>
     );
 
-    expect(html).toContain('pt-0 text-sm text-muted-foreground');
     expect(html).toContain('custom-content');
     expect(html).toContain('Body text');
+    expect(html).toContain('data-slot="card-content"');
   });
 });

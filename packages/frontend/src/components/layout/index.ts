@@ -8,4 +8,4 @@ export {
   type PageCardTone,
 } from './page-card';
 export { RoleBadge, type RoleBadgeParty } from './role-badge';
-export { type ChannelStatus, StatusBadge } from './status-badge';
+export { StatusBadge } from './status-badge';

@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { buttonVariants } from '../components/ui/button';
 
 describe('button variants', () => {
-  it('includes danger variant styles', () => {
+  it('includes danger variant with destructive token classes', () => {
     const classes = buttonVariants({ variant: 'danger' });
 
-    expect(classes).toContain('text-[#ef4444]');
-    expect(classes).toContain('border-[color:rgb(239_68_68_/_0.5)]');
-    expect(classes).toContain('bg-[color:rgb(239_68_68_/_0.1)]');
+    expect(classes).toContain('text-destructive');
+    expect(classes).toContain('border-destructive/50');
+    expect(classes).toContain('bg-destructive/10');
   });
 
   it('keeps default variant styles', () => {

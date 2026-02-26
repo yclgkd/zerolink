@@ -20,12 +20,7 @@ export function ManagePage(): ReactElement {
           <PageCardTitle asChild className="text-primary">
             <h2>Manage / Deliver</h2>
           </PageCardTitle>
-          <div className="flex items-center gap-2">
-            <RoleBadge party="sender" />
-            <span className="sr-only" data-testid="manage-status-slot">
-              Reserved for status badge
-            </span>
-          </div>
+          <RoleBadge party="sender" />
         </div>
         <PageCardDescription>
           Sender-side page shell for verification, deliver, update, and delete.

@@ -1,43 +1,39 @@
+import type { ChannelState } from '@zerolink/shared';
 import type { ComponentProps } from 'react';
 
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/badge';
 
-export type ChannelStatus = 'waiting' | 'locked' | 'delivered' | 'deleted' | 'expired';
-
-const statusConfig: Record<ChannelStatus, { className: string; icon: string; label: string }> = {
+const statusConfig: Record<ChannelState, { className: string; icon: string; label: string }> = {
   waiting: {
     label: 'Waiting for Lock',
-    icon: '⏳',
-    className:
-      'border-[color:rgb(245_158_11_/_0.3)] bg-[color:rgb(245_158_11_/_0.1)] text-[#f59e0b]',
+    icon: '\u23F3',
+    className: 'border-neon-amber/30 bg-neon-amber/10 text-neon-amber',
   },
   locked: {
     label: 'Locked by Receiver',
-    icon: '🔒',
-    className: 'border-[color:rgb(6_182_212_/_0.3)] bg-[color:rgb(6_182_212_/_0.1)] text-[#06b6d4]',
+    icon: '\uD83D\uDD12',
+    className: 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan',
   },
   delivered: {
     label: 'Delivered',
-    icon: '✨',
-    className:
-      'border-[color:rgb(16_185_129_/_0.3)] bg-[color:rgb(16_185_129_/_0.1)] text-[#10b981]',
+    icon: '\u2728',
+    className: 'border-neon-green/30 bg-neon-green/10 text-neon-green',
   },
   deleted: {
     label: 'Deleted',
-    icon: '🗑',
-    className:
-      'border-[color:rgb(100_116_139_/_0.3)] bg-[color:rgb(100_116_139_/_0.1)] text-[#64748b]',
+    icon: '\uD83D\uDDD1',
+    className: 'border-neon-slate/30 bg-neon-slate/10 text-neon-slate',
   },
   expired: {
     label: 'Expired',
-    icon: '⛔',
-    className: 'border-[color:rgb(239_68_68_/_0.3)] bg-[color:rgb(239_68_68_/_0.1)] text-[#ef4444]',
+    icon: '\u26D4',
+    className: 'border-destructive/30 bg-destructive/10 text-destructive',
   },
 };
 
 type StatusBadgeProps = Omit<ComponentProps<typeof Badge>, 'children' | 'variant'> & {
-  status: ChannelStatus;
+  status: ChannelState;
 };
 
 function StatusBadge({ status, className, ...props }: StatusBadgeProps) {

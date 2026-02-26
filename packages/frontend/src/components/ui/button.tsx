@@ -15,7 +15,7 @@ export const buttonVariants = cva(
           'border border-border bg-card/70 text-muted-foreground hover:bg-card hover:text-foreground',
         ghost: 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
         danger:
-          'border border-[color:rgb(239_68_68_/_0.5)] bg-[color:rgb(239_68_68_/_0.1)] text-[#ef4444] hover:bg-[color:rgb(239_68_68_/_0.2)] hover:shadow-[0_0_20px_rgb(239_68_68_/_0.3)]',
+          'border border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:shadow-[0_0_20px] hover:shadow-destructive/30',
       },
       size: {
         default: 'h-10 px-4 py-2',

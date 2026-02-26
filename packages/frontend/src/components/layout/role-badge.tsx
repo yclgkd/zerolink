@@ -6,17 +6,15 @@ import { Badge } from '../ui/badge';
 const roleConfig = {
   sender: {
     label: 'Sender',
-    className:
-      'border-[color:rgb(168_85_247_/_0.35)] bg-[color:rgb(168_85_247_/_0.15)] text-primary',
+    className: 'border-neon-purple/35 bg-neon-purple/15 text-primary',
   },
   receiver: {
     label: 'Receiver',
-    className:
-      'border-[color:rgb(6_182_212_/_0.4)] bg-[color:rgb(6_182_212_/_0.1)] text-[var(--neon-cyan)]',
+    className: 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan',
   },
 } as const;
 
-type RoleBadgeParty = keyof typeof roleConfig;
+export type RoleBadgeParty = keyof typeof roleConfig;
 
 type RoleBadgeProps = Omit<ComponentProps<typeof Badge>, 'variant'> & {
   party: RoleBadgeParty;
@@ -32,4 +30,4 @@ function RoleBadge({ party, className, children, ...props }: RoleBadgeProps) {
   );
 }
 
-export { RoleBadge, type RoleBadgeParty };
+export { RoleBadge };
