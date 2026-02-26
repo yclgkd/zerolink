@@ -190,6 +190,49 @@ function LockedStep() {
   );
 }
 
+function DecryptFetchSummary({ payload }: { payload: DecryptFetchResponse }) {
+  return (
+    <div
+      className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
+      data-testid="share-decrypt-summary"
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
+        Encrypted Payload Retrieved
+      </p>
+      <p className="text-xs text-foreground">
+        Delivered at: <span className="font-medium">{formatDeliveredAt(payload.deliveredAt)}</span>
+      </p>
+      <p className="text-xs text-foreground">
+        Receiver fingerprint prefix:{' '}
+        <code className="text-neon-cyan">{payload.receiverPubFpr.slice(0, 16)}</code>
+      </p>
+      <p className="text-xs text-foreground">
+        Cipher pad block: <span className="font-medium">{payload.cipherBundle.padBlock}</span>
+      </p>
+    </div>
+  );
+}
+
+function DecryptFetchErrorPanel({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <div
+      className="space-y-3 rounded-xl border border-destructive/35 bg-destructive/10 p-4"
+      data-testid="share-decrypt-error"
+    >
+      <p className="text-xs text-destructive">{error}</p>
+      <Button
+        data-testid="share-decrypt-retry"
+        onClick={onRetry}
+        size="sm"
+        type="button"
+        variant="secondary"
+      >
+        Retry
+      </Button>
+    </div>
+  );
+}
+
 function DeliveredStep({
   decryptFetchPayload,
   decryptFetchError,
@@ -208,82 +251,32 @@ function DeliveredStep({
         </p>
       </div>
 
-      {decryptFetchPayload ? (
-        <div
-          className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
-          data-testid="share-decrypt-summary"
-        >
-          <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
-            Encrypted Payload Retrieved
-          </p>
-          <p className="text-xs text-foreground">
-            Delivered at:{' '}
-            <span className="font-medium">
-              {formatDeliveredAt(decryptFetchPayload.deliveredAt)}
-            </span>
-          </p>
-          <p className="text-xs text-foreground">
-            Receiver fingerprint prefix:{' '}
-            <code className="text-neon-cyan">
-              {decryptFetchPayload.receiverPubFpr.slice(0, 16)}
-            </code>
-          </p>
-          <p className="text-xs text-foreground">
-            Cipher pad block:{' '}
-            <span className="font-medium">{decryptFetchPayload.cipherBundle.padBlock}</span>
-          </p>
-        </div>
-      ) : null}
-
+      {decryptFetchPayload ? <DecryptFetchSummary payload={decryptFetchPayload} /> : null}
       {decryptFetchError ? (
-        <div
-          className="space-y-3 rounded-xl border border-destructive/35 bg-destructive/10 p-4"
-          data-testid="share-decrypt-error"
-        >
-          <p className="text-xs text-destructive">{decryptFetchError}</p>
-          <Button
-            data-testid="share-decrypt-retry"
-            onClick={onRetry}
-            size="sm"
-            type="button"
-            variant="secondary"
-          >
-            Retry
-          </Button>
-        </div>
+        <DecryptFetchErrorPanel error={decryptFetchError} onRetry={onRetry} />
       ) : null}
     </section>
   );
 }
 
-/**
- * The receiver page that manages lock and delivered-state UI while decrypt integration is pending.
- */
-export function SharePage(): ReactElement {
-  const { uuid } = useParams<{ uuid: string }>();
+function useSharePageState(uuid?: string) {
   const [step, setStep] = useState<SharePageStep>('onboarding');
   const [passphrase, setPassphrase] = useState('');
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
   const [decryptFetchPayload, setDecryptFetchPayload] = useState<DecryptFetchResponse | null>(null);
   const [decryptFetchError, setDecryptFetchError] = useState<string | null>(null);
   const [decryptFetchAttempt, setDecryptFetchAttempt] = useState(0);
-  const canGenerate = passphrase.trim().length > 0;
 
   useEffect(() => {
-    if (!uuid) {
-      return;
-    }
+    if (!uuid) return;
 
     let cancelled = false;
-
     async function loadChannelState(): Promise<void> {
       try {
         const response = await fetch(`/api/public/${uuid}`);
         const payload = (await response.json()) as unknown;
         const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
-        if (!parsedPayload.success || cancelled) {
-          return;
-        }
+        if (!parsedPayload.success || cancelled) return;
 
         setChannelState(parsedPayload.data.state);
         if (parsedPayload.data.state === CHANNEL_STATE.WAITING) {
@@ -292,22 +285,17 @@ export function SharePage(): ReactElement {
           setStep('locked');
         }
       } catch {
-        // Keep UI-only waiting fallback when public status cannot be retrieved.
-        if (!cancelled) {
-          setChannelState(CHANNEL_STATE.WAITING);
-        }
+        if (!cancelled) setChannelState(CHANNEL_STATE.WAITING);
       }
     }
 
     void loadChannelState();
-
     return () => {
       cancelled = true;
     };
   }, [uuid]);
 
   useEffect(() => {
-    // decryptFetchAttempt is intentionally in deps to allow manual retry
     void decryptFetchAttempt;
 
     if (!uuid || channelState !== CHANNEL_STATE.DELIVERED) {
@@ -317,19 +305,14 @@ export function SharePage(): ReactElement {
     }
 
     let cancelled = false;
-
     async function loadDecryptPayload(): Promise<void> {
       try {
         const response = await fetch(`/api/decrypt_fetch/${uuid}`);
-        if (!response.ok) {
-          throw new Error('decrypt fetch request failed');
-        }
+        if (!response.ok) throw new Error('decrypt fetch request failed');
 
         const payload = (await response.json()) as unknown;
         const parsedPayload = parseDecryptFetchPayload(payload);
-        if (!parsedPayload) {
-          throw new Error('decrypt fetch payload invalid');
-        }
+        if (!parsedPayload) throw new Error('decrypt fetch payload invalid');
 
         if (!cancelled) {
           setDecryptFetchPayload(parsedPayload);
@@ -344,27 +327,35 @@ export function SharePage(): ReactElement {
     }
 
     void loadDecryptPayload();
-
     return () => {
       cancelled = true;
     };
   }, [channelState, uuid, decryptFetchAttempt]);
 
-  function handleContinue(): void {
-    setStep('lock');
-  }
+  return {
+    step,
+    setStep,
+    passphrase,
+    setPassphrase,
+    channelState,
+    decryptFetchPayload,
+    decryptFetchError,
+    retryFetch: () => setDecryptFetchAttempt((n) => n + 1),
+    canGenerate: passphrase.trim().length > 0,
+  };
+}
 
-  function handleBack(): void {
-    setStep('onboarding');
-  }
+/**
+ * The receiver page that manages lock and delivered-state UI while decrypt integration is pending.
+ */
+export function SharePage(): ReactElement {
+  const { uuid } = useParams<{ uuid: string }>();
+  const state = useSharePageState(uuid);
 
   function handleGenerate(): void {
-    if (!canGenerate) {
-      return;
-    }
-
-    setPassphrase('');
-    setStep('locked');
+    if (!state.canGenerate) return;
+    state.setPassphrase('');
+    state.setStep('locked');
   }
 
   return (
@@ -373,29 +364,31 @@ export function SharePage(): ReactElement {
       <PageCardContent className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
-        {channelState === CHANNEL_STATE.WAITING ? (
+        {state.channelState === CHANNEL_STATE.WAITING ? (
           <>
-            {step === 'onboarding' ? <OnboardingStep onContinue={handleContinue} /> : null}
-            {step === 'lock' ? (
+            {state.step === 'onboarding' ? (
+              <OnboardingStep onContinue={() => state.setStep('lock')} />
+            ) : null}
+            {state.step === 'lock' ? (
               <LockStep
-                canGenerate={canGenerate}
-                onBack={handleBack}
+                canGenerate={state.canGenerate}
+                onBack={() => state.setStep('onboarding')}
                 onGenerate={handleGenerate}
-                onPassphraseChange={setPassphrase}
-                passphrase={passphrase}
+                onPassphraseChange={state.setPassphrase}
+                passphrase={state.passphrase}
               />
             ) : null}
-            {step === 'locked' ? <LockedStep /> : null}
+            {state.step === 'locked' ? <LockedStep /> : null}
           </>
         ) : null}
 
-        {channelState === CHANNEL_STATE.LOCKED ? <LockedStep /> : null}
+        {state.channelState === CHANNEL_STATE.LOCKED ? <LockedStep /> : null}
 
-        {channelState === CHANNEL_STATE.DELIVERED ? (
+        {state.channelState === CHANNEL_STATE.DELIVERED ? (
           <DeliveredStep
-            decryptFetchError={decryptFetchError}
-            decryptFetchPayload={decryptFetchPayload}
-            onRetry={() => setDecryptFetchAttempt((n) => n + 1)}
+            decryptFetchError={state.decryptFetchError}
+            decryptFetchPayload={state.decryptFetchPayload}
+            onRetry={state.retryFetch}
           />
         ) : null}
       </PageCardContent>
