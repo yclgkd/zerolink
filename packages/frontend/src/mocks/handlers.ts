@@ -1,5 +1,6 @@
 import {
   CHANNEL_STATE,
+  CipherBundleSchema,
   CompoundBeginRequestSchema,
   CompoundBeginResponseSchema,
   CompoundCommitRequestSchema,
@@ -8,11 +9,14 @@ import {
   CreateBeginResponseSchema,
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
+  HexStringSchema,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
   LockCommitRequestSchema,
   LockCommitResponseSchema,
   ROUTE_PATTERN,
+  UnixMsSchema,
+  UUIDSchema,
 } from '@zerolink/shared';
 import { HttpResponse, http } from 'msw';
 
@@ -22,6 +26,7 @@ const MOCK_CHALLENGE = 'bW9ja19jaGFsbGVuZ2VfdmFsdWU';
 const MOCK_SEED = 'bW9ja19jb21wb3VuZF9zZWVk';
 const MOCK_B64U = 'bW9ja19iYXNlNjR1cmw';
 const MOCK_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const MOCK_TIMESTAMP = 1_700_000_000_000;
 
 interface RequestBody {
   uuid?: unknown;
@@ -170,6 +175,37 @@ export const handlers = [
     });
   }),
 
+  http.get(`${API_PREFIX}/decrypt_fetch/:uuid`, ({ params }) => {
+    const pathUuid = getPathUuid(params);
+    const parsedUuid = pathUuid ? UUIDSchema.safeParse(pathUuid) : null;
+    if (!parsedUuid?.success) {
+      return badRequest();
+    }
+
+    const payload = {
+      ok: true,
+      cipherBundle: {
+        ciphertext: MOCK_B64U,
+        iv: MOCK_B64U,
+        aad: MOCK_B64U,
+        encContentKey: MOCK_B64U,
+        ciphertextHash: MOCK_HEX,
+        padBlock: 4096,
+      },
+      receiverPubFpr: MOCK_HEX,
+      deliveredAt: MOCK_TIMESTAMP,
+    };
+    if (
+      !CipherBundleSchema.safeParse(payload.cipherBundle).success ||
+      !HexStringSchema.safeParse(payload.receiverPubFpr).success ||
+      !UnixMsSchema.safeParse(payload.deliveredAt).success
+    ) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(payload);
+  }),
+
   http.post(`${API_PREFIX}/create_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
@@ -237,7 +273,7 @@ export const handlers = [
       lockChallenge: {
         id: MOCK_CHALLENGE_ID,
         challenge: MOCK_CHALLENGE,
-        expiresAt: Date.now() + 60_000,
+        expiresAt: MOCK_TIMESTAMP + 60_000,
       },
     };
     const parsedPayload = LockBeginResponseSchema.safeParse(payload);
@@ -280,7 +316,7 @@ export const handlers = [
       challenge: {
         id: MOCK_CHALLENGE_ID,
         seed: MOCK_SEED,
-        expiresAt: Date.now() + 60_000,
+        expiresAt: MOCK_TIMESTAMP + 60_000,
       },
       receiverPubFpr: MOCK_HEX,
       receiverPubJwk: {
