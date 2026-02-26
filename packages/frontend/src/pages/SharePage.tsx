@@ -53,6 +53,36 @@ const mockSafetyCodeDisplay: SafetyCodeDisplay = {
   fullFpr: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00' as HexString,
 };
 
+function SharePageHeader() {
+  return (
+    <PageCardHeader>
+      <div className="flex items-center justify-between gap-3">
+        <PageCardTitle asChild className="text-primary">
+          <h2>Secure Channel</h2>
+        </PageCardTitle>
+        <RoleBadge party="receiver" />
+      </div>
+      <PageCardDescription>
+        Receiver-side lock flow UI before decrypt integration.
+      </PageCardDescription>
+    </PageCardHeader>
+  );
+}
+
+function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
+  return (
+    <p>
+      UUID:{' '}
+      <code
+        className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground"
+        data-testid="share-uuid"
+      >
+        {uuid ?? '(missing uuid)'}
+      </code>
+    </p>
+  );
+}
+
 function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   return (
     <section className="space-y-4" data-testid="share-step-onboarding">
@@ -171,27 +201,9 @@ export function SharePage(): ReactElement {
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
-      <PageCardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <PageCardTitle asChild className="text-primary">
-            <h2>Secure Channel</h2>
-          </PageCardTitle>
-          <RoleBadge party="receiver" />
-        </div>
-        <PageCardDescription>
-          Receiver-side lock flow UI before decrypt integration.
-        </PageCardDescription>
-      </PageCardHeader>
+      <SharePageHeader />
       <PageCardContent className="space-y-6">
-        <p>
-          UUID:{' '}
-          <code
-            className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground"
-            data-testid="share-uuid"
-          >
-            {uuid ?? '(missing uuid)'}
-          </code>
-        </p>
+        <UuidDisplay uuid={uuid} />
 
         {step === 'onboarding' ? <OnboardingStep onContinue={handleContinue} /> : null}
 
