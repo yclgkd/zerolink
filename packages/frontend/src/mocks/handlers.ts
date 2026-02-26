@@ -26,6 +26,7 @@ const MOCK_CHALLENGE = 'bW9ja19jaGFsbGVuZ2VfdmFsdWU';
 const MOCK_SEED = 'bW9ja19jb21wb3VuZF9zZWVk';
 const MOCK_B64U = 'bW9ja19iYXNlNjR1cmw';
 const MOCK_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const MOCK_TIMESTAMP = 1_700_000_000_000;
 
 interface RequestBody {
   uuid?: unknown;
@@ -192,7 +193,7 @@ export const handlers = [
         padBlock: 4096,
       },
       receiverPubFpr: MOCK_HEX,
-      deliveredAt: Date.now(),
+      deliveredAt: MOCK_TIMESTAMP,
     };
     if (
       !CipherBundleSchema.safeParse(payload.cipherBundle).success ||
@@ -272,7 +273,7 @@ export const handlers = [
       lockChallenge: {
         id: MOCK_CHALLENGE_ID,
         challenge: MOCK_CHALLENGE,
-        expiresAt: Date.now() + 60_000,
+        expiresAt: MOCK_TIMESTAMP + 60_000,
       },
     };
     const parsedPayload = LockBeginResponseSchema.safeParse(payload);
@@ -315,7 +316,7 @@ export const handlers = [
       challenge: {
         id: MOCK_CHALLENGE_ID,
         seed: MOCK_SEED,
-        expiresAt: Date.now() + 60_000,
+        expiresAt: MOCK_TIMESTAMP + 60_000,
       },
       receiverPubFpr: MOCK_HEX,
       receiverPubJwk: {

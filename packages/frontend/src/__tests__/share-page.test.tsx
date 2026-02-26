@@ -9,6 +9,11 @@ import { SharePage } from '../pages/SharePage';
 const originalFetch = globalThis.fetch;
 const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
+const MOCK_TIMESTAMP = 1_700_000_000_000;
+
+function getFetchSpy(): ReturnType<typeof vi.fn> {
+  return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+}
 
 function renderSharePage(routePath = '/s/:uuid', initialPath = '/s/demo-channel-shell') {
   return render(
@@ -54,7 +59,7 @@ function mockDecryptFetchSuccess(fetchSpy: ReturnType<typeof vi.fn>) {
         padBlock: 4096,
       },
       receiverPubFpr: VALID_HEX,
-      deliveredAt: Date.now(),
+      deliveredAt: MOCK_TIMESTAMP,
     })
   );
 }
@@ -83,7 +88,7 @@ afterEach(() => {
 
 describe('SharePage', () => {
   it('loads waiting state from /api/public/:uuid and renders onboarding by default', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
     renderSharePage();
@@ -98,7 +103,7 @@ describe('SharePage', () => {
   });
 
   it('moves from onboarding to lock form when continuing in waiting state', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
     renderSharePage();
 
@@ -109,7 +114,7 @@ describe('SharePage', () => {
   });
 
   it('renders passphrase input and lock actions in lock form state', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
     renderSharePage();
 
@@ -122,7 +127,7 @@ describe('SharePage', () => {
   });
 
   it('keeps generate button disabled when passphrase is empty', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
     renderSharePage();
 
@@ -134,7 +139,7 @@ describe('SharePage', () => {
   });
 
   it('allows waiting lock flow to reach locked view as local UI state', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
     renderSharePage();
 
@@ -150,7 +155,7 @@ describe('SharePage', () => {
   });
 
   it('renders locked state from /api/public/:uuid with safety code and next steps', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
     renderSharePage();
 
@@ -160,7 +165,7 @@ describe('SharePage', () => {
   });
 
   it('renders delivered state and fetches decrypt payload', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'delivered');
     mockDecryptFetchSuccess(fetchSpy);
 
@@ -174,7 +179,7 @@ describe('SharePage', () => {
   });
 
   it('shows non-blocking decrypt fetch error in delivered state', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'delivered');
     fetchSpy.mockResolvedValueOnce(jsonResponse({ ok: false, code: 'BAD_REQUEST' }, 400));
 
@@ -186,7 +191,7 @@ describe('SharePage', () => {
   });
 
   it('shows uuid and receiver role badge', async () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
     renderSharePage();
 
@@ -196,10 +201,25 @@ describe('SharePage', () => {
   });
 
   it('falls back to missing uuid label and skips network fetch when uuid param is absent', () => {
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = getFetchSpy();
     renderSharePage('/s', '/s');
 
     expect(screen.getByTestId('share-uuid').textContent).toContain('(missing uuid)');
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('retries decrypt fetch when clicking Retry button', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered');
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ ok: false, code: 'BAD_REQUEST' }, 400));
+
+    renderSharePage();
+
+    expect(await screen.findByTestId('share-decrypt-error')).toBeTruthy();
+
+    mockDecryptFetchSuccess(fetchSpy);
+    fireEvent.click(screen.getByTestId('share-decrypt-retry'));
+
+    expect(await screen.findByTestId('share-decrypt-summary')).toBeTruthy();
   });
 });

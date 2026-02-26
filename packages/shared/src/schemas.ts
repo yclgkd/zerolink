@@ -371,6 +371,15 @@ export const PublicStatusResponseSchema = z.object({
   state: ChannelStateSchema,
 });
 
+export const DecryptFetchResponseSchema = z.object({
+  ok: z.literal(true),
+  cipherBundle: CipherBundleSchema,
+  receiverPubFpr: HexStringSchema,
+  deliveredAt: UnixMsSchema,
+});
+
+export type DecryptFetchResponse = z.infer<typeof DecryptFetchResponseSchema>;
+
 export const ErrorResponseSchema = z.object({
   ok: z.literal(false),
   code: z.string().min(1, 'error code must not be empty'),

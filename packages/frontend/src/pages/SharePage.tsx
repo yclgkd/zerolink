@@ -1,11 +1,10 @@
 import {
   CHANNEL_STATE,
   type ChannelState,
-  CipherBundleSchema,
+  type DecryptFetchResponse,
+  DecryptFetchResponseSchema,
   type HexString,
-  HexStringSchema,
   PublicStatusResponseSchema,
-  UnixMsSchema,
 } from '@zerolink/shared';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
@@ -24,19 +23,6 @@ import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
 
 type SharePageStep = 'onboarding' | 'lock' | 'locked';
-
-type DecryptFetchPayload = {
-  cipherBundle: {
-    ciphertext: string;
-    iv: string;
-    aad: string;
-    encContentKey: string;
-    ciphertextHash: HexString;
-    padBlock: number;
-  };
-  receiverPubFpr: HexString;
-  deliveredAt: number;
-};
 
 const onboardingItems = [
   {
@@ -62,7 +48,8 @@ const nextSteps = [
   'Keep this tab open until the sender confirms delivery.',
 ] as const;
 
-const mockSafetyCodeDisplay = {
+// TODO(ZL-029): Replace with computed safety code from receiver keypair
+const PLACEHOLDER_SAFETY_CODE = {
   emoji: {
     type: 'emoji',
     emojis: ['🔥', '🌲', '🚀', '🔮', '💎', '🎯', '⚡', '🌙'],
@@ -79,28 +66,9 @@ function formatDeliveredAt(unixMs: number): string {
   return new Date(unixMs).toLocaleString();
 }
 
-function parseDecryptFetchPayload(payload: unknown): DecryptFetchPayload | null {
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-    return null;
-  }
-
-  const responsePayload = payload as Record<string, unknown>;
-  if (responsePayload['ok'] !== true) {
-    return null;
-  }
-
-  const parsedCipherBundle = CipherBundleSchema.safeParse(responsePayload['cipherBundle']);
-  const parsedReceiverPubFpr = HexStringSchema.safeParse(responsePayload['receiverPubFpr']);
-  const parsedDeliveredAt = UnixMsSchema.safeParse(responsePayload['deliveredAt']);
-  if (!parsedCipherBundle.success || !parsedReceiverPubFpr.success || !parsedDeliveredAt.success) {
-    return null;
-  }
-
-  return {
-    cipherBundle: parsedCipherBundle.data,
-    receiverPubFpr: parsedReceiverPubFpr.data,
-    deliveredAt: parsedDeliveredAt.data,
-  };
+function parseDecryptFetchPayload(payload: unknown): DecryptFetchResponse | null {
+  const result = DecryptFetchResponseSchema.safeParse(payload);
+  return result.success ? result.data : null;
 }
 
 function SharePageHeader() {
@@ -206,7 +174,7 @@ function LockedStep() {
           Verify the Safety Code with the sender before delivery.
         </p>
       </div>
-      <SafetyCode display={mockSafetyCodeDisplay} />
+      <SafetyCode display={PLACEHOLDER_SAFETY_CODE} />
       <div
         className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
         data-testid="share-next-steps"
@@ -225,9 +193,11 @@ function LockedStep() {
 function DeliveredStep({
   decryptFetchPayload,
   decryptFetchError,
+  onRetry,
 }: {
-  decryptFetchPayload: DecryptFetchPayload | null;
+  decryptFetchPayload: DecryptFetchResponse | null;
   decryptFetchError: string | null;
+  onRetry: () => void;
 }) {
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
@@ -267,10 +237,19 @@ function DeliveredStep({
 
       {decryptFetchError ? (
         <div
-          className="rounded-xl border border-destructive/35 bg-destructive/10 p-4 text-xs text-destructive"
+          className="space-y-3 rounded-xl border border-destructive/35 bg-destructive/10 p-4"
           data-testid="share-decrypt-error"
         >
-          {decryptFetchError}
+          <p className="text-xs text-destructive">{decryptFetchError}</p>
+          <Button
+            data-testid="share-decrypt-retry"
+            onClick={onRetry}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            Retry
+          </Button>
         </div>
       ) : null}
     </section>
@@ -285,8 +264,9 @@ export function SharePage(): ReactElement {
   const [step, setStep] = useState<SharePageStep>('onboarding');
   const [passphrase, setPassphrase] = useState('');
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
-  const [decryptFetchPayload, setDecryptFetchPayload] = useState<DecryptFetchPayload | null>(null);
+  const [decryptFetchPayload, setDecryptFetchPayload] = useState<DecryptFetchResponse | null>(null);
   const [decryptFetchError, setDecryptFetchError] = useState<string | null>(null);
+  const [decryptFetchAttempt, setDecryptFetchAttempt] = useState(0);
   const canGenerate = passphrase.trim().length > 0;
 
   useEffect(() => {
@@ -327,6 +307,9 @@ export function SharePage(): ReactElement {
   }, [uuid]);
 
   useEffect(() => {
+    // decryptFetchAttempt is intentionally in deps to allow manual retry
+    void decryptFetchAttempt;
+
     if (!uuid || channelState !== CHANNEL_STATE.DELIVERED) {
       setDecryptFetchPayload(null);
       setDecryptFetchError(null);
@@ -365,7 +348,7 @@ export function SharePage(): ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [channelState, uuid]);
+  }, [channelState, uuid, decryptFetchAttempt]);
 
   function handleContinue(): void {
     setStep('lock');
@@ -412,6 +395,7 @@ export function SharePage(): ReactElement {
           <DeliveredStep
             decryptFetchError={decryptFetchError}
             decryptFetchPayload={decryptFetchPayload}
+            onRetry={() => setDecryptFetchAttempt((n) => n + 1)}
           />
         ) : null}
       </PageCardContent>
