@@ -12,6 +12,7 @@ import {
   type HexString,
   HexStringSchema,
   type LockBeginResponse,
+  MAX_PLAINTEXT_BYTES,
   type RSAPublicKeyJWK,
   SECURITY_PROFILE,
   UnixMsSchema,
@@ -420,6 +421,44 @@ describe('crypto orchestrator', () => {
       },
     });
     expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
+  });
+
+  it('returns CRYPTO_ERROR when deliver encryption pipeline throws', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: { id: VALID_B64U, seed: VALID_B64U, expiresAt: CHALLENGE_EXPIRES_AT },
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion: 0,
+      },
+    });
+
+    const result = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: new Uint8Array(MAX_PLAINTEXT_BYTES + 1),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'CRYPTO_ERROR',
+        stage: 'deliver.crypto',
+      },
+    });
+    expect(vi.mocked(assertWithWebAuthn)).not.toHaveBeenCalled();
+    expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
+    expect(useDeliverStore.getState().compoundCommit.status).toBe('error');
+    expect(useDeliverStore.getState().compoundCommit.errorCode).toBe('CRYPTO_ERROR');
   });
 
   it('runs delete flow and marks deleted state', async () => {

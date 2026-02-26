@@ -484,45 +484,58 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
       return toError('MISSING_RECEIVER_IDENTITY', 'deliver.validate');
     }
 
-    const plaintextBytes = toPlaintextBytes(input.plaintext);
-    const aad = toUtf8Bytes(input.uuid);
-    const aesKey = await generateAesKey();
-    const rawContentKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
-    const encrypted = await encryptAesGcm({ key: aesKey, plaintext: plaintextBytes, aad });
-    const receiverPublicKey = await importReceiverPublicKeyFromJwk(receiverPubJwk);
-    const encContentKey = await wrapContentKey({
-      receiverPublicKey,
-      contentKey: rawContentKey,
-    });
-    const ciphertextHash = await computeSha256Hex(encrypted.ciphertext);
+    let cipherBundle: CipherBundle;
+    let intent: UpdateIntent;
+    let intentHash: string;
+    let expectedChallenge: string;
+    try {
+      const plaintextBytes = toPlaintextBytes(input.plaintext);
+      const aad = toUtf8Bytes(input.uuid);
+      const aesKey = await generateAesKey();
+      const rawContentKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
+      const encrypted = await encryptAesGcm({ key: aesKey, plaintext: plaintextBytes, aad });
+      const receiverPublicKey = await importReceiverPublicKeyFromJwk(receiverPubJwk);
+      const encContentKey = await wrapContentKey({
+        receiverPublicKey,
+        contentKey: rawContentKey,
+      });
+      const ciphertextHash = await computeSha256Hex(encrypted.ciphertext);
 
-    const cipherBundle = toCipherBundleTransport({
-      ciphertext: encrypted.ciphertext,
-      iv: encrypted.iv,
-      aad,
-      encContentKey,
-      ciphertextHash,
-      padBlock: encrypted.padBlock,
-    });
+      cipherBundle = toCipherBundleTransport({
+        ciphertext: encrypted.ciphertext,
+        iv: encrypted.iv,
+        aad,
+        encContentKey,
+        ciphertextHash,
+        padBlock: encrypted.padBlock,
+      });
 
-    const intent: UpdateIntent = {
-      op: 'update',
-      uuid: asUuid(input.uuid),
-      version: compoundBeginResult.data.currentVersion,
-      timestamp: asUnixMs(now()),
-      nonce: randomBase64Url(NONCE_BYTES, randomBytes),
-      receiverPubFpr,
-      cipherBundle,
-      expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
-    };
+      intent = {
+        op: 'update',
+        uuid: asUuid(input.uuid),
+        version: compoundBeginResult.data.currentVersion,
+        timestamp: asUnixMs(now()),
+        nonce: randomBase64Url(NONCE_BYTES, randomBytes),
+        receiverPubFpr,
+        cipherBundle,
+        expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
+      };
 
-    const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
-    const expectedChallenge = await deriveExpectedCompoundChallengeB64u({
-      uuid: input.uuid,
-      challengeId: challenge.id,
-      challengeSeed: challenge.seed,
-      intentHash,
-    });
+      intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
+      expectedChallenge = await deriveExpectedCompoundChallengeB64u({
+        uuid: input.uuid,
+        challengeId: challenge.id,
+        challengeSeed: challenge.seed,
+        intentHash,
+      });
+    } catch (error) {
+      state.failCompoundCommit('CRYPTO_ERROR');
+      return toError(
+        'CRYPTO_ERROR',
+        'deliver.crypto',
+        error instanceof Error ? error.message : undefined
+      );
+    }
 
     state.startCompoundCommit();
     const assertionResult = await assertWithWebAuthn({
