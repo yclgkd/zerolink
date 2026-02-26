@@ -162,7 +162,12 @@ export function CreatePage(): ReactElement {
   const [createdProfile, setCreatedProfile] = useState<SecurityProfile | null>(null);
 
   const webAuthnSupported = useMemo(
-    () => typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined',
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.PublicKeyCredential !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      typeof navigator.credentials !== 'undefined' &&
+      typeof navigator.credentials.create === 'function',
     []
   );
 
@@ -185,6 +190,7 @@ export function CreatePage(): ReactElement {
   function completeCreateFlow(): void {
     setCreatedProfile(selectedProfile);
     setShowCompatibilityConfirm(false);
+    setCompatibilityAccepted(false);
   }
 
   function handleCreate(): void {
