@@ -2,7 +2,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 
 import { cn } from '../../lib/utils';
-import { getPassphraseStrength } from './passphrase-strength';
+import { getPassphraseStrength, type PassphraseStrength } from './passphrase-strength';
 
 const STRICT_WARNING_TEXT =
   'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)';
@@ -40,6 +40,42 @@ function getSegmentClass(strengthLevel: 0 | 1 | 2 | 3, segmentLevel: 1 | 2 | 3):
   if (strengthLevel === 1) return 'bg-destructive';
   if (strengthLevel === 2) return 'bg-neon-amber';
   return 'bg-neon-green';
+}
+
+function PassphraseStrengthIndicator({
+  strength,
+  showWarning,
+}: {
+  strength: PassphraseStrength;
+  showWarning: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">Passphrase strength</span>
+        <span className={cn('text-xs font-medium', getLabelClass(strength.level))}>
+          {strength.label}
+        </span>
+      </div>
+      <div className="flex gap-1.5">
+        {([1, 2, 3] as const).map((segmentLevel) => (
+          <div
+            className={cn(
+              'h-1.5 flex-1 rounded-full transition-colors',
+              getSegmentClass(strength.level, segmentLevel)
+            )}
+            data-testid={`passphrase-strength-segment-${segmentLevel}`}
+            key={segmentLevel}
+          />
+        ))}
+      </div>
+      {showWarning ? (
+        <p className="rounded-lg border border-neon-amber/35 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
+          {STRICT_WARNING_TEXT}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -89,31 +125,7 @@ export function PassphraseInput({
       </div>
 
       {showStrength && value ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Passphrase strength</span>
-            <span className={cn('text-xs font-medium', getLabelClass(strength.level))}>
-              {strength.label}
-            </span>
-          </div>
-          <div className="flex gap-1.5">
-            {([1, 2, 3] as const).map((segmentLevel) => (
-              <div
-                className={cn(
-                  'h-1.5 flex-1 rounded-full transition-colors',
-                  getSegmentClass(strength.level, segmentLevel)
-                )}
-                data-testid={`passphrase-strength-segment-${segmentLevel}`}
-                key={segmentLevel}
-              />
-            ))}
-          </div>
-          {showWarning ? (
-            <p className="rounded-lg border border-neon-amber/35 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
-              {STRICT_WARNING_TEXT}
-            </p>
-          ) : null}
-        </div>
+        <PassphraseStrengthIndicator showWarning={showWarning} strength={strength} />
       ) : null}
     </div>
   );
