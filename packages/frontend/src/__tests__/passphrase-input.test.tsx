@@ -1,0 +1,96 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { PassphraseInput } from '../components/lock/passphrase-input';
+
+describe('PassphraseInput', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders password input by default', () => {
+    render(<PassphraseInput onChange={() => {}} value="" />);
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('type')).toBe('password');
+  });
+
+  it('toggles passphrase visibility when the button is clicked', () => {
+    render(<PassphraseInput onChange={() => {}} value="abc" />);
+
+    const input = screen.getByTestId('passphrase-input-field');
+    const toggle = screen.getByRole('button', { name: 'Show passphrase' });
+
+    fireEvent.click(toggle);
+    expect(input.getAttribute('type')).toBe('text');
+    expect(screen.getByRole('button', { name: 'Hide passphrase' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide passphrase' }));
+    expect(input.getAttribute('type')).toBe('password');
+  });
+
+  it('calls onChange with the updated value', () => {
+    const onChange = vi.fn();
+    render(<PassphraseInput onChange={onChange} value="" />);
+
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'new-passphrase' },
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('new-passphrase');
+  });
+
+  it('hides the strength section when showStrength is false', () => {
+    render(<PassphraseInput onChange={() => {}} showStrength={false} value="Password12!" />);
+
+    expect(screen.queryByText('Passphrase strength')).toBeNull();
+  });
+
+  it('shows strength label and three segments when value is non-empty', () => {
+    render(<PassphraseInput onChange={() => {}} value="Password12" />);
+
+    expect(screen.getByText('Passphrase strength')).toBeTruthy();
+    expect(screen.getByText('Medium')).toBeTruthy();
+    expect(screen.getAllByTestId(/passphrase-strength-segment-/)).toHaveLength(3);
+  });
+
+  it('shows strict warning for weak passphrase in strict mode', () => {
+    render(<PassphraseInput onChange={() => {}} strictMode value="abc" />);
+
+    expect(
+      screen.getByText(
+        'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)'
+      )
+    ).toBeTruthy();
+  });
+
+  it('does not show strict warning for medium or strong passphrase', () => {
+    const { rerender } = render(
+      <PassphraseInput onChange={() => {}} strictMode value="Password12" />
+    );
+
+    expect(
+      screen.queryByText(
+        'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)'
+      )
+    ).toBeNull();
+
+    rerender(<PassphraseInput onChange={() => {}} strictMode value="Strong#Pass1234XYZ" />);
+    expect(
+      screen.queryByText(
+        'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)'
+      )
+    ).toBeNull();
+  });
+
+  it('merges custom className with default container classes', () => {
+    render(<PassphraseInput className="custom-passphrase-root" onChange={() => {}} value="" />);
+
+    expect(screen.getByTestId('passphrase-input-root').className).toContain(
+      'custom-passphrase-root'
+    );
+  });
+});
