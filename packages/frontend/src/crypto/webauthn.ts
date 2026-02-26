@@ -266,7 +266,7 @@ export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfile
     case SECURITY_PROFILE.HARDWARE_ONLY:
       return {
         userVerification: 'required',
-        residentKey: 'required',
+        residentKey: 'preferred',
         attestation: 'direct',
         authenticatorAttachment: 'cross-platform',
       };

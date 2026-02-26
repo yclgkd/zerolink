@@ -177,7 +177,7 @@ describe('resolveWebAuthnPolicy', () => {
   it('returns hardware-only profile defaults', () => {
     expect(resolveWebAuthnPolicy(SECURITY_PROFILE.HARDWARE_ONLY)).toEqual({
       userVerification: 'required',
-      residentKey: 'required',
+      residentKey: 'preferred',
       attestation: 'direct',
       authenticatorAttachment: 'cross-platform',
     });
@@ -294,7 +294,7 @@ describe('registerWithWebAuthn', () => {
         attestation: 'direct',
         authenticatorSelection: {
           userVerification: 'required',
-          residentKey: 'required',
+          residentKey: 'preferred',
           authenticatorAttachment: 'cross-platform',
         },
       },
