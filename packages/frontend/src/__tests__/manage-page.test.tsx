@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ManagePage } from '../pages/ManagePage';
 
 const originalFetch = globalThis.fetch;
+const originalClipboard = navigator.clipboard;
 
 function renderManagePage(routePath = '/m/:uuid', initialPath = '/m/demo-channel-shell') {
   return render(
@@ -37,6 +38,15 @@ afterEach(() => {
     });
   } else {
     Reflect.deleteProperty(globalThis, 'fetch');
+  }
+
+  if (originalClipboard) {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
+  } else {
+    Reflect.deleteProperty(navigator, 'clipboard');
   }
 });
 
@@ -126,6 +136,50 @@ describe('ManagePage', () => {
 
     expect(screen.getByTestId('manage-state-deleted')).toBeTruthy();
     expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+  });
+
+  it('disables destroy action in expired state', () => {
+    renderManagePage();
+
+    fireEvent.click(screen.getByTestId('manage-status-switch-expired'));
+
+    const destroyButton = screen.getByTestId('manage-destroy-button') as HTMLButtonElement;
+    expect(destroyButton.disabled).toBe(true);
+
+    fireEvent.click(destroyButton);
+    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+    expect(screen.getByTestId('manage-state-expired')).toBeTruthy();
+  });
+
+  it('keeps copy label when clipboard api is unavailable', () => {
+    renderManagePage();
+    Reflect.deleteProperty(navigator, 'clipboard');
+
+    const copyButton = screen.getByTestId('manage-copy-button');
+    expect(copyButton.textContent).toBe('Copy');
+
+    fireEvent.click(copyButton);
+
+    expect(copyButton.textContent).toBe('Copy');
+  });
+
+  it('shows copied label only after clipboard write succeeds', async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderManagePage();
+
+    const copyButton = screen.getByTestId('manage-copy-button');
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(copyButton.textContent).toBe('Copied');
+    });
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/s/demo-channel-shell'));
   });
 
   it('does not trigger network requests during ui-only interactions', () => {

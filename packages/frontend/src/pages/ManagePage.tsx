@@ -264,7 +264,7 @@ function ActionPanel({
   onConfirmDestroy: () => void;
 }) {
   const deliverDisabled = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
-  const destroyDisabled = status === CHANNEL_STATE.DELETED;
+  const destroyDisabled = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
 
   return (
     <section className="space-y-3">
@@ -320,16 +320,41 @@ function useManagePageState(uuid?: string) {
   };
 
   const handleApplyDestroy = () => {
+    if (status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED) {
+      setShowDestroyConfirm(false);
+      return;
+    }
+
     setStatus(CHANNEL_STATE.DELETED);
     setShowDestroyConfirm(false);
   };
 
+  const handleDestroyConfirm = () => {
+    if (status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED) {
+      setShowDestroyConfirm(false);
+      return;
+    }
+
+    setShowDestroyConfirm(true);
+  };
+
   const handleCopyShareLink = async () => {
-    if (!uuid) return;
+    if (!uuid) {
+      setCopied(false);
+      return;
+    }
+
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareLink);
+      const writeText =
+        typeof navigator !== 'undefined'
+          ? navigator.clipboard?.writeText?.bind(navigator.clipboard)
+          : undefined;
+      if (!writeText) {
+        setCopied(false);
+        return;
       }
+
+      await writeText(shareLink);
       setCopied(true);
     } catch {
       setCopied(false);
@@ -343,7 +368,7 @@ function useManagePageState(uuid?: string) {
     shareLink,
     handleStatusSwitch,
     handleDeliver,
-    handleDestroyConfirm: () => setShowDestroyConfirm(true),
+    handleDestroyConfirm,
     handleCancelDestroy: () => setShowDestroyConfirm(false),
     handleApplyDestroy,
     handleCopyShareLink,
