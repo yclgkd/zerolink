@@ -10,10 +10,19 @@ import type {
 } from '@zerolink/shared';
 import { create } from 'zustand';
 
-import { type AsyncRequestState, createIdleRequestState } from './request-state';
+import {
+  type AsyncRequestState,
+  createErrorState,
+  createIdleRequestState,
+  createLoadingState,
+  createSuccessState,
+} from './request-state';
 
 export type LockFlowStep = 'onboarding' | 'lock' | 'locked';
 
+/**
+ * State properties for the receiver-side channel lock flow.
+ */
 export interface LockStoreState {
   uuid: UUID | null;
   step: LockFlowStep;
@@ -33,6 +42,9 @@ interface ReceiverIdentityState {
   lockedAt: UnixMs;
 }
 
+/**
+ * Action modifiers for the receiver-side channel lock flow.
+ */
 export interface LockStoreActions {
   setLockUuid: (uuid: UUID | null) => void;
   setStep: (step: LockFlowStep) => void;
@@ -50,6 +62,9 @@ export interface LockStoreActions {
   resetLockStore: () => void;
 }
 
+/**
+ * Combined store type for channel locking.
+ */
 export type LockStore = LockStoreState & LockStoreActions;
 
 function createInitialState(): LockStoreState {
@@ -67,30 +82,9 @@ function createInitialState(): LockStoreState {
   };
 }
 
-function createLoadingState<T>(): AsyncRequestState<T> {
-  return {
-    status: 'loading',
-    data: null,
-    errorCode: null,
-  };
-}
-
-function createSuccessState<T>(payload: T): AsyncRequestState<T> {
-  return {
-    status: 'success',
-    data: payload,
-    errorCode: null,
-  };
-}
-
-function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
-  return {
-    status: 'error',
-    data: null,
-    errorCode,
-  };
-}
-
+/**
+ * Zustand store managing the receiver-side key generation and channel locking process.
+ */
 export const useLockStore = create<LockStore>((set, get) => ({
   ...createInitialState(),
 

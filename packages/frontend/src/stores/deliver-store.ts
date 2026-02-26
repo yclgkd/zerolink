@@ -10,8 +10,17 @@ import {
 } from '@zerolink/shared';
 import { create } from 'zustand';
 
-import { type AsyncRequestState, createIdleRequestState } from './request-state';
+import {
+  type AsyncRequestState,
+  createErrorState,
+  createIdleRequestState,
+  createLoadingState,
+  createSuccessState,
+} from './request-state';
 
+/**
+ * State properties for the sender-side channel management and delivery flow.
+ */
 export interface DeliverStoreState {
   uuid: UUID | null;
   channelState: ChannelState;
@@ -25,6 +34,9 @@ export interface DeliverStoreState {
   receiverPubJwk: RSAPublicKeyJWK | null;
 }
 
+/**
+ * Action modifiers for the sender-side channel management and delivery flow.
+ */
 export interface DeliverStoreActions {
   setDeliverUuid: (uuid: UUID | null) => void;
   setChannelState: (state: ChannelState) => void;
@@ -41,6 +53,9 @@ export interface DeliverStoreActions {
   resetDeliverStore: () => void;
 }
 
+/**
+ * Combined store type for channel management.
+ */
 export type DeliverStore = DeliverStoreState & DeliverStoreActions;
 
 function createInitialState(): DeliverStoreState {
@@ -58,30 +73,9 @@ function createInitialState(): DeliverStoreState {
   };
 }
 
-function createLoadingState<T>(): AsyncRequestState<T> {
-  return {
-    status: 'loading',
-    data: null,
-    errorCode: null,
-  };
-}
-
-function createSuccessState<T>(payload: T): AsyncRequestState<T> {
-  return {
-    status: 'success',
-    data: payload,
-    errorCode: null,
-  };
-}
-
-function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
-  return {
-    status: 'error',
-    data: null,
-    errorCode,
-  };
-}
-
+/**
+ * Zustand store managing the sender-side delivery and destruction process.
+ */
 export const useDeliverStore = create<DeliverStore>((set, get) => ({
   ...createInitialState(),
 

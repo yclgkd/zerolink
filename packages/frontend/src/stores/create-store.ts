@@ -6,8 +6,17 @@ import {
 } from '@zerolink/shared';
 import { create } from 'zustand';
 
-import { type AsyncRequestState, createIdleRequestState } from './request-state';
+import {
+  type AsyncRequestState,
+  createErrorState,
+  createIdleRequestState,
+  createLoadingState,
+  createSuccessState,
+} from './request-state';
 
+/**
+ * State properties for the channel creation flow.
+ */
 export interface CreateStoreState {
   selectedProfile: SecurityProfile;
   webAuthnSupported: boolean;
@@ -18,6 +27,9 @@ export interface CreateStoreState {
   createFinish: AsyncRequestState<CreateFinishResponse>;
 }
 
+/**
+ * Action modifiers for the channel creation flow.
+ */
 export interface CreateStoreActions {
   setSelectedProfile: (profile: SecurityProfile) => void;
   setWebAuthnSupported: (supported: boolean) => void;
@@ -33,6 +45,9 @@ export interface CreateStoreActions {
   resetCreateStore: () => void;
 }
 
+/**
+ * Combined store type for channel creation.
+ */
 export type CreateStore = CreateStoreState & CreateStoreActions;
 
 function createInitialState(): CreateStoreState {
@@ -47,30 +62,9 @@ function createInitialState(): CreateStoreState {
   };
 }
 
-function createLoadingState<T>(): AsyncRequestState<T> {
-  return {
-    status: 'loading',
-    data: null,
-    errorCode: null,
-  };
-}
-
-function createSuccessState<T>(payload: T): AsyncRequestState<T> {
-  return {
-    status: 'success',
-    data: payload,
-    errorCode: null,
-  };
-}
-
-function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
-  return {
-    status: 'error',
-    data: null,
-    errorCode,
-  };
-}
-
+/**
+ * Zustand store managing the sender-side channel creation process.
+ */
 export const useCreateStore = create<CreateStore>((set) => ({
   ...createInitialState(),
 

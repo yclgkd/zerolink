@@ -7,8 +7,17 @@ import {
 } from '@zerolink/shared';
 import { create } from 'zustand';
 
-import { type AsyncRequestState, createIdleRequestState } from './request-state';
+import {
+  type AsyncRequestState,
+  createErrorState,
+  createIdleRequestState,
+  createLoadingState,
+  createSuccessState,
+} from './request-state';
 
+/**
+ * State properties for the receiver decrypt flow.
+ */
 export interface DecryptStoreState {
   uuid: UUID | null;
   channelState: ChannelState;
@@ -18,6 +27,9 @@ export interface DecryptStoreState {
   burned: boolean;
 }
 
+/**
+ * Action modifiers for the receiver decrypt flow.
+ */
 export interface DecryptStoreActions {
   setDecryptUuid: (uuid: UUID | null) => void;
   startPublicStatus: () => void;
@@ -31,6 +43,9 @@ export interface DecryptStoreActions {
   resetDecryptStore: () => void;
 }
 
+/**
+ * Combined store type for the decryption lifecycle.
+ */
 export type DecryptStore = DecryptStoreState & DecryptStoreActions;
 
 function createInitialState(): DecryptStoreState {
@@ -44,30 +59,9 @@ function createInitialState(): DecryptStoreState {
   };
 }
 
-function createLoadingState<T>(): AsyncRequestState<T> {
-  return {
-    status: 'loading',
-    data: null,
-    errorCode: null,
-  };
-}
-
-function createSuccessState<T>(payload: T): AsyncRequestState<T> {
-  return {
-    status: 'success',
-    data: payload,
-    errorCode: null,
-  };
-}
-
-function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
-  return {
-    status: 'error',
-    data: null,
-    errorCode,
-  };
-}
-
+/**
+ * Zustand store managing the receiver-side payload fetching and decryption.
+ */
 export const useDecryptStore = create<DecryptStore>((set, get) => ({
   ...createInitialState(),
 
