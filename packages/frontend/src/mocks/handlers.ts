@@ -4,6 +4,10 @@ import {
   CreateBeginResponseSchema,
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
+  LockBeginRequestSchema,
+  LockBeginResponseSchema,
+  LockCommitRequestSchema,
+  LockCommitResponseSchema,
   ROUTE_PATTERN,
 } from '@zerolink/shared';
 import { HttpResponse, http } from 'msw';
@@ -113,6 +117,24 @@ function getCreateFinishBody(body: RequestBody | null) {
   return result.success ? result.data : null;
 }
 
+function getLockBeginBody(body: RequestBody | null) {
+  if (!body) {
+    return null;
+  }
+
+  const result = LockBeginRequestSchema.safeParse(body);
+  return result.success ? result.data : null;
+}
+
+function getLockCommitBody(body: RequestBody | null) {
+  if (!body) {
+    return null;
+  }
+
+  const result = LockCommitRequestSchema.safeParse(body);
+  return result.success ? result.data : null;
+}
+
 export const handlers = [
   http.get(`${API_PREFIX}/public/:uuid`, ({ params }) => {
     const pathUuid = getPathUuid(params);
@@ -183,30 +205,44 @@ export const handlers = [
   http.post(`${API_PREFIX}/lock_begin/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body)) {
+    const lockBeginBody = getLockBeginBody(body);
+    if (!pathUuid || !lockBeginBody || lockBeginBody.uuid !== pathUuid) {
       return badRequest();
     }
 
-    return HttpResponse.json({
+    const payload = {
       ok: true,
       lockChallenge: {
         id: MOCK_CHALLENGE_ID,
         challenge: MOCK_CHALLENGE,
         expiresAt: Date.now() + 60_000,
       },
-    });
+    };
+    const parsedPayload = LockBeginResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
   }),
 
   http.post(`${API_PREFIX}/lock_commit/:uuid`, async ({ params, request }) => {
     const pathUuid = getPathUuid(params);
     const body = await readJsonObject(request);
-    if (hasUuidMismatch(pathUuid, body)) {
+    const lockCommitBody = getLockCommitBody(body);
+    if (!pathUuid || !lockCommitBody || lockCommitBody.uuid !== pathUuid) {
       return badRequest();
     }
 
-    return HttpResponse.json({
+    const payload = {
       ok: true,
-    });
+    };
+    const parsedPayload = LockCommitResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
   }),
 
   http.post(`${API_PREFIX}/manage/compound_begin/:uuid`, async ({ params, request }) => {
