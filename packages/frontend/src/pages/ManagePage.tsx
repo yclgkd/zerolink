@@ -45,6 +45,25 @@ const mockSafetyCodeDisplay = {
   fullFpr: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00' as HexString,
 } as const;
 
+function ManagePageHeader({ status }: { status: ChannelState }) {
+  return (
+    <PageCardHeader>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <PageCardTitle asChild className="text-primary">
+            <h2>Manage / Deliver</h2>
+          </PageCardTitle>
+          <StatusBadge status={status} />
+        </div>
+        <RoleBadge party="sender" />
+      </div>
+      <PageCardDescription>
+        Sender-side verification and delivery controls (UI-only flow).
+      </PageCardDescription>
+    </PageCardHeader>
+  );
+}
+
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   return (
     <p>
@@ -192,6 +211,43 @@ function StatusContent({ status }: { status: ChannelState }) {
   );
 }
 
+function DestroyConfirmPanel({
+  onCancelDestroy,
+  onConfirmDestroy,
+}: {
+  onCancelDestroy: () => void;
+  onConfirmDestroy: () => void;
+}) {
+  return (
+    <div
+      className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm"
+      data-testid="manage-destroy-confirm"
+    >
+      <p className="text-foreground">Destroy this channel permanently?</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          data-testid="manage-destroy-cancel"
+          onClick={onCancelDestroy}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Cancel
+        </Button>
+        <Button
+          data-testid="manage-destroy-confirm-apply"
+          onClick={onConfirmDestroy}
+          size="sm"
+          type="button"
+          variant="danger"
+        >
+          Confirm Destroy
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ActionPanel({
   status,
   showDestroyConfirm,
@@ -233,83 +289,43 @@ function ActionPanel({
       </div>
 
       {showDestroyConfirm ? (
-        <div
-          className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm"
-          data-testid="manage-destroy-confirm"
-        >
-          <p className="text-foreground">Destroy this channel permanently?</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              data-testid="manage-destroy-cancel"
-              onClick={onCancelDestroy}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
-              Cancel
-            </Button>
-            <Button
-              data-testid="manage-destroy-confirm-apply"
-              onClick={onConfirmDestroy}
-              size="sm"
-              type="button"
-              variant="danger"
-            >
-              Confirm Destroy
-            </Button>
-          </div>
-        </div>
+        <DestroyConfirmPanel
+          onCancelDestroy={onCancelDestroy}
+          onConfirmDestroy={onConfirmDestroy}
+        />
       ) : null}
     </section>
   );
 }
 
-/**
- * Sender-side manage page with local-only state flow for waiting/locked/delivered/deleted/expired.
- */
-export function ManagePage(): ReactElement {
-  const { uuid } = useParams<{ uuid: string }>();
+function useManagePageState(uuid?: string) {
   const [status, setStatus] = useState<ChannelState>(CHANNEL_STATE.WAITING);
   const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const shareLink = useMemo(() => {
-    if (!uuid) {
-      return '(missing uuid)';
-    }
-
+    if (!uuid) return '(missing uuid)';
     const sharePath = ROUTE_PATTERN.SHARE.replace(':uuid', uuid);
     return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
   }, [uuid]);
 
-  function handleStatusSwitch(nextStatus: ChannelState): void {
+  const handleStatusSwitch = (nextStatus: ChannelState) => {
     setStatus(nextStatus);
     setShowDestroyConfirm(false);
-  }
+  };
 
-  function handleDeliver(): void {
+  const handleDeliver = () => {
     setStatus(CHANNEL_STATE.DELIVERED);
     setShowDestroyConfirm(false);
-  }
+  };
 
-  function handleDestroyConfirm(): void {
-    setShowDestroyConfirm(true);
-  }
-
-  function handleCancelDestroy(): void {
-    setShowDestroyConfirm(false);
-  }
-
-  function handleApplyDestroy(): void {
+  const handleApplyDestroy = () => {
     setStatus(CHANNEL_STATE.DELETED);
     setShowDestroyConfirm(false);
-  }
+  };
 
-  async function handleCopyShareLink(): Promise<void> {
-    if (!uuid) {
-      return;
-    }
-
+  const handleCopyShareLink = async () => {
+    if (!uuid) return;
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareLink);
@@ -318,36 +334,51 @@ export function ManagePage(): ReactElement {
     } catch {
       setCopied(false);
     }
-  }
+  };
+
+  return {
+    status,
+    showDestroyConfirm,
+    copied,
+    shareLink,
+    handleStatusSwitch,
+    handleDeliver,
+    handleDestroyConfirm: () => setShowDestroyConfirm(true),
+    handleCancelDestroy: () => setShowDestroyConfirm(false),
+    handleApplyDestroy,
+    handleCopyShareLink,
+  };
+}
+
+/**
+ * Sender-side manage page with local-only state flow for waiting/locked/delivered/deleted/expired.
+ */
+export function ManagePage(): ReactElement {
+  const { uuid } = useParams<{ uuid: string }>();
+  const state = useManagePageState(uuid);
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
-      <PageCardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-2">
-            <PageCardTitle asChild className="text-primary">
-              <h2>Manage / Deliver</h2>
-            </PageCardTitle>
-            <StatusBadge status={status} />
-          </div>
-          <RoleBadge party="sender" />
-        </div>
-        <PageCardDescription>
-          Sender-side verification and delivery controls (UI-only flow).
-        </PageCardDescription>
-      </PageCardHeader>
+      <ManagePageHeader status={state.status} />
       <PageCardContent className="space-y-6">
         <UuidDisplay uuid={uuid} />
-        <ShareLinkCard copied={copied} onCopy={handleCopyShareLink} shareLink={shareLink} />
-        <StatePreviewSwitcher currentStatus={status} onSelectStatus={handleStatusSwitch} />
-        <StatusContent status={status} />
+        <ShareLinkCard
+          copied={state.copied}
+          onCopy={state.handleCopyShareLink}
+          shareLink={state.shareLink}
+        />
+        <StatePreviewSwitcher
+          currentStatus={state.status}
+          onSelectStatus={state.handleStatusSwitch}
+        />
+        <StatusContent status={state.status} />
         <ActionPanel
-          onCancelDestroy={handleCancelDestroy}
-          onConfirmDestroy={handleApplyDestroy}
-          onDeliver={handleDeliver}
-          onOpenDestroyConfirm={handleDestroyConfirm}
-          showDestroyConfirm={showDestroyConfirm}
-          status={status}
+          onCancelDestroy={state.handleCancelDestroy}
+          onConfirmDestroy={state.handleApplyDestroy}
+          onDeliver={state.handleDeliver}
+          onOpenDestroyConfirm={state.handleDestroyConfirm}
+          showDestroyConfirm={state.showDestroyConfirm}
+          status={state.status}
         />
       </PageCardContent>
     </PageCard>
