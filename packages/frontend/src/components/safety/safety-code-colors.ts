@@ -34,6 +34,8 @@ function getPaletteEntry(index: number, palette?: readonly string[]): string {
 
 /**
  * Resolves color cell indices into actual color strings with safe fallback behavior.
+ * @param cells - The array of color indices from the safety code payload
+ * @param palette - Optional custom palette to map indices to colors
  */
 export function resolveSafetyCodeColors(
   cells: SafetyCodeColor['cells'],
