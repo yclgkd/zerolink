@@ -53,6 +53,99 @@ const mockSafetyCodeDisplay: SafetyCodeDisplay = {
   fullFpr: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00' as HexString,
 };
 
+function OnboardingStep({ onContinue }: { onContinue: () => void }) {
+  return (
+    <section className="space-y-4" data-testid="share-step-onboarding">
+      <h3 className="text-base font-semibold text-foreground">Lock This Channel</h3>
+      <div className="space-y-3">
+        {onboardingItems.map((item, index) => (
+          <div
+            className="rounded-xl border border-border/60 bg-card/50 p-4"
+            data-testid={`share-onboarding-card-${index + 1}`}
+            key={item.title}
+          >
+            <p className="flex items-center gap-2 text-foreground">
+              <span>{item.emoji}</span>
+              <span className="font-medium">{item.title}</span>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+          </div>
+        ))}
+      </div>
+      <Button data-testid="share-continue-button" onClick={onContinue} type="button">
+        Continue to Lock
+      </Button>
+    </section>
+  );
+}
+
+function LockStep({
+  passphrase,
+  canGenerate,
+  onPassphraseChange,
+  onBack,
+  onGenerate,
+}: {
+  passphrase: string;
+  canGenerate: boolean;
+  onPassphraseChange: (value: string) => void;
+  onBack: () => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <section className="space-y-4" data-testid="share-step-lock">
+      <h3 className="text-base font-semibold text-foreground">Generate Key & Lock</h3>
+      <PassphraseInput
+        onChange={onPassphraseChange}
+        placeholder="Enter a strong passphrase"
+        value={passphrase}
+      />
+      <div className="flex gap-2">
+        <Button data-testid="share-back-button" onClick={onBack} type="button" variant="secondary">
+          Back
+        </Button>
+        <Button
+          data-testid="share-generate-button"
+          disabled={!canGenerate}
+          onClick={onGenerate}
+          type="button"
+        >
+          Generate Key & Lock
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function LockedStep() {
+  return (
+    <section className="space-y-4" data-testid="share-step-locked">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-foreground">Channel Locked Successfully</h3>
+        <p className="text-xs text-muted-foreground">
+          Verify the Safety Code with the sender before delivery.
+        </p>
+      </div>
+      <SafetyCode display={mockSafetyCodeDisplay} />
+      <div
+        className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
+        data-testid="share-next-steps"
+      >
+        <p className="text-xs font-medium uppercase tracking-wide text-neon-cyan">Next Steps</p>
+        <ol className="space-y-1 text-sm text-foreground">
+          {nextSteps.map((stepText) => (
+            <li key={stepText}>{stepText}</li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The receiver page that manages the flow for locking a secure channel.
+ * Guides the user through onboarding, local key generation, and displaying the safety code.
+ */
 export function SharePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
   const [step, setStep] = useState<SharePageStep>('onboarding');
@@ -79,8 +172,8 @@ export function SharePage(): ReactElement {
     <PageCard data-testid="page-share" tone="cyan">
       <PageCardHeader>
         <div className="flex items-center justify-between gap-3">
-          <PageCardTitle asChild className="text-[var(--neon-cyan)]">
-            <h2>Share / Unlock</h2>
+          <PageCardTitle asChild className="text-primary">
+            <h2>Secure Channel</h2>
           </PageCardTitle>
           <RoleBadge party="receiver" />
         </div>
@@ -92,92 +185,26 @@ export function SharePage(): ReactElement {
         <p>
           UUID:{' '}
           <code
-            className="rounded bg-muted px-2 py-1 text-xs text-[var(--neon-cyan)]"
+            className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground"
             data-testid="share-uuid"
           >
             {uuid ?? '(missing uuid)'}
           </code>
         </p>
 
-        {step === 'onboarding' ? (
-          <section className="space-y-4" data-testid="share-step-onboarding">
-            <h3 className="text-base font-semibold text-foreground">Lock This Channel</h3>
-            <div className="space-y-3">
-              {onboardingItems.map((item, index) => (
-                <div
-                  className="rounded-xl border border-border/60 bg-card/50 p-4"
-                  data-testid={`share-onboarding-card-${index + 1}`}
-                  key={item.title}
-                >
-                  <p className="flex items-center gap-2 text-foreground">
-                    <span>{item.emoji}</span>
-                    <span className="font-medium">{item.title}</span>
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
-                </div>
-              ))}
-            </div>
-            <Button data-testid="share-continue-button" onClick={handleContinue} type="button">
-              Continue to Lock
-            </Button>
-          </section>
-        ) : null}
+        {step === 'onboarding' ? <OnboardingStep onContinue={handleContinue} /> : null}
 
         {step === 'lock' ? (
-          <section className="space-y-4" data-testid="share-step-lock">
-            <h3 className="text-base font-semibold text-foreground">Generate Key & Lock</h3>
-            <PassphraseInput
-              onChange={setPassphrase}
-              placeholder="Enter a strong passphrase"
-              value={passphrase}
-            />
-            <div className="flex gap-2">
-              <Button
-                data-testid="share-back-button"
-                onClick={handleBack}
-                type="button"
-                variant="secondary"
-              >
-                Back
-              </Button>
-              <Button
-                data-testid="share-generate-button"
-                disabled={!canGenerate}
-                onClick={handleGenerate}
-                type="button"
-              >
-                Generate Key & Lock
-              </Button>
-            </div>
-          </section>
+          <LockStep
+            canGenerate={canGenerate}
+            onBack={handleBack}
+            onGenerate={handleGenerate}
+            onPassphraseChange={setPassphrase}
+            passphrase={passphrase}
+          />
         ) : null}
 
-        {step === 'locked' ? (
-          <section className="space-y-4" data-testid="share-step-locked">
-            <div className="space-y-1">
-              <h3 className="text-base font-semibold text-foreground">
-                Channel Locked Successfully
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Verify the Safety Code with the sender before delivery.
-              </p>
-            </div>
-            <SafetyCode display={mockSafetyCodeDisplay} />
-            <div
-              className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
-              data-testid="share-next-steps"
-            >
-              <p className="text-xs font-medium uppercase tracking-wide text-neon-cyan">
-                Next Steps
-              </p>
-              <ol className="space-y-1 text-sm text-foreground">
-                {nextSteps.map((stepText) => (
-                  <li key={stepText}>{stepText}</li>
-                ))}
-              </ol>
-            </div>
-          </section>
-        ) : null}
+        {step === 'locked' ? <LockedStep /> : null}
       </PageCardContent>
     </PageCard>
   );
