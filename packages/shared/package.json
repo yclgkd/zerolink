@@ -5,6 +5,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./constants": "./src/constants.ts",
+    "./crypto/aes": "./src/crypto/aes.ts",
+    "./crypto/kdf": "./src/crypto/kdf.ts",
+    "./crypto/rsa": "./src/crypto/rsa.ts",
     "./schemas": "./src/schemas.ts",
     "./types": "./src/types.ts"
   },
