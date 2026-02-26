@@ -82,10 +82,16 @@ function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
   };
 }
 
-export const useDeliverStore = create<DeliverStore>((set) => ({
+export const useDeliverStore = create<DeliverStore>((set, get) => ({
   ...createInitialState(),
 
-  setDeliverUuid: (uuid) => set(() => ({ uuid })),
+  setDeliverUuid: (uuid) => {
+    if (get().uuid === uuid) return;
+    set(() => ({
+      ...createInitialState(),
+      uuid,
+    }));
+  },
 
   setChannelState: (state) =>
     set(() => ({

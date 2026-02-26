@@ -91,10 +91,16 @@ function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
   };
 }
 
-export const useLockStore = create<LockStore>((set) => ({
+export const useLockStore = create<LockStore>((set, get) => ({
   ...createInitialState(),
 
-  setLockUuid: (uuid) => set(() => ({ uuid })),
+  setLockUuid: (uuid) => {
+    if (get().uuid === uuid) return;
+    set(() => ({
+      ...createInitialState(),
+      uuid,
+    }));
+  },
 
   setStep: (step) => set(() => ({ step })),
 

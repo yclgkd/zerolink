@@ -68,10 +68,16 @@ function createErrorState<T>(errorCode: string): AsyncRequestState<T> {
   };
 }
 
-export const useDecryptStore = create<DecryptStore>((set) => ({
+export const useDecryptStore = create<DecryptStore>((set, get) => ({
   ...createInitialState(),
 
-  setDecryptUuid: (uuid) => set(() => ({ uuid })),
+  setDecryptUuid: (uuid) => {
+    if (get().uuid === uuid) return;
+    set(() => ({
+      ...createInitialState(),
+      uuid,
+    }));
+  },
 
   startPublicStatus: () =>
     set(() => ({ publicStatus: createLoadingState<PublicStatusResponse>() })),

@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useLockStore } from '../stores/lock-store';
 
 const VALID_UUID = UUIDSchema.parse('aaaaaaaaaaaaaaaaaaaaa');
+const NEXT_UUID = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
 const VALID_HEX = HexStringSchema.parse(
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 );
@@ -169,6 +170,69 @@ describe('useLockStore', () => {
       data: null,
       errorCode: 'LOCK_PROOF_INVALID',
     });
+  });
+
+  it('resets lock flow state when uuid changes', () => {
+    const state = useLockStore.getState();
+
+    state.setLockUuid(VALID_UUID);
+    state.setStep('lock');
+    state.setPassphrase('Strong#Pass1234');
+    state.completeLockBegin(buildLockBeginResponse());
+    state.setReceiverIdentity({
+      receiverPubJwk: buildReceiverPubJwk(),
+      receiverPubFpr: VALID_HEX,
+      lockedAt: UnixMsSchema.parse(1_700_000_000_000),
+    });
+    state.setSafetyCode(buildSafetyCodeDisplay());
+    state.completeLockCommit(buildLockCommitResponse());
+
+    state.setLockUuid(NEXT_UUID);
+
+    const nextState = useLockStore.getState();
+    expect(nextState.uuid).toBe(NEXT_UUID);
+    expect(nextState.step).toBe('onboarding');
+    expect(nextState.passphrase).toBe('');
+    expect(nextState.lockChallenge).toBeNull();
+    expect(nextState.receiverPubJwk).toBeNull();
+    expect(nextState.receiverPubFpr).toBeNull();
+    expect(nextState.lockedAt).toBeNull();
+    expect(nextState.safetyCode).toBeNull();
+    expect(nextState.lockBegin).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(nextState.lockCommit).toEqual({ status: 'idle', data: null, errorCode: null });
+  });
+
+  it('does not reset when uuid is unchanged', () => {
+    const state = useLockStore.getState();
+    const receiverPubJwk = buildReceiverPubJwk();
+    const lockedAt = UnixMsSchema.parse(1_700_000_000_000);
+    const safetyCode = buildSafetyCodeDisplay();
+
+    state.setLockUuid(VALID_UUID);
+    state.setStep('lock');
+    state.setPassphrase('Strong#Pass1234');
+    state.completeLockBegin(buildLockBeginResponse());
+    state.setReceiverIdentity({
+      receiverPubJwk,
+      receiverPubFpr: VALID_HEX,
+      lockedAt,
+    });
+    state.setSafetyCode(safetyCode);
+    state.startLockCommit();
+
+    state.setLockUuid(VALID_UUID);
+
+    const nextState = useLockStore.getState();
+    expect(nextState.uuid).toBe(VALID_UUID);
+    expect(nextState.step).toBe('lock');
+    expect(nextState.passphrase).toBe('Strong#Pass1234');
+    expect(nextState.lockChallenge).not.toBeNull();
+    expect(nextState.receiverPubJwk).toEqual(receiverPubJwk);
+    expect(nextState.receiverPubFpr).toBe(VALID_HEX);
+    expect(nextState.lockedAt).toBe(lockedAt);
+    expect(nextState.safetyCode).toEqual(safetyCode);
+    expect(nextState.lockBegin.status).toBe('success');
+    expect(nextState.lockCommit.status).toBe('loading');
   });
 
   it('resets to initial defaults', () => {

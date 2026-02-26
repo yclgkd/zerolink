@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useDecryptStore } from '../stores/decrypt-store';
 
 const VALID_UUID = UUIDSchema.parse('aaaaaaaaaaaaaaaaaaaaa');
+const NEXT_UUID = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
 const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
 
@@ -115,6 +116,45 @@ describe('useDecryptStore', () => {
     state.markBurned();
     expect(useDecryptStore.getState().burned).toBe(true);
     expect(useDecryptStore.getState().plaintext).toBeNull();
+  });
+
+  it('resets channel-scoped state when uuid changes', () => {
+    const state = useDecryptStore.getState();
+
+    state.setDecryptUuid(VALID_UUID);
+    state.completePublicStatus(buildPublicStatusResponse());
+    state.completeDecryptFetch(buildDecryptFetchResponse());
+    state.setPlaintext('secret payload');
+    state.markBurned();
+
+    state.setDecryptUuid(NEXT_UUID);
+
+    const nextState = useDecryptStore.getState();
+    expect(nextState.uuid).toBe(NEXT_UUID);
+    expect(nextState.channelState).toBe(CHANNEL_STATE.WAITING);
+    expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(nextState.plaintext).toBeNull();
+    expect(nextState.burned).toBe(false);
+  });
+
+  it('does not reset when uuid is unchanged', () => {
+    const state = useDecryptStore.getState();
+
+    state.setDecryptUuid(VALID_UUID);
+    state.completePublicStatus(buildPublicStatusResponse());
+    state.completeDecryptFetch(buildDecryptFetchResponse());
+    state.setPlaintext('secret payload');
+
+    state.setDecryptUuid(VALID_UUID);
+
+    const nextState = useDecryptStore.getState();
+    expect(nextState.uuid).toBe(VALID_UUID);
+    expect(nextState.channelState).toBe(CHANNEL_STATE.DELIVERED);
+    expect(nextState.publicStatus.status).toBe('success');
+    expect(nextState.decryptFetch.status).toBe('success');
+    expect(nextState.plaintext).toBe('secret payload');
+    expect(nextState.burned).toBe(false);
   });
 
   it('resets to initial defaults', () => {

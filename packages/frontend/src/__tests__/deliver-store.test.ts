@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useDeliverStore } from '../stores/deliver-store';
 
 const VALID_UUID = UUIDSchema.parse('aaaaaaaaaaaaaaaaaaaaa');
+const NEXT_UUID = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
 const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
 
@@ -154,6 +155,56 @@ describe('useDeliverStore', () => {
       data: null,
       errorCode: 'ASSERTION_INVALID',
     });
+  });
+
+  it('resets delivery metadata when uuid changes', () => {
+    const state = useDeliverStore.getState();
+    state.setDeliverUuid(VALID_UUID);
+    state.setChannelState(CHANNEL_STATE.LOCKED);
+    state.setShowDestroyConfirm(true);
+    state.setCopied(true);
+    state.completeCompoundBegin(buildCompoundBeginResponse());
+    state.completeCompoundCommit(buildCompoundCommitResponse());
+
+    state.setDeliverUuid(NEXT_UUID);
+
+    const nextState = useDeliverStore.getState();
+    expect(nextState.uuid).toBe(NEXT_UUID);
+    expect(nextState.channelState).toBe(CHANNEL_STATE.WAITING);
+    expect(nextState.showDestroyConfirm).toBe(false);
+    expect(nextState.copied).toBe(false);
+    expect(nextState.challenge).toBeNull();
+    expect(nextState.currentVersion).toBeNull();
+    expect(nextState.receiverPubFpr).toBeNull();
+    expect(nextState.receiverPubJwk).toBeNull();
+    expect(nextState.compoundBegin).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(nextState.compoundCommit).toEqual({ status: 'idle', data: null, errorCode: null });
+  });
+
+  it('does not reset when uuid is unchanged', () => {
+    const state = useDeliverStore.getState();
+    const beginPayload = buildCompoundBeginResponse();
+
+    state.setDeliverUuid(VALID_UUID);
+    state.setChannelState(CHANNEL_STATE.LOCKED);
+    state.setShowDestroyConfirm(true);
+    state.setCopied(true);
+    state.completeCompoundBegin(beginPayload);
+    state.startCompoundCommit();
+
+    state.setDeliverUuid(VALID_UUID);
+
+    const nextState = useDeliverStore.getState();
+    expect(nextState.uuid).toBe(VALID_UUID);
+    expect(nextState.channelState).toBe(CHANNEL_STATE.LOCKED);
+    expect(nextState.showDestroyConfirm).toBe(true);
+    expect(nextState.copied).toBe(true);
+    expect(nextState.challenge).toEqual(beginPayload.challenge);
+    expect(nextState.currentVersion).toBe(beginPayload.currentVersion);
+    expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr ?? null);
+    expect(nextState.receiverPubJwk).toEqual(beginPayload.receiverPubJwk ?? null);
+    expect(nextState.compoundBegin.status).toBe('success');
+    expect(nextState.compoundCommit.status).toBe('loading');
   });
 
   it('resets to initial defaults', () => {
