@@ -1,39 +1,42 @@
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { Badge } from '../components/ui/badge';
-import { Card, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import {
+  PageCard,
+  PageCardContent,
+  PageCardDescription,
+  PageCardHeader,
+  PageCardTitle,
+  RoleBadge,
+} from '../components/layout';
 
 export function SharePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
 
   return (
-    <Card className="border-border/70 bg-card/85" data-testid="page-share">
-      <CardHeader className="gap-3">
+    <PageCard data-testid="page-share" tone="cyan">
+      <PageCardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle asChild className="text-2xl text-[var(--neon-cyan)]">
+          <PageCardTitle asChild className="text-[var(--neon-cyan)]">
             <h2>Share / Unlock</h2>
-          </CardTitle>
-          <Badge
-            className="border-[var(--neon-cyan)]/40 bg-[var(--neon-cyan)]/10 text-[var(--neon-cyan)]"
-            variant="secondary"
-          >
-            Receiver
-          </Badge>
+          </PageCardTitle>
+          <RoleBadge party="receiver" />
         </div>
-        <CardDescription className="text-muted-foreground">
+        <PageCardDescription>
           Receiver-side page shell for lock and decrypt flows.
-        </CardDescription>
-      </CardHeader>
-      <p className="px-6 pb-6 text-sm text-muted-foreground">
-        UUID:{' '}
-        <code
-          className="rounded bg-muted px-2 py-1 text-xs text-[var(--neon-cyan)]"
-          data-testid="share-uuid"
-        >
-          {uuid ?? '(missing uuid)'}
-        </code>
-      </p>
-    </Card>
+        </PageCardDescription>
+      </PageCardHeader>
+      <PageCardContent>
+        <p>
+          UUID:{' '}
+          <code
+            className="rounded bg-muted px-2 py-1 text-xs text-[var(--neon-cyan)]"
+            data-testid="share-uuid"
+          >
+            {uuid ?? '(missing uuid)'}
+          </code>
+        </p>
+      </PageCardContent>
+    </PageCard>
   );
 }

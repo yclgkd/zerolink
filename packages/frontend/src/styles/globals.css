@@ -32,6 +32,8 @@
   --color-neon-orange: var(--neon-orange);
   --color-neon-cyan: var(--neon-cyan);
   --color-neon-green: var(--neon-green);
+  --color-neon-amber: var(--neon-amber);
+  --color-neon-slate: var(--neon-slate);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -89,6 +91,8 @@
   --neon-orange: #f97316;
   --neon-cyan: #06b6d4;
   --neon-green: #10b981;
+  --neon-amber: #f59e0b;
+  --neon-slate: #64748b;
 
   --radius: 1rem;
 

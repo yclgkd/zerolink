@@ -1,25 +1,29 @@
 import type { ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 
+import {
+  PageCard,
+  PageCardDescription,
+  PageCardFooter,
+  PageCardHeader,
+  PageCardTitle,
+} from '../components/layout';
 import { Button } from '../components/ui/button';
-import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 
 export function NotFoundPage(): ReactElement {
   return (
-    <Card className="border-border/70 bg-card/85" data-testid="page-not-found">
-      <CardHeader className="gap-2">
-        <CardTitle asChild className="text-2xl text-destructive">
+    <PageCard data-testid="page-not-found" tone="orange">
+      <PageCardHeader className="gap-2">
+        <PageCardTitle asChild className="text-destructive">
           <h2>Page Not Found</h2>
-        </CardTitle>
-        <CardDescription className="text-muted-foreground">
-          Check the URL and try again.
-        </CardDescription>
-      </CardHeader>
-      <CardFooter>
+        </PageCardTitle>
+        <PageCardDescription>Check the URL and try again.</PageCardDescription>
+      </PageCardHeader>
+      <PageCardFooter>
         <Button asChild size="sm" variant="secondary">
           <Link to="/">Back to Create</Link>
         </Button>
-      </CardFooter>
-    </Card>
+      </PageCardFooter>
+    </PageCard>
   );
 }
