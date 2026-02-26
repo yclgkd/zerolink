@@ -65,6 +65,7 @@ describe('SharePage', () => {
 
     expect(screen.getByTestId('share-step-locked')).toBeTruthy();
     expect(screen.getByText('Safety Code')).toBeTruthy();
+    expect(screen.queryByTestId('passphrase-input-field')).toBeNull();
   });
 
   it('renders next steps content in locked state', () => {

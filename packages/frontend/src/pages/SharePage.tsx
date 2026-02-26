@@ -165,6 +165,7 @@ export function SharePage(): ReactElement {
       return;
     }
 
+    setPassphrase('');
     setStep('locked');
   }
 
