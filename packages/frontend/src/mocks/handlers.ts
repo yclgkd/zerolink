@@ -1,5 +1,6 @@
 import {
   CHANNEL_STATE,
+  CipherBundleSchema,
   CompoundBeginRequestSchema,
   CompoundBeginResponseSchema,
   CompoundCommitRequestSchema,
@@ -8,11 +9,14 @@ import {
   CreateBeginResponseSchema,
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
+  HexStringSchema,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
   LockCommitRequestSchema,
   LockCommitResponseSchema,
   ROUTE_PATTERN,
+  UnixMsSchema,
+  UUIDSchema,
 } from '@zerolink/shared';
 import { HttpResponse, http } from 'msw';
 
@@ -168,6 +172,37 @@ export const handlers = [
       ok: true,
       state: CHANNEL_STATE.WAITING,
     });
+  }),
+
+  http.get(`${API_PREFIX}/decrypt_fetch/:uuid`, ({ params }) => {
+    const pathUuid = getPathUuid(params);
+    const parsedUuid = pathUuid ? UUIDSchema.safeParse(pathUuid) : null;
+    if (!parsedUuid?.success) {
+      return badRequest();
+    }
+
+    const payload = {
+      ok: true,
+      cipherBundle: {
+        ciphertext: MOCK_B64U,
+        iv: MOCK_B64U,
+        aad: MOCK_B64U,
+        encContentKey: MOCK_B64U,
+        ciphertextHash: MOCK_HEX,
+        padBlock: 4096,
+      },
+      receiverPubFpr: MOCK_HEX,
+      deliveredAt: Date.now(),
+    };
+    if (
+      !CipherBundleSchema.safeParse(payload.cipherBundle).success ||
+      !HexStringSchema.safeParse(payload.receiverPubFpr).success ||
+      !UnixMsSchema.safeParse(payload.deliveredAt).success
+    ) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(payload);
   }),
 
   http.post(`${API_PREFIX}/create_begin/:uuid`, async ({ params, request }) => {
