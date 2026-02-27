@@ -426,12 +426,12 @@ describe('ManagePage integration', () => {
       (screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).getAttribute(
         'aria-invalid'
       )
-    ).toBe('true');
+    ).toBeNull();
     expect(
       (screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).getAttribute(
         'aria-describedby'
       )
-    ).toBe('manage-action-error');
+    ).toBeNull();
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
   });
 

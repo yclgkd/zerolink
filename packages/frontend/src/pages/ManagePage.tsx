@@ -426,6 +426,7 @@ function useManageDeliveryLogic(
   isActionPending: boolean,
   setIsActionPending: (pending: boolean) => void,
   setActionError: (error: string | null) => void,
+  setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
   profile: SecurityProfile
 ) {
@@ -439,10 +440,16 @@ function useManageDeliveryLogic(
 
   const handleDeliver = async () => {
     if (isActionPending) return;
-    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be delivered.');
-    if (secretInput.trim().length === 0)
+    if (!store.uuid) {
+      setIsSecretInputInvalid(false);
+      return setActionError('Channel UUID is missing and cannot be delivered.');
+    }
+    if (secretInput.trim().length === 0) {
+      setIsSecretInputInvalid(true);
       return setActionError('Secret payload is required before delivery.');
+    }
 
+    setIsSecretInputInvalid(false);
     setActionError(null);
     setIsActionPending(true);
     const actionScope = actionScopeRef.current ?? 0;
@@ -458,14 +465,19 @@ function useManageDeliveryLogic(
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
+      setIsSecretInputInvalid(false);
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
-    if (!result.ok) return setActionError(mapActionError(result.error.code));
+    if (!result.ok) {
+      setIsSecretInputInvalid(false);
+      return setActionError(mapActionError(result.error.code));
+    }
 
     store.setShowDestroyConfirm(false);
+    setIsSecretInputInvalid(false);
     setActionError(null);
   };
 
@@ -478,6 +490,7 @@ function useManageDestructionLogic(
   isActionPending: boolean,
   setIsActionPending: (pending: boolean) => void,
   setActionError: (error: string | null) => void,
+  setIsSecretInputInvalid: (invalid: boolean) => void,
   profile: SecurityProfile,
   isActiveActionContext: (scope: number, actionUuid: string) => boolean
 ) {
@@ -495,8 +508,12 @@ function useManageDestructionLogic(
 
   const handleApplyDestroy = async () => {
     if (isActionPending) return;
-    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be destroyed.');
+    if (!store.uuid) {
+      setIsSecretInputInvalid(false);
+      return setActionError('Channel UUID is missing and cannot be destroyed.');
+    }
 
+    setIsSecretInputInvalid(false);
     setActionError(null);
     setIsActionPending(true);
     const actionScope = actionScopeRef.current ?? 0;
@@ -508,12 +525,17 @@ function useManageDestructionLogic(
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
+      setIsSecretInputInvalid(false);
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
-    if (!result.ok) return setActionError(mapActionError(result.error.code));
+    if (!result.ok) {
+      setIsSecretInputInvalid(false);
+      return setActionError(mapActionError(result.error.code));
+    }
+    setIsSecretInputInvalid(false);
     setActionError(null);
   };
 
@@ -528,6 +550,7 @@ function useManagePageState(uuid?: string) {
 
   const [secretInput, setSecretInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
 
   useEffect(() => {
@@ -544,6 +567,7 @@ function useManagePageState(uuid?: string) {
     setIsActionPending(false);
     setSecretInput('');
     setActionError(null);
+    setIsSecretInputInvalid(false);
     setPublicStatusError(null);
 
     if (!uuid) {
@@ -580,6 +604,7 @@ function useManagePageState(uuid?: string) {
     isActionPending,
     setIsActionPending,
     setActionError,
+    setIsSecretInputInvalid,
     secretInput,
     profile
   );
@@ -590,6 +615,7 @@ function useManagePageState(uuid?: string) {
     isActionPending,
     setIsActionPending,
     setActionError,
+    setIsSecretInputInvalid,
     profile,
     isActiveActionContext
   );
@@ -602,12 +628,16 @@ function useManagePageState(uuid?: string) {
     secretInput,
     safetyCode,
     actionError,
+    isSecretInputInvalid,
     publicStatusError,
     isActionPending,
     canDeliver,
     handleSecretChange: (value: string) => {
       setSecretInput(value);
-      if (actionError) setActionError(null);
+      if (actionError || isSecretInputInvalid) {
+        setActionError(null);
+        setIsSecretInputInvalid(false);
+      }
     },
     handleDeliver,
     handleDestroyConfirm,
@@ -649,8 +679,10 @@ export function ManagePage(): ReactElement {
         <StatusContent safetyCode={state.safetyCode} status={state.status} />
 
         <SecretInput
-          ariaDescribedBy={state.actionError ? 'manage-action-error' : undefined}
-          ariaInvalid={Boolean(state.actionError)}
+          ariaDescribedBy={
+            state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
+          }
+          ariaInvalid={state.isSecretInputInvalid ? true : undefined}
           disabled={state.isActionPending}
           onChange={state.handleSecretChange}
           value={state.secretInput}

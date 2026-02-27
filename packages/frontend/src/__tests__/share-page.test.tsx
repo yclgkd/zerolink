@@ -216,7 +216,7 @@ describe('SharePage', () => {
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-describedby'
       )
-    ).toBe('share-lock-secret-warning');
+    ).toBeNull();
     const generateButton = screen.getByTestId('share-generate-button') as HTMLButtonElement;
     expect(generateButton.disabled).toBe(true);
 
@@ -358,13 +358,48 @@ describe('SharePage', () => {
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-invalid'
       )
+    ).toBeNull();
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-describedby'
+      )
+    ).toBeNull();
+    expect(screen.queryByTestId('share-step-locked')).toBeNull();
+  });
+
+  it('marks lock passphrase invalid when lockChannel reports PASSPHRASE_REQUIRED', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    lockChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'lock.validate',
+      },
+    });
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+    await screen.findByTestId('share-step-onboarding');
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
+    fireEvent.click(screen.getByTestId('share-generate-button'));
+
+    const error = await screen.findByTestId('share-lock-error');
+    expect(error).toBeTruthy();
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-invalid'
+      )
     ).toBe('true');
     expect(
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-describedby'
       )
     ).toBe('share-lock-error');
-    expect(screen.queryByTestId('share-step-locked')).toBeNull();
   });
 
   it('shows safety unavailable hint when server state is locked but local safety code is missing', async () => {
@@ -661,14 +696,50 @@ describe('SharePage', () => {
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-invalid'
       )
+    ).toBeNull();
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-describedby'
+      )
+    ).toBeNull();
+    expect(screen.getByText('Local key material is unavailable on this device.')).toBeTruthy();
+    expect(screen.getByTestId('share-step-delivered')).toBeTruthy();
+  });
+
+  it('marks decrypt passphrase invalid for CRYPTO_ERROR', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered');
+
+    decryptDeliveredMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'CRYPTO_ERROR',
+        stage: 'decrypt.crypto',
+      },
+    });
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await screen.findByTestId('share-step-delivered');
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    const error = await screen.findByTestId('share-decrypt-error');
+    expect(error).toBeTruthy();
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-invalid'
+      )
     ).toBe('true');
     expect(
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-describedby'
       )
     ).toBe('share-decrypt-error');
-    expect(screen.getByText('Local key material is unavailable on this device.')).toBeTruthy();
-    expect(screen.getByTestId('share-step-delivered')).toBeTruthy();
+    expect(screen.getByText('Unable to decrypt with the provided passphrase.')).toBeTruthy();
   });
 
   it('maps integrity mismatch to user-friendly decrypt error message', async () => {
