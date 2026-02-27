@@ -476,6 +476,7 @@ export function SharePage(): ReactElement {
     setLockUuid,
     setStep,
     setPassphrase,
+    resetLockStore,
   } = useLockStore();
 
   const publicState = usePublicShareState(uuid);
@@ -498,6 +499,12 @@ export function SharePage(): ReactElement {
     setLockUuid(parsedUuid.success ? parsedUuid.data : null);
     setLockError(null);
   }, [uuid, setLockUuid]);
+
+  useEffect(() => {
+    return () => {
+      resetLockStore();
+    };
+  }, [resetLockStore]);
 
   const lockPending =
     isLockSubmitting || lockBegin.status === 'loading' || lockCommit.status === 'loading';

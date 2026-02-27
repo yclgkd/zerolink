@@ -436,6 +436,58 @@ describe('SharePage', () => {
     expect(fetchSpy).not.toHaveBeenCalledWith('/api/decrypt_fetch/uuidbbbbbbbbbbbbbbbbbb');
   });
 
+  it('resets lock step and passphrase after leaving and returning to same uuid', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === `/api/public/${VALID_UUID}`) {
+        return Promise.resolve(
+          jsonResponse({
+            ok: true,
+            state: 'waiting',
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unexpected fetch call: ${url}`));
+    });
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/s/:uuid',
+          element: <SharePage />,
+        },
+        {
+          path: '/m/:uuid',
+          element: <div data-testid="manage-page-stub">Manage</div>,
+        },
+      ],
+      {
+        initialEntries: [`/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`],
+      }
+    );
+
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+
+    const passphraseInput = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(passphraseInput, { target: { value: 'Strong#Pass1234XYZ' } });
+    expect(passphraseInput.value).toBe('Strong#Pass1234XYZ');
+
+    await router.navigate(`/m/${VALID_UUID}`);
+    expect(await screen.findByTestId('manage-page-stub')).toBeTruthy();
+
+    await router.navigate(`/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    const returnPassphraseInput = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    expect(returnPassphraseInput.value).toBe('');
+  });
+
   it('shows non-blocking decrypt fetch error in delivered state', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'delivered');
