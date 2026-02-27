@@ -350,6 +350,7 @@ function toApiReceiverPubJwk(
 }
 
 type DeliverStoreStateSnapshot = ReturnType<DeliverStore['getState']>;
+type DecryptStoreStateSnapshot = ReturnType<DecryptStore['getState']>;
 
 function canApplyDeliverStoreUpdate(uuid: string, state: DeliverStoreStateSnapshot): boolean {
   return state.uuid === null || state.uuid === uuid;
@@ -362,6 +363,20 @@ function applyDeliverStoreUpdate(
 ): void {
   const state = deliverStore.getState();
   if (!canApplyDeliverStoreUpdate(uuid, state)) return;
+  apply(state);
+}
+
+function canApplyDecryptStoreUpdate(uuid: string, state: DecryptStoreStateSnapshot): boolean {
+  return state.uuid === null || state.uuid === uuid;
+}
+
+function applyDecryptStoreUpdate(
+  decryptStore: DecryptStore,
+  uuid: string,
+  apply: (state: DecryptStoreStateSnapshot) => void
+): void {
+  const state = decryptStore.getState();
+  if (!canApplyDecryptStoreUpdate(uuid, state)) return;
   apply(state);
 }
 
@@ -789,26 +804,37 @@ async function executeDecryptDelivered(
   const passErr = ensurePassphrase(input.passphrase, 'decrypt.validate');
   if (passErr) return passErr;
 
-  const state = deps.decryptStore.getState();
-  state.startPublicStatus();
+  applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+    state.startPublicStatus();
+  });
 
   const statusRes = await deps.client.publicStatus(input.uuid);
   if (!statusRes.ok) {
-    state.failPublicStatus(statusRes.error.code);
+    applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+      state.failPublicStatus(statusRes.error.code);
+    });
     return toError(statusRes.error.code, 'decrypt.public-status');
   }
-  state.completePublicStatus(statusRes.data);
+  applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+    state.completePublicStatus(statusRes.data);
+  });
   if (!isDeliveredState(statusRes.data.state)) {
     return toError('CHANNEL_NOT_DELIVERED', 'decrypt.public-status');
   }
 
-  state.startDecryptFetch();
+  applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+    state.startDecryptFetch();
+  });
   const fetchRes = await deps.client.decryptFetch(input.uuid);
   if (!fetchRes.ok) {
-    state.failDecryptFetch(fetchRes.error.code);
+    applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+      state.failDecryptFetch(fetchRes.error.code);
+    });
     return toError(fetchRes.error.code, 'decrypt.fetch');
   }
-  state.completeDecryptFetch(fetchRes.data as DecryptFetchResponse);
+  applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+    state.completeDecryptFetch(fetchRes.data as DecryptFetchResponse);
+  });
 
   const payload = fetchRes.data;
   let envelope: ReceiverKeyEnvelope | null;
@@ -825,7 +851,9 @@ async function executeDecryptDelivered(
       input.passphrase,
       envelope
     );
-    state.setPlaintext(plaintext);
+    applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
+      state.setPlaintext(plaintext);
+    });
     return {
       ok: true,
       data: {

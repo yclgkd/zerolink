@@ -2,8 +2,6 @@ import type { SafetyCodeDisplay } from '@zerolink/shared';
 import {
   CHANNEL_STATE,
   type ChannelState,
-  type DecryptFetchResponse,
-  DecryptFetchResponseSchema,
   PublicStatusResponseSchema,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -24,6 +22,7 @@ import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { extractLockSecretFromHash } from '../crypto/protocol-utils';
+import { useDecryptStore } from '../stores/decrypt-store';
 import { useLockStore } from '../stores/lock-store';
 
 const onboardingItems = [
@@ -50,15 +49,6 @@ const nextSteps = [
   'Keep this tab open until the sender confirms delivery.',
 ] as const;
 
-function formatDeliveredAt(unixMs: number): string {
-  return new Date(unixMs).toLocaleString();
-}
-
-function parseDecryptFetchPayload(payload: unknown): DecryptFetchResponse | null {
-  const result = DecryptFetchResponseSchema.safeParse(payload);
-  return result.success ? result.data : null;
-}
-
 function mapLockError(code: string): string {
   switch (code) {
     case 'INVALID_LOCK_SECRET':
@@ -78,6 +68,29 @@ function mapLockError(code: string): string {
       return 'Lock request failed due to network or request validation.';
     default:
       return 'Lock failed. Please try again.';
+  }
+}
+
+function mapDecryptError(code: string): string {
+  switch (code) {
+    case 'PASSPHRASE_REQUIRED':
+      return 'Passphrase is required to decrypt.';
+    case 'CHANNEL_NOT_DELIVERED':
+      return 'Channel is not delivered yet. Ask sender to deliver first.';
+    case 'KEY_STORAGE_ERROR':
+      return 'Local key material is unavailable on this device.';
+    case 'INTEGRITY_MISMATCH':
+      return 'Ciphertext integrity verification failed.';
+    case 'CRYPTO_ERROR':
+      return 'Unable to decrypt with the provided passphrase.';
+    case 'NETWORK_ERROR':
+    case 'BAD_REQUEST':
+    case 'INVALID_REQUEST':
+      return 'Decrypt request failed due to network or request validation.';
+    case 'INTERNAL_ERROR':
+      return 'An unexpected error occurred. Please try again.';
+    default:
+      return 'Decrypt failed. Please try again.';
   }
 }
 
@@ -245,70 +258,99 @@ function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDi
   );
 }
 
-function DecryptFetchSummary({ payload }: { payload: DecryptFetchResponse }) {
-  return (
-    <div
-      className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
-      data-testid="share-decrypt-summary"
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
-        Encrypted Payload Retrieved
-      </p>
-      <p className="text-xs text-foreground">
-        Delivered at: <span className="font-medium">{formatDeliveredAt(payload.deliveredAt)}</span>
-      </p>
-      <p className="text-xs text-foreground">
-        Receiver fingerprint prefix:{' '}
-        <code className="text-neon-cyan">{payload.receiverPubFpr.slice(0, 16)}</code>
-      </p>
-      <p className="text-xs text-foreground">
-        Cipher pad block: <span className="font-medium">{payload.cipherBundle.padBlock}</span>
-      </p>
-    </div>
-  );
-}
-
-function DecryptFetchErrorPanel({ error, onRetry }: { error: string; onRetry: () => void }) {
+function DecryptErrorPanel({ error }: { error: string }) {
   return (
     <div
       className="space-y-3 rounded-xl border border-destructive/35 bg-destructive/10 p-4"
       data-testid="share-decrypt-error"
     >
       <p className="text-xs text-destructive">{error}</p>
-      <Button
-        data-testid="share-decrypt-retry"
-        onClick={onRetry}
-        size="sm"
-        type="button"
-        variant="secondary"
-      >
-        Retry
-      </Button>
     </div>
   );
 }
 
 function DeliveredStep({
-  decryptFetchPayload,
-  decryptFetchError,
-  onRetry,
+  passphrase,
+  decryptPending,
+  decryptError,
+  plaintext,
+  burned,
+  canDecrypt,
+  canBurn,
+  onPassphraseChange,
+  onDecrypt,
+  onBurn,
 }: {
-  decryptFetchPayload: DecryptFetchResponse | null;
-  decryptFetchError: string | null;
-  onRetry: () => void;
+  passphrase: string;
+  decryptPending: boolean;
+  decryptError: string | null;
+  plaintext: string | null;
+  burned: boolean;
+  canDecrypt: boolean;
+  canBurn: boolean;
+  onPassphraseChange: (value: string) => void;
+  onDecrypt: () => void;
+  onBurn: () => void;
 }) {
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">Content Delivered</h3>
         <p className="text-xs text-muted-foreground">
-          Sender has delivered encrypted content. Decrypt flow integration lands in ZL-029.
+          Enter your passphrase to decrypt content locally on this device.
         </p>
       </div>
 
-      {decryptFetchPayload ? <DecryptFetchSummary payload={decryptFetchPayload} /> : null}
-      {decryptFetchError ? (
-        <DecryptFetchErrorPanel error={decryptFetchError} onRetry={onRetry} />
+      <div className="space-y-3" data-testid="share-decrypt-panel">
+        <PassphraseInput
+          onChange={onPassphraseChange}
+          placeholder="Enter passphrase to decrypt"
+          value={passphrase}
+        />
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            data-testid="share-decrypt-button"
+            disabled={!canDecrypt}
+            onClick={onDecrypt}
+            type="button"
+          >
+            {decryptPending ? 'Decrypting...' : 'Decrypt'}
+          </Button>
+          <Button
+            data-testid="share-decrypt-burn"
+            disabled={!canBurn}
+            onClick={onBurn}
+            type="button"
+            variant="danger"
+          >
+            Burn Local Plaintext
+          </Button>
+        </div>
+      </div>
+
+      {decryptError ? <DecryptErrorPanel error={decryptError} /> : null}
+
+      {plaintext ? (
+        <div
+          className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
+          data-testid="share-decrypt-plaintext"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-neon-green">Plaintext</p>
+          <pre className="whitespace-pre-wrap break-words text-sm text-foreground">{plaintext}</pre>
+        </div>
+      ) : null}
+
+      {burned ? (
+        <div
+          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+          data-testid="share-decrypt-burned"
+        >
+          <p className="font-medium text-foreground">Local plaintext has been burned.</p>
+          <p className="mt-1 text-xs text-neon-orange">
+            Re-enter your passphrase to decrypt again if needed.
+          </p>
+        </div>
       ) : null}
     </section>
   );
@@ -358,27 +400,17 @@ function TerminalStep({
 
 function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
-  const [decryptFetchPayload, setDecryptFetchPayload] = useState<DecryptFetchResponse | null>(null);
-  const [decryptFetchError, setDecryptFetchError] = useState<string | null>(null);
-  const [decryptFetchAttempt, setDecryptFetchAttempt] = useState(0);
   const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
-  const [publicStatusResolvedUuid, setPublicStatusResolvedUuid] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uuid) {
       setChannelState(CHANNEL_STATE.WAITING);
-      setDecryptFetchPayload(null);
-      setDecryptFetchError(null);
-      setPublicStatusResolvedUuid(null);
       setIsPublicStatusLoading(false);
       return;
     }
 
     const currentUuid = uuid;
     setChannelState(CHANNEL_STATE.WAITING);
-    setDecryptFetchPayload(null);
-    setDecryptFetchError(null);
-    setPublicStatusResolvedUuid(null);
     setIsPublicStatusLoading(true);
 
     let cancelled = false;
@@ -391,18 +423,15 @@ function usePublicShareState(uuid?: string) {
 
         if (!parsedPayload.success) {
           setChannelState(CHANNEL_STATE.WAITING);
-          setPublicStatusResolvedUuid(currentUuid);
           setIsPublicStatusLoading(false);
           return;
         }
 
         setChannelState(parsedPayload.data.state);
-        setPublicStatusResolvedUuid(currentUuid);
         setIsPublicStatusLoading(false);
       } catch {
         if (!cancelled) {
           setChannelState(CHANNEL_STATE.WAITING);
-          setPublicStatusResolvedUuid(currentUuid);
           setIsPublicStatusLoading(false);
         }
       }
@@ -414,47 +443,9 @@ function usePublicShareState(uuid?: string) {
     };
   }, [uuid]);
 
-  useEffect(() => {
-    if (!uuid || publicStatusResolvedUuid !== uuid || channelState !== CHANNEL_STATE.DELIVERED) {
-      setDecryptFetchPayload(null);
-      setDecryptFetchError(null);
-      return;
-    }
-
-    let cancelled = false;
-    async function loadDecryptPayload(): Promise<void> {
-      try {
-        const response = await fetch(`/api/decrypt_fetch/${uuid}`);
-        if (!response.ok) throw new Error('decrypt fetch request failed');
-
-        const payload = (await response.json()) as unknown;
-        const parsedPayload = parseDecryptFetchPayload(payload);
-        if (!parsedPayload) throw new Error('decrypt fetch payload invalid');
-
-        if (!cancelled) {
-          setDecryptFetchPayload(parsedPayload);
-          setDecryptFetchError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setDecryptFetchPayload(null);
-          setDecryptFetchError('Unable to load encrypted payload preview.');
-        }
-      }
-    }
-
-    void loadDecryptPayload();
-    return () => {
-      cancelled = true;
-    };
-  }, [channelState, uuid, decryptFetchAttempt, publicStatusResolvedUuid]);
-
   return {
     channelState,
-    decryptFetchPayload,
-    decryptFetchError,
     isPublicStatusLoading,
-    retryFetch: () => setDecryptFetchAttempt((n) => n + 1),
   };
 }
 
@@ -545,14 +536,133 @@ function useSharePageLockLogic(uuid?: string, hash?: string) {
   };
 }
 
+function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
+  const store = useDecryptStore();
+  const [passphrase, setPassphrase] = useState('');
+  const [decryptError, setDecryptError] = useState<string | null>(null);
+  const [isDecryptSubmitting, setIsDecryptSubmitting] = useState(false);
+  const mountedRef = useRef(true);
+  const decryptActionScopeRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    decryptActionScopeRef.current += 1;
+    setIsDecryptSubmitting(false);
+
+    if (!uuid) {
+      useDecryptStore.getState().setDecryptUuid(null);
+      setPassphrase('');
+      setDecryptError(null);
+      return;
+    }
+
+    const parsedUuid = UUIDSchema.safeParse(uuid);
+    useDecryptStore.getState().setDecryptUuid(parsedUuid.success ? parsedUuid.data : null);
+    setPassphrase('');
+    setDecryptError(null);
+  }, [uuid]);
+
+  useEffect(() => {
+    return () => useDecryptStore.getState().resetDecryptStore();
+  }, []);
+
+  useEffect(() => {
+    if (enabled) return;
+
+    decryptActionScopeRef.current += 1;
+    setIsDecryptSubmitting(false);
+    setPassphrase('');
+    setDecryptError(null);
+    useDecryptStore.getState().setPlaintext(null);
+  }, [enabled]);
+
+  const canDecrypt =
+    Boolean(enabled) && Boolean(store.uuid) && passphrase.trim().length > 0 && !isDecryptSubmitting;
+
+  const canBurn = Boolean(enabled) && Boolean(store.plaintext) && !isDecryptSubmitting;
+
+  function isActiveDecryptContext(scope: number, actionUuid: string): boolean {
+    if (!mountedRef.current) return false;
+    if (decryptActionScopeRef.current !== scope) return false;
+    return useDecryptStore.getState().uuid === actionUuid;
+  }
+
+  async function handleDecrypt(): Promise<void> {
+    if (!enabled || isDecryptSubmitting) return;
+
+    if (!store.uuid) return setDecryptError(mapDecryptError('INVALID_REQUEST'));
+    if (passphrase.trim().length === 0)
+      return setDecryptError(mapDecryptError('PASSPHRASE_REQUIRED'));
+
+    const actionScope = decryptActionScopeRef.current;
+    const actionUuid = store.uuid;
+
+    setDecryptError(null);
+    setIsDecryptSubmitting(true);
+
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.decryptDelivered>>;
+    try {
+      result = await cryptoOrchestrator.decryptDelivered({
+        uuid: actionUuid,
+        passphrase,
+      });
+    } catch {
+      if (!isActiveDecryptContext(actionScope, actionUuid)) return;
+      setIsDecryptSubmitting(false);
+      setDecryptError(mapDecryptError('INTERNAL_ERROR'));
+      return;
+    }
+
+    if (!isActiveDecryptContext(actionScope, actionUuid)) return;
+    setIsDecryptSubmitting(false);
+    if (!result.ok) {
+      setDecryptError(mapDecryptError(result.error.code));
+      return;
+    }
+
+    setDecryptError(null);
+  }
+
+  function handleBurn(): void {
+    if (!enabled || isDecryptSubmitting || !store.plaintext) return;
+
+    store.markBurned();
+    setPassphrase('');
+    setDecryptError(null);
+  }
+
+  return {
+    store,
+    passphrase,
+    decryptError,
+    decryptPending: isDecryptSubmitting,
+    canDecrypt,
+    canBurn,
+    handlePassphraseChange: (value: string) => {
+      setPassphrase(value);
+      if (decryptError) setDecryptError(null);
+    },
+    handleDecrypt,
+    handleBurn,
+  };
+}
+
 /**
- * Receiver page integrating lock flow with orchestrator while preserving existing delivered preview.
+ * Receiver page integrating lock flow and delivered decryption flow with orchestrator.
  */
 export function SharePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
   const location = useLocation();
   const publicState = usePublicShareState(uuid);
   const lockLogic = useSharePageLockLogic(uuid, location.hash);
+  const isDeliveredState =
+    !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
+  const decryptLogic = useSharePageDecryptLogic(uuid, isDeliveredState);
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
@@ -594,12 +704,18 @@ export function SharePage(): ReactElement {
           <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
         ) : null}
 
-        {!publicState.isPublicStatusLoading &&
-        publicState.channelState === CHANNEL_STATE.DELIVERED ? (
+        {isDeliveredState ? (
           <DeliveredStep
-            decryptFetchError={publicState.decryptFetchError}
-            decryptFetchPayload={publicState.decryptFetchPayload}
-            onRetry={publicState.retryFetch}
+            burned={decryptLogic.store.burned}
+            canBurn={decryptLogic.canBurn}
+            canDecrypt={decryptLogic.canDecrypt}
+            decryptError={decryptLogic.decryptError}
+            decryptPending={decryptLogic.decryptPending}
+            onBurn={decryptLogic.handleBurn}
+            onDecrypt={() => void decryptLogic.handleDecrypt()}
+            onPassphraseChange={decryptLogic.handlePassphraseChange}
+            passphrase={decryptLogic.passphrase}
+            plaintext={decryptLogic.store.plaintext}
           />
         ) : null}
 
