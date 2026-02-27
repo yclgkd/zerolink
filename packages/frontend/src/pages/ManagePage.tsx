@@ -18,6 +18,7 @@ import {
   PageCardHeader,
   PageCardTitle,
   RoleBadge,
+  StateNotice,
   StatusBadge,
 } from '../components/layout';
 import { SafetyCode } from '../components/safety/safety-code';
@@ -157,16 +158,16 @@ function StatusContent({
         {safetyCode ? (
           <SafetyCode display={safetyCode} />
         ) : (
-          <div
-            className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+          <StateNotice
             data-testid="manage-safety-unavailable"
+            title="Safety Code unavailable on this device."
+            tone="warning"
           >
-            <p className="font-medium text-foreground">Safety Code unavailable on this device.</p>
             <p className="mt-1 text-xs text-neon-orange">
               Safety Code is generated locally and can only be shown when receiver fingerprint is
               available on this device.
             </p>
-          </div>
+          </StateNotice>
         )}
       </section>
     );
@@ -208,10 +209,14 @@ function SecretInput({
   value,
   onChange,
   disabled,
+  ariaInvalid,
+  ariaDescribedBy,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  ariaInvalid?: boolean | undefined;
+  ariaDescribedBy?: string | undefined;
 }) {
   return (
     <section className="space-y-2">
@@ -222,6 +227,8 @@ function SecretInput({
         Secret Payload
       </label>
       <textarea
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
         className="min-h-24 w-full rounded-xl border border-border/70 bg-card/60 px-3 py-2 text-sm text-foreground outline-none ring-offset-background transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
         data-testid="manage-secret-input"
         disabled={disabled}
@@ -620,16 +627,17 @@ export function ManagePage(): ReactElement {
   return (
     <PageCard data-testid="page-manage" tone="orange">
       <ManagePageHeader status={state.status} />
-      <PageCardContent className="space-y-6">
+      <PageCardContent aria-busy={state.isActionPending} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {state.publicStatusError ? (
-          <div
-            className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-3 text-xs text-neon-orange"
+          <StateNotice
             data-testid="manage-public-status-error"
+            id="manage-public-status-error"
+            tone="warning"
           >
             {state.publicStatusError}
-          </div>
+          </StateNotice>
         ) : null}
 
         <ShareLinkCard
@@ -641,18 +649,22 @@ export function ManagePage(): ReactElement {
         <StatusContent safetyCode={state.safetyCode} status={state.status} />
 
         <SecretInput
+          ariaDescribedBy={state.actionError ? 'manage-action-error' : undefined}
+          ariaInvalid={Boolean(state.actionError)}
           disabled={state.isActionPending}
           onChange={state.handleSecretChange}
           value={state.secretInput}
         />
 
         {state.actionError ? (
-          <div
-            className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+          <StateNotice
+            autoFocusOnMount
             data-testid="manage-action-error"
+            id="manage-action-error"
+            tone="error"
           >
             {state.actionError}
-          </div>
+          </StateNotice>
         ) : null}
 
         <ActionPanel

@@ -16,6 +16,7 @@ import {
   PageCardHeader,
   PageCardTitle,
   RoleBadge,
+  StateNotice,
 } from '../components/layout';
 import { PassphraseInput } from '../components/lock/passphrase-input';
 import { SafetyCode } from '../components/safety/safety-code';
@@ -173,27 +174,40 @@ function LockStep({
     <section className="space-y-4" data-testid="share-step-lock">
       <h3 className="text-base font-semibold text-foreground">Generate Key & Lock</h3>
       <PassphraseInput
+        ariaDescribedBy={
+          lockError
+            ? 'share-lock-error'
+            : lockSecretWarning
+              ? 'share-lock-secret-warning'
+              : undefined
+        }
+        ariaInvalid={Boolean(lockError)}
+        inputId="share-lock-passphrase"
+        label="Lock passphrase"
         onChange={onPassphraseChange}
         placeholder="Enter a strong passphrase"
         value={passphrase}
       />
 
       {lockSecretWarning ? (
-        <div
-          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-3 text-xs text-neon-orange"
+        <StateNotice
           data-testid="share-lock-secret-warning"
+          id="share-lock-secret-warning"
+          tone="warning"
         >
           {lockSecretWarning}
-        </div>
+        </StateNotice>
       ) : null}
 
       {lockError ? (
-        <div
-          className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+        <StateNotice
+          autoFocusOnMount
           data-testid="share-lock-error"
+          id="share-lock-error"
+          tone="error"
         >
           {lockError}
-        </div>
+        </StateNotice>
       ) : null}
 
       <div className="flex gap-2">
@@ -232,15 +246,15 @@ function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDi
       {safetyCodeAvailable ? (
         <SafetyCode display={safetyCodeAvailable} />
       ) : (
-        <div
-          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+        <StateNotice
           data-testid="share-safety-unavailable"
+          title="Safety Code unavailable on this device."
+          tone="warning"
         >
-          <p className="font-medium text-foreground">Safety Code unavailable on this device.</p>
           <p className="mt-1 text-xs text-neon-orange">
             Safety Code is generated locally during lock and is not recoverable from server state.
           </p>
-        </div>
+        </StateNotice>
       )}
 
       <div
@@ -260,12 +274,14 @@ function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDi
 
 function DecryptErrorPanel({ error }: { error: string }) {
   return (
-    <div
-      className="space-y-3 rounded-xl border border-destructive/35 bg-destructive/10 p-4"
+    <StateNotice
+      autoFocusOnMount
       data-testid="share-decrypt-error"
+      id="share-decrypt-error"
+      tone="error"
     >
-      <p className="text-xs text-destructive">{error}</p>
-    </div>
+      {error}
+    </StateNotice>
   );
 }
 
@@ -301,8 +317,12 @@ function DeliveredStep({
         </p>
       </div>
 
-      <div className="space-y-3" data-testid="share-decrypt-panel">
+      <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
         <PassphraseInput
+          ariaDescribedBy={decryptError ? 'share-decrypt-error' : undefined}
+          ariaInvalid={Boolean(decryptError)}
+          inputId="share-decrypt-passphrase"
+          label="Decrypt passphrase"
           onChange={onPassphraseChange}
           placeholder="Enter passphrase to decrypt"
           value={passphrase}
@@ -342,15 +362,15 @@ function DeliveredStep({
       ) : null}
 
       {burned ? (
-        <div
-          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+        <StateNotice
           data-testid="share-decrypt-burned"
+          title="Local plaintext has been burned."
+          tone="warning"
         >
-          <p className="font-medium text-foreground">Local plaintext has been burned.</p>
           <p className="mt-1 text-xs text-neon-orange">
             Re-enter your passphrase to decrypt again if needed.
           </p>
-        </div>
+        </StateNotice>
       ) : null}
     </section>
   );
@@ -358,10 +378,14 @@ function DeliveredStep({
 
 function LoadingStep() {
   return (
-    <section className="space-y-2" data-testid="share-step-loading">
-      <h3 className="text-base font-semibold text-foreground">Loading Channel State</h3>
+    <StateNotice
+      aria-busy="true"
+      data-testid="share-step-loading"
+      title="Loading Channel State"
+      tone="info"
+    >
       <p className="text-xs text-muted-foreground">Fetching secure channel status for this link.</p>
-    </section>
+    </StateNotice>
   );
 }
 
@@ -663,11 +687,13 @@ export function SharePage(): ReactElement {
   const isDeliveredState =
     !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
   const decryptLogic = useSharePageDecryptLogic(uuid, isDeliveredState);
+  const isPageBusy =
+    publicState.isPublicStatusLoading || lockLogic.lockPending || decryptLogic.decryptPending;
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
       <SharePageHeader />
-      <PageCardContent className="space-y-6">
+      <PageCardContent aria-busy={isPageBusy} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {publicState.isPublicStatusLoading ? <LoadingStep /> : null}

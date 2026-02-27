@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import { getPassphraseStrength, type PassphraseStrength } from './passphrase-strength';
@@ -23,6 +23,14 @@ export type PassphraseInputProps = {
   strictMode?: boolean;
   /** Optional class name applied to the component root. */
   className?: string;
+  /** Optional ID passed to the underlying input element. */
+  inputId?: string | undefined;
+  /** Accessible label for the passphrase input. */
+  label?: string | undefined;
+  /** Marks the input invalid for assistive technologies. */
+  ariaInvalid?: boolean | undefined;
+  /** ID reference for contextual error/help text. */
+  ariaDescribedBy?: string | undefined;
 };
 
 function getLabelClass(level: 0 | 1 | 2 | 3): string {
@@ -88,15 +96,26 @@ export function PassphraseInput({
   showStrength = true,
   strictMode = false,
   className,
+  inputId,
+  label = 'Passphrase',
+  ariaInvalid,
+  ariaDescribedBy,
 }: PassphraseInputProps) {
   const [showPassphrase, setShowPassphrase] = useState(false);
+  const generatedId = useId();
+  const resolvedInputId = inputId ?? `passphrase-input-${generatedId.replace(/:/gu, '')}`;
   const strength = getPassphraseStrength(value);
   const showWarning = strictMode && Boolean(value) && strength.level === 1;
 
   return (
     <div className={cn('space-y-3', className)} data-testid="passphrase-input-root">
+      <label className="sr-only" htmlFor={resolvedInputId}>
+        {label}
+      </label>
       <div className="relative">
         <input
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
           className={cn(
             'w-full rounded-xl border px-4 py-3 transition focus-visible:outline-none focus-visible:ring-2',
             'border-input bg-input-background text-foreground placeholder:text-muted-foreground',
@@ -105,6 +124,7 @@ export function PassphraseInput({
               : 'focus-visible:ring-ring'
           )}
           data-testid="passphrase-input-field"
+          id={resolvedInputId}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           type={showPassphrase ? 'text' : 'password'}

@@ -170,6 +170,8 @@ describe('SharePage', () => {
     expect(screen.getByTestId('page-share')).toBeTruthy();
     expect(screen.getByTestId('share-step-onboarding')).toBeTruthy();
     expect(screen.getByText('Your passphrase stays on this device')).toBeTruthy();
+    const content = screen.getByTestId('page-share').querySelector('[aria-busy]');
+    expect(content?.getAttribute('aria-busy')).toBe('false');
   });
 
   it('moves from onboarding to lock form when continuing in waiting state', async () => {
@@ -206,7 +208,15 @@ describe('SharePage', () => {
       target: { value: 'Strong#Pass1234XYZ' },
     });
 
-    expect(screen.getByTestId('share-lock-secret-warning')).toBeTruthy();
+    const warning = screen.getByTestId('share-lock-secret-warning');
+    expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-describedby'
+      )
+    ).toBe('share-lock-secret-warning');
     const generateButton = screen.getByTestId('share-generate-button') as HTMLButtonElement;
     expect(generateButton.disabled).toBe(true);
 
@@ -274,6 +284,8 @@ describe('SharePage', () => {
       );
       expect((screen.getByTestId('share-back-button') as HTMLButtonElement).disabled).toBe(true);
     });
+    const busyContainer = screen.getByTestId('page-share').querySelector('[aria-busy]');
+    expect(busyContainer?.getAttribute('aria-busy')).toBe('true');
 
     deferred.resolve({
       ok: true,
@@ -296,6 +308,7 @@ describe('SharePage', () => {
       );
       expect((screen.getByTestId('share-back-button') as HTMLButtonElement).disabled).toBe(false);
     });
+    expect(busyContainer?.getAttribute('aria-busy')).toBe('false');
   });
 
   it('renders locked state with real safety code after successful lock', async () => {
@@ -337,7 +350,20 @@ describe('SharePage', () => {
     fireEvent.click(screen.getByTestId('share-generate-button'));
 
     expect(await screen.findByTestId('share-step-lock')).toBeTruthy();
-    expect(await screen.findByTestId('share-lock-error')).toBeTruthy();
+    const error = await screen.findByTestId('share-lock-error');
+    expect(error).toBeTruthy();
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.getAttribute('aria-live')).toBe('assertive');
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-invalid'
+      )
+    ).toBe('true');
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-describedby'
+      )
+    ).toBe('share-lock-error');
     expect(screen.queryByTestId('share-step-locked')).toBeNull();
   });
 
@@ -347,7 +373,10 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
-    expect(screen.getByTestId('share-safety-unavailable')).toBeTruthy();
+    const warning = screen.getByTestId('share-safety-unavailable');
+    expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
@@ -624,7 +653,20 @@ describe('SharePage', () => {
     });
     fireEvent.click(screen.getByTestId('share-decrypt-button'));
 
-    expect(await screen.findByTestId('share-decrypt-error')).toBeTruthy();
+    const error = await screen.findByTestId('share-decrypt-error');
+    expect(error).toBeTruthy();
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.getAttribute('aria-live')).toBe('assertive');
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-invalid'
+      )
+    ).toBe('true');
+    expect(
+      (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
+        'aria-describedby'
+      )
+    ).toBe('share-decrypt-error');
     expect(screen.getByText('Local key material is unavailable on this device.')).toBeTruthy();
     expect(screen.getByTestId('share-step-delivered')).toBeTruthy();
   });
@@ -671,7 +713,10 @@ describe('SharePage', () => {
     fireEvent.click(screen.getByTestId('share-decrypt-burn'));
 
     expect(screen.queryByTestId('share-decrypt-plaintext')).toBeNull();
-    expect(screen.getByTestId('share-decrypt-burned')).toBeTruthy();
+    const burned = screen.getByTestId('share-decrypt-burned');
+    expect(burned).toBeTruthy();
+    expect(burned.getAttribute('role')).toBe('status');
+    expect(burned.getAttribute('aria-live')).toBe('polite');
     expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
   });
 
@@ -749,7 +794,11 @@ describe('SharePage', () => {
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith('/api/public/uuidbbbbbbbbbbbbbbbbb');
     });
-    expect(screen.getByTestId('share-step-loading')).toBeTruthy();
+    const loading = screen.getByTestId('share-step-loading');
+    expect(loading).toBeTruthy();
+    expect(loading.getAttribute('role')).toBe('status');
+    expect(loading.getAttribute('aria-live')).toBe('polite');
+    expect(loading.getAttribute('aria-busy')).toBe('true');
     expect(screen.queryByTestId('share-decrypt-plaintext')).toBeNull();
 
     uuidBPublic.resolve(

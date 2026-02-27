@@ -195,7 +195,10 @@ describe('ManagePage integration', () => {
     renderManagePage();
 
     expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
-    expect(screen.getByTestId('manage-safety-unavailable')).toBeTruthy();
+    const warning = screen.getByTestId('manage-safety-unavailable');
+    expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
@@ -413,7 +416,20 @@ describe('ManagePage integration', () => {
     });
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
-    expect(await screen.findByTestId('manage-action-error')).toBeTruthy();
+    const error = await screen.findByTestId('manage-action-error');
+    expect(error).toBeTruthy();
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.getAttribute('aria-live')).toBe('assertive');
+    expect(
+      (screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).getAttribute(
+        'aria-invalid'
+      )
+    ).toBe('true');
+    expect(
+      (screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).getAttribute(
+        'aria-describedby'
+      )
+    ).toBe('manage-action-error');
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
   });
 
@@ -517,7 +533,9 @@ describe('ManagePage integration', () => {
 
     await router.navigate(`/m/${NEXT_UUID}`);
     expect(await screen.findByTestId('manage-state-waiting')).toBeTruthy();
-    expect(screen.getByTestId('manage-uuid').textContent).toContain(NEXT_UUID);
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-uuid').textContent).toContain(NEXT_UUID);
+    });
     expect(screen.queryByTestId('manage-action-error')).toBeNull();
     expect(screen.queryByTestId('manage-state-deleted')).toBeNull();
 
@@ -557,7 +575,10 @@ describe('ManagePage integration', () => {
 
     renderManagePage();
 
-    expect(await screen.findByTestId('manage-public-status-error')).toBeTruthy();
+    const warning = await screen.findByTestId('manage-public-status-error');
+    expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
   });
 
