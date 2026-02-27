@@ -459,83 +459,57 @@ function usePublicShareState(uuid?: string) {
   };
 }
 
-/**
- * Receiver page integrating lock flow with orchestrator while preserving existing delivered preview.
- */
-export function SharePage(): ReactElement {
-  const { uuid } = useParams<{ uuid: string }>();
-  const location = useLocation();
-  const {
-    uuid: lockUuid,
-    step,
-    passphrase,
-    safetyCode,
-    setLockUuid,
-    setStep,
-    setPassphrase,
-    resetLockStore,
-  } = useLockStore();
-
+function useSharePageLockLogic(uuid?: string, hash?: string) {
+  const store = useLockStore();
+  const [lockError, setLockError] = useState<string | null>(null);
+  const [isLockSubmitting, setIsLockSubmitting] = useState(false);
   const mountedRef = useRef(true);
+
   useEffect(() => {
     return () => {
       mountedRef.current = false;
     };
   }, []);
 
-  const publicState = usePublicShareState(uuid);
-  const [lockError, setLockError] = useState<string | null>(null);
-  const [isLockSubmitting, setIsLockSubmitting] = useState(false);
-
-  const lockSecretB64u = extractLockSecretFromHash(location.hash);
+  const lockSecretB64u = extractLockSecretFromHash(hash ?? '');
   const lockSecretWarning = lockSecretB64u
     ? null
     : 'This share link is missing a lock secret fragment (#k=...).';
 
   useEffect(() => {
     if (!uuid) {
-      setLockUuid(null);
+      store.setLockUuid(null);
       setLockError(null);
       return;
     }
-
     const parsedUuid = UUIDSchema.safeParse(uuid);
-    setLockUuid(parsedUuid.success ? parsedUuid.data : null);
+    store.setLockUuid(parsedUuid.success ? parsedUuid.data : null);
     setLockError(null);
-  }, [uuid, setLockUuid]);
+  }, [uuid, store.setLockUuid]);
 
   useEffect(() => {
-    return () => {
-      resetLockStore();
-    };
-  }, [resetLockStore]);
+    return () => store.resetLockStore();
+  }, [store.resetLockStore]);
 
   const lockPending = isLockSubmitting;
   const canGenerate =
-    Boolean(lockUuid) && passphrase.trim().length > 0 && Boolean(lockSecretB64u) && !lockPending;
+    Boolean(store.uuid) &&
+    store.passphrase.trim().length > 0 &&
+    Boolean(lockSecretB64u) &&
+    !lockPending;
 
   function handlePassphraseChange(value: string): void {
-    setPassphrase(value);
-    if (lockError) {
-      setLockError(null);
-    }
+    store.setPassphrase(value);
+    if (lockError) setLockError(null);
   }
 
   async function handleGenerate(): Promise<void> {
     if (lockPending) return;
 
-    if (!lockUuid) {
-      setLockError(mapLockError('INVALID_REQUEST'));
-      return;
-    }
-    if (!lockSecretB64u) {
-      setLockError(mapLockError('INVALID_LOCK_SECRET'));
-      return;
-    }
-    if (passphrase.trim().length === 0) {
-      setLockError(mapLockError('PASSPHRASE_REQUIRED'));
-      return;
-    }
+    if (!store.uuid) return setLockError(mapLockError('INVALID_REQUEST'));
+    if (!lockSecretB64u) return setLockError(mapLockError('INVALID_LOCK_SECRET'));
+    if (store.passphrase.trim().length === 0)
+      return setLockError(mapLockError('PASSPHRASE_REQUIRED'));
 
     setLockError(null);
     setIsLockSubmitting(true);
@@ -543,9 +517,9 @@ export function SharePage(): ReactElement {
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.lockChannel>>;
     try {
       result = await cryptoOrchestrator.lockChannel({
-        uuid: lockUuid,
+        uuid: store.uuid,
         lockSecretB64u,
-        passphrase,
+        passphrase: store.passphrase,
       });
     } catch {
       if (!mountedRef.current) return;
@@ -556,13 +530,30 @@ export function SharePage(): ReactElement {
 
     if (!mountedRef.current) return;
     setIsLockSubmitting(false);
-    if (!result.ok) {
-      setLockError(mapLockError(result.error.code));
-      return;
-    }
-
+    if (!result.ok) return setLockError(mapLockError(result.error.code));
     setLockError(null);
   }
+
+  return {
+    store,
+    lockError,
+    setLockError,
+    lockPending,
+    canGenerate,
+    lockSecretWarning,
+    handlePassphraseChange,
+    handleGenerate,
+  };
+}
+
+/**
+ * Receiver page integrating lock flow with orchestrator while preserving existing delivered preview.
+ */
+export function SharePage(): ReactElement {
+  const { uuid } = useParams<{ uuid: string }>();
+  const location = useLocation();
+  const publicState = usePublicShareState(uuid);
+  const lockLogic = useSharePageLockLogic(uuid, location.hash);
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
@@ -575,31 +566,33 @@ export function SharePage(): ReactElement {
         {!publicState.isPublicStatusLoading &&
         publicState.channelState === CHANNEL_STATE.WAITING ? (
           <>
-            {step === 'onboarding' ? <OnboardingStep onContinue={() => setStep('lock')} /> : null}
-            {step === 'lock' ? (
+            {lockLogic.store.step === 'onboarding' ? (
+              <OnboardingStep onContinue={() => lockLogic.store.setStep('lock')} />
+            ) : null}
+            {lockLogic.store.step === 'lock' ? (
               <LockStep
-                canGenerate={canGenerate}
-                lockError={lockError}
-                lockPending={lockPending}
-                lockSecretWarning={lockSecretWarning}
+                canGenerate={lockLogic.canGenerate}
+                lockError={lockLogic.lockError}
+                lockPending={lockLogic.lockPending}
+                lockSecretWarning={lockLogic.lockSecretWarning}
                 onBack={() => {
-                  if (lockPending) return;
-                  setLockError(null);
-                  setStep('onboarding');
+                  if (lockLogic.lockPending) return;
+                  lockLogic.setLockError(null);
+                  lockLogic.store.setStep('onboarding');
                 }}
-                onGenerate={() => {
-                  void handleGenerate();
-                }}
-                onPassphraseChange={handlePassphraseChange}
-                passphrase={passphrase}
+                onGenerate={() => void lockLogic.handleGenerate()}
+                onPassphraseChange={lockLogic.handlePassphraseChange}
+                passphrase={lockLogic.store.passphrase}
               />
             ) : null}
-            {step === 'locked' ? <LockedStep safetyCodeAvailable={safetyCode} /> : null}
+            {lockLogic.store.step === 'locked' ? (
+              <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
+            ) : null}
           </>
         ) : null}
 
         {!publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.LOCKED ? (
-          <LockedStep safetyCodeAvailable={safetyCode} />
+          <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
         ) : null}
 
         {!publicState.isPublicStatusLoading &&
