@@ -637,6 +637,13 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
 
   const canBurn = Boolean(enabled) && Boolean(store.plaintext) && !isDecryptSubmitting;
 
+  useEffect(() => {
+    // If plaintext is present, decrypt has already completed and pending must settle.
+    if (store.plaintext && isDecryptSubmitting) {
+      setIsDecryptSubmitting(false);
+    }
+  }, [store.plaintext, isDecryptSubmitting]);
+
   function isActiveDecryptContext(scope: number, actionUuid: string): boolean {
     if (!mountedRef.current) return false;
     if (decryptActionScopeRef.current !== scope) return false;
@@ -672,13 +679,23 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
         passphrase,
       });
     } catch {
-      if (!isActiveDecryptContext(actionScope, actionUuid)) return;
+      if (!isActiveDecryptContext(actionScope, actionUuid)) {
+        if (mountedRef.current) {
+          setIsDecryptSubmitting(false);
+        }
+        return;
+      }
       setIsDecryptSubmitting(false);
       setDecryptErrorFromCode('INTERNAL_ERROR');
       return;
     }
 
-    if (!isActiveDecryptContext(actionScope, actionUuid)) return;
+    if (!isActiveDecryptContext(actionScope, actionUuid)) {
+      if (mountedRef.current) {
+        setIsDecryptSubmitting(false);
+      }
+      return;
+    }
     setIsDecryptSubmitting(false);
     if (!result.ok) {
       setDecryptErrorFromCode(result.error.code);

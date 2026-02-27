@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     testTimeout: 20_000,
+    exclude: [...configDefaults.exclude, 'e2e/**', 'playwright.config.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
