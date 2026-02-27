@@ -597,7 +597,9 @@ describe('SharePage', () => {
 
     unmount();
 
-    // Resolve after unmount — should not throw
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Resolve after unmount — should not throw or log errors
     deferred.resolve({
       ok: true,
       data: {
@@ -612,6 +614,11 @@ describe('SharePage', () => {
         receiverPubFpr: VALID_HEX,
       },
     });
+
+    // Flush microtasks so the resolved promise handler runs
+    await new Promise((r) => setTimeout(r, 0));
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('shows user-friendly error when lockChannel throws an exception', async () => {
@@ -632,5 +639,32 @@ describe('SharePage', () => {
     const errorText = screen.getByTestId('share-lock-error').textContent;
     expect(errorText).toBe('An unexpected error occurred. Please try again.');
     expect(errorText).not.toContain('INTERNAL_ERROR');
+  });
+
+  it('shows generic fallback error when lockChannel returns an unknown error code', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    lockChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'TOTALLY_UNKNOWN_CODE_XYZ',
+        stage: 'lock.begin',
+      },
+    });
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+    await screen.findByTestId('share-step-onboarding');
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
+    fireEvent.click(screen.getByTestId('share-generate-button'));
+
+    expect(await screen.findByTestId('share-lock-error')).toBeTruthy();
+    const errorText = screen.getByTestId('share-lock-error').textContent;
+    expect(errorText).toBe('Lock failed. Please try again.');
+    expect(errorText).not.toContain('TOTALLY_UNKNOWN_CODE_XYZ');
   });
 });
