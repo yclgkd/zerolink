@@ -122,11 +122,13 @@ function mockDecryptSuccessWithStoreSideEffects(): void {
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
 
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => {
@@ -505,6 +507,54 @@ describe('SharePage', () => {
     });
   });
 
+  it('keeps decrypt pending during re-decrypt when plaintext already exists', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await screen.findByTestId('share-step-delivered');
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'first-passphrase' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+    expect(await screen.findByTestId('share-decrypt-plaintext')).toBeTruthy();
+
+    const deferred = createDeferred<{
+      ok: true;
+      data: {
+        plaintext: string;
+        plaintextBytes: Uint8Array;
+        deliveredAt: number;
+        receiverPubFpr: string;
+      };
+    }>();
+    decryptDeliveredMock.mockReturnValueOnce(deferred.promise);
+
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'second-passphrase' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    await waitFor(() => {
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      const burnButton = screen.getByTestId('share-decrypt-burn') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(true);
+      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(burnButton.disabled).toBe(true);
+    });
+
+    deferred.resolve({
+      ok: true,
+      data: {
+        plaintext: 'decrypted:second-passphrase',
+        plaintextBytes: new Uint8Array([1, 2, 3]),
+        deliveredAt: MOCK_TIMESTAMP,
+        receiverPubFpr: VALID_HEX,
+      },
+    });
+  });
+
   it('resets decrypt pending when navigating to another delivered uuid mid-request', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
@@ -664,6 +714,237 @@ describe('SharePage', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('share-decrypt-error')).toBeNull();
       expect(screen.getByTestId('share-step-delivered')).toBeTruthy();
+    });
+  });
+
+  it('does not clear current pending when stale decrypt response resolves', async () => {
+    const fetchSpy = getFetchSpy();
+    const uuidBPublic = createDeferred<Response>();
+    fetchSpy.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/public/uuidaaaaaaaaaaaaaaaaa') {
+        return Promise.resolve(
+          jsonResponse({
+            ok: true,
+            state: 'delivered',
+          })
+        );
+      }
+      if (url === '/api/public/uuidbbbbbbbbbbbbbbbbb') {
+        return uuidBPublic.promise;
+      }
+
+      return Promise.reject(new Error(`Unexpected fetch call: ${url}`));
+    });
+
+    const deferredA = createDeferred<{
+      ok: true;
+      data: {
+        plaintext: string;
+        plaintextBytes: Uint8Array;
+        deliveredAt: number;
+        receiverPubFpr: string;
+      };
+    }>();
+    const deferredB = createDeferred<{
+      ok: true;
+      data: {
+        plaintext: string;
+        plaintextBytes: Uint8Array;
+        deliveredAt: number;
+        receiverPubFpr: string;
+      };
+    }>();
+
+    decryptDeliveredMock
+      .mockImplementationOnce(() => deferredA.promise)
+      .mockImplementationOnce(() => deferredB.promise);
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/s/:uuid',
+          element: <SharePage />,
+        },
+      ],
+      {
+        initialEntries: ['/s/uuidaaaaaaaaaaaaaaaaa'],
+      }
+    );
+
+    render(<RouterProvider router={router} />);
+
+    await screen.findByTestId('share-step-delivered');
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'first-passphrase' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    await router.navigate('/s/uuidbbbbbbbbbbbbbbbbb');
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith('/api/public/uuidbbbbbbbbbbbbbbbbb');
+    });
+    uuidBPublic.resolve(
+      jsonResponse({
+        ok: true,
+        state: 'delivered',
+      })
+    );
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'second-passphrase' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    await waitFor(() => {
+      expect(decryptDeliveredMock).toHaveBeenCalledTimes(2);
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(true);
+      expect(decryptButton.textContent).toBe('Decrypting...');
+    });
+
+    deferredA.resolve({
+      ok: true,
+      data: {
+        plaintext: 'decrypted:first-passphrase',
+        plaintextBytes: new Uint8Array([1, 2, 3]),
+        deliveredAt: MOCK_TIMESTAMP,
+        receiverPubFpr: VALID_HEX,
+      },
+    });
+
+    await waitFor(() => {
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(true);
+      expect(decryptButton.textContent).toBe('Decrypting...');
+    });
+
+    deferredB.resolve({
+      ok: true,
+      data: {
+        plaintext: 'decrypted:second-passphrase',
+        plaintextBytes: new Uint8Array([4, 5, 6]),
+        deliveredAt: MOCK_TIMESTAMP,
+        receiverPubFpr: VALID_HEX,
+      },
+    });
+
+    await waitFor(() => {
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(false);
+      expect(decryptButton.textContent).toBe('Decrypt');
+    });
+  });
+
+  it('does not clear current pending when stale decrypt throws', async () => {
+    const fetchSpy = getFetchSpy();
+    const uuidBPublic = createDeferred<Response>();
+    fetchSpy.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/public/uuidaaaaaaaaaaaaaaaaa') {
+        return Promise.resolve(
+          jsonResponse({
+            ok: true,
+            state: 'delivered',
+          })
+        );
+      }
+      if (url === '/api/public/uuidbbbbbbbbbbbbbbbbb') {
+        return uuidBPublic.promise;
+      }
+
+      return Promise.reject(new Error(`Unexpected fetch call: ${url}`));
+    });
+
+    const deferredA = createDeferred<{
+      ok: true;
+      data: {
+        plaintext: string;
+        plaintextBytes: Uint8Array;
+        deliveredAt: number;
+        receiverPubFpr: string;
+      };
+    }>();
+    const deferredB = createDeferred<{
+      ok: true;
+      data: {
+        plaintext: string;
+        plaintextBytes: Uint8Array;
+        deliveredAt: number;
+        receiverPubFpr: string;
+      };
+    }>();
+
+    decryptDeliveredMock
+      .mockImplementationOnce(() => deferredA.promise)
+      .mockImplementationOnce(() => deferredB.promise);
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/s/:uuid',
+          element: <SharePage />,
+        },
+      ],
+      {
+        initialEntries: ['/s/uuidaaaaaaaaaaaaaaaaa'],
+      }
+    );
+
+    render(<RouterProvider router={router} />);
+
+    await screen.findByTestId('share-step-delivered');
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'first-passphrase' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    await router.navigate('/s/uuidbbbbbbbbbbbbbbbbb');
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith('/api/public/uuidbbbbbbbbbbbbbbbbb');
+    });
+    uuidBPublic.resolve(
+      jsonResponse({
+        ok: true,
+        state: 'delivered',
+      })
+    );
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'second-passphrase' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    await waitFor(() => {
+      expect(decryptDeliveredMock).toHaveBeenCalledTimes(2);
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(true);
+      expect(decryptButton.textContent).toBe('Decrypting...');
+    });
+
+    deferredA.reject(new Error('stale decrypt failure'));
+
+    await waitFor(() => {
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(true);
+      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(screen.queryByTestId('share-decrypt-error')).toBeNull();
+    });
+
+    deferredB.resolve({
+      ok: true,
+      data: {
+        plaintext: 'decrypted:second-passphrase',
+        plaintextBytes: new Uint8Array([7, 8, 9]),
+        deliveredAt: MOCK_TIMESTAMP,
+        receiverPubFpr: VALID_HEX,
+      },
+    });
+
+    await waitFor(() => {
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(false);
+      expect(decryptButton.textContent).toBe('Decrypt');
     });
   });
 
