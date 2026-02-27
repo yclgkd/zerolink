@@ -7,7 +7,7 @@ import {
   type SecurityProfile,
   UUIDSchema,
 } from '@zerolink/shared';
-import type { ReactElement } from 'react';
+import type { ReactElement, RefObject } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -334,201 +334,17 @@ function ActionPanel({
 function useResolvedProfile(): SecurityProfile {
   const createdProfile = useCreateStore((state) => state.createdProfile);
   const selectedProfile = useCreateStore((state) => state.selectedProfile);
-
   return createdProfile ?? selectedProfile ?? SECURITY_PROFILE.STANDARD;
 }
 
-function useManagePageState(uuid?: string) {
-  const store = useDeliverStore();
-  const profile = useResolvedProfile();
-  const [secretInput, setSecretInput] = useState('');
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
-  const [isActionPending, setIsActionPending] = useState(false);
+function useShareLinkGenerator(uuid?: string) {
   const [copied, setCopied] = useState(false);
-  const mountedRef = useRef(true);
-  const actionScopeRef = useRef(0);
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    actionScopeRef.current += 1;
-    setIsActionPending(false);
-
-    if (!uuid) {
-      store.setDeliverUuid(null);
-      setSecretInput('');
-      setActionError(null);
-      setPublicStatusError(null);
-      return;
-    }
-
-    const parsedUuid = UUIDSchema.safeParse(uuid);
-    store.setDeliverUuid(parsedUuid.success ? parsedUuid.data : null);
-    store.setShowDestroyConfirm(false);
-    setSecretInput('');
-    setActionError(null);
-    setPublicStatusError(null);
-  }, [uuid, store.setDeliverUuid, store.setShowDestroyConfirm]);
-
-  const isActiveActionContext = (scope: number, actionUuid: string): boolean => {
-    if (!mountedRef.current) return false;
-    if (actionScopeRef.current !== scope) return false;
-    return useDeliverStore.getState().uuid === actionUuid;
-  };
-
-  useEffect(() => {
-    let canceled = false;
-
-    if (!uuid) {
-      store.setChannelState(CHANNEL_STATE.WAITING);
-      return;
-    }
-
-    const loadPublicStatus = async () => {
-      try {
-        const response = await fetch(`/api/public/${uuid}`);
-        if (!response.ok) throw new Error(`HTTP_${response.status}`);
-
-        const payload = (await response.json()) as unknown;
-        const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
-        if (!parsedPayload.success) throw new Error('INVALID_RESPONSE');
-
-        if (canceled || !mountedRef.current) return;
-        setPublicStatusError(null);
-        setActionError(null);
-        store.setShowDestroyConfirm(false);
-        store.setChannelState(parsedPayload.data.state);
-      } catch {
-        if (canceled || !mountedRef.current) return;
-        store.setShowDestroyConfirm(false);
-        store.setChannelState(CHANNEL_STATE.WAITING);
-        setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
-      }
-    };
-
-    void loadPublicStatus();
-
-    return () => {
-      canceled = true;
-    };
-  }, [uuid, store.setChannelState, store.setShowDestroyConfirm]);
-
-  useEffect(() => {
-    return () => store.resetDeliverStore();
-  }, [store.resetDeliverStore]);
-
-  const safetyCode = useMemo(() => {
-    if (!store.receiverPubFpr) return null;
-
-    try {
-      return deriveSafetyCodeDisplay(store.receiverPubFpr);
-    } catch {
-      return null;
-    }
-  }, [store.receiverPubFpr]);
 
   const shareLink = useMemo(() => {
     if (!uuid) return '(missing uuid)';
     const sharePath = ROUTE_PATTERN.SHARE.replace(':uuid', uuid);
     return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
   }, [uuid]);
-
-  const canDeliver =
-    store.channelState !== CHANNEL_STATE.DELETED &&
-    store.channelState !== CHANNEL_STATE.EXPIRED &&
-    secretInput.trim().length > 0 &&
-    Boolean(store.uuid);
-
-  const handleDeliver = async () => {
-    if (isActionPending) return;
-    if (!store.uuid) {
-      setActionError('Channel UUID is missing and cannot be delivered.');
-      return;
-    }
-    if (secretInput.trim().length === 0) {
-      setActionError('Secret payload is required before delivery.');
-      return;
-    }
-
-    setActionError(null);
-    setIsActionPending(true);
-    const actionScope = actionScopeRef.current;
-    const actionUuid = store.uuid;
-
-    let result: Awaited<ReturnType<typeof cryptoOrchestrator.deliverSecret>>;
-    try {
-      result = await cryptoOrchestrator.deliverSecret({
-        uuid: actionUuid,
-        profile,
-        plaintext: secretInput,
-      });
-    } catch {
-      if (!isActiveActionContext(actionScope, actionUuid)) return;
-      setIsActionPending(false);
-      setActionError(mapActionError('INTERNAL_ERROR'));
-      return;
-    }
-
-    if (!isActiveActionContext(actionScope, actionUuid)) return;
-    setIsActionPending(false);
-    if (!result.ok) {
-      setActionError(mapActionError(result.error.code));
-      return;
-    }
-
-    store.setShowDestroyConfirm(false);
-    setActionError(null);
-  };
-
-  const handleDestroyConfirm = () => {
-    if (isActionPending) return;
-    if (
-      store.channelState === CHANNEL_STATE.DELETED ||
-      store.channelState === CHANNEL_STATE.EXPIRED
-    )
-      return;
-    store.setShowDestroyConfirm(true);
-  };
-
-  const handleApplyDestroy = async () => {
-    if (isActionPending) return;
-    if (!store.uuid) {
-      setActionError('Channel UUID is missing and cannot be destroyed.');
-      return;
-    }
-
-    setActionError(null);
-    setIsActionPending(true);
-    const actionScope = actionScopeRef.current;
-    const actionUuid = store.uuid;
-
-    let result: Awaited<ReturnType<typeof cryptoOrchestrator.deleteChannel>>;
-    try {
-      result = await cryptoOrchestrator.deleteChannel({
-        uuid: actionUuid,
-        profile,
-      });
-    } catch {
-      if (!isActiveActionContext(actionScope, actionUuid)) return;
-      setIsActionPending(false);
-      setActionError(mapActionError('INTERNAL_ERROR'));
-      return;
-    }
-
-    if (!isActiveActionContext(actionScope, actionUuid)) return;
-    setIsActionPending(false);
-    if (!result.ok) {
-      setActionError(mapActionError(result.error.code));
-      return;
-    }
-
-    setActionError(null);
-  };
 
   const handleCopyShareLink = async () => {
     if (!uuid) {
@@ -552,6 +368,224 @@ function useManagePageState(uuid?: string) {
       setCopied(false);
     }
   };
+
+  return { copied, shareLink, handleCopyShareLink };
+}
+
+function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<boolean>) {
+  const store = useDeliverStore();
+  const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let canceled = false;
+    if (!uuid) {
+      store.setChannelState(CHANNEL_STATE.WAITING);
+      return;
+    }
+
+    const loadPublicStatus = async () => {
+      try {
+        const response = await fetch(`/api/public/${uuid}`);
+        if (!response.ok) throw new Error(`HTTP_${response.status}`);
+
+        const payload = (await response.json()) as unknown;
+        const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
+        if (!parsedPayload.success) throw new Error('INVALID_RESPONSE');
+
+        if (canceled || !mountedRef.current) return;
+        setPublicStatusError(null);
+        store.setShowDestroyConfirm(false);
+        store.setChannelState(parsedPayload.data.state);
+      } catch {
+        if (canceled || !mountedRef.current) return;
+        store.setShowDestroyConfirm(false);
+        store.setChannelState(CHANNEL_STATE.WAITING);
+        setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
+      }
+    };
+
+    void loadPublicStatus();
+    return () => {
+      canceled = true;
+    };
+  }, [uuid, store.setChannelState, store.setShowDestroyConfirm, mountedRef]);
+
+  return { publicStatusError, setPublicStatusError };
+}
+
+function useManageDeliveryLogic(
+  mountedRef: RefObject<boolean>,
+  actionScopeRef: RefObject<number>,
+  isActionPending: boolean,
+  setIsActionPending: (pending: boolean) => void,
+  setActionError: (error: string | null) => void,
+  secretInput: string,
+  profile: SecurityProfile
+) {
+  const store = useDeliverStore();
+
+  const isActiveActionContext = (scope: number, actionUuid: string): boolean => {
+    if (!mountedRef.current) return false;
+    if (actionScopeRef.current !== scope) return false;
+    return useDeliverStore.getState().uuid === actionUuid;
+  };
+
+  const handleDeliver = async () => {
+    if (isActionPending) return;
+    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be delivered.');
+    if (secretInput.trim().length === 0)
+      return setActionError('Secret payload is required before delivery.');
+
+    setActionError(null);
+    setIsActionPending(true);
+    const actionScope = actionScopeRef.current ?? 0;
+    const actionUuid = store.uuid;
+
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.deliverSecret>>;
+    try {
+      result = await cryptoOrchestrator.deliverSecret({
+        uuid: actionUuid,
+        profile,
+        plaintext: secretInput,
+      });
+    } catch {
+      if (!isActiveActionContext(actionScope, actionUuid)) return;
+      setIsActionPending(false);
+      return setActionError(mapActionError('INTERNAL_ERROR'));
+    }
+
+    if (!isActiveActionContext(actionScope, actionUuid)) return;
+    setIsActionPending(false);
+    if (!result.ok) return setActionError(mapActionError(result.error.code));
+
+    store.setShowDestroyConfirm(false);
+    setActionError(null);
+  };
+
+  return { handleDeliver, isActiveActionContext };
+}
+
+function useManageDestructionLogic(
+  _mountedRef: RefObject<boolean>,
+  actionScopeRef: RefObject<number>,
+  isActionPending: boolean,
+  setIsActionPending: (pending: boolean) => void,
+  setActionError: (error: string | null) => void,
+  profile: SecurityProfile,
+  isActiveActionContext: (scope: number, actionUuid: string) => boolean
+) {
+  const store = useDeliverStore();
+
+  const handleDestroyConfirm = () => {
+    if (isActionPending) return;
+    if (
+      store.channelState === CHANNEL_STATE.DELETED ||
+      store.channelState === CHANNEL_STATE.EXPIRED
+    )
+      return;
+    store.setShowDestroyConfirm(true);
+  };
+
+  const handleApplyDestroy = async () => {
+    if (isActionPending) return;
+    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be destroyed.');
+
+    setActionError(null);
+    setIsActionPending(true);
+    const actionScope = actionScopeRef.current ?? 0;
+    const actionUuid = store.uuid;
+
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.deleteChannel>>;
+    try {
+      result = await cryptoOrchestrator.deleteChannel({ uuid: actionUuid, profile });
+    } catch {
+      if (!isActiveActionContext(actionScope, actionUuid)) return;
+      setIsActionPending(false);
+      return setActionError(mapActionError('INTERNAL_ERROR'));
+    }
+
+    if (!isActiveActionContext(actionScope, actionUuid)) return;
+    setIsActionPending(false);
+    if (!result.ok) return setActionError(mapActionError(result.error.code));
+    setActionError(null);
+  };
+
+  return { handleDestroyConfirm, handleApplyDestroy };
+}
+
+function useManagePageState(uuid?: string) {
+  const store = useDeliverStore();
+  const profile = useResolvedProfile();
+  const mountedRef = useRef(true);
+  const actionScopeRef = useRef(0);
+
+  const [secretInput, setSecretInput] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isActionPending, setIsActionPending] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const { publicStatusError, setPublicStatusError } = usePublicStatusFetcher(uuid, mountedRef);
+  const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
+
+  useEffect(() => {
+    actionScopeRef.current += 1;
+    setIsActionPending(false);
+    setSecretInput('');
+    setActionError(null);
+    setPublicStatusError(null);
+
+    if (!uuid) {
+      store.setDeliverUuid(null);
+      return;
+    }
+    const parsedUuid = UUIDSchema.safeParse(uuid);
+    store.setDeliverUuid(parsedUuid.success ? parsedUuid.data : null);
+    store.setShowDestroyConfirm(false);
+  }, [uuid, store.setDeliverUuid, store.setShowDestroyConfirm, setPublicStatusError]);
+
+  useEffect(() => {
+    return () => store.resetDeliverStore();
+  }, [store.resetDeliverStore]);
+
+  const safetyCode = useMemo(() => {
+    if (!store.receiverPubFpr) return null;
+    try {
+      return deriveSafetyCodeDisplay(store.receiverPubFpr);
+    } catch {
+      return null;
+    }
+  }, [store.receiverPubFpr]);
+
+  const canDeliver =
+    store.channelState !== CHANNEL_STATE.DELETED &&
+    store.channelState !== CHANNEL_STATE.EXPIRED &&
+    secretInput.trim().length > 0 &&
+    Boolean(store.uuid);
+
+  const { handleDeliver, isActiveActionContext } = useManageDeliveryLogic(
+    mountedRef,
+    actionScopeRef,
+    isActionPending,
+    setIsActionPending,
+    setActionError,
+    secretInput,
+    profile
+  );
+
+  const { handleDestroyConfirm, handleApplyDestroy } = useManageDestructionLogic(
+    mountedRef,
+    actionScopeRef,
+    isActionPending,
+    setIsActionPending,
+    setActionError,
+    profile,
+    isActiveActionContext
+  );
 
   return {
     status: store.channelState,
