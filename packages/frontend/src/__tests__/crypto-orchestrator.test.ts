@@ -726,6 +726,119 @@ describe('crypto orchestrator', () => {
     expect(useDecryptStore.getState().plaintext).toBe('receiver can decrypt this');
   });
 
+  it('does not apply decrypt store updates when uuid changes mid-flow', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-mid-flow-scope',
+      storeName: 'receiver-keys',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+    useDecryptStore.getState().setDecryptUuid(VALID_UUID_BRANDED);
+
+    vi.mocked(apiClient.lockBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        lockChallenge: {
+          id: VALID_B64U,
+          challenge: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+      },
+    });
+    vi.mocked(apiClient.lockCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+    const lockResult = await orchestrator.lockChannel({
+      uuid: VALID_UUID,
+      lockSecretB64u: VALID_LOCK_SECRET,
+      passphrase: 'Strong#Pass1234',
+    });
+    expect(lockResult.ok).toBe(true);
+    if (!lockResult.ok) return;
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+        currentVersion: 0,
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+      if (input.intent.op === 'update') {
+        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      }
+      return { ok: true, status: 200, data: { ok: true } };
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'receiver can decrypt this',
+    });
+    expect(deliverResult.ok).toBe(true);
+    expect(committedCipherBundle).not.toBeNull();
+    if (!committedCipherBundle) return;
+
+    const statusDeferred = createDeferred<Awaited<ReturnType<ApiClient['publicStatus']>>>();
+    vi.mocked(apiClient.publicStatus).mockImplementation(async () => statusDeferred.promise);
+    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: committedCipherBundle,
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const decryptPromise = orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(useDecryptStore.getState().publicStatus.status).toBe('loading');
+
+    useDecryptStore.getState().setDecryptUuid(NEXT_UUID_BRANDED);
+    useDecryptStore.getState().setPlaintext('next-uuid-local-plaintext');
+
+    statusDeferred.resolve({
+      ok: true,
+      status: 200,
+      data: { ok: true, state: CHANNEL_STATE.DELIVERED },
+    });
+
+    const decryptResult = await decryptPromise;
+    expect(decryptResult.ok).toBe(true);
+    expect(vi.mocked(apiClient.decryptFetch)).toHaveBeenCalledWith(VALID_UUID);
+
+    const state = useDecryptStore.getState();
+    expect(state.uuid).toBe(NEXT_UUID_BRANDED);
+    expect(state.channelState).toBe(CHANNEL_STATE.WAITING);
+    expect(state.publicStatus.status).toBe('idle');
+    expect(state.decryptFetch.status).toBe('idle');
+    expect(state.plaintext).toBe('next-uuid-local-plaintext');
+  });
+
   it('returns CHANNEL_NOT_DELIVERED when public state is not delivered', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     vi.mocked(apiClient.publicStatus).mockResolvedValue({

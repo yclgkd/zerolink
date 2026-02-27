@@ -542,6 +542,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   const [decryptError, setDecryptError] = useState<string | null>(null);
   const [isDecryptSubmitting, setIsDecryptSubmitting] = useState(false);
   const mountedRef = useRef(true);
+  const decryptActionScopeRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -550,6 +551,9 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   }, []);
 
   useEffect(() => {
+    decryptActionScopeRef.current += 1;
+    setIsDecryptSubmitting(false);
+
     if (!uuid) {
       useDecryptStore.getState().setDecryptUuid(null);
       setPassphrase('');
@@ -570,6 +574,8 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   useEffect(() => {
     if (enabled) return;
 
+    decryptActionScopeRef.current += 1;
+    setIsDecryptSubmitting(false);
     setPassphrase('');
     setDecryptError(null);
     useDecryptStore.getState().setPlaintext(null);
@@ -580,6 +586,12 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
 
   const canBurn = Boolean(enabled) && Boolean(store.plaintext) && !isDecryptSubmitting;
 
+  function isActiveDecryptContext(scope: number, actionUuid: string): boolean {
+    if (!mountedRef.current) return false;
+    if (decryptActionScopeRef.current !== scope) return false;
+    return useDecryptStore.getState().uuid === actionUuid;
+  }
+
   async function handleDecrypt(): Promise<void> {
     if (!enabled || isDecryptSubmitting) return;
 
@@ -587,23 +599,26 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     if (passphrase.trim().length === 0)
       return setDecryptError(mapDecryptError('PASSPHRASE_REQUIRED'));
 
+    const actionScope = decryptActionScopeRef.current;
+    const actionUuid = store.uuid;
+
     setDecryptError(null);
     setIsDecryptSubmitting(true);
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.decryptDelivered>>;
     try {
       result = await cryptoOrchestrator.decryptDelivered({
-        uuid: store.uuid,
+        uuid: actionUuid,
         passphrase,
       });
     } catch {
-      if (!mountedRef.current) return;
+      if (!isActiveDecryptContext(actionScope, actionUuid)) return;
       setIsDecryptSubmitting(false);
       setDecryptError(mapDecryptError('INTERNAL_ERROR'));
       return;
     }
 
-    if (!mountedRef.current) return;
+    if (!isActiveDecryptContext(actionScope, actionUuid)) return;
     setIsDecryptSubmitting(false);
     if (!result.ok) {
       setDecryptError(mapDecryptError(result.error.code));
