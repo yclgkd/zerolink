@@ -51,17 +51,6 @@ function mockCreateSuccess(): void {
   });
 }
 
-function mockCreateFailure(code: string): void {
-  createChannelMock.mockResolvedValue({
-    ok: false,
-    error: {
-      ok: false,
-      code,
-      stage: 'create.register',
-    },
-  });
-}
-
 function expectProfileSelected(profile: SecurityProfile): void {
   const allProfiles: SecurityProfile[] = [
     SECURITY_PROFILE.STANDARD,
@@ -151,9 +140,8 @@ describe('CreatePage integration', () => {
     expect(continueButton.disabled).toBe(true);
   });
 
-  it('calls createChannel and shows FALLBACK_REQUIRED error in compatibility flow', async () => {
+  it('shows fallback unavailable error and does not call createChannel via compatibility continue', async () => {
     mockWebAuthnSupport(false);
-    mockCreateFailure('FALLBACK_REQUIRED');
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
@@ -161,9 +149,27 @@ describe('CreatePage integration', () => {
     fireEvent.click(screen.getByTestId('create-compatibility-continue'));
 
     await waitFor(() => {
-      expect(createChannelMock).toHaveBeenCalledTimes(1);
+      expect(createChannelMock).not.toHaveBeenCalled();
     });
     expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
+    expect(screen.queryByTestId('create-success-share-link')).toBeNull();
+    expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
+  });
+
+  it('shows fallback unavailable error and does not call createChannel via primary create button', async () => {
+    mockWebAuthnSupport(false);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(createChannelMock).not.toHaveBeenCalled();
+    });
+    expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
     expect(screen.queryByTestId('create-success-share-link')).toBeNull();
     expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
   });

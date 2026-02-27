@@ -34,10 +34,13 @@ interface CreatedLinks {
   manageUrl: string;
 }
 
+const FALLBACK_UNAVAILABLE_MESSAGE =
+  'Compatibility mode fallback is not implemented yet in this build.';
+
 function mapCreateError(code: string): string {
   switch (code) {
     case 'FALLBACK_REQUIRED':
-      return 'Compatibility mode fallback is not implemented yet in this build.';
+      return FALLBACK_UNAVAILABLE_MESSAGE;
     case 'PROFILE_BLOCKED':
       return 'This security profile requires WebAuthn support in your environment.';
     case 'NETWORK_ERROR':
@@ -112,7 +115,8 @@ function CompatibilityPanel({
     >
       <p className="font-medium text-foreground">Compatibility Mode (Lower Security)</p>
       <p>
-        Standard profile can continue without WebAuthn, but this reduces authentication guarantees.
+        Compatibility mode fallback is not implemented in this build. Use a WebAuthn-capable
+        environment to create channels.
       </p>
       <label className="flex items-start gap-2">
         <input
@@ -248,12 +252,25 @@ export function CreatePage(): ReactElement {
     setCreatedProfile(null);
   }
 
+  function showFallbackUnavailableError(): void {
+    setSubmitError(FALLBACK_UNAVAILABLE_MESSAGE);
+    setCreatedLinks(null);
+    setCreatedProfile(null);
+    setShowCompatibilityConfirm(false);
+    setCompatibilityAccepted(false);
+  }
+
   function handleSelectProfile(profile: SecurityProfile): void {
     setSelectedProfile(profile);
     clearLocalFeedback();
   }
 
   async function runCreate(): Promise<void> {
+    if (compatibilityAvailable) {
+      showFallbackUnavailableError();
+      return;
+    }
+
     clearLocalFeedback();
     setIsCreating(true);
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
@@ -298,6 +315,11 @@ export function CreatePage(): ReactElement {
       return;
     }
 
+    if (compatibilityAvailable) {
+      showFallbackUnavailableError();
+      return;
+    }
+
     void runCreate();
   }
 
@@ -309,6 +331,12 @@ export function CreatePage(): ReactElement {
 
   function handleCompatibilityContinue(): void {
     if (!compatibilityAccepted || isSubmitting) return;
+
+    if (compatibilityAvailable) {
+      showFallbackUnavailableError();
+      return;
+    }
+
     void runCreate();
   }
 
