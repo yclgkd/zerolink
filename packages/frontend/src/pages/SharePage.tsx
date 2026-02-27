@@ -69,6 +69,7 @@ function mapLockError(code: string): string {
       return 'Unable to fetch lock challenge. Please retry.';
     case 'KEY_STORAGE_ERROR':
       return 'Unable to store receiver key material on this device.';
+    case 'CRYPTO_ERROR':
     case 'INTERNAL_ERROR':
       return 'An unexpected error occurred. Please try again.';
     case 'NETWORK_ERROR':
@@ -414,8 +415,6 @@ function usePublicShareState(uuid?: string) {
   }, [uuid]);
 
   useEffect(() => {
-    void decryptFetchAttempt;
-
     if (!uuid || publicStatusResolvedUuid !== uuid || channelState !== CHANNEL_STATE.DELIVERED) {
       setDecryptFetchPayload(null);
       setDecryptFetchError(null);
@@ -478,18 +477,18 @@ function useSharePageLockLogic(uuid?: string, hash?: string) {
 
   useEffect(() => {
     if (!uuid) {
-      store.setLockUuid(null);
+      useLockStore.getState().setLockUuid(null);
       setLockError(null);
       return;
     }
     const parsedUuid = UUIDSchema.safeParse(uuid);
-    store.setLockUuid(parsedUuid.success ? parsedUuid.data : null);
+    useLockStore.getState().setLockUuid(parsedUuid.success ? parsedUuid.data : null);
     setLockError(null);
-  }, [uuid, store.setLockUuid]);
+  }, [uuid]);
 
   useEffect(() => {
-    return () => store.resetLockStore();
-  }, [store.resetLockStore]);
+    return () => useLockStore.getState().resetLockStore();
+  }, []);
 
   const lockPending = isLockSubmitting;
   const canGenerate =

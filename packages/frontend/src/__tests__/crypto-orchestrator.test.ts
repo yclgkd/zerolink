@@ -53,6 +53,7 @@ const VALID_LOCK_SECRET = Base64UrlSchema.parse('bW9ja19sb2NrX3NlY3JldF8xMjM0NTY
 const NOW = UnixMsSchema.parse(1_700_000_000_000);
 const CHALLENGE_EXPIRES_AT = UnixMsSchema.parse(Number(NOW) + 60_000);
 const VALID_UUID_BRANDED = UUIDSchema.parse(VALID_UUID);
+const NEXT_UUID_BRANDED = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
 
 function toMutableReceiverJwk(jwk: RSAPublicKeyJWK): {
   kty: 'RSA';
@@ -142,6 +143,15 @@ function createOrchestrator(overrides: Partial<CryptoOrchestratorDeps> = {}): {
   });
 
   return { orchestrator, apiClient };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
 }
 
 beforeEach(() => {
@@ -412,6 +422,58 @@ describe('crypto orchestrator', () => {
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELIVERED);
   });
 
+  it('does not apply deliver store updates when uuid changes mid-flow', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    useDeliverStore.getState().setDeliverUuid(VALID_UUID_BRANDED);
+
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+    const beginDeferred = createDeferred<Awaited<ReturnType<ApiClient['compoundBegin']>>>();
+    vi.mocked(apiClient.compoundBegin).mockImplementation(async () => beginDeferred.promise);
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+    vi.mocked(apiClient.compoundCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+
+    const deliverPromise = orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'hello from sender',
+    });
+
+    useDeliverStore.getState().setDeliverUuid(NEXT_UUID_BRANDED);
+    beginDeferred.resolve({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion: 0,
+      },
+    });
+
+    const result = await deliverPromise;
+
+    expect(result.ok).toBe(true);
+    const state = useDeliverStore.getState();
+    expect(state.uuid).toBe(NEXT_UUID_BRANDED);
+    expect(state.channelState).toBe(CHANNEL_STATE.WAITING);
+    expect(state.compoundCommit.status).toBe('idle');
+  });
+
   it('returns MISSING_RECEIVER_IDENTITY when compound begin has no receiver fields', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     vi.mocked(apiClient.compoundBegin).mockResolvedValue({
@@ -519,6 +581,51 @@ describe('crypto orchestrator', () => {
 
     expect(result.ok).toBe(true);
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELETED);
+  });
+
+  it('does not apply delete store updates when uuid changes mid-flow', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    useDeliverStore.getState().setDeliverUuid(VALID_UUID_BRANDED);
+
+    const beginDeferred = createDeferred<Awaited<ReturnType<ApiClient['compoundBegin']>>>();
+    vi.mocked(apiClient.compoundBegin).mockImplementation(async () => beginDeferred.promise);
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+    vi.mocked(apiClient.deleteCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+
+    const deletePromise = orchestrator.deleteChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    useDeliverStore.getState().setDeliverUuid(NEXT_UUID_BRANDED);
+    beginDeferred.resolve({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        currentVersion: 3,
+      },
+    });
+
+    const result = await deletePromise;
+
+    expect(result.ok).toBe(true);
+    const state = useDeliverStore.getState();
+    expect(state.uuid).toBe(NEXT_UUID_BRANDED);
+    expect(state.channelState).toBe(CHANNEL_STATE.WAITING);
+    expect(state.compoundCommit.status).toBe('idle');
   });
 
   it('decrypts delivered payload and sets plaintext in decrypt store', async () => {

@@ -349,6 +349,22 @@ function toApiReceiverPubJwk(
   };
 }
 
+type DeliverStoreStateSnapshot = ReturnType<DeliverStore['getState']>;
+
+function canApplyDeliverStoreUpdate(uuid: string, state: DeliverStoreStateSnapshot): boolean {
+  return state.uuid === null || state.uuid === uuid;
+}
+
+function applyDeliverStoreUpdate(
+  deliverStore: DeliverStore,
+  uuid: string,
+  apply: (state: DeliverStoreStateSnapshot) => void
+): void {
+  const state = deliverStore.getState();
+  if (!canApplyDeliverStoreUpdate(uuid, state)) return;
+  apply(state);
+}
+
 async function executeCreateChannel(
   deps: ResolvedDeps,
   input: CreateChannelInput
@@ -581,15 +597,20 @@ async function executeDeliverSecret(
   deps: ResolvedDeps,
   input: DeliverSecretInput
 ): Promise<CryptoOrchestratorResult<DeliverSecretOutput>> {
-  const state = deps.deliverStore.getState();
-  state.startCompoundBegin();
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.startCompoundBegin();
+  });
 
   const beginRes = await deps.client.compoundBegin({ uuid: input.uuid });
   if (!beginRes.ok) {
-    state.failCompoundBegin(beginRes.error.code);
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundBegin(beginRes.error.code);
+    });
     return toError(beginRes.error.code, 'deliver.begin');
   }
-  state.completeCompoundBegin(beginRes.data as CompoundBeginResponse);
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.completeCompoundBegin(beginRes.data as CompoundBeginResponse);
+  });
 
   const beginData = beginRes.data;
   if (!beginData.challenge) return toError('MISSING_LOCK_CHALLENGE', 'deliver.validate');
@@ -607,7 +628,9 @@ async function executeDeliverSecret(
   try {
     intentData = await buildDeliverUpdateIntent(deps, input, resolvedBeginData);
   } catch (error) {
-    state.failCompoundCommit('CRYPTO_ERROR');
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundCommit('CRYPTO_ERROR');
+    });
     return toError(
       'CRYPTO_ERROR',
       'deliver.crypto',
@@ -615,13 +638,17 @@ async function executeDeliverSecret(
     );
   }
 
-  state.startCompoundCommit();
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.startCompoundCommit();
+  });
   const assertRes = await assertWithWebAuthn({
     profile: input.profile,
     requestOptions: { publicKey: { challenge: intentData.expectedChallenge } },
   });
   if (!assertRes.ok) {
-    state.failCompoundCommit(assertRes.error.code);
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundCommit(assertRes.error.code);
+    });
     return mapWebAuthnError(assertRes.error.code, 'deliver.assert');
   }
 
@@ -632,12 +659,16 @@ async function executeDeliverSecret(
     intent: intentData.intent,
   });
   if (!commitRes.ok) {
-    state.failCompoundCommit(commitRes.error.code);
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundCommit(commitRes.error.code);
+    });
     return toError(commitRes.error.code, 'deliver.commit');
   }
 
-  state.completeCompoundCommit(commitRes.data);
-  state.markDelivered();
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.completeCompoundCommit(commitRes.data);
+    state.markDelivered();
+  });
 
   return { ok: true, data: intentData };
 }
@@ -646,15 +677,20 @@ async function executeDeleteChannel(
   deps: ResolvedDeps,
   input: DeleteChannelInput
 ): Promise<CryptoOrchestratorResult<DeleteChannelOutput>> {
-  const state = deps.deliverStore.getState();
-  state.startCompoundBegin();
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.startCompoundBegin();
+  });
 
   const beginRes = await deps.client.compoundBegin({ uuid: input.uuid });
   if (!beginRes.ok) {
-    state.failCompoundBegin(beginRes.error.code);
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundBegin(beginRes.error.code);
+    });
     return toError(beginRes.error.code, 'delete.begin');
   }
-  state.completeCompoundBegin(beginRes.data as CompoundBeginResponse);
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.completeCompoundBegin(beginRes.data as CompoundBeginResponse);
+  });
 
   const beginData = beginRes.data;
   if (!beginData.challenge) return toError('MISSING_LOCK_CHALLENGE', 'delete.validate');
@@ -675,13 +711,17 @@ async function executeDeleteChannel(
     intentHash,
   });
 
-  state.startCompoundCommit();
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.startCompoundCommit();
+  });
   const assertRes = await assertWithWebAuthn({
     profile: input.profile,
     requestOptions: { publicKey: { challenge: expectedChallenge } },
   });
   if (!assertRes.ok) {
-    state.failCompoundCommit(assertRes.error.code);
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundCommit(assertRes.error.code);
+    });
     return mapWebAuthnError(assertRes.error.code, 'delete.assert');
   }
 
@@ -692,12 +732,16 @@ async function executeDeleteChannel(
     intent,
   });
   if (!commitRes.ok) {
-    state.failCompoundCommit(commitRes.error.code);
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundCommit(commitRes.error.code);
+    });
     return toError(commitRes.error.code, 'delete.commit');
   }
 
-  state.completeCompoundCommit(commitRes.data);
-  state.markDeleted();
+  applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+    state.completeCompoundCommit(commitRes.data);
+    state.markDeleted();
+  });
 
   return { ok: true, data: { intentHash, intent, expectedChallenge } };
 }

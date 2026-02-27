@@ -1,6 +1,14 @@
-import { CHANNEL_STATE, type ChannelState, type HexString, ROUTE_PATTERN } from '@zerolink/shared';
-import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
+import {
+  CHANNEL_STATE,
+  type ChannelState,
+  PublicStatusResponseSchema,
+  ROUTE_PATTERN,
+  SECURITY_PROFILE,
+  type SecurityProfile,
+  UUIDSchema,
+} from '@zerolink/shared';
+import type { ReactElement, RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import {
@@ -14,36 +22,36 @@ import {
 } from '../components/layout';
 import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
-import { cn } from '../lib/utils';
+import { cryptoOrchestrator } from '../crypto/orchestrator';
+import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
+import { useCreateStore } from '../stores/create-store';
+import { useDeliverStore } from '../stores/deliver-store';
 
-const statusOrder: ChannelState[] = [
-  CHANNEL_STATE.WAITING,
-  CHANNEL_STATE.LOCKED,
-  CHANNEL_STATE.DELIVERED,
-  CHANNEL_STATE.DELETED,
-  CHANNEL_STATE.EXPIRED,
-];
-
-const statusSwitcherLabelMap: Record<ChannelState, string> = {
-  [CHANNEL_STATE.WAITING]: 'Waiting',
-  [CHANNEL_STATE.LOCKED]: 'Locked',
-  [CHANNEL_STATE.DELIVERED]: 'Delivered',
-  [CHANNEL_STATE.DELETED]: 'Deleted',
-  [CHANNEL_STATE.EXPIRED]: 'Expired',
-};
-
-const mockSafetyCodeDisplay = {
-  emoji: {
-    type: 'emoji',
-    emojis: ['🔥', '🌲', '🚀', '🔮', '💎', '🎯', '⚡', '🌙'],
-  },
-  color: {
-    type: 'color',
-    cells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-  },
-  shortFpr: 'a1b2c3d4e5f6...f1e2d3c4b5a6',
-  fullFpr: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00' as HexString,
-} as const;
+function mapActionError(code: string): string {
+  switch (code) {
+    case 'FALLBACK_REQUIRED':
+      return 'Compatibility fallback is unavailable for this action in the current build.';
+    case 'PROFILE_BLOCKED':
+      return 'Selected security profile requires WebAuthn support.';
+    case 'MISSING_LOCK_CHALLENGE':
+      return 'Unable to fetch challenge from server. Please retry.';
+    case 'MISSING_RECEIVER_IDENTITY':
+      return 'Receiver identity is unavailable. Ask receiver to lock again.';
+    case 'NETWORK_ERROR':
+      return 'Network error while performing manage action. Please retry.';
+    case 'BAD_REQUEST':
+    case 'INVALID_REQUEST':
+      return 'Manage request was rejected. Please retry.';
+    case 'WEBAUTHN_ERROR':
+    case 'NOT_ALLOWED':
+    case 'ABORTED':
+      return 'WebAuthn verification was not completed.';
+    case 'INTERNAL_ERROR':
+      return 'Unexpected internal error. Please retry.';
+    default:
+      return `Manage action failed: ${code}`;
+  }
+}
 
 function ManagePageHeader({ status }: { status: ChannelState }) {
   return (
@@ -58,7 +66,7 @@ function ManagePageHeader({ status }: { status: ChannelState }) {
         <RoleBadge party="sender" />
       </div>
       <PageCardDescription>
-        Sender-side verification and delivery controls (UI-only flow).
+        Sender-side verification and delivery controls (integrated flow).
       </PageCardDescription>
     </PageCardHeader>
   );
@@ -118,42 +126,13 @@ function ShareLinkCard({
   );
 }
 
-function StatePreviewSwitcher({
-  currentStatus,
-  onSelectStatus,
+function StatusContent({
+  status,
+  safetyCode,
 }: {
-  currentStatus: ChannelState;
-  onSelectStatus: (status: ChannelState) => void;
+  status: ChannelState;
+  safetyCode: ReturnType<typeof deriveSafetyCodeDisplay> | null;
 }) {
-  return (
-    <section className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        State Preview
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {statusOrder.map((status) => (
-          <button
-            aria-pressed={currentStatus === status}
-            className={cn(
-              'rounded-lg border px-3 py-1.5 text-xs transition-colors',
-              currentStatus === status
-                ? 'border-primary/50 bg-primary/15 text-primary'
-                : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'
-            )}
-            data-testid={`manage-status-switch-${status}`}
-            key={status}
-            onClick={() => onSelectStatus(status)}
-            type="button"
-          >
-            {statusSwitcherLabelMap[status]}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function StatusContent({ status }: { status: ChannelState }) {
   if (status === CHANNEL_STATE.WAITING) {
     return (
       <section className="space-y-2" data-testid="manage-state-waiting">
@@ -174,7 +153,21 @@ function StatusContent({ status }: { status: ChannelState }) {
             Verify the Safety Code out-of-band before delivering the secret.
           </p>
         </div>
-        <SafetyCode display={mockSafetyCodeDisplay} />
+
+        {safetyCode ? (
+          <SafetyCode display={safetyCode} />
+        ) : (
+          <div
+            className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+            data-testid="manage-safety-unavailable"
+          >
+            <p className="font-medium text-foreground">Safety Code unavailable on this device.</p>
+            <p className="mt-1 text-xs text-neon-orange">
+              Safety Code is generated locally and can only be shown when receiver fingerprint is
+              available on this device.
+            </p>
+          </div>
+        )}
       </section>
     );
   }
@@ -211,10 +204,42 @@ function StatusContent({ status }: { status: ChannelState }) {
   );
 }
 
+function SecretInput({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <section className="space-y-2">
+      <label
+        className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+        htmlFor="manage-secret-input"
+      >
+        Secret Payload
+      </label>
+      <textarea
+        className="min-h-24 w-full rounded-xl border border-border/70 bg-card/60 px-3 py-2 text-sm text-foreground outline-none ring-offset-background transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+        data-testid="manage-secret-input"
+        disabled={disabled}
+        id="manage-secret-input"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Enter plaintext secret to encrypt and deliver"
+        value={value}
+      />
+    </section>
+  );
+}
+
 function DestroyConfirmPanel({
+  pending,
   onCancelDestroy,
   onConfirmDestroy,
 }: {
+  pending: boolean;
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
@@ -227,6 +252,7 @@ function DestroyConfirmPanel({
       <div className="flex flex-wrap gap-2">
         <Button
           data-testid="manage-destroy-cancel"
+          disabled={pending}
           onClick={onCancelDestroy}
           size="sm"
           type="button"
@@ -236,12 +262,13 @@ function DestroyConfirmPanel({
         </Button>
         <Button
           data-testid="manage-destroy-confirm-apply"
+          disabled={pending}
           onClick={onConfirmDestroy}
           size="sm"
           type="button"
           variant="danger"
         >
-          Confirm Destroy
+          {pending ? 'Destroying...' : 'Confirm Destroy'}
         </Button>
       </div>
     </div>
@@ -251,6 +278,8 @@ function DestroyConfirmPanel({
 function ActionPanel({
   status,
   showDestroyConfirm,
+  pending,
+  canDeliver,
   onDeliver,
   onOpenDestroyConfirm,
   onCancelDestroy,
@@ -258,13 +287,16 @@ function ActionPanel({
 }: {
   status: ChannelState;
   showDestroyConfirm: boolean;
+  pending: boolean;
+  canDeliver: boolean;
   onDeliver: () => void;
   onOpenDestroyConfirm: () => void;
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
-  const deliverDisabled = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
-  const destroyDisabled = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
+  const terminal = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
+  const deliverDisabled = terminal || pending || !canDeliver;
+  const destroyDisabled = terminal || pending;
 
   return (
     <section className="space-y-3">
@@ -275,7 +307,7 @@ function ActionPanel({
           onClick={onDeliver}
           type="button"
         >
-          Deliver
+          {pending ? 'Delivering...' : 'Deliver'}
         </Button>
         <Button
           data-testid="manage-destroy-button"
@@ -292,15 +324,20 @@ function ActionPanel({
         <DestroyConfirmPanel
           onCancelDestroy={onCancelDestroy}
           onConfirmDestroy={onConfirmDestroy}
+          pending={pending}
         />
       ) : null}
     </section>
   );
 }
 
-function useManagePageState(uuid?: string) {
-  const [status, setStatus] = useState<ChannelState>(CHANNEL_STATE.WAITING);
-  const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
+function useResolvedProfile(): SecurityProfile {
+  const createdProfile = useCreateStore((state) => state.createdProfile);
+  const selectedProfile = useCreateStore((state) => state.selectedProfile);
+  return createdProfile ?? selectedProfile ?? SECURITY_PROFILE.STANDARD;
+}
+
+function useShareLinkGenerator(uuid?: string) {
   const [copied, setCopied] = useState(false);
 
   const shareLink = useMemo(() => {
@@ -308,35 +345,6 @@ function useManagePageState(uuid?: string) {
     const sharePath = ROUTE_PATTERN.SHARE.replace(':uuid', uuid);
     return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
   }, [uuid]);
-
-  const handleStatusSwitch = (nextStatus: ChannelState) => {
-    setStatus(nextStatus);
-    setShowDestroyConfirm(false);
-  };
-
-  const handleDeliver = () => {
-    setStatus(CHANNEL_STATE.DELIVERED);
-    setShowDestroyConfirm(false);
-  };
-
-  const handleApplyDestroy = () => {
-    if (status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED) {
-      setShowDestroyConfirm(false);
-      return;
-    }
-
-    setStatus(CHANNEL_STATE.DELETED);
-    setShowDestroyConfirm(false);
-  };
-
-  const handleDestroyConfirm = () => {
-    if (status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED) {
-      setShowDestroyConfirm(false);
-      return;
-    }
-
-    setShowDestroyConfirm(true);
-  };
 
   const handleCopyShareLink = async () => {
     if (!uuid) {
@@ -361,22 +369,249 @@ function useManagePageState(uuid?: string) {
     }
   };
 
+  return { copied, shareLink, handleCopyShareLink };
+}
+
+function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<boolean>) {
+  const store = useDeliverStore();
+  const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let canceled = false;
+    if (!uuid) {
+      store.setChannelState(CHANNEL_STATE.WAITING);
+      return;
+    }
+
+    const loadPublicStatus = async () => {
+      try {
+        const response = await fetch(`/api/public/${uuid}`);
+        if (!response.ok) throw new Error(`HTTP_${response.status}`);
+
+        const payload = (await response.json()) as unknown;
+        const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
+        if (!parsedPayload.success) throw new Error('INVALID_RESPONSE');
+
+        if (canceled || !mountedRef.current) return;
+        setPublicStatusError(null);
+        store.setShowDestroyConfirm(false);
+        store.setChannelState(parsedPayload.data.state);
+      } catch {
+        if (canceled || !mountedRef.current) return;
+        store.setShowDestroyConfirm(false);
+        store.setChannelState(CHANNEL_STATE.WAITING);
+        setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
+      }
+    };
+
+    void loadPublicStatus();
+    return () => {
+      canceled = true;
+    };
+  }, [uuid, store.setChannelState, store.setShowDestroyConfirm, mountedRef]);
+
+  return { publicStatusError, setPublicStatusError };
+}
+
+function useManageDeliveryLogic(
+  mountedRef: RefObject<boolean>,
+  actionScopeRef: RefObject<number>,
+  isActionPending: boolean,
+  setIsActionPending: (pending: boolean) => void,
+  setActionError: (error: string | null) => void,
+  secretInput: string,
+  profile: SecurityProfile
+) {
+  const store = useDeliverStore();
+
+  const isActiveActionContext = (scope: number, actionUuid: string): boolean => {
+    if (!mountedRef.current) return false;
+    if (actionScopeRef.current !== scope) return false;
+    return useDeliverStore.getState().uuid === actionUuid;
+  };
+
+  const handleDeliver = async () => {
+    if (isActionPending) return;
+    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be delivered.');
+    if (secretInput.trim().length === 0)
+      return setActionError('Secret payload is required before delivery.');
+
+    setActionError(null);
+    setIsActionPending(true);
+    const actionScope = actionScopeRef.current ?? 0;
+    const actionUuid = store.uuid;
+
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.deliverSecret>>;
+    try {
+      result = await cryptoOrchestrator.deliverSecret({
+        uuid: actionUuid,
+        profile,
+        plaintext: secretInput,
+      });
+    } catch {
+      if (!isActiveActionContext(actionScope, actionUuid)) return;
+      setIsActionPending(false);
+      return setActionError(mapActionError('INTERNAL_ERROR'));
+    }
+
+    if (!isActiveActionContext(actionScope, actionUuid)) return;
+    setIsActionPending(false);
+    if (!result.ok) return setActionError(mapActionError(result.error.code));
+
+    store.setShowDestroyConfirm(false);
+    setActionError(null);
+  };
+
+  return { handleDeliver, isActiveActionContext };
+}
+
+function useManageDestructionLogic(
+  _mountedRef: RefObject<boolean>,
+  actionScopeRef: RefObject<number>,
+  isActionPending: boolean,
+  setIsActionPending: (pending: boolean) => void,
+  setActionError: (error: string | null) => void,
+  profile: SecurityProfile,
+  isActiveActionContext: (scope: number, actionUuid: string) => boolean
+) {
+  const store = useDeliverStore();
+
+  const handleDestroyConfirm = () => {
+    if (isActionPending) return;
+    if (
+      store.channelState === CHANNEL_STATE.DELETED ||
+      store.channelState === CHANNEL_STATE.EXPIRED
+    )
+      return;
+    store.setShowDestroyConfirm(true);
+  };
+
+  const handleApplyDestroy = async () => {
+    if (isActionPending) return;
+    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be destroyed.');
+
+    setActionError(null);
+    setIsActionPending(true);
+    const actionScope = actionScopeRef.current ?? 0;
+    const actionUuid = store.uuid;
+
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.deleteChannel>>;
+    try {
+      result = await cryptoOrchestrator.deleteChannel({ uuid: actionUuid, profile });
+    } catch {
+      if (!isActiveActionContext(actionScope, actionUuid)) return;
+      setIsActionPending(false);
+      return setActionError(mapActionError('INTERNAL_ERROR'));
+    }
+
+    if (!isActiveActionContext(actionScope, actionUuid)) return;
+    setIsActionPending(false);
+    if (!result.ok) return setActionError(mapActionError(result.error.code));
+    setActionError(null);
+  };
+
+  return { handleDestroyConfirm, handleApplyDestroy };
+}
+
+function useManagePageState(uuid?: string) {
+  const store = useDeliverStore();
+  const profile = useResolvedProfile();
+  const mountedRef = useRef(true);
+  const actionScopeRef = useRef(0);
+
+  const [secretInput, setSecretInput] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isActionPending, setIsActionPending] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const { publicStatusError, setPublicStatusError } = usePublicStatusFetcher(uuid, mountedRef);
+  const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
+
+  useEffect(() => {
+    actionScopeRef.current += 1;
+    setIsActionPending(false);
+    setSecretInput('');
+    setActionError(null);
+    setPublicStatusError(null);
+
+    if (!uuid) {
+      store.setDeliverUuid(null);
+      return;
+    }
+    const parsedUuid = UUIDSchema.safeParse(uuid);
+    store.setDeliverUuid(parsedUuid.success ? parsedUuid.data : null);
+    store.setShowDestroyConfirm(false);
+  }, [uuid, store.setDeliverUuid, store.setShowDestroyConfirm, setPublicStatusError]);
+
+  useEffect(() => {
+    return () => store.resetDeliverStore();
+  }, [store.resetDeliverStore]);
+
+  const safetyCode = useMemo(() => {
+    if (!store.receiverPubFpr) return null;
+    try {
+      return deriveSafetyCodeDisplay(store.receiverPubFpr);
+    } catch {
+      return null;
+    }
+  }, [store.receiverPubFpr]);
+
+  const canDeliver =
+    store.channelState !== CHANNEL_STATE.DELETED &&
+    store.channelState !== CHANNEL_STATE.EXPIRED &&
+    secretInput.trim().length > 0 &&
+    Boolean(store.uuid);
+
+  const { handleDeliver, isActiveActionContext } = useManageDeliveryLogic(
+    mountedRef,
+    actionScopeRef,
+    isActionPending,
+    setIsActionPending,
+    setActionError,
+    secretInput,
+    profile
+  );
+
+  const { handleDestroyConfirm, handleApplyDestroy } = useManageDestructionLogic(
+    mountedRef,
+    actionScopeRef,
+    isActionPending,
+    setIsActionPending,
+    setActionError,
+    profile,
+    isActiveActionContext
+  );
+
   return {
-    status,
-    showDestroyConfirm,
+    status: store.channelState,
+    showDestroyConfirm: store.showDestroyConfirm,
     copied,
     shareLink,
-    handleStatusSwitch,
+    secretInput,
+    safetyCode,
+    actionError,
+    publicStatusError,
+    isActionPending,
+    canDeliver,
+    handleSecretChange: (value: string) => {
+      setSecretInput(value);
+      if (actionError) setActionError(null);
+    },
     handleDeliver,
     handleDestroyConfirm,
-    handleCancelDestroy: () => setShowDestroyConfirm(false),
+    handleCancelDestroy: () => store.setShowDestroyConfirm(false),
     handleApplyDestroy,
     handleCopyShareLink,
   };
 }
 
 /**
- * Sender-side manage page with local-only state flow for waiting/locked/delivered/deleted/expired.
+ * Sender-side manage page integrated with orchestrator deliver/delete flows.
  */
 export function ManagePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
@@ -387,21 +622,46 @@ export function ManagePage(): ReactElement {
       <ManagePageHeader status={state.status} />
       <PageCardContent className="space-y-6">
         <UuidDisplay uuid={uuid} />
+
+        {state.publicStatusError ? (
+          <div
+            className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-3 text-xs text-neon-orange"
+            data-testid="manage-public-status-error"
+          >
+            {state.publicStatusError}
+          </div>
+        ) : null}
+
         <ShareLinkCard
           copied={state.copied}
           onCopy={state.handleCopyShareLink}
           shareLink={state.shareLink}
         />
-        <StatePreviewSwitcher
-          currentStatus={state.status}
-          onSelectStatus={state.handleStatusSwitch}
+
+        <StatusContent safetyCode={state.safetyCode} status={state.status} />
+
+        <SecretInput
+          disabled={state.isActionPending}
+          onChange={state.handleSecretChange}
+          value={state.secretInput}
         />
-        <StatusContent status={state.status} />
+
+        {state.actionError ? (
+          <div
+            className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+            data-testid="manage-action-error"
+          >
+            {state.actionError}
+          </div>
+        ) : null}
+
         <ActionPanel
+          canDeliver={state.canDeliver}
           onCancelDestroy={state.handleCancelDestroy}
           onConfirmDestroy={state.handleApplyDestroy}
           onDeliver={state.handleDeliver}
           onOpenDestroyConfirm={state.handleDestroyConfirm}
+          pending={state.isActionPending}
           showDestroyConfirm={state.showDestroyConfirm}
           status={state.status}
         />
