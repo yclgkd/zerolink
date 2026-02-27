@@ -7,13 +7,7 @@ const CHANNEL_UUID_LENGTH = 21;
 export function generateChannelUuid(): string {
   const bytes = new Uint8Array(CHANNEL_UUID_LENGTH);
 
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let index = 0; index < bytes.length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256);
-    }
-  }
+  crypto.getRandomValues(bytes);
 
   let value = '';
   for (const byte of bytes) {

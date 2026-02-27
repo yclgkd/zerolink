@@ -125,7 +125,9 @@ function CompatibilityPanel({
           onChange={(event) => setCompatibilityAccepted(event.target.checked)}
           type="checkbox"
         />
-        <span>I understand the risk and want to continue in Compatibility Mode.</span>
+        <span>
+          I understand that compatibility mode is currently unavailable and want to attempt anyway.
+        </span>
       </label>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -228,11 +230,13 @@ export function CreatePage(): ReactElement {
     setShowCompatibilityConfirm,
     setCompatibilityAccepted,
     setCreatedProfile,
+    startCreateBegin,
+    completeCreateBegin,
+    failCreateBegin,
   } = useCreateStore();
 
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
@@ -243,8 +247,7 @@ export function CreatePage(): ReactElement {
     !webAuthnSupported && selectedProfile !== SECURITY_PROFILE.STANDARD;
   const compatibilityAvailable =
     !webAuthnSupported && selectedProfile === SECURITY_PROFILE.STANDARD;
-  const isSubmitting =
-    isCreating || createBegin.status === 'loading' || createFinish.status === 'loading';
+  const isSubmitting = createBegin.status === 'loading' || createFinish.status === 'loading';
 
   function clearLocalFeedback(): void {
     setSubmitError(null);
@@ -272,7 +275,7 @@ export function CreatePage(): ReactElement {
     }
 
     clearLocalFeedback();
-    setIsCreating(true);
+    startCreateBegin();
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
 
     try {
@@ -281,17 +284,18 @@ export function CreatePage(): ReactElement {
         profile: selectedProfile,
       });
     } catch {
+      failCreateBegin('INTERNAL_ERROR');
       setSubmitError('Channel creation failed: INTERNAL_ERROR');
       return;
-    } finally {
-      setIsCreating(false);
     }
 
     if (!result.ok) {
+      failCreateBegin(result.error.code);
       setSubmitError(mapCreateError(result.error.code));
       return;
     }
 
+    completeCreateBegin({ ok: true, creationOptions: {} });
     setCreatedProfile(selectedProfile);
     setCreatedLinks({
       shareUrlWithFragment: result.data.shareUrlWithFragment,
