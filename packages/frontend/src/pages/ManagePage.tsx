@@ -347,6 +347,7 @@ function useManagePageState(uuid?: string) {
   const [isActionPending, setIsActionPending] = useState(false);
   const [copied, setCopied] = useState(false);
   const mountedRef = useRef(true);
+  const actionScopeRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -355,6 +356,9 @@ function useManagePageState(uuid?: string) {
   }, []);
 
   useEffect(() => {
+    actionScopeRef.current += 1;
+    setIsActionPending(false);
+
     if (!uuid) {
       store.setDeliverUuid(null);
       setSecretInput('');
@@ -370,6 +374,12 @@ function useManagePageState(uuid?: string) {
     setActionError(null);
     setPublicStatusError(null);
   }, [uuid, store.setDeliverUuid, store.setShowDestroyConfirm]);
+
+  const isActiveActionContext = (scope: number, actionUuid: string): boolean => {
+    if (!mountedRef.current) return false;
+    if (actionScopeRef.current !== scope) return false;
+    return useDeliverStore.getState().uuid === actionUuid;
+  };
 
   useEffect(() => {
     let canceled = false;
@@ -447,22 +457,24 @@ function useManagePageState(uuid?: string) {
 
     setActionError(null);
     setIsActionPending(true);
+    const actionScope = actionScopeRef.current;
+    const actionUuid = store.uuid;
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.deliverSecret>>;
     try {
       result = await cryptoOrchestrator.deliverSecret({
-        uuid: store.uuid,
+        uuid: actionUuid,
         profile,
         plaintext: secretInput,
       });
     } catch {
-      if (!mountedRef.current) return;
+      if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
       setActionError(mapActionError('INTERNAL_ERROR'));
       return;
     }
 
-    if (!mountedRef.current) return;
+    if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
     if (!result.ok) {
       setActionError(mapActionError(result.error.code));
@@ -492,21 +504,23 @@ function useManagePageState(uuid?: string) {
 
     setActionError(null);
     setIsActionPending(true);
+    const actionScope = actionScopeRef.current;
+    const actionUuid = store.uuid;
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.deleteChannel>>;
     try {
       result = await cryptoOrchestrator.deleteChannel({
-        uuid: store.uuid,
+        uuid: actionUuid,
         profile,
       });
     } catch {
-      if (!mountedRef.current) return;
+      if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
       setActionError(mapActionError('INTERNAL_ERROR'));
       return;
     }
 
-    if (!mountedRef.current) return;
+    if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
     if (!result.ok) {
       setActionError(mapActionError(result.error.code));
