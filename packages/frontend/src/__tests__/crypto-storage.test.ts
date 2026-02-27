@@ -83,4 +83,49 @@ describe('indexeddb receiver key storage', () => {
       value: originalIndexedDb,
     });
   });
+
+  it('throws KEY_STORAGE_ERROR when indexeddb open request fails', async () => {
+    const originalIndexedDb = globalThis.indexedDB;
+    const openError = new Error('open failed');
+
+    const indexedDbMock = {
+      open() {
+        const request = {} as IDBOpenDBRequest;
+        Object.defineProperty(request, 'error', {
+          configurable: true,
+          get: () => openError,
+        });
+
+        queueMicrotask(() => {
+          request.onerror?.(
+            new Event('error') as Event & {
+              target: IDBRequest;
+            }
+          );
+        });
+
+        return request;
+      },
+    } as unknown as IDBFactory;
+
+    Object.defineProperty(globalThis, 'indexedDB', {
+      configurable: true,
+      value: indexedDbMock,
+    });
+
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-db-open-error',
+      storeName: 'test-store-open-error',
+    });
+
+    await expect(storage.load(SAMPLE_ENVELOPE.uuid)).rejects.toMatchObject({
+      code: 'KEY_STORAGE_ERROR',
+      message: 'IndexedDB open failed for test-db-open-error',
+    });
+
+    Object.defineProperty(globalThis, 'indexedDB', {
+      configurable: true,
+      value: originalIndexedDb,
+    });
+  });
 });

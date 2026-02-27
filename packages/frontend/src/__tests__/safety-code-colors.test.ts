@@ -30,4 +30,9 @@ describe('resolveSafetyCodeColors', () => {
     expect(colors[2]).toBe('#333333');
     expect(colors[15]).toBe(DEFAULT_SAFETY_COLOR_PALETTE[15]);
   });
+
+  it('falls back to first default color when cell index is out of range', () => {
+    const colors = resolveSafetyCodeColors([99] as unknown as typeof fullCellRange);
+    expect(colors).toEqual([DEFAULT_SAFETY_COLOR_PALETTE[0]]);
+  });
 });

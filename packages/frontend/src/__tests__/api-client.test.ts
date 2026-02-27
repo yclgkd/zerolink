@@ -390,4 +390,56 @@ describe('api client', () => {
       })
     );
   });
+
+  it('normalizes trailing slash in basePath when building request url', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          lockChallenge: {
+            id: VALID_B64U,
+            challenge: VALID_B64U,
+            expiresAt: MOCK_TIMESTAMP,
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+    );
+    const client = createApiClient({
+      basePath: '/custom-api/',
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    await client.lockBegin({ uuid: VALID_UUID });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/custom-api/lock_begin/aaaaaaaaaaaaaaaaaaaaa',
+      expect.any(Object)
+    );
+  });
+
+  it('returns INVALID_RESPONSE when 2xx body is not valid json', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('not-json', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+      })
+    );
+    const client = createApiClient({
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    const result = await client.publicStatus(VALID_UUID);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INVALID_RESPONSE');
+    expect(result.error.status).toBe(200);
+  });
 });
