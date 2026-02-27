@@ -42,14 +42,14 @@ function toEmojiTuple(bytes: Uint8Array): SafetyCodeDisplay['emoji']['emojis'] {
   }
 
   return [
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[0]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[1]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[2]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[3]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[4]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[5]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[6]! & 0x0f]!,
-    DEFAULT_SAFETY_EMOJI_PALETTE[source[7]! & 0x0f]!,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[0] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[1] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[2] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[3] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[4] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[5] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[6] as number) & 0x0f] as string,
+    DEFAULT_SAFETY_EMOJI_PALETTE[(source[7] as number) & 0x0f] as string,
   ];
 }
 
@@ -69,22 +69,22 @@ function toColorCellTuple(bytes: Uint8Array): SafetyCodeDisplay['color']['cells'
   }
 
   return [
-    cells[0]!,
-    cells[1]!,
-    cells[2]!,
-    cells[3]!,
-    cells[4]!,
-    cells[5]!,
-    cells[6]!,
-    cells[7]!,
-    cells[8]!,
-    cells[9]!,
-    cells[10]!,
-    cells[11]!,
-    cells[12]!,
-    cells[13]!,
-    cells[14]!,
-    cells[15]!,
+    cells[0] as number,
+    cells[1] as number,
+    cells[2] as number,
+    cells[3] as number,
+    cells[4] as number,
+    cells[5] as number,
+    cells[6] as number,
+    cells[7] as number,
+    cells[8] as number,
+    cells[9] as number,
+    cells[10] as number,
+    cells[11] as number,
+    cells[12] as number,
+    cells[13] as number,
+    cells[14] as number,
+    cells[15] as number,
   ];
 }
 

@@ -11,7 +11,7 @@ export function generateChannelUuid(): string {
 
   let value = '';
   for (const byte of bytes) {
-    value += CHANNEL_UUID_ALPHABET[byte & 63]!;
+    value += CHANNEL_UUID_ALPHABET[byte & 63] as string;
   }
 
   return value;

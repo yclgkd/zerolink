@@ -213,58 +213,39 @@ function SuccessSummary({
   );
 }
 
-/**
- * Create page integrated with store + orchestrator create flow.
- */
-export function CreatePage(): ReactElement {
-  const {
-    selectedProfile,
-    webAuthnSupported,
-    showCompatibilityConfirm,
-    compatibilityAccepted,
-    createdProfile,
-    createBegin,
-    createFinish,
-    setSelectedProfile,
-    setWebAuthnSupported,
-    setShowCompatibilityConfirm,
-    setCompatibilityAccepted,
-    setCreatedProfile,
-    startCreateBegin,
-    completeCreateBegin,
-    failCreateBegin,
-  } = useCreateStore();
-
+function useCreatePageLogic() {
+  const store = useCreateStore();
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
-    setWebAuthnSupported(support.supported);
-  }, [setWebAuthnSupported]);
+    store.setWebAuthnSupported(support.supported);
+  }, [store.setWebAuthnSupported]);
 
   const strictOrHardwareBlocked =
-    !webAuthnSupported && selectedProfile !== SECURITY_PROFILE.STANDARD;
+    !store.webAuthnSupported && store.selectedProfile !== SECURITY_PROFILE.STANDARD;
   const compatibilityAvailable =
-    !webAuthnSupported && selectedProfile === SECURITY_PROFILE.STANDARD;
-  const isSubmitting = createBegin.status === 'loading' || createFinish.status === 'loading';
+    !store.webAuthnSupported && store.selectedProfile === SECURITY_PROFILE.STANDARD;
+  const isSubmitting =
+    store.createBegin.status === 'loading' || store.createFinish.status === 'loading';
 
   function clearLocalFeedback(): void {
     setSubmitError(null);
     setCreatedLinks(null);
-    setCreatedProfile(null);
+    store.setCreatedProfile(null);
   }
 
   function showFallbackUnavailableError(): void {
     setSubmitError(FALLBACK_UNAVAILABLE_MESSAGE);
     setCreatedLinks(null);
-    setCreatedProfile(null);
-    setShowCompatibilityConfirm(false);
-    setCompatibilityAccepted(false);
+    store.setCreatedProfile(null);
+    store.setShowCompatibilityConfirm(false);
+    store.setCompatibilityAccepted(false);
   }
 
   function handleSelectProfile(profile: SecurityProfile): void {
-    setSelectedProfile(profile);
+    store.setSelectedProfile(profile);
     clearLocalFeedback();
   }
 
@@ -275,51 +256,45 @@ export function CreatePage(): ReactElement {
     }
 
     clearLocalFeedback();
-    startCreateBegin();
-    let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
+    store.startCreateBegin();
 
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
     try {
       result = await cryptoOrchestrator.createChannel({
         uuid: generateChannelUuid(),
-        profile: selectedProfile,
+        profile: store.selectedProfile,
       });
     } catch {
-      failCreateBegin('INTERNAL_ERROR');
+      store.failCreateBegin('INTERNAL_ERROR');
       setSubmitError('Channel creation failed: INTERNAL_ERROR');
       return;
     }
 
     if (!result.ok) {
-      failCreateBegin(result.error.code);
+      store.failCreateBegin(result.error.code);
       setSubmitError(mapCreateError(result.error.code));
       return;
     }
 
-    completeCreateBegin({ ok: true, creationOptions: {} });
-    setCreatedProfile(selectedProfile);
+    store.completeCreateBegin({ ok: true, creationOptions: {} });
+    store.setCreatedProfile(store.selectedProfile);
     setCreatedLinks({
       shareUrlWithFragment: result.data.shareUrlWithFragment,
       manageUrl: result.data.manageUrl,
     });
-    setShowCompatibilityConfirm(false);
-    setCompatibilityAccepted(false);
+    store.setShowCompatibilityConfirm(false);
+    store.setCompatibilityAccepted(false);
   }
 
   function handleCreate(): void {
-    if (strictOrHardwareBlocked || isSubmitting) {
-      return;
-    }
-
-    if (compatibilityAvailable && !showCompatibilityConfirm) {
-      setShowCompatibilityConfirm(true);
-      return;
-    }
-
-    if (compatibilityAvailable && showCompatibilityConfirm && !compatibilityAccepted) {
-      return;
-    }
+    if (strictOrHardwareBlocked || isSubmitting) return;
 
     if (compatibilityAvailable) {
+      if (!store.showCompatibilityConfirm) {
+        store.setShowCompatibilityConfirm(true);
+        return;
+      }
+      if (!store.compatibilityAccepted) return;
       showFallbackUnavailableError();
       return;
     }
@@ -328,13 +303,13 @@ export function CreatePage(): ReactElement {
   }
 
   function handleCompatibilityCancel(): void {
-    setShowCompatibilityConfirm(false);
-    setCompatibilityAccepted(false);
+    store.setShowCompatibilityConfirm(false);
+    store.setCompatibilityAccepted(false);
     setSubmitError(null);
   }
 
   function handleCompatibilityContinue(): void {
-    if (!compatibilityAccepted || isSubmitting) return;
+    if (!store.compatibilityAccepted || isSubmitting) return;
 
     if (compatibilityAvailable) {
       showFallbackUnavailableError();
@@ -343,6 +318,26 @@ export function CreatePage(): ReactElement {
 
     void runCreate();
   }
+
+  return {
+    state: store,
+    createdLinks,
+    submitError,
+    strictOrHardwareBlocked,
+    compatibilityAvailable,
+    isSubmitting,
+    handleSelectProfile,
+    handleCreate,
+    handleCompatibilityCancel,
+    handleCompatibilityContinue,
+  };
+}
+
+/**
+ * Create page integrated with store + orchestrator create flow.
+ */
+export function CreatePage(): ReactElement {
+  const logic = useCreatePageLogic();
 
   return (
     <PageCard data-testid="page-create" tone="purple">
@@ -359,29 +354,29 @@ export function CreatePage(): ReactElement {
       </PageCardHeader>
       <PageCardContent className="space-y-6">
         <ProfileSelectionGrid
-          onSelectProfile={handleSelectProfile}
-          selectedProfile={selectedProfile}
+          onSelectProfile={logic.handleSelectProfile}
+          selectedProfile={logic.state.selectedProfile}
         />
-        <WebAuthnWarning strictOrHardwareBlocked={strictOrHardwareBlocked} />
-        {showCompatibilityConfirm && compatibilityAvailable ? (
+        <WebAuthnWarning strictOrHardwareBlocked={logic.strictOrHardwareBlocked} />
+        {logic.state.showCompatibilityConfirm && logic.compatibilityAvailable ? (
           <CompatibilityPanel
-            compatibilityAccepted={compatibilityAccepted}
-            loading={isSubmitting}
-            onCancel={handleCompatibilityCancel}
-            onContinue={handleCompatibilityContinue}
-            setCompatibilityAccepted={setCompatibilityAccepted}
+            compatibilityAccepted={logic.state.compatibilityAccepted}
+            loading={logic.isSubmitting}
+            onCancel={logic.handleCompatibilityCancel}
+            onContinue={logic.handleCompatibilityContinue}
+            setCompatibilityAccepted={logic.state.setCompatibilityAccepted}
           />
         ) : null}
-        <ActionFooter disabled={isSubmitting} onCreate={handleCreate} />
-        {submitError ? (
+        <ActionFooter disabled={logic.isSubmitting} onCreate={logic.handleCreate} />
+        {logic.submitError ? (
           <div
             className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
             data-testid="create-submit-error"
           >
-            {submitError}
+            {logic.submitError}
           </div>
         ) : null}
-        <SuccessSummary createdProfile={createdProfile} links={createdLinks} />
+        <SuccessSummary createdProfile={logic.state.createdProfile} links={logic.createdLinks} />
       </PageCardContent>
     </PageCard>
   );

@@ -270,7 +270,6 @@ export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfile
         attestation: 'direct',
         authenticatorAttachment: 'cross-platform',
       };
-    case SECURITY_PROFILE.STANDARD:
     default:
       return {
         userVerification: 'preferred',
