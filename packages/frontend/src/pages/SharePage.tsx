@@ -1,14 +1,15 @@
+import type { SafetyCodeDisplay } from '@zerolink/shared';
 import {
   CHANNEL_STATE,
   type ChannelState,
   type DecryptFetchResponse,
   DecryptFetchResponseSchema,
-  type HexString,
   PublicStatusResponseSchema,
+  UUIDSchema,
 } from '@zerolink/shared';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
 
 import {
   PageCard,
@@ -21,8 +22,9 @@ import {
 import { PassphraseInput } from '../components/lock/passphrase-input';
 import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
-
-type SharePageStep = 'onboarding' | 'lock' | 'locked';
+import { cryptoOrchestrator } from '../crypto/orchestrator';
+import { extractLockSecretFromHash } from '../crypto/protocol-utils';
+import { useLockStore } from '../stores/lock-store';
 
 const onboardingItems = [
   {
@@ -48,20 +50,6 @@ const nextSteps = [
   'Keep this tab open until the sender confirms delivery.',
 ] as const;
 
-// TODO(ZL-029): Replace with computed safety code from receiver keypair
-const PLACEHOLDER_SAFETY_CODE = {
-  emoji: {
-    type: 'emoji',
-    emojis: ['🔥', '🌲', '🚀', '🔮', '💎', '🎯', '⚡', '🌙'],
-  },
-  color: {
-    type: 'color',
-    cells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-  },
-  shortFpr: 'a1b2c3d4e5f6...f1e2d3c4b5a6',
-  fullFpr: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00' as HexString,
-} as const;
-
 function formatDeliveredAt(unixMs: number): string {
   return new Date(unixMs).toLocaleString();
 }
@@ -69,6 +57,27 @@ function formatDeliveredAt(unixMs: number): string {
 function parseDecryptFetchPayload(payload: unknown): DecryptFetchResponse | null {
   const result = DecryptFetchResponseSchema.safeParse(payload);
   return result.success ? result.data : null;
+}
+
+function mapLockError(code: string): string {
+  switch (code) {
+    case 'INVALID_LOCK_SECRET':
+      return 'This share link is missing or has an invalid lock secret (#k=...).';
+    case 'PASSPHRASE_REQUIRED':
+      return 'Passphrase is required before locking.';
+    case 'MISSING_LOCK_CHALLENGE':
+      return 'Unable to fetch lock challenge. Please retry.';
+    case 'KEY_STORAGE_ERROR':
+      return 'Unable to store receiver key material on this device.';
+    case 'INTERNAL_ERROR':
+      return 'An unexpected error occurred. Please try again.';
+    case 'NETWORK_ERROR':
+    case 'BAD_REQUEST':
+    case 'INVALID_REQUEST':
+      return 'Lock request failed due to network or request validation.';
+    default:
+      return 'Lock failed. Please try again.';
+  }
 }
 
 function SharePageHeader() {
@@ -81,7 +90,7 @@ function SharePageHeader() {
         <RoleBadge party="receiver" />
       </div>
       <PageCardDescription>
-        Receiver-side lock flow UI before decrypt integration.
+        Generate your encryption key to secure this channel.
       </PageCardDescription>
     </PageCardHeader>
   );
@@ -130,12 +139,18 @@ function OnboardingStep({ onContinue }: { onContinue: () => void }) {
 function LockStep({
   passphrase,
   canGenerate,
+  lockPending,
+  lockSecretWarning,
+  lockError,
   onPassphraseChange,
   onBack,
   onGenerate,
 }: {
   passphrase: string;
   canGenerate: boolean;
+  lockPending: boolean;
+  lockSecretWarning: string | null;
+  lockError: string | null;
   onPassphraseChange: (value: string) => void;
   onBack: () => void;
   onGenerate: () => void;
@@ -148,24 +163,49 @@ function LockStep({
         placeholder="Enter a strong passphrase"
         value={passphrase}
       />
+
+      {lockSecretWarning ? (
+        <div
+          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-3 text-xs text-neon-orange"
+          data-testid="share-lock-secret-warning"
+        >
+          {lockSecretWarning}
+        </div>
+      ) : null}
+
+      {lockError ? (
+        <div
+          className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+          data-testid="share-lock-error"
+        >
+          {lockError}
+        </div>
+      ) : null}
+
       <div className="flex gap-2">
-        <Button data-testid="share-back-button" onClick={onBack} type="button" variant="secondary">
+        <Button
+          data-testid="share-back-button"
+          disabled={lockPending}
+          onClick={onBack}
+          type="button"
+          variant="secondary"
+        >
           Back
         </Button>
         <Button
           data-testid="share-generate-button"
-          disabled={!canGenerate}
+          disabled={!canGenerate || lockPending}
           onClick={onGenerate}
           type="button"
         >
-          Generate Key & Lock
+          {lockPending ? 'Locking...' : 'Generate Key & Lock'}
         </Button>
       </div>
     </section>
   );
 }
 
-function LockedStep() {
+function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDisplay | null }) {
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
@@ -174,7 +214,21 @@ function LockedStep() {
           Verify the Safety Code with the sender before delivery.
         </p>
       </div>
-      <SafetyCode display={PLACEHOLDER_SAFETY_CODE} />
+
+      {safetyCodeAvailable ? (
+        <SafetyCode display={safetyCodeAvailable} />
+      ) : (
+        <div
+          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+          data-testid="share-safety-unavailable"
+        >
+          <p className="font-medium text-foreground">Safety Code unavailable on this device.</p>
+          <p className="mt-1 text-xs text-neon-orange">
+            Safety Code is generated locally during lock and is not recoverable from server state.
+          </p>
+        </div>
+      )}
+
       <div
         className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
         data-testid="share-next-steps"
@@ -301,9 +355,7 @@ function TerminalStep({
   }
 }
 
-function useSharePageState(uuid?: string) {
-  const [step, setStep] = useState<SharePageStep>('onboarding');
-  const [passphrase, setPassphrase] = useState('');
+function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
   const [decryptFetchPayload, setDecryptFetchPayload] = useState<DecryptFetchResponse | null>(null);
   const [decryptFetchError, setDecryptFetchError] = useState<string | null>(null);
@@ -313,8 +365,6 @@ function useSharePageState(uuid?: string) {
 
   useEffect(() => {
     if (!uuid) {
-      setStep('onboarding');
-      setPassphrase('');
       setChannelState(CHANNEL_STATE.WAITING);
       setDecryptFetchPayload(null);
       setDecryptFetchError(null);
@@ -324,9 +374,6 @@ function useSharePageState(uuid?: string) {
     }
 
     const currentUuid = uuid;
-
-    setStep('onboarding');
-    setPassphrase('');
     setChannelState(CHANNEL_STATE.WAITING);
     setDecryptFetchPayload(null);
     setDecryptFetchError(null);
@@ -340,26 +387,20 @@ function useSharePageState(uuid?: string) {
         const payload = (await response.json()) as unknown;
         const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
         if (cancelled) return;
+
         if (!parsedPayload.success) {
           setChannelState(CHANNEL_STATE.WAITING);
-          setStep('onboarding');
           setPublicStatusResolvedUuid(currentUuid);
           setIsPublicStatusLoading(false);
           return;
         }
 
         setChannelState(parsedPayload.data.state);
-        if (parsedPayload.data.state === CHANNEL_STATE.WAITING) {
-          setStep('onboarding');
-        } else {
-          setStep('locked');
-        }
         setPublicStatusResolvedUuid(currentUuid);
         setIsPublicStatusLoading(false);
       } catch {
         if (!cancelled) {
           setChannelState(CHANNEL_STATE.WAITING);
-          setStep('onboarding');
           setPublicStatusResolvedUuid(currentUuid);
           setIsPublicStatusLoading(false);
         }
@@ -410,31 +451,109 @@ function useSharePageState(uuid?: string) {
   }, [channelState, uuid, decryptFetchAttempt, publicStatusResolvedUuid]);
 
   return {
-    step,
-    setStep,
-    passphrase,
-    setPassphrase,
     channelState,
     decryptFetchPayload,
     decryptFetchError,
     isPublicStatusLoading,
     retryFetch: () => setDecryptFetchAttempt((n) => n + 1),
-    canGenerate: passphrase.trim().length > 0,
+  };
+}
+
+function useSharePageLockLogic(uuid?: string, hash?: string) {
+  const store = useLockStore();
+  const [lockError, setLockError] = useState<string | null>(null);
+  const [isLockSubmitting, setIsLockSubmitting] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const lockSecretB64u = extractLockSecretFromHash(hash ?? '');
+  const lockSecretWarning = lockSecretB64u
+    ? null
+    : 'This share link is missing a lock secret fragment (#k=...).';
+
+  useEffect(() => {
+    if (!uuid) {
+      store.setLockUuid(null);
+      setLockError(null);
+      return;
+    }
+    const parsedUuid = UUIDSchema.safeParse(uuid);
+    store.setLockUuid(parsedUuid.success ? parsedUuid.data : null);
+    setLockError(null);
+  }, [uuid, store.setLockUuid]);
+
+  useEffect(() => {
+    return () => store.resetLockStore();
+  }, [store.resetLockStore]);
+
+  const lockPending = isLockSubmitting;
+  const canGenerate =
+    Boolean(store.uuid) &&
+    store.passphrase.trim().length > 0 &&
+    Boolean(lockSecretB64u) &&
+    !lockPending;
+
+  function handlePassphraseChange(value: string): void {
+    store.setPassphrase(value);
+    if (lockError) setLockError(null);
+  }
+
+  async function handleGenerate(): Promise<void> {
+    if (lockPending) return;
+
+    if (!store.uuid) return setLockError(mapLockError('INVALID_REQUEST'));
+    if (!lockSecretB64u) return setLockError(mapLockError('INVALID_LOCK_SECRET'));
+    if (store.passphrase.trim().length === 0)
+      return setLockError(mapLockError('PASSPHRASE_REQUIRED'));
+
+    setLockError(null);
+    setIsLockSubmitting(true);
+
+    let result: Awaited<ReturnType<typeof cryptoOrchestrator.lockChannel>>;
+    try {
+      result = await cryptoOrchestrator.lockChannel({
+        uuid: store.uuid,
+        lockSecretB64u,
+        passphrase: store.passphrase,
+      });
+    } catch {
+      if (!mountedRef.current) return;
+      setIsLockSubmitting(false);
+      setLockError(mapLockError('INTERNAL_ERROR'));
+      return;
+    }
+
+    if (!mountedRef.current) return;
+    setIsLockSubmitting(false);
+    if (!result.ok) return setLockError(mapLockError(result.error.code));
+    setLockError(null);
+  }
+
+  return {
+    store,
+    lockError,
+    setLockError,
+    lockPending,
+    canGenerate,
+    lockSecretWarning,
+    handlePassphraseChange,
+    handleGenerate,
   };
 }
 
 /**
- * The receiver page that manages lock and delivered-state UI while decrypt integration is pending.
+ * Receiver page integrating lock flow with orchestrator while preserving existing delivered preview.
  */
 export function SharePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
-  const state = useSharePageState(uuid);
-
-  function handleGenerate(): void {
-    if (!state.canGenerate) return;
-    state.setPassphrase('');
-    state.setStep('locked');
-  }
+  const location = useLocation();
+  const publicState = usePublicShareState(uuid);
+  const lockLogic = useSharePageLockLogic(uuid, location.hash);
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
@@ -442,43 +561,56 @@ export function SharePage(): ReactElement {
       <PageCardContent className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
-        {state.isPublicStatusLoading ? <LoadingStep /> : null}
+        {publicState.isPublicStatusLoading ? <LoadingStep /> : null}
 
-        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.WAITING ? (
+        {!publicState.isPublicStatusLoading &&
+        publicState.channelState === CHANNEL_STATE.WAITING ? (
           <>
-            {state.step === 'onboarding' ? (
-              <OnboardingStep onContinue={() => state.setStep('lock')} />
+            {lockLogic.store.step === 'onboarding' ? (
+              <OnboardingStep onContinue={() => lockLogic.store.setStep('lock')} />
             ) : null}
-            {state.step === 'lock' ? (
+            {lockLogic.store.step === 'lock' ? (
               <LockStep
-                canGenerate={state.canGenerate}
-                onBack={() => state.setStep('onboarding')}
-                onGenerate={handleGenerate}
-                onPassphraseChange={state.setPassphrase}
-                passphrase={state.passphrase}
+                canGenerate={lockLogic.canGenerate}
+                lockError={lockLogic.lockError}
+                lockPending={lockLogic.lockPending}
+                lockSecretWarning={lockLogic.lockSecretWarning}
+                onBack={() => {
+                  if (lockLogic.lockPending) return;
+                  lockLogic.setLockError(null);
+                  lockLogic.store.setStep('onboarding');
+                }}
+                onGenerate={() => void lockLogic.handleGenerate()}
+                onPassphraseChange={lockLogic.handlePassphraseChange}
+                passphrase={lockLogic.store.passphrase}
               />
             ) : null}
-            {state.step === 'locked' ? <LockedStep /> : null}
+            {lockLogic.store.step === 'locked' ? (
+              <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
+            ) : null}
           </>
         ) : null}
 
-        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.LOCKED ? (
-          <LockedStep />
+        {!publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.LOCKED ? (
+          <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
         ) : null}
 
-        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.DELIVERED ? (
+        {!publicState.isPublicStatusLoading &&
+        publicState.channelState === CHANNEL_STATE.DELIVERED ? (
           <DeliveredStep
-            decryptFetchError={state.decryptFetchError}
-            decryptFetchPayload={state.decryptFetchPayload}
-            onRetry={state.retryFetch}
+            decryptFetchError={publicState.decryptFetchError}
+            decryptFetchPayload={publicState.decryptFetchPayload}
+            onRetry={publicState.retryFetch}
           />
         ) : null}
 
-        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.DELETED ? (
+        {!publicState.isPublicStatusLoading &&
+        publicState.channelState === CHANNEL_STATE.DELETED ? (
           <TerminalStep state={CHANNEL_STATE.DELETED} />
         ) : null}
 
-        {!state.isPublicStatusLoading && state.channelState === CHANNEL_STATE.EXPIRED ? (
+        {!publicState.isPublicStatusLoading &&
+        publicState.channelState === CHANNEL_STATE.EXPIRED ? (
           <TerminalStep state={CHANNEL_STATE.EXPIRED} />
         ) : null}
       </PageCardContent>
