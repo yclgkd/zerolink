@@ -591,6 +591,8 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   const [isDecryptSubmitting, setIsDecryptSubmitting] = useState(false);
   const mountedRef = useRef(true);
   const decryptActionScopeRef = useRef(0);
+  const decryptRequestIdRef = useRef(0);
+  const decryptInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -600,6 +602,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
 
   useEffect(() => {
     decryptActionScopeRef.current += 1;
+    decryptInFlightRef.current = false;
     setIsDecryptSubmitting(false);
 
     if (!uuid) {
@@ -625,6 +628,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     if (enabled) return;
 
     decryptActionScopeRef.current += 1;
+    decryptInFlightRef.current = false;
     setIsDecryptSubmitting(false);
     setPassphrase('');
     setDecryptError(null);
@@ -636,13 +640,6 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     Boolean(enabled) && Boolean(store.uuid) && passphrase.trim().length > 0 && !isDecryptSubmitting;
 
   const canBurn = Boolean(enabled) && Boolean(store.plaintext) && !isDecryptSubmitting;
-
-  useEffect(() => {
-    // If plaintext is present, decrypt has already completed and pending must settle.
-    if (store.plaintext && isDecryptSubmitting) {
-      setIsDecryptSubmitting(false);
-    }
-  }, [store.plaintext, isDecryptSubmitting]);
 
   function isActiveDecryptContext(scope: number, actionUuid: string): boolean {
     if (!mountedRef.current) return false;
@@ -660,14 +657,23 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     setIsDecryptPassphraseInvalid(isDecryptPassphraseErrorCode(code));
   }
 
+  function settleDecryptSubmitting(requestId: number): void {
+    if (decryptRequestIdRef.current !== requestId) return;
+    decryptInFlightRef.current = false;
+    setIsDecryptSubmitting(false);
+  }
+
   async function handleDecrypt(): Promise<void> {
-    if (!enabled || isDecryptSubmitting) return;
+    if (!enabled || isDecryptSubmitting || decryptInFlightRef.current) return;
 
     if (!store.uuid) return setDecryptErrorFromCode('INVALID_REQUEST');
     if (passphrase.trim().length === 0) return setDecryptErrorFromCode('PASSPHRASE_REQUIRED');
 
     const actionScope = decryptActionScopeRef.current;
     const actionUuid = store.uuid;
+    const requestId = decryptRequestIdRef.current + 1;
+    decryptRequestIdRef.current = requestId;
+    decryptInFlightRef.current = true;
 
     clearDecryptError();
     setIsDecryptSubmitting(true);
@@ -679,24 +685,14 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
         passphrase,
       });
     } catch {
-      if (!isActiveDecryptContext(actionScope, actionUuid)) {
-        if (mountedRef.current) {
-          setIsDecryptSubmitting(false);
-        }
-        return;
-      }
-      setIsDecryptSubmitting(false);
+      settleDecryptSubmitting(requestId);
+      if (!isActiveDecryptContext(actionScope, actionUuid)) return;
       setDecryptErrorFromCode('INTERNAL_ERROR');
       return;
     }
 
-    if (!isActiveDecryptContext(actionScope, actionUuid)) {
-      if (mountedRef.current) {
-        setIsDecryptSubmitting(false);
-      }
-      return;
-    }
-    setIsDecryptSubmitting(false);
+    settleDecryptSubmitting(requestId);
+    if (!isActiveDecryptContext(actionScope, actionUuid)) return;
     if (!result.ok) {
       setDecryptErrorFromCode(result.error.code);
       return;
