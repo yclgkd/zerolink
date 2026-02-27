@@ -16,6 +16,7 @@ import {
   PageCardHeader,
   PageCardTitle,
   RoleBadge,
+  StateNotice,
 } from '../components/layout';
 import { PassphraseInput } from '../components/lock/passphrase-input';
 import { SafetyCode } from '../components/safety/safety-code';
@@ -94,6 +95,14 @@ function mapDecryptError(code: string): string {
   }
 }
 
+function isLockPassphraseErrorCode(code: string): boolean {
+  return code === 'PASSPHRASE_REQUIRED';
+}
+
+function isDecryptPassphraseErrorCode(code: string): boolean {
+  return code === 'PASSPHRASE_REQUIRED' || code === 'CRYPTO_ERROR';
+}
+
 function SharePageHeader() {
   return (
     <PageCardHeader>
@@ -156,6 +165,7 @@ function LockStep({
   lockPending,
   lockSecretWarning,
   lockError,
+  isLockPassphraseInvalid,
   onPassphraseChange,
   onBack,
   onGenerate,
@@ -165,6 +175,7 @@ function LockStep({
   lockPending: boolean;
   lockSecretWarning: string | null;
   lockError: string | null;
+  isLockPassphraseInvalid: boolean;
   onPassphraseChange: (value: string) => void;
   onBack: () => void;
   onGenerate: () => void;
@@ -173,27 +184,34 @@ function LockStep({
     <section className="space-y-4" data-testid="share-step-lock">
       <h3 className="text-base font-semibold text-foreground">Generate Key & Lock</h3>
       <PassphraseInput
+        ariaDescribedBy={lockError && isLockPassphraseInvalid ? 'share-lock-error' : undefined}
+        ariaInvalid={isLockPassphraseInvalid ? true : undefined}
+        inputId="share-lock-passphrase"
+        label="Lock passphrase"
         onChange={onPassphraseChange}
         placeholder="Enter a strong passphrase"
         value={passphrase}
       />
 
       {lockSecretWarning ? (
-        <div
-          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-3 text-xs text-neon-orange"
+        <StateNotice
           data-testid="share-lock-secret-warning"
+          id="share-lock-secret-warning"
+          tone="warning"
         >
           {lockSecretWarning}
-        </div>
+        </StateNotice>
       ) : null}
 
       {lockError ? (
-        <div
-          className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+        <StateNotice
+          autoFocusOnMount
           data-testid="share-lock-error"
+          id="share-lock-error"
+          tone="error"
         >
           {lockError}
-        </div>
+        </StateNotice>
       ) : null}
 
       <div className="flex gap-2">
@@ -232,15 +250,15 @@ function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDi
       {safetyCodeAvailable ? (
         <SafetyCode display={safetyCodeAvailable} />
       ) : (
-        <div
-          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+        <StateNotice
           data-testid="share-safety-unavailable"
+          title="Safety Code unavailable on this device."
+          tone="warning"
         >
-          <p className="font-medium text-foreground">Safety Code unavailable on this device.</p>
           <p className="mt-1 text-xs text-neon-orange">
             Safety Code is generated locally during lock and is not recoverable from server state.
           </p>
-        </div>
+        </StateNotice>
       )}
 
       <div
@@ -260,12 +278,14 @@ function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDi
 
 function DecryptErrorPanel({ error }: { error: string }) {
   return (
-    <div
-      className="space-y-3 rounded-xl border border-destructive/35 bg-destructive/10 p-4"
+    <StateNotice
+      autoFocusOnMount
       data-testid="share-decrypt-error"
+      id="share-decrypt-error"
+      tone="error"
     >
-      <p className="text-xs text-destructive">{error}</p>
-    </div>
+      {error}
+    </StateNotice>
   );
 }
 
@@ -273,6 +293,7 @@ function DeliveredStep({
   passphrase,
   decryptPending,
   decryptError,
+  isDecryptPassphraseInvalid,
   plaintext,
   burned,
   canDecrypt,
@@ -284,6 +305,7 @@ function DeliveredStep({
   passphrase: string;
   decryptPending: boolean;
   decryptError: string | null;
+  isDecryptPassphraseInvalid: boolean;
   plaintext: string | null;
   burned: boolean;
   canDecrypt: boolean;
@@ -301,8 +323,14 @@ function DeliveredStep({
         </p>
       </div>
 
-      <div className="space-y-3" data-testid="share-decrypt-panel">
+      <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
         <PassphraseInput
+          ariaDescribedBy={
+            decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
+          }
+          ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
+          inputId="share-decrypt-passphrase"
+          label="Decrypt passphrase"
           onChange={onPassphraseChange}
           placeholder="Enter passphrase to decrypt"
           value={passphrase}
@@ -342,15 +370,15 @@ function DeliveredStep({
       ) : null}
 
       {burned ? (
-        <div
-          className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+        <StateNotice
           data-testid="share-decrypt-burned"
+          title="Local plaintext has been burned."
+          tone="warning"
         >
-          <p className="font-medium text-foreground">Local plaintext has been burned.</p>
           <p className="mt-1 text-xs text-neon-orange">
             Re-enter your passphrase to decrypt again if needed.
           </p>
-        </div>
+        </StateNotice>
       ) : null}
     </section>
   );
@@ -358,10 +386,14 @@ function DeliveredStep({
 
 function LoadingStep() {
   return (
-    <section className="space-y-2" data-testid="share-step-loading">
-      <h3 className="text-base font-semibold text-foreground">Loading Channel State</h3>
+    <StateNotice
+      aria-busy="true"
+      data-testid="share-step-loading"
+      title="Loading Channel State"
+      tone="info"
+    >
       <p className="text-xs text-muted-foreground">Fetching secure channel status for this link.</p>
-    </section>
+    </StateNotice>
   );
 }
 
@@ -452,6 +484,7 @@ function usePublicShareState(uuid?: string) {
 function useSharePageLockLogic(uuid?: string, hash?: string) {
   const store = useLockStore();
   const [lockError, setLockError] = useState<string | null>(null);
+  const [isLockPassphraseInvalid, setIsLockPassphraseInvalid] = useState(false);
   const [isLockSubmitting, setIsLockSubmitting] = useState(false);
   const mountedRef = useRef(true);
 
@@ -470,11 +503,13 @@ function useSharePageLockLogic(uuid?: string, hash?: string) {
     if (!uuid) {
       useLockStore.getState().setLockUuid(null);
       setLockError(null);
+      setIsLockPassphraseInvalid(false);
       return;
     }
     const parsedUuid = UUIDSchema.safeParse(uuid);
     useLockStore.getState().setLockUuid(parsedUuid.success ? parsedUuid.data : null);
     setLockError(null);
+    setIsLockPassphraseInvalid(false);
   }, [uuid]);
 
   useEffect(() => {
@@ -488,20 +523,31 @@ function useSharePageLockLogic(uuid?: string, hash?: string) {
     Boolean(lockSecretB64u) &&
     !lockPending;
 
+  function clearLockError(): void {
+    setLockError(null);
+    setIsLockPassphraseInvalid(false);
+  }
+
+  function setLockErrorFromCode(code: string): void {
+    setLockError(mapLockError(code));
+    setIsLockPassphraseInvalid(isLockPassphraseErrorCode(code));
+  }
+
   function handlePassphraseChange(value: string): void {
     store.setPassphrase(value);
-    if (lockError) setLockError(null);
+    if (lockError || isLockPassphraseInvalid) {
+      clearLockError();
+    }
   }
 
   async function handleGenerate(): Promise<void> {
     if (lockPending) return;
 
-    if (!store.uuid) return setLockError(mapLockError('INVALID_REQUEST'));
-    if (!lockSecretB64u) return setLockError(mapLockError('INVALID_LOCK_SECRET'));
-    if (store.passphrase.trim().length === 0)
-      return setLockError(mapLockError('PASSPHRASE_REQUIRED'));
+    if (!store.uuid) return setLockErrorFromCode('INVALID_REQUEST');
+    if (!lockSecretB64u) return setLockErrorFromCode('INVALID_LOCK_SECRET');
+    if (store.passphrase.trim().length === 0) return setLockErrorFromCode('PASSPHRASE_REQUIRED');
 
-    setLockError(null);
+    clearLockError();
     setIsLockSubmitting(true);
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.lockChannel>>;
@@ -514,20 +560,21 @@ function useSharePageLockLogic(uuid?: string, hash?: string) {
     } catch {
       if (!mountedRef.current) return;
       setIsLockSubmitting(false);
-      setLockError(mapLockError('INTERNAL_ERROR'));
+      setLockErrorFromCode('INTERNAL_ERROR');
       return;
     }
 
     if (!mountedRef.current) return;
     setIsLockSubmitting(false);
-    if (!result.ok) return setLockError(mapLockError(result.error.code));
-    setLockError(null);
+    if (!result.ok) return setLockErrorFromCode(result.error.code);
+    clearLockError();
   }
 
   return {
     store,
     lockError,
-    setLockError,
+    isLockPassphraseInvalid,
+    clearLockError,
     lockPending,
     canGenerate,
     lockSecretWarning,
@@ -540,6 +587,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   const store = useDecryptStore();
   const [passphrase, setPassphrase] = useState('');
   const [decryptError, setDecryptError] = useState<string | null>(null);
+  const [isDecryptPassphraseInvalid, setIsDecryptPassphraseInvalid] = useState(false);
   const [isDecryptSubmitting, setIsDecryptSubmitting] = useState(false);
   const mountedRef = useRef(true);
   const decryptActionScopeRef = useRef(0);
@@ -558,6 +606,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
       useDecryptStore.getState().setDecryptUuid(null);
       setPassphrase('');
       setDecryptError(null);
+      setIsDecryptPassphraseInvalid(false);
       return;
     }
 
@@ -565,6 +614,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     useDecryptStore.getState().setDecryptUuid(parsedUuid.success ? parsedUuid.data : null);
     setPassphrase('');
     setDecryptError(null);
+    setIsDecryptPassphraseInvalid(false);
   }, [uuid]);
 
   useEffect(() => {
@@ -578,6 +628,7 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     setIsDecryptSubmitting(false);
     setPassphrase('');
     setDecryptError(null);
+    setIsDecryptPassphraseInvalid(false);
     useDecryptStore.getState().setPlaintext(null);
   }, [enabled]);
 
@@ -592,17 +643,26 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     return useDecryptStore.getState().uuid === actionUuid;
   }
 
+  function clearDecryptError(): void {
+    setDecryptError(null);
+    setIsDecryptPassphraseInvalid(false);
+  }
+
+  function setDecryptErrorFromCode(code: string): void {
+    setDecryptError(mapDecryptError(code));
+    setIsDecryptPassphraseInvalid(isDecryptPassphraseErrorCode(code));
+  }
+
   async function handleDecrypt(): Promise<void> {
     if (!enabled || isDecryptSubmitting) return;
 
-    if (!store.uuid) return setDecryptError(mapDecryptError('INVALID_REQUEST'));
-    if (passphrase.trim().length === 0)
-      return setDecryptError(mapDecryptError('PASSPHRASE_REQUIRED'));
+    if (!store.uuid) return setDecryptErrorFromCode('INVALID_REQUEST');
+    if (passphrase.trim().length === 0) return setDecryptErrorFromCode('PASSPHRASE_REQUIRED');
 
     const actionScope = decryptActionScopeRef.current;
     const actionUuid = store.uuid;
 
-    setDecryptError(null);
+    clearDecryptError();
     setIsDecryptSubmitting(true);
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.decryptDelivered>>;
@@ -614,18 +674,18 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     } catch {
       if (!isActiveDecryptContext(actionScope, actionUuid)) return;
       setIsDecryptSubmitting(false);
-      setDecryptError(mapDecryptError('INTERNAL_ERROR'));
+      setDecryptErrorFromCode('INTERNAL_ERROR');
       return;
     }
 
     if (!isActiveDecryptContext(actionScope, actionUuid)) return;
     setIsDecryptSubmitting(false);
     if (!result.ok) {
-      setDecryptError(mapDecryptError(result.error.code));
+      setDecryptErrorFromCode(result.error.code);
       return;
     }
 
-    setDecryptError(null);
+    clearDecryptError();
   }
 
   function handleBurn(): void {
@@ -633,19 +693,22 @@ function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
 
     store.markBurned();
     setPassphrase('');
-    setDecryptError(null);
+    clearDecryptError();
   }
 
   return {
     store,
     passphrase,
     decryptError,
+    isDecryptPassphraseInvalid,
     decryptPending: isDecryptSubmitting,
     canDecrypt,
     canBurn,
     handlePassphraseChange: (value: string) => {
       setPassphrase(value);
-      if (decryptError) setDecryptError(null);
+      if (decryptError || isDecryptPassphraseInvalid) {
+        clearDecryptError();
+      }
     },
     handleDecrypt,
     handleBurn,
@@ -663,11 +726,13 @@ export function SharePage(): ReactElement {
   const isDeliveredState =
     !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
   const decryptLogic = useSharePageDecryptLogic(uuid, isDeliveredState);
+  const isPageBusy =
+    publicState.isPublicStatusLoading || lockLogic.lockPending || decryptLogic.decryptPending;
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
       <SharePageHeader />
-      <PageCardContent className="space-y-6">
+      <PageCardContent aria-busy={isPageBusy} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {publicState.isPublicStatusLoading ? <LoadingStep /> : null}
@@ -681,12 +746,13 @@ export function SharePage(): ReactElement {
             {lockLogic.store.step === 'lock' ? (
               <LockStep
                 canGenerate={lockLogic.canGenerate}
+                isLockPassphraseInvalid={lockLogic.isLockPassphraseInvalid}
                 lockError={lockLogic.lockError}
                 lockPending={lockLogic.lockPending}
                 lockSecretWarning={lockLogic.lockSecretWarning}
                 onBack={() => {
                   if (lockLogic.lockPending) return;
-                  lockLogic.setLockError(null);
+                  lockLogic.clearLockError();
                   lockLogic.store.setStep('onboarding');
                 }}
                 onGenerate={() => void lockLogic.handleGenerate()}
@@ -710,6 +776,7 @@ export function SharePage(): ReactElement {
             canBurn={decryptLogic.canBurn}
             canDecrypt={decryptLogic.canDecrypt}
             decryptError={decryptLogic.decryptError}
+            isDecryptPassphraseInvalid={decryptLogic.isDecryptPassphraseInvalid}
             decryptPending={decryptLogic.decryptPending}
             onBurn={decryptLogic.handleBurn}
             onDecrypt={() => void decryptLogic.handleDecrypt()}

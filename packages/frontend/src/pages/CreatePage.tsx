@@ -10,6 +10,7 @@ import {
   PageCardHeader,
   PageCardTitle,
   RoleBadge,
+  StateNotice,
 } from '../components/layout';
 import { Button } from '../components/ui/button';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
@@ -81,17 +82,15 @@ function WebAuthnWarning({ strictOrHardwareBlocked }: { strictOrHardwareBlocked:
   if (!strictOrHardwareBlocked) return null;
 
   return (
-    <div
-      className="space-y-2 rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+    <StateNotice
       data-testid="create-webauthn-blocked-warning"
+      title="Hardware authentication is not available in this environment."
+      tone="warning"
     >
-      <p className="font-medium text-foreground">
-        Hardware authentication is not available in this environment.
-      </p>
       <p className="text-neon-orange">
         Strict and Hardware-Only profiles require WebAuthn support.
       </p>
-    </div>
+    </StateNotice>
   );
 }
 
@@ -181,11 +180,11 @@ function SuccessSummary({
   if (!createdProfile || !links) return null;
 
   return (
-    <div
-      className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4 text-sm text-foreground"
+    <StateNotice
       data-testid="create-success-summary"
+      title="Secure channel created."
+      tone="success"
     >
-      <p className="font-medium">Secure channel created.</p>
       <p>
         Selected profile: <span className="font-semibold">{profileLabelMap[createdProfile]}</span>
       </p>
@@ -209,7 +208,7 @@ function SuccessSummary({
           {links.manageUrl}
         </a>
       </p>
-    </div>
+    </StateNotice>
   );
 }
 
@@ -352,7 +351,7 @@ export function CreatePage(): ReactElement {
           Zero-knowledge channel creation with security profile gating and WebAuthn integration.
         </PageCardDescription>
       </PageCardHeader>
-      <PageCardContent className="space-y-6">
+      <PageCardContent aria-busy={logic.isSubmitting} className="space-y-6">
         <ProfileSelectionGrid
           onSelectProfile={logic.handleSelectProfile}
           selectedProfile={logic.state.selectedProfile}
@@ -369,12 +368,14 @@ export function CreatePage(): ReactElement {
         ) : null}
         <ActionFooter disabled={logic.isSubmitting} onCreate={logic.handleCreate} />
         {logic.submitError ? (
-          <div
-            className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+          <StateNotice
+            autoFocusOnMount
             data-testid="create-submit-error"
+            id="create-submit-error"
+            tone="error"
           >
             {logic.submitError}
-          </div>
+          </StateNotice>
         ) : null}
         <SuccessSummary createdProfile={logic.state.createdProfile} links={logic.createdLinks} />
       </PageCardContent>

@@ -109,7 +109,10 @@ describe('CreatePage integration', () => {
 
     fireEvent.click(screen.getByTestId('security-profile-select-strict'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
-    expect(screen.getByTestId('create-webauthn-blocked-warning')).toBeTruthy();
+    const warning = screen.getByTestId('create-webauthn-blocked-warning');
+    expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
 
     fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
@@ -151,7 +154,10 @@ describe('CreatePage integration', () => {
     await waitFor(() => {
       expect(createChannelMock).not.toHaveBeenCalled();
     });
-    expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    const error = screen.getByTestId('create-submit-error');
+    expect(error).toBeTruthy();
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.getAttribute('aria-live')).toBe('assertive');
     expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
     expect(screen.queryByTestId('create-success-share-link')).toBeNull();
     expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
@@ -168,7 +174,10 @@ describe('CreatePage integration', () => {
     await waitFor(() => {
       expect(createChannelMock).not.toHaveBeenCalled();
     });
-    expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    const error = screen.getByTestId('create-submit-error');
+    expect(error).toBeTruthy();
+    expect(error.getAttribute('role')).toBe('alert');
+    expect(error.getAttribute('aria-live')).toBe('assertive');
     expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
     expect(screen.queryByTestId('create-success-share-link')).toBeNull();
     expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
@@ -223,6 +232,8 @@ describe('CreatePage integration', () => {
     await waitFor(() => {
       expect((screen.getByTestId('create-submit-button') as HTMLButtonElement).disabled).toBe(true);
     });
+    const busyContainer = submit.closest('[aria-busy]');
+    expect(busyContainer?.getAttribute('aria-busy')).toBe('true');
 
     deferred.resolve({
       ok: true,
@@ -240,6 +251,7 @@ describe('CreatePage integration', () => {
         false
       );
     });
+    expect(busyContainer?.getAttribute('aria-busy')).toBe('false');
   });
 
   it('cancels compatibility panel and resets acceptance checkbox', () => {

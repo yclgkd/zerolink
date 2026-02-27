@@ -18,6 +18,7 @@ import {
   PageCardHeader,
   PageCardTitle,
   RoleBadge,
+  StateNotice,
   StatusBadge,
 } from '../components/layout';
 import { SafetyCode } from '../components/safety/safety-code';
@@ -157,16 +158,16 @@ function StatusContent({
         {safetyCode ? (
           <SafetyCode display={safetyCode} />
         ) : (
-          <div
-            className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-4 text-sm"
+          <StateNotice
             data-testid="manage-safety-unavailable"
+            title="Safety Code unavailable on this device."
+            tone="warning"
           >
-            <p className="font-medium text-foreground">Safety Code unavailable on this device.</p>
             <p className="mt-1 text-xs text-neon-orange">
               Safety Code is generated locally and can only be shown when receiver fingerprint is
               available on this device.
             </p>
-          </div>
+          </StateNotice>
         )}
       </section>
     );
@@ -208,10 +209,14 @@ function SecretInput({
   value,
   onChange,
   disabled,
+  ariaInvalid,
+  ariaDescribedBy,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  ariaInvalid?: boolean | undefined;
+  ariaDescribedBy?: string | undefined;
 }) {
   return (
     <section className="space-y-2">
@@ -222,6 +227,8 @@ function SecretInput({
         Secret Payload
       </label>
       <textarea
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
         className="min-h-24 w-full rounded-xl border border-border/70 bg-card/60 px-3 py-2 text-sm text-foreground outline-none ring-offset-background transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
         data-testid="manage-secret-input"
         disabled={disabled}
@@ -419,6 +426,7 @@ function useManageDeliveryLogic(
   isActionPending: boolean,
   setIsActionPending: (pending: boolean) => void,
   setActionError: (error: string | null) => void,
+  setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
   profile: SecurityProfile
 ) {
@@ -432,10 +440,16 @@ function useManageDeliveryLogic(
 
   const handleDeliver = async () => {
     if (isActionPending) return;
-    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be delivered.');
-    if (secretInput.trim().length === 0)
+    if (!store.uuid) {
+      setIsSecretInputInvalid(false);
+      return setActionError('Channel UUID is missing and cannot be delivered.');
+    }
+    if (secretInput.trim().length === 0) {
+      setIsSecretInputInvalid(true);
       return setActionError('Secret payload is required before delivery.');
+    }
 
+    setIsSecretInputInvalid(false);
     setActionError(null);
     setIsActionPending(true);
     const actionScope = actionScopeRef.current ?? 0;
@@ -451,14 +465,19 @@ function useManageDeliveryLogic(
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
+      setIsSecretInputInvalid(false);
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
-    if (!result.ok) return setActionError(mapActionError(result.error.code));
+    if (!result.ok) {
+      setIsSecretInputInvalid(false);
+      return setActionError(mapActionError(result.error.code));
+    }
 
     store.setShowDestroyConfirm(false);
+    setIsSecretInputInvalid(false);
     setActionError(null);
   };
 
@@ -471,6 +490,7 @@ function useManageDestructionLogic(
   isActionPending: boolean,
   setIsActionPending: (pending: boolean) => void,
   setActionError: (error: string | null) => void,
+  setIsSecretInputInvalid: (invalid: boolean) => void,
   profile: SecurityProfile,
   isActiveActionContext: (scope: number, actionUuid: string) => boolean
 ) {
@@ -488,8 +508,12 @@ function useManageDestructionLogic(
 
   const handleApplyDestroy = async () => {
     if (isActionPending) return;
-    if (!store.uuid) return setActionError('Channel UUID is missing and cannot be destroyed.');
+    if (!store.uuid) {
+      setIsSecretInputInvalid(false);
+      return setActionError('Channel UUID is missing and cannot be destroyed.');
+    }
 
+    setIsSecretInputInvalid(false);
     setActionError(null);
     setIsActionPending(true);
     const actionScope = actionScopeRef.current ?? 0;
@@ -501,12 +525,17 @@ function useManageDestructionLogic(
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
+      setIsSecretInputInvalid(false);
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
-    if (!result.ok) return setActionError(mapActionError(result.error.code));
+    if (!result.ok) {
+      setIsSecretInputInvalid(false);
+      return setActionError(mapActionError(result.error.code));
+    }
+    setIsSecretInputInvalid(false);
     setActionError(null);
   };
 
@@ -521,6 +550,7 @@ function useManagePageState(uuid?: string) {
 
   const [secretInput, setSecretInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
 
   useEffect(() => {
@@ -537,6 +567,7 @@ function useManagePageState(uuid?: string) {
     setIsActionPending(false);
     setSecretInput('');
     setActionError(null);
+    setIsSecretInputInvalid(false);
     setPublicStatusError(null);
 
     if (!uuid) {
@@ -573,6 +604,7 @@ function useManagePageState(uuid?: string) {
     isActionPending,
     setIsActionPending,
     setActionError,
+    setIsSecretInputInvalid,
     secretInput,
     profile
   );
@@ -583,6 +615,7 @@ function useManagePageState(uuid?: string) {
     isActionPending,
     setIsActionPending,
     setActionError,
+    setIsSecretInputInvalid,
     profile,
     isActiveActionContext
   );
@@ -595,12 +628,16 @@ function useManagePageState(uuid?: string) {
     secretInput,
     safetyCode,
     actionError,
+    isSecretInputInvalid,
     publicStatusError,
     isActionPending,
     canDeliver,
     handleSecretChange: (value: string) => {
       setSecretInput(value);
-      if (actionError) setActionError(null);
+      if (actionError || isSecretInputInvalid) {
+        setActionError(null);
+        setIsSecretInputInvalid(false);
+      }
     },
     handleDeliver,
     handleDestroyConfirm,
@@ -620,16 +657,17 @@ export function ManagePage(): ReactElement {
   return (
     <PageCard data-testid="page-manage" tone="orange">
       <ManagePageHeader status={state.status} />
-      <PageCardContent className="space-y-6">
+      <PageCardContent aria-busy={state.isActionPending} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {state.publicStatusError ? (
-          <div
-            className="rounded-xl border border-neon-orange/40 bg-neon-orange/10 p-3 text-xs text-neon-orange"
+          <StateNotice
             data-testid="manage-public-status-error"
+            id="manage-public-status-error"
+            tone="warning"
           >
             {state.publicStatusError}
-          </div>
+          </StateNotice>
         ) : null}
 
         <ShareLinkCard
@@ -641,18 +679,24 @@ export function ManagePage(): ReactElement {
         <StatusContent safetyCode={state.safetyCode} status={state.status} />
 
         <SecretInput
+          ariaDescribedBy={
+            state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
+          }
+          ariaInvalid={state.isSecretInputInvalid ? true : undefined}
           disabled={state.isActionPending}
           onChange={state.handleSecretChange}
           value={state.secretInput}
         />
 
         {state.actionError ? (
-          <div
-            className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+          <StateNotice
+            autoFocusOnMount
             data-testid="manage-action-error"
+            id="manage-action-error"
+            tone="error"
           >
             {state.actionError}
-          </div>
+          </StateNotice>
         ) : null}
 
         <ActionPanel

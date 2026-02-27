@@ -93,4 +93,33 @@ describe('PassphraseInput', () => {
       'custom-passphrase-root'
     );
   });
+
+  it('binds custom label and input id', () => {
+    render(
+      <PassphraseInput
+        inputId="lock-passphrase"
+        label="Lock passphrase"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    const input = screen.getByLabelText('Lock passphrase');
+    expect(input.getAttribute('id')).toBe('lock-passphrase');
+  });
+
+  it('forwards aria-invalid and aria-describedby to the input', () => {
+    render(
+      <PassphraseInput
+        ariaDescribedBy="share-lock-error"
+        ariaInvalid
+        onChange={() => {}}
+        value="abc"
+      />
+    );
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe('share-lock-error');
+  });
 });
