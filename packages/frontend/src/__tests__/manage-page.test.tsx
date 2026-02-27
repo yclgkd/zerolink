@@ -385,7 +385,9 @@ describe('ManagePage integration', () => {
 
     await router.navigate(`/m/${NEXT_UUID}`);
     expect(await screen.findByTestId('manage-state-waiting')).toBeTruthy();
-    expect(screen.getByTestId('manage-uuid').textContent).toContain(NEXT_UUID);
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-uuid').textContent).toContain(NEXT_UUID);
+    });
     expect(screen.queryByTestId('manage-action-error')).toBeNull();
 
     deferred.resolve({
