@@ -367,7 +367,7 @@ describe('SharePage', () => {
     const uuidBPublic = createDeferred<Response>();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/public/uuidaaaaaaaaaaaaaaaaaa') {
+      if (url === '/api/public/uuidaaaaaaaaaaaaaaaaa') {
         return Promise.resolve(
           jsonResponse({
             ok: true,
@@ -375,7 +375,7 @@ describe('SharePage', () => {
           })
         );
       }
-      if (url === '/api/decrypt_fetch/uuidaaaaaaaaaaaaaaaaaa') {
+      if (url === '/api/decrypt_fetch/uuidaaaaaaaaaaaaaaaaa') {
         return Promise.resolve(
           jsonResponse({
             ok: true,
@@ -392,7 +392,7 @@ describe('SharePage', () => {
           })
         );
       }
-      if (url === '/api/public/uuidbbbbbbbbbbbbbbbbbb') {
+      if (url === '/api/public/uuidbbbbbbbbbbbbbbbbb') {
         return uuidBPublic.promise;
       }
 
@@ -407,7 +407,7 @@ describe('SharePage', () => {
         },
       ],
       {
-        initialEntries: ['/s/uuidaaaaaaaaaaaaaaaaaa'],
+        initialEntries: ['/s/uuidaaaaaaaaaaaaaaaaa'],
       }
     );
 
@@ -416,14 +416,14 @@ describe('SharePage', () => {
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
     expect(await screen.findByTestId('share-decrypt-summary')).toBeTruthy();
 
-    await router.navigate('/s/uuidbbbbbbbbbbbbbbbbbb');
+    await router.navigate('/s/uuidbbbbbbbbbbbbbbbbb');
 
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith('/api/public/uuidbbbbbbbbbbbbbbbbbb');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/public/uuidbbbbbbbbbbbbbbbbb');
     });
     expect(screen.getByTestId('share-step-loading')).toBeTruthy();
     expect(screen.queryByTestId('share-decrypt-summary')).toBeNull();
-    expect(fetchSpy).not.toHaveBeenCalledWith('/api/decrypt_fetch/uuidbbbbbbbbbbbbbbbbbb');
+    expect(fetchSpy).not.toHaveBeenCalledWith('/api/decrypt_fetch/uuidbbbbbbbbbbbbbbbbb');
 
     uuidBPublic.resolve(
       jsonResponse({
@@ -433,7 +433,7 @@ describe('SharePage', () => {
     );
 
     expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
-    expect(fetchSpy).not.toHaveBeenCalledWith('/api/decrypt_fetch/uuidbbbbbbbbbbbbbbbbbb');
+    expect(fetchSpy).not.toHaveBeenCalledWith('/api/decrypt_fetch/uuidbbbbbbbbbbbbbbbbb');
   });
 
   it('resets lock step and passphrase after leaving and returning to same uuid', async () => {
@@ -474,7 +474,9 @@ describe('SharePage', () => {
     fireEvent.click(screen.getByTestId('share-continue-button'));
 
     const passphraseInput = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
-    fireEvent.change(passphraseInput, { target: { value: 'Strong#Pass1234XYZ' } });
+    fireEvent.change(passphraseInput, {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
     expect(passphraseInput.value).toBe('Strong#Pass1234XYZ');
 
     await router.navigate(`/m/${VALID_UUID}`);
@@ -558,5 +560,77 @@ describe('SharePage', () => {
     fireEvent.click(screen.getByTestId('share-decrypt-retry'));
 
     expect(await screen.findByTestId('share-decrypt-summary')).toBeTruthy();
+  });
+
+  it('does not update state after unmount during pending lock request', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    const deferred = createDeferred<{
+      ok: true;
+      data: {
+        receiverPubJwk: {
+          kty: 'RSA';
+          alg: 'RSA-OAEP-256';
+          n: string;
+          e: string;
+          ext: true;
+          key_ops: ['encrypt'];
+        };
+        receiverPubFpr: string;
+      };
+    }>();
+    lockChannelMock.mockReturnValueOnce(deferred.promise);
+
+    const { unmount } = renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+    await screen.findByTestId('share-step-onboarding');
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
+    fireEvent.click(screen.getByTestId('share-generate-button'));
+
+    await waitFor(() => {
+      expect(lockChannelMock).toHaveBeenCalledTimes(1);
+    });
+
+    unmount();
+
+    // Resolve after unmount — should not throw
+    deferred.resolve({
+      ok: true,
+      data: {
+        receiverPubJwk: {
+          kty: 'RSA',
+          alg: 'RSA-OAEP-256',
+          n: VALID_B64U,
+          e: 'AQAB',
+          ext: true,
+          key_ops: ['encrypt'],
+        },
+        receiverPubFpr: VALID_HEX,
+      },
+    });
+  });
+
+  it('shows user-friendly error when lockChannel throws an exception', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    lockChannelMock.mockRejectedValueOnce(new Error('unexpected crash'));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+    await screen.findByTestId('share-step-onboarding');
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
+    fireEvent.click(screen.getByTestId('share-generate-button'));
+
+    expect(await screen.findByTestId('share-lock-error')).toBeTruthy();
+    const errorText = screen.getByTestId('share-lock-error').textContent;
+    expect(errorText).toBe('An unexpected error occurred. Please try again.');
+    expect(errorText).not.toContain('INTERNAL_ERROR');
   });
 });

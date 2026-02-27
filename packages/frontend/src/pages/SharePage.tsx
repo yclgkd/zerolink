@@ -1,3 +1,4 @@
+import type { SafetyCodeDisplay } from '@zerolink/shared';
 import {
   CHANNEL_STATE,
   type ChannelState,
@@ -7,7 +8,7 @@ import {
   UUIDSchema,
 } from '@zerolink/shared';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
 import {
@@ -68,12 +69,14 @@ function mapLockError(code: string): string {
       return 'Unable to fetch lock challenge. Please retry.';
     case 'KEY_STORAGE_ERROR':
       return 'Unable to store receiver key material on this device.';
+    case 'INTERNAL_ERROR':
+      return 'An unexpected error occurred. Please try again.';
     case 'NETWORK_ERROR':
     case 'BAD_REQUEST':
     case 'INVALID_REQUEST':
       return 'Lock request failed due to network or request validation.';
     default:
-      return `Lock failed: ${code}`;
+      return 'Lock failed. Please try again.';
   }
 }
 
@@ -87,7 +90,7 @@ function SharePageHeader() {
         <RoleBadge party="receiver" />
       </div>
       <PageCardDescription>
-        Receiver-side lock flow integrated with lock_begin/lock_commit protocol calls.
+        Generate your encryption key to secure this channel.
       </PageCardDescription>
     </PageCardHeader>
   );
@@ -202,11 +205,7 @@ function LockStep({
   );
 }
 
-function LockedStep({
-  safetyCodeAvailable,
-}: {
-  safetyCodeAvailable: ReturnType<typeof useLockStore.getState>['safetyCode'];
-}) {
+function LockedStep({ safetyCodeAvailable }: { safetyCodeAvailable: SafetyCodeDisplay | null }) {
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
@@ -471,13 +470,18 @@ export function SharePage(): ReactElement {
     step,
     passphrase,
     safetyCode,
-    lockBegin,
-    lockCommit,
     setLockUuid,
     setStep,
     setPassphrase,
     resetLockStore,
   } = useLockStore();
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const publicState = usePublicShareState(uuid);
   const [lockError, setLockError] = useState<string | null>(null);
@@ -506,8 +510,7 @@ export function SharePage(): ReactElement {
     };
   }, [resetLockStore]);
 
-  const lockPending =
-    isLockSubmitting || lockBegin.status === 'loading' || lockCommit.status === 'loading';
+  const lockPending = isLockSubmitting;
   const canGenerate =
     Boolean(lockUuid) && passphrase.trim().length > 0 && Boolean(lockSecretB64u) && !lockPending;
 
@@ -545,11 +548,13 @@ export function SharePage(): ReactElement {
         passphrase,
       });
     } catch {
+      if (!mountedRef.current) return;
       setIsLockSubmitting(false);
       setLockError(mapLockError('INTERNAL_ERROR'));
       return;
     }
 
+    if (!mountedRef.current) return;
     setIsLockSubmitting(false);
     if (!result.ok) {
       setLockError(mapLockError(result.error.code));
