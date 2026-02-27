@@ -1,15 +1,35 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { deliverSecretMock, deleteChannelMock } = vi.hoisted(() => ({
+  deliverSecretMock: vi.fn(),
+  deleteChannelMock: vi.fn(),
+}));
+
+vi.mock('../crypto/orchestrator', async () => {
+  return {
+    cryptoOrchestrator: {
+      deliverSecret: deliverSecretMock,
+      deleteChannel: deleteChannelMock,
+    },
+  };
+});
+
 import { ManagePage } from '../pages/ManagePage';
+import { useCreateStore } from '../stores/create-store';
+import { useDeliverStore } from '../stores/deliver-store';
 
 const originalFetch = globalThis.fetch;
 const originalClipboard = navigator.clipboard;
 
-function renderManagePage(routePath = '/m/:uuid', initialPath = '/m/demo-channel-shell') {
+const VALID_UUID = 'aaaaaaaaaaaaaaaaaaaaa';
+const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+function renderManagePage(routePath = '/m/:uuid', initialPath = `/m/${VALID_UUID}`) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
@@ -19,12 +39,68 @@ function renderManagePage(routePath = '/m/:uuid', initialPath = '/m/demo-channel
   );
 }
 
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+function getFetchSpy(): ReturnType<typeof vi.fn> {
+  if (!vi.isMockFunction(globalThis.fetch)) {
+    throw new Error('global fetch is not mocked');
+  }
+
+  return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+}
+
+function mockPublicState(fetchSpy: ReturnType<typeof vi.fn>, state: string) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse({
+      ok: true,
+      state,
+    })
+  );
+}
+
+function mockDeliverSuccessWithStoreSideEffects(): void {
+  deliverSecretMock.mockImplementation(async () => {
+    useDeliverStore.getState().markDelivered();
+    return { ok: true, data: {} };
+  });
+}
+
+function mockDeleteSuccessWithStoreSideEffects(): void {
+  deleteChannelMock.mockImplementation(async () => {
+    useDeliverStore.getState().markDeleted();
+    return { ok: true, data: {} };
+  });
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
     writable: true,
     value: vi.fn(),
   });
+
+  useCreateStore.getState().resetCreateStore();
+  useDeliverStore.getState().resetDeliverStore();
+
+  vi.clearAllMocks();
+  mockDeliverSuccessWithStoreSideEffects();
+  mockDeleteSuccessWithStoreSideEffects();
 });
 
 afterEach(() => {
@@ -50,120 +126,303 @@ afterEach(() => {
   }
 });
 
-describe('ManagePage', () => {
-  it('renders waiting state by default', () => {
+describe('ManagePage integration', () => {
+  it('calls /api/public/:uuid on mount and renders waiting state from API', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
     renderManagePage();
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(`/api/public/${VALID_UUID}`);
+    });
 
     expect(screen.getByTestId('page-manage')).toBeTruthy();
-    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
-    expect(screen.getByText('Waiting for Receiver Lock')).toBeTruthy();
+    expect(await screen.findByTestId('manage-state-waiting')).toBeTruthy();
   });
 
-  it('shows sender role badge and uuid value', () => {
+  it('shows sender role badge and uuid value', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
     renderManagePage();
 
-    expect(screen.getByText('Sender')).toBeTruthy();
-    expect(screen.getByTestId('manage-uuid').textContent).toContain('demo-channel-shell');
+    expect(await screen.findByText('Sender')).toBeTruthy();
+    expect(screen.getByTestId('manage-uuid').textContent).toContain(VALID_UUID);
   });
 
-  it('falls back to missing uuid label when uuid param is absent', () => {
+  it('falls back to missing uuid label and blocks deliver/delete when uuid is absent', async () => {
+    const fetchSpy = getFetchSpy();
+
     renderManagePage('/m', '/m');
 
     expect(screen.getByTestId('manage-uuid').textContent).toContain('(missing uuid)');
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'hello' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).not.toHaveBeenCalled();
+      expect(deleteChannelMock).not.toHaveBeenCalled();
+    });
   });
 
-  it('switches between all status previews and updates aria-pressed', () => {
+  it('renders locked state from public status and shows safety unavailable by default', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
     renderManagePage();
 
-    const waiting = screen.getByTestId('manage-status-switch-waiting');
-    const locked = screen.getByTestId('manage-status-switch-locked');
-    const delivered = screen.getByTestId('manage-status-switch-delivered');
-    const deleted = screen.getByTestId('manage-status-switch-deleted');
-    const expired = screen.getByTestId('manage-status-switch-expired');
-
-    expect(waiting.getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(locked);
-    expect(locked.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
-
-    fireEvent.click(delivered);
-    expect(delivered.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('manage-state-delivered')).toBeTruthy();
-
-    fireEvent.click(deleted);
-    expect(deleted.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('manage-state-deleted')).toBeTruthy();
-
-    fireEvent.click(expired);
-    expect(expired.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('manage-state-expired')).toBeTruthy();
+    expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
+    expect(screen.getByTestId('manage-safety-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
-  it('renders safety code in locked state', () => {
+  it('renders real safety code in locked state when receiver fingerprint exists in store', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
     renderManagePage();
 
-    fireEvent.click(screen.getByTestId('manage-status-switch-locked'));
-
-    expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
-    expect(screen.getByText('Safety Code')).toBeTruthy();
-    expect(
-      screen.getByText('Verify this code via another channel (phone, video call)')
-    ).toBeTruthy();
+    expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
+    useDeliverStore.setState({ receiverPubFpr: VALID_HEX as never });
+    expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
-  it('transitions to delivered state when clicking deliver', () => {
+  it('keeps deliver disabled while secret input is empty', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
     renderManagePage();
 
+    await screen.findByTestId('manage-state-waiting');
+    const deliverButton = screen.getByTestId('manage-deliver-button') as HTMLButtonElement;
+    expect(deliverButton.disabled).toBe(true);
+  });
+
+  it('calls deliverSecret with uuid/profile/plaintext and transitions to delivered on success', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'top secret payload' },
+    });
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
-    expect(screen.getByTestId('manage-state-delivered')).toBeTruthy();
-    expect(screen.getByText('Delivery Completed')).toBeTruthy();
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = deliverSecretMock.mock.calls[0]?.[0];
+    expect(callArg?.uuid).toBe(VALID_UUID);
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.STRICT);
+    expect(callArg?.plaintext).toBe('top secret payload');
+
+    expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
   });
 
-  it('uses inline destroy confirm panel and respects cancel/confirm actions', () => {
+  it('prefers createdProfile over selectedProfile when delivering', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
+    useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
+
     renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.HARDWARE_ONLY);
+  });
+
+  it('disables deliver/destroy while deliver request is pending and re-enables after completion', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    const deferred = createDeferred<{ ok: true; data: Record<string, never> }>();
+    deliverSecretMock.mockReturnValueOnce(deferred.promise);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(
+        true
+      );
+      expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(
+        true
+      );
+    });
+
+    deferred.resolve({ ok: true, data: {} });
+
+    await waitFor(() => {
+      expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(
+        false
+      );
+    });
+  });
+
+  it('shows action error on deliver failure and keeps non-delivered state', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    deliverSecretMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'BAD_REQUEST', stage: 'deliver.commit' },
+    });
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    expect(await screen.findByTestId('manage-action-error')).toBeTruthy();
+    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+  });
+
+  it('uses inline destroy confirm and transitions to deleted after confirm', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
 
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
     expect(screen.getByTestId('manage-destroy-confirm')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('manage-destroy-cancel'));
     expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
-    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
     fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
-    expect(screen.getByTestId('manage-state-deleted')).toBeTruthy();
-    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+    await waitFor(() => {
+      expect(deleteChannelMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(deleteChannelMock.mock.calls[0]?.[0]?.uuid).toBe(VALID_UUID);
+    expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(await screen.findByTestId('manage-state-deleted')).toBeTruthy();
   });
 
-  it('disables destroy action in expired state', () => {
+  it('disables confirm panel actions while delete request is pending', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    const deferred = createDeferred<{ ok: true; data: Record<string, never> }>();
+    deleteChannelMock.mockReturnValueOnce(deferred.promise);
+
     renderManagePage();
 
-    fireEvent.click(screen.getByTestId('manage-status-switch-expired'));
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
+    await waitFor(() => {
+      expect((screen.getByTestId('manage-destroy-cancel') as HTMLButtonElement).disabled).toBe(
+        true
+      );
+      expect(
+        (screen.getByTestId('manage-destroy-confirm-apply') as HTMLButtonElement).disabled
+      ).toBe(true);
+    });
+
+    deferred.resolve({ ok: true, data: {} });
+  });
+
+  it('shows action error on delete failure', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    deleteChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'PROFILE_BLOCKED', stage: 'delete.assert' },
+    });
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    expect(await screen.findByTestId('manage-action-error')).toBeTruthy();
+    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+  });
+
+  it('renders expired state from API and disables destructive actions', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'expired');
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-state-expired')).toBeTruthy();
+
+    const deliverButton = screen.getByTestId('manage-deliver-button') as HTMLButtonElement;
     const destroyButton = screen.getByTestId('manage-destroy-button') as HTMLButtonElement;
+
+    expect(deliverButton.disabled).toBe(true);
     expect(destroyButton.disabled).toBe(true);
 
     fireEvent.click(destroyButton);
     expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
-    expect(screen.getByTestId('manage-state-expired')).toBeTruthy();
   });
 
-  it('keeps copy label when clipboard api is unavailable', () => {
+  it('shows public status error when /api/public fails but keeps page interactive', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockRejectedValueOnce(new Error('network down'));
+
     renderManagePage();
+
+    expect(await screen.findByTestId('manage-public-status-error')).toBeTruthy();
+    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+  });
+
+  it('keeps copy label when clipboard api is unavailable', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderManagePage();
+    await screen.findByTestId('manage-state-waiting');
+
     Reflect.deleteProperty(navigator, 'clipboard');
 
     const copyButton = screen.getByTestId('manage-copy-button');
-    expect(copyButton.textContent).toBe('Copy');
-
     fireEvent.click(copyButton);
 
     expect(copyButton.textContent).toBe('Copy');
   });
 
   it('shows copied label only after clipboard write succeeds', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -171,6 +430,7 @@ describe('ManagePage', () => {
     });
 
     renderManagePage();
+    await screen.findByTestId('manage-state-waiting');
 
     const copyButton = screen.getByTestId('manage-copy-button');
     fireEvent.click(copyButton);
@@ -179,18 +439,6 @@ describe('ManagePage', () => {
       expect(copyButton.textContent).toBe('Copied');
     });
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/s/demo-channel-shell'));
-  });
-
-  it('does not trigger network requests during ui-only interactions', () => {
-    renderManagePage();
-    const fetchSpy = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-
-    fireEvent.click(screen.getByTestId('manage-status-switch-locked'));
-    fireEvent.click(screen.getByTestId('manage-deliver-button'));
-    fireEvent.click(screen.getByTestId('manage-destroy-button'));
-    fireEvent.click(screen.getByTestId('manage-destroy-cancel'));
-
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`/s/${VALID_UUID}`));
   });
 });
