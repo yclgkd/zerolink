@@ -78,4 +78,25 @@ describe('protocol-utils', () => {
     expect(firstCallArg).toBeInstanceOf(Uint8Array);
     expect((firstCallArg as Uint8Array).byteLength).toBe(32);
   });
+
+  it('throws when lock secret is not valid base64url in lock key derivation', async () => {
+    await expect(deriveLockKeyB64u(VALID_UUID, 'invalid+base64')).rejects.toThrow(
+      'invalid base64url'
+    );
+  });
+
+  it('throws when WebCrypto subtle API is unavailable', () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {},
+    });
+
+    expect(() => generateLockSecretB64u()).toThrow('WebCrypto is not available');
+
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: originalCrypto,
+    });
+  });
 });
