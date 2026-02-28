@@ -98,6 +98,24 @@ const VALID_COMPOUND_COMMIT_DELETE_BODY = {
   intent: VALID_DELETE_INTENT,
 } as const;
 
+const VALID_SOFTKEY_COMPOUND_COMMIT_UPDATE_BODY = {
+  adminMode: 'softkey',
+  uuid: VALID_UUID,
+  softkeySignature:
+    'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
+  intentHash: 'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+  intent: VALID_UPDATE_INTENT,
+} as const;
+
+const VALID_SOFTKEY_COMPOUND_COMMIT_DELETE_BODY = {
+  adminMode: 'softkey',
+  uuid: VALID_UUID,
+  softkeySignature:
+    'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
+  intentHash: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+  intent: VALID_DELETE_INTENT,
+} as const;
+
 function createMockEnv(responder: (request: Request) => Promise<Response> | Response): {
   env: Env;
   calls: VaultCall[];
@@ -178,7 +196,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
   for (const route of STUB_ROUTES) {
     it(`returns 501 stub response for ${route.method} ${route.path}`, async () => {
       const { env, calls } = createMockEnv(async () => {
-        return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+        return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+          status: 500,
+        });
       });
       const response = await dispatch(env, route.path, route.method);
       const payload = (await response.json()) as ApiErrorResponse;
@@ -252,10 +272,13 @@ describe('backend worker routing + lock/compound forwarding', () => {
         expiresAt: 1_730_000_123_000,
       },
       currentVersion: 2,
+      adminMode: 'webauthn',
       receiverPubFpr: 'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
     };
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify(compoundBeginResponse), { status: 200 });
+      return new Response(JSON.stringify(compoundBeginResponse), {
+        status: 200,
+      });
     });
 
     const response = await dispatch(
@@ -313,9 +336,54 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls[0]?.method).toBe('POST');
   });
 
+  it('forwards softkey compound_commit request to SecretVault DO', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/manage/compound_commit/${VALID_UUID}`,
+      'POST',
+      VALID_SOFTKEY_COMPOUND_COMMIT_UPDATE_BODY
+    );
+    const payload = (await response.json()) as { ok: true };
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/compound_commit');
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.body).toContain('"adminMode":"softkey"');
+    expect(calls[0]?.body).toContain('"softkeySignature"');
+  });
+
+  it('forwards softkey delete_commit alias to SecretVault compound_commit', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/delete_commit/${VALID_UUID}`,
+      'POST',
+      VALID_SOFTKEY_COMPOUND_COMMIT_DELETE_BODY
+    );
+    const payload = (await response.json()) as { ok: true };
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/compound_commit');
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.body).toContain('"adminMode":"softkey"');
+  });
+
   it('returns 400 for invalid lock_begin payload and does not call DO', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/lock_begin/${VALID_UUID}`, 'POST', {
@@ -330,7 +398,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 400 when path UUID and body UUID do not match', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/lock_begin/${VALID_UUID}`, 'POST', {
@@ -345,7 +415,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 400 when path UUID and body UUID do not match on lock_commit', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/lock_commit/${VALID_UUID}`, 'POST', {
@@ -361,7 +433,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 400 for malformed JSON body on lock_commit', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(
@@ -380,7 +454,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 400 for invalid compound_begin payload and does not call DO', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/manage/compound_begin/${VALID_UUID}`, 'POST', {
@@ -395,7 +471,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 400 when compound_commit uuid values do not match route uuid', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/manage/compound_commit/${VALID_UUID}`, 'POST', {
@@ -415,7 +493,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 400 when delete_commit alias receives non-delete intent', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(
@@ -433,7 +513,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 405 for method mismatch on lock challenge routes', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/lock_begin/${VALID_UUID}`, 'GET');
@@ -447,7 +529,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 405 for method mismatch on compound routes', async () => {
     const { env, calls } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
 
     const response = await dispatch(env, `/api/manage/compound_begin/${VALID_UUID}`, 'GET');
@@ -537,7 +621,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('handles preflight OPTIONS for /api/*', async () => {
     const { env } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
     const response = await dispatch(env, '/api/lock_begin/abc123', 'OPTIONS');
 
@@ -551,7 +637,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 404 for unknown /api path with CORS headers', async () => {
     const { env } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
     const response = await dispatch(env, '/api/unknown/abc123', 'GET');
     const payload = (await response.json()) as ApiErrorResponse;
@@ -566,7 +654,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns 405 for method mismatch on known non-lock /api route', async () => {
     const { env } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
     const response = await dispatch(env, '/api/create_begin/abc123', 'GET');
     const payload = (await response.json()) as ApiErrorResponse;
@@ -582,7 +672,9 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
   it('returns health text for non-api route', async () => {
     const { env } = createMockEnv(async () => {
-      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
     });
     const response = await dispatch(env, '/', 'GET');
     const body = await response.text();
