@@ -36,7 +36,10 @@ import {
   type CryptoOrchestratorDeps,
   createCryptoOrchestrator,
 } from '../crypto/orchestrator';
-import { createIndexedDbReceiverKeyStorage } from '../crypto/storage';
+import {
+  createIndexedDbReceiverKeyStorage,
+  createIndexedDbSoftkeyAdminStorage,
+} from '../crypto/storage';
 import {
   assertWithWebAuthn,
   registerWithWebAuthn,
@@ -127,6 +130,12 @@ function createOrchestrator(overrides: Partial<CryptoOrchestratorDeps> = {}): {
       createIndexedDbReceiverKeyStorage({
         dbName: `test-orchestrator-db-${Math.random().toString(16).slice(2)}`,
         storeName: 'receiver-keys',
+      }),
+    softkeyAdminStorage:
+      overrides.softkeyAdminStorage ??
+      createIndexedDbSoftkeyAdminStorage({
+        dbName: `test-orchestrator-softkey-${Math.random().toString(16).slice(2)}`,
+        storeName: 'softkey-admin',
       }),
     createStore: overrides.createStore ?? useCreateStore,
     lockStore: overrides.lockStore ?? useLockStore,
@@ -265,6 +274,101 @@ describe('crypto orchestrator', () => {
     expect(vi.mocked(apiClient.createFinish)).not.toHaveBeenCalled();
     expect(useCreateStore.getState().createFinish.status).toBe('error');
     expect(useCreateStore.getState().createFinish.errorCode).toBe('FALLBACK_REQUIRED');
+  });
+
+  it('removes softkey admin envelope when compatibility createFinish fails', async () => {
+    const softkeyAdminStorage = createIndexedDbSoftkeyAdminStorage({
+      dbName: `test-orchestrator-softkey-cleanup-${Math.random().toString(16).slice(2)}`,
+      storeName: 'softkey-admin',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+    });
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions: {},
+      },
+    });
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        status: 500,
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'Compat#Pass123',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        stage: 'create.finish',
+      },
+    });
+    expect(await softkeyAdminStorage.load(VALID_UUID)).toBeNull();
+    expect(useCreateStore.getState().createFinish.status).toBe('error');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('HTTP_ERROR');
+  });
+
+  it('returns KEY_STORAGE_ERROR when compatibility cleanup fails', async () => {
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => null),
+      remove: vi.fn(async () => {
+        throw new Error('cleanup failed');
+      }),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+    });
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions: {},
+      },
+    });
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        status: 500,
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'Compat#Pass123',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'KEY_STORAGE_ERROR',
+        stage: 'create.cleanup',
+      },
+    });
+    expect(softkeyAdminStorage.remove).toHaveBeenCalledWith(VALID_UUID);
+    expect(useCreateStore.getState().createFinish.status).toBe('error');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('KEY_STORAGE_ERROR');
   });
 
   it('runs lock flow and stores wrapped private key envelope', async () => {

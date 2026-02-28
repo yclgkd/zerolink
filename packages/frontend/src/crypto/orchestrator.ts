@@ -462,6 +462,12 @@ async function executeCreateChannel(
       timestamp: deps.now(),
     });
     if (!finishRes.ok) {
+      try {
+        await deps.softkeyAdminStorage.remove(input.uuid);
+      } catch {
+        state.failCreateFinish('KEY_STORAGE_ERROR');
+        return toError('KEY_STORAGE_ERROR', 'create.cleanup');
+      }
       state.failCreateFinish(finishRes.error.code);
       return toError(finishRes.error.code, 'create.finish');
     }

@@ -114,4 +114,64 @@ describe('verifySoftkeySignature', () => {
     },
     TEST_TIMEOUT_MS
   );
+
+  it(
+    'rejects odd-length hex signature',
+    async () => {
+      const keyPair = await generateKeyPair();
+      const softkeyPubJwk = await getPublicJwk(keyPair.publicKey);
+      const payload = new TextEncoder().encode('challenge-payload');
+
+      const result = await verifySoftkeySignature({
+        softkeyPubJwk,
+        payload,
+        signatureHex: 'abc' as HexString,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe('invalid signature hex encoding');
+    },
+    TEST_TIMEOUT_MS
+  );
+
+  it(
+    'rejects signature hex with invalid length',
+    async () => {
+      const keyPair = await generateKeyPair();
+      const softkeyPubJwk = await getPublicJwk(keyPair.publicKey);
+      const payload = new TextEncoder().encode('challenge-payload');
+
+      const result = await verifySoftkeySignature({
+        softkeyPubJwk,
+        payload,
+        signatureHex: '00'.repeat(32) as HexString,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe('invalid signature length');
+    },
+    TEST_TIMEOUT_MS
+  );
+
+  it(
+    'rejects hex signature with non-hex characters',
+    async () => {
+      const keyPair = await generateKeyPair();
+      const softkeyPubJwk = await getPublicJwk(keyPair.publicKey);
+      const payload = new TextEncoder().encode('challenge-payload');
+
+      const result = await verifySoftkeySignature({
+        softkeyPubJwk,
+        payload,
+        signatureHex: '0g' as HexString,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe('invalid signature hex encoding');
+    },
+    TEST_TIMEOUT_MS
+  );
 });

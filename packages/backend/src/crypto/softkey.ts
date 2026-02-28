@@ -13,6 +13,9 @@ export interface SoftkeyVerifyParams {
 
 export type SoftkeyVerifyResult = Result<void, string>;
 
+const ECDSA_P256_P1363_SIGNATURE_BYTES = 64;
+const ECDSA_P256_P1363_SIGNATURE_HEX_LENGTH = ECDSA_P256_P1363_SIGNATURE_BYTES * 2;
+
 /**
  * Verifies an ECDSA P-256 signature produced by the softkey compat mode.
  * PRD §9: used when the channel's adminMode is 'softkey'.
@@ -24,15 +27,26 @@ export async function verifySoftkeySignature(
   const cryptoApi = getCryptoApi();
 
   // Decode hex signature to bytes
-  let sigBytes: Uint8Array;
-  try {
-    const pairs = signatureHex.match(/.{2}/gu);
-    if (!pairs || pairs.length === 0) {
-      return { ok: false, error: 'empty signature' };
-    }
-    sigBytes = Uint8Array.from(pairs.map((b) => Number.parseInt(b, 16)));
-  } catch {
+  if (signatureHex.length === 0) {
+    return { ok: false, error: 'empty signature' };
+  }
+  if (signatureHex.length % 2 !== 0) {
     return { ok: false, error: 'invalid signature hex encoding' };
+  }
+  if (!/^[0-9a-f]+$/u.test(signatureHex)) {
+    return { ok: false, error: 'invalid signature hex encoding' };
+  }
+  if (signatureHex.length !== ECDSA_P256_P1363_SIGNATURE_HEX_LENGTH) {
+    return { ok: false, error: 'invalid signature length' };
+  }
+
+  const sigBytes = new Uint8Array(ECDSA_P256_P1363_SIGNATURE_BYTES);
+  for (let index = 0; index < signatureHex.length; index += 2) {
+    const parsedByte = Number.parseInt(signatureHex.slice(index, index + 2), 16);
+    if (Number.isNaN(parsedByte)) {
+      return { ok: false, error: 'invalid signature hex encoding' };
+    }
+    sigBytes[index / 2] = parsedByte;
   }
 
   // Import the JWK public key for verification
