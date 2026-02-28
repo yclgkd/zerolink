@@ -49,8 +49,10 @@ import {
   wrapSoftkeyPrivateKey,
 } from './softkey';
 import {
+  createIndexedDbPendingSoftkeyCleanupStorage,
   createIndexedDbReceiverKeyStorage,
   createIndexedDbSoftkeyAdminStorage,
+  type PendingSoftkeyCleanupStorage,
   type ReceiverKeyEnvelope,
   type ReceiverKeyStorage,
   type SoftkeyAdminStorage,
@@ -114,6 +116,7 @@ export interface CryptoOrchestratorDeps {
   apiClient?: ApiClient;
   receiverKeyStorage?: ReceiverKeyStorage;
   softkeyAdminStorage?: SoftkeyAdminStorage;
+  pendingSoftkeyCleanupStorage?: PendingSoftkeyCleanupStorage;
   createStore?: CreateStore;
   lockStore?: LockStore;
   deliverStore?: DeliverStore;
@@ -244,6 +247,7 @@ interface ResolvedDeps {
   client: ApiClient;
   receiverKeyStorage: ReceiverKeyStorage;
   softkeyAdminStorage: SoftkeyAdminStorage;
+  pendingSoftkeyCleanupStorage: PendingSoftkeyCleanupStorage;
   createStore: CreateStore;
   lockStore: LockStore;
   deliverStore: DeliverStore;
@@ -399,10 +403,44 @@ function applyDecryptStoreUpdate(
   apply(state);
 }
 
+async function retryPendingSoftkeyCleanup(
+  softkeyAdminStorage: SoftkeyAdminStorage,
+  pendingSoftkeyCleanupStorage: PendingSoftkeyCleanupStorage
+): Promise<void> {
+  let pendingRecords: Awaited<ReturnType<PendingSoftkeyCleanupStorage['list']>>;
+  try {
+    pendingRecords = await pendingSoftkeyCleanupStorage.list();
+  } catch {
+    return;
+  }
+
+  for (const record of pendingRecords) {
+    try {
+      const envelope = await softkeyAdminStorage.load(record.uuid);
+      if (!envelope) {
+        await pendingSoftkeyCleanupStorage.clear(record.uuid);
+        continue;
+      }
+
+      if (envelope.createdAt > record.markedAt) {
+        await pendingSoftkeyCleanupStorage.clear(record.uuid);
+        continue;
+      }
+
+      await softkeyAdminStorage.remove(record.uuid);
+      await pendingSoftkeyCleanupStorage.clear(record.uuid);
+    } catch {
+      // Keep pending record for next retry.
+    }
+  }
+}
+
 async function executeCreateChannel(
   deps: ResolvedDeps,
   input: CreateChannelInput
 ): Promise<CryptoOrchestratorResult<CreateChannelOutput>> {
+  await retryPendingSoftkeyCleanup(deps.softkeyAdminStorage, deps.pendingSoftkeyCleanupStorage);
+
   const state = deps.createStore.getState();
   state.startCreateBegin();
 
@@ -422,12 +460,8 @@ async function executeCreateChannel(
   let lockKeyB64u: Base64Url;
   try {
     lockKeyB64u = await deriveLockKeyB64u(input.uuid, lockSecretB64u);
-  } catch (error) {
-    return toError(
-      'CRYPTO_ERROR',
-      'create.lock-key',
-      error instanceof Error ? error.message : undefined
-    );
+  } catch {
+    return toError('CRYPTO_ERROR', 'create.lock-key');
   }
 
   if (input.useCompatibilityMode) {
@@ -462,8 +496,23 @@ async function executeCreateChannel(
       timestamp: deps.now(),
     });
     if (!finishRes.ok) {
+      let cleanupFailed = false;
+      try {
+        await deps.softkeyAdminStorage.remove(input.uuid);
+      } catch {
+        cleanupFailed = true;
+      }
+      if (cleanupFailed) {
+        try {
+          await deps.pendingSoftkeyCleanupStorage.mark(input.uuid, deps.now());
+        } catch {
+          // Ignore mark failure to preserve create.finish error semantics.
+        }
+      }
       state.failCreateFinish(finishRes.error.code);
-      return toError(finishRes.error.code, 'create.finish');
+      return cleanupFailed
+        ? toError(finishRes.error.code, 'create.finish', 'cleanup failed after create.finish')
+        : toError(finishRes.error.code, 'create.finish');
     }
 
     state.completeCreateFinish(finishRes.data);
@@ -590,12 +639,8 @@ async function executeLockChannel(
       challenge.challenge,
       nowMs
     );
-  } catch (error) {
-    return toError(
-      'CRYPTO_ERROR',
-      'lock.crypto',
-      error instanceof Error ? error.message : undefined
-    );
+  } catch {
+    return toError('CRYPTO_ERROR', 'lock.crypto');
   }
 
   try {
@@ -740,15 +785,11 @@ async function executeDeliverSecret(
   let intentData: Awaited<ReturnType<typeof buildDeliverUpdateIntent>>;
   try {
     intentData = await buildDeliverUpdateIntent(deps, input, resolvedBeginData);
-  } catch (error) {
+  } catch {
     applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
       state.failCompoundCommit('CRYPTO_ERROR');
     });
-    return toError(
-      'CRYPTO_ERROR',
-      'deliver.crypto',
-      error instanceof Error ? error.message : undefined
-    );
+    return toError('CRYPTO_ERROR', 'deliver.crypto');
   }
 
   applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
@@ -1041,9 +1082,10 @@ async function executeDecryptDelivered(
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : undefined;
-    if (msg === 'INTEGRITY_MISMATCH') return toError('INTEGRITY_MISMATCH', 'decrypt.verify');
-    return toError('CRYPTO_ERROR', 'decrypt.crypto', msg);
+    if (error instanceof Error && error.message === 'INTEGRITY_MISMATCH') {
+      return toError('INTEGRITY_MISMATCH', 'decrypt.verify');
+    }
+    return toError('CRYPTO_ERROR', 'decrypt.crypto');
   }
 }
 
@@ -1055,6 +1097,8 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
     client: deps.apiClient ?? defaultApiClient,
     receiverKeyStorage: deps.receiverKeyStorage ?? createIndexedDbReceiverKeyStorage(),
     softkeyAdminStorage: deps.softkeyAdminStorage ?? createIndexedDbSoftkeyAdminStorage(),
+    pendingSoftkeyCleanupStorage:
+      deps.pendingSoftkeyCleanupStorage ?? createIndexedDbPendingSoftkeyCleanupStorage(),
     createStore: deps.createStore ?? useCreateStore,
     lockStore: deps.lockStore ?? useLockStore,
     deliverStore: deps.deliverStore ?? useDeliverStore,
@@ -1064,8 +1108,17 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
       deps.randomBytes ?? ((length: number) => crypto.getRandomValues(new Uint8Array(length))),
   };
 
+  let createChannelQueue = Promise.resolve();
+
   return {
-    createChannel: (input) => executeCreateChannel(resolved, input),
+    createChannel: (input) => {
+      const next = createChannelQueue.then(() => executeCreateChannel(resolved, input));
+      createChannelQueue = next.then(
+        () => undefined,
+        () => undefined
+      );
+      return next;
+    },
     lockChannel: (input) => executeLockChannel(resolved, input),
     deliverSecret: (input) => executeDeliverSecret(resolved, input),
     deleteChannel: (input) => executeDeleteChannel(resolved, input),

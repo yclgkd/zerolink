@@ -36,7 +36,12 @@ import {
   type CryptoOrchestratorDeps,
   createCryptoOrchestrator,
 } from '../crypto/orchestrator';
-import { createIndexedDbReceiverKeyStorage } from '../crypto/storage';
+import {
+  createIndexedDbPendingSoftkeyCleanupStorage,
+  createIndexedDbReceiverKeyStorage,
+  createIndexedDbSoftkeyAdminStorage,
+  type SoftkeyAdminEnvelope,
+} from '../crypto/storage';
 import {
   assertWithWebAuthn,
   registerWithWebAuthn,
@@ -100,6 +105,33 @@ const VALID_ASSERTION: AssertionJSON = {
   },
 };
 
+function buildSoftkeyAdminEnvelope(createdAt: number): SoftkeyAdminEnvelope {
+  return {
+    uuid: VALID_UUID,
+    softkeyPubJwk: {
+      kty: 'EC',
+      crv: 'P-256',
+      x: VALID_B64U,
+      y: VALID_B64U,
+      ext: true,
+      key_ops: ['verify'],
+    },
+    wrappedPrivateKey: {
+      encryptedKey: VALID_B64U,
+      iv: VALID_B64U,
+      kdf: {
+        kdfType: 'argon2id',
+        version: 19,
+        m: 65_536,
+        t: 3,
+        p: 1,
+        salt: VALID_B64U,
+      },
+    },
+    createdAt,
+  };
+}
+
 function createApiClientMock(): ApiClient {
   return {
     createBegin: vi.fn(),
@@ -127,6 +159,18 @@ function createOrchestrator(overrides: Partial<CryptoOrchestratorDeps> = {}): {
       createIndexedDbReceiverKeyStorage({
         dbName: `test-orchestrator-db-${Math.random().toString(16).slice(2)}`,
         storeName: 'receiver-keys',
+      }),
+    softkeyAdminStorage:
+      overrides.softkeyAdminStorage ??
+      createIndexedDbSoftkeyAdminStorage({
+        dbName: `test-orchestrator-softkey-${Math.random().toString(16).slice(2)}`,
+        storeName: 'softkey-admin',
+      }),
+    pendingSoftkeyCleanupStorage:
+      overrides.pendingSoftkeyCleanupStorage ??
+      createIndexedDbPendingSoftkeyCleanupStorage({
+        dbName: `test-orchestrator-softkey-pending-${Math.random().toString(16).slice(2)}`,
+        storeName: 'pending-softkey-cleanup',
       }),
     createStore: overrides.createStore ?? useCreateStore,
     lockStore: overrides.lockStore ?? useLockStore,
@@ -265,6 +309,561 @@ describe('crypto orchestrator', () => {
     expect(vi.mocked(apiClient.createFinish)).not.toHaveBeenCalled();
     expect(useCreateStore.getState().createFinish.status).toBe('error');
     expect(useCreateStore.getState().createFinish.errorCode).toBe('FALLBACK_REQUIRED');
+  });
+
+  it('removes softkey admin envelope when compatibility createFinish fails', async () => {
+    const softkeyAdminStorage = createIndexedDbSoftkeyAdminStorage({
+      dbName: `test-orchestrator-softkey-cleanup-${Math.random().toString(16).slice(2)}`,
+      storeName: 'softkey-admin',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+    });
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions: {},
+      },
+    });
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        status: 500,
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'Compat#Pass123',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        stage: 'create.finish',
+      },
+    });
+    expect(await softkeyAdminStorage.load(VALID_UUID)).toBeNull();
+    expect(useCreateStore.getState().createFinish.status).toBe('error');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('HTTP_ERROR');
+  });
+
+  it('preserves create finish error when compatibility cleanup fails', async () => {
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => null),
+      remove: vi.fn(async () => {
+        throw new Error('cleanup failed');
+      }),
+    };
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {}),
+      list: vi.fn(async () => []),
+      clear: vi.fn(async () => {}),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions: {},
+      },
+    });
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        status: 500,
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'Compat#Pass123',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        stage: 'create.finish',
+        message: 'cleanup failed after create.finish',
+      },
+    });
+    expect(softkeyAdminStorage.remove).toHaveBeenCalledWith(VALID_UUID);
+    expect(pendingSoftkeyCleanupStorage.mark).toHaveBeenCalledWith(VALID_UUID, NOW);
+    expect(useCreateStore.getState().createFinish.status).toBe('error');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('HTTP_ERROR');
+  });
+
+  it('keeps create finish error when pending cleanup mark fails', async () => {
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => null),
+      remove: vi.fn(async () => {
+        throw new Error('cleanup failed');
+      }),
+    };
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {
+        throw new Error('mark failed');
+      }),
+      list: vi.fn(async () => []),
+      clear: vi.fn(async () => {}),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions: {},
+      },
+    });
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        status: 500,
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'Compat#Pass123',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'HTTP_ERROR',
+        stage: 'create.finish',
+        message: 'cleanup failed after create.finish',
+      },
+    });
+    expect(pendingSoftkeyCleanupStorage.mark).toHaveBeenCalledWith(VALID_UUID, NOW);
+    expect(useCreateStore.getState().createFinish.status).toBe('error');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('HTTP_ERROR');
+  });
+
+  it('retries pending softkey cleanup on next create and clears pending records', async () => {
+    const softkeyDbName = `test-orchestrator-softkey-retry-${Math.random().toString(16).slice(2)}`;
+    const pendingDbName = `test-orchestrator-softkey-pending-retry-${Math.random()
+      .toString(16)
+      .slice(2)}`;
+
+    const softkeyAdminStorage = createIndexedDbSoftkeyAdminStorage({
+      dbName: softkeyDbName,
+      storeName: 'softkey-admin',
+    });
+    const pendingSoftkeyCleanupStorage = createIndexedDbPendingSoftkeyCleanupStorage({
+      dbName: pendingDbName,
+      storeName: 'pending-softkey-cleanup',
+    });
+
+    await softkeyAdminStorage.save({
+      uuid: VALID_UUID,
+      softkeyPubJwk: {
+        kty: 'EC',
+        crv: 'P-256',
+        x: VALID_B64U,
+        y: VALID_B64U,
+        ext: true,
+        key_ops: ['verify'],
+      },
+      wrappedPrivateKey: {
+        encryptedKey: VALID_B64U,
+        iv: VALID_B64U,
+        kdf: {
+          kdfType: 'argon2id',
+          version: 19,
+          m: 65_536,
+          t: 3,
+          p: 1,
+          salt: VALID_B64U,
+        },
+      },
+      createdAt: NOW - 2,
+    });
+    await pendingSoftkeyCleanupStorage.mark(VALID_UUID, NOW - 1);
+
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    const creationOptions: CreateBeginResponse['creationOptions'] = {
+      publicKey: {
+        challenge: VALID_B64U,
+        rp: { name: 'ZeroLink' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    };
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions,
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    } satisfies WebAuthnAdapterResult<AttestationJSON>);
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await softkeyAdminStorage.load(VALID_UUID)).toBeNull();
+    expect(await pendingSoftkeyCleanupStorage.list()).toEqual([]);
+  });
+
+  it('keeps pending softkey cleanup record when retry remove fails', async () => {
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {}),
+      list: vi.fn(async () => [{ uuid: VALID_UUID, markedAt: NOW - 1 }]),
+      clear: vi.fn(async () => {}),
+    };
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => buildSoftkeyAdminEnvelope(Number(NOW) - 2)),
+      remove: vi.fn(async () => {
+        throw new Error('remove failed');
+      }),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    const creationOptions: CreateBeginResponse['creationOptions'] = {
+      publicKey: {
+        challenge: VALID_B64U,
+        rp: { name: 'ZeroLink' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    };
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions,
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    } satisfies WebAuthnAdapterResult<AttestationJSON>);
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(softkeyAdminStorage.remove).toHaveBeenCalledWith(VALID_UUID);
+    expect(pendingSoftkeyCleanupStorage.clear).not.toHaveBeenCalled();
+  });
+
+  it('continues create flow when pending cleanup list fails', async () => {
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {}),
+      list: vi.fn(async () => {
+        throw new Error('list failed');
+      }),
+      clear: vi.fn(async () => {}),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      pendingSoftkeyCleanupStorage,
+    });
+
+    const creationOptions: CreateBeginResponse['creationOptions'] = {
+      publicKey: {
+        challenge: VALID_B64U,
+        rp: { name: 'ZeroLink' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    };
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions,
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    } satisfies WebAuthnAdapterResult<AttestationJSON>);
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(pendingSoftkeyCleanupStorage.list).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiClient.createBegin)).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears pending record when no softkey envelope exists during retry', async () => {
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {}),
+      list: vi.fn(async () => [{ uuid: VALID_UUID, markedAt: NOW - 1 }]),
+      clear: vi.fn(async () => {}),
+    };
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => null),
+      remove: vi.fn(async () => {}),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    const creationOptions: CreateBeginResponse['creationOptions'] = {
+      publicKey: {
+        challenge: VALID_B64U,
+        rp: { name: 'ZeroLink' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    };
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions,
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    } satisfies WebAuthnAdapterResult<AttestationJSON>);
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(softkeyAdminStorage.remove).not.toHaveBeenCalled();
+    expect(pendingSoftkeyCleanupStorage.clear).toHaveBeenCalledWith(VALID_UUID);
+  });
+
+  it('clears stale pending record when a newer softkey envelope exists', async () => {
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {}),
+      list: vi.fn(async () => [{ uuid: VALID_UUID, markedAt: NOW - 10 }]),
+      clear: vi.fn(async () => {}),
+    };
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => buildSoftkeyAdminEnvelope(Number(NOW))),
+      remove: vi.fn(async () => {}),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    const creationOptions: CreateBeginResponse['creationOptions'] = {
+      publicKey: {
+        challenge: VALID_B64U,
+        rp: { name: 'ZeroLink' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    };
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions,
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    } satisfies WebAuthnAdapterResult<AttestationJSON>);
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(softkeyAdminStorage.remove).not.toHaveBeenCalled();
+    expect(pendingSoftkeyCleanupStorage.clear).toHaveBeenCalledWith(VALID_UUID);
+  });
+
+  it('removes pending softkey envelope when createdAt equals markedAt', async () => {
+    const pendingSoftkeyCleanupStorage = {
+      mark: vi.fn(async () => {}),
+      list: vi.fn(async () => [{ uuid: VALID_UUID, markedAt: NOW }]),
+      clear: vi.fn(async () => {}),
+    };
+    const softkeyAdminStorage = {
+      save: vi.fn(async () => {}),
+      load: vi.fn(async () => buildSoftkeyAdminEnvelope(Number(NOW))),
+      remove: vi.fn(async () => {}),
+    };
+    const { orchestrator, apiClient } = createOrchestrator({
+      softkeyAdminStorage,
+      pendingSoftkeyCleanupStorage,
+    });
+
+    const creationOptions: CreateBeginResponse['creationOptions'] = {
+      publicKey: {
+        challenge: VALID_B64U,
+        rp: { name: 'ZeroLink' },
+        user: {
+          id: VALID_B64U,
+          name: 'alice@example.com',
+          displayName: 'Alice',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      },
+    };
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions,
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    } satisfies WebAuthnAdapterResult<AttestationJSON>);
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: '/s/aaaaaaaaaaaaaaaaaaaaa',
+        manageUrl: '/m/aaaaaaaaaaaaaaaaaaaaa',
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(softkeyAdminStorage.remove).toHaveBeenCalledWith(VALID_UUID);
+    expect(pendingSoftkeyCleanupStorage.clear).toHaveBeenCalledWith(VALID_UUID);
   });
 
   it('runs lock flow and stores wrapped private key envelope', async () => {
