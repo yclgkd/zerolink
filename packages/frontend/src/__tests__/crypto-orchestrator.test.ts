@@ -322,7 +322,7 @@ describe('crypto orchestrator', () => {
     expect(useCreateStore.getState().createFinish.errorCode).toBe('HTTP_ERROR');
   });
 
-  it('returns KEY_STORAGE_ERROR when compatibility cleanup fails', async () => {
+  it('preserves create finish error when compatibility cleanup fails', async () => {
     const softkeyAdminStorage = {
       save: vi.fn(async () => {}),
       load: vi.fn(async () => null),
@@ -362,13 +362,14 @@ describe('crypto orchestrator', () => {
       ok: false,
       error: {
         ok: false,
-        code: 'KEY_STORAGE_ERROR',
-        stage: 'create.cleanup',
+        code: 'HTTP_ERROR',
+        stage: 'create.finish',
+        message: 'cleanup failed after create.finish',
       },
     });
     expect(softkeyAdminStorage.remove).toHaveBeenCalledWith(VALID_UUID);
     expect(useCreateStore.getState().createFinish.status).toBe('error');
-    expect(useCreateStore.getState().createFinish.errorCode).toBe('KEY_STORAGE_ERROR');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('HTTP_ERROR');
   });
 
   it('runs lock flow and stores wrapped private key envelope', async () => {

@@ -422,12 +422,8 @@ async function executeCreateChannel(
   let lockKeyB64u: Base64Url;
   try {
     lockKeyB64u = await deriveLockKeyB64u(input.uuid, lockSecretB64u);
-  } catch (error) {
-    return toError(
-      'CRYPTO_ERROR',
-      'create.lock-key',
-      error instanceof Error ? error.message : undefined
-    );
+  } catch {
+    return toError('CRYPTO_ERROR', 'create.lock-key');
   }
 
   if (input.useCompatibilityMode) {
@@ -462,14 +458,16 @@ async function executeCreateChannel(
       timestamp: deps.now(),
     });
     if (!finishRes.ok) {
+      let cleanupFailed = false;
       try {
         await deps.softkeyAdminStorage.remove(input.uuid);
       } catch {
-        state.failCreateFinish('KEY_STORAGE_ERROR');
-        return toError('KEY_STORAGE_ERROR', 'create.cleanup');
+        cleanupFailed = true;
       }
       state.failCreateFinish(finishRes.error.code);
-      return toError(finishRes.error.code, 'create.finish');
+      return cleanupFailed
+        ? toError(finishRes.error.code, 'create.finish', 'cleanup failed after create.finish')
+        : toError(finishRes.error.code, 'create.finish');
     }
 
     state.completeCreateFinish(finishRes.data);
@@ -596,12 +594,8 @@ async function executeLockChannel(
       challenge.challenge,
       nowMs
     );
-  } catch (error) {
-    return toError(
-      'CRYPTO_ERROR',
-      'lock.crypto',
-      error instanceof Error ? error.message : undefined
-    );
+  } catch {
+    return toError('CRYPTO_ERROR', 'lock.crypto');
   }
 
   try {
@@ -746,15 +740,11 @@ async function executeDeliverSecret(
   let intentData: Awaited<ReturnType<typeof buildDeliverUpdateIntent>>;
   try {
     intentData = await buildDeliverUpdateIntent(deps, input, resolvedBeginData);
-  } catch (error) {
+  } catch {
     applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
       state.failCompoundCommit('CRYPTO_ERROR');
     });
-    return toError(
-      'CRYPTO_ERROR',
-      'deliver.crypto',
-      error instanceof Error ? error.message : undefined
-    );
+    return toError('CRYPTO_ERROR', 'deliver.crypto');
   }
 
   applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
@@ -1047,9 +1037,10 @@ async function executeDecryptDelivered(
       },
     };
   } catch (error) {
-    const msg = error instanceof Error ? error.message : undefined;
-    if (msg === 'INTEGRITY_MISMATCH') return toError('INTEGRITY_MISMATCH', 'decrypt.verify');
-    return toError('CRYPTO_ERROR', 'decrypt.crypto', msg);
+    if (error instanceof Error && error.message === 'INTEGRITY_MISMATCH') {
+      return toError('INTEGRITY_MISMATCH', 'decrypt.verify');
+    }
+    return toError('CRYPTO_ERROR', 'decrypt.crypto');
   }
 }
 
