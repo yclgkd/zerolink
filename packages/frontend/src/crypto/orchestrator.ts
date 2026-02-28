@@ -49,8 +49,10 @@ import {
   wrapSoftkeyPrivateKey,
 } from './softkey';
 import {
+  createIndexedDbPendingSoftkeyCleanupStorage,
   createIndexedDbReceiverKeyStorage,
   createIndexedDbSoftkeyAdminStorage,
+  type PendingSoftkeyCleanupStorage,
   type ReceiverKeyEnvelope,
   type ReceiverKeyStorage,
   type SoftkeyAdminStorage,
@@ -114,6 +116,7 @@ export interface CryptoOrchestratorDeps {
   apiClient?: ApiClient;
   receiverKeyStorage?: ReceiverKeyStorage;
   softkeyAdminStorage?: SoftkeyAdminStorage;
+  pendingSoftkeyCleanupStorage?: PendingSoftkeyCleanupStorage;
   createStore?: CreateStore;
   lockStore?: LockStore;
   deliverStore?: DeliverStore;
@@ -244,6 +247,7 @@ interface ResolvedDeps {
   client: ApiClient;
   receiverKeyStorage: ReceiverKeyStorage;
   softkeyAdminStorage: SoftkeyAdminStorage;
+  pendingSoftkeyCleanupStorage: PendingSoftkeyCleanupStorage;
   createStore: CreateStore;
   lockStore: LockStore;
   deliverStore: DeliverStore;
@@ -399,10 +403,44 @@ function applyDecryptStoreUpdate(
   apply(state);
 }
 
+async function retryPendingSoftkeyCleanup(
+  softkeyAdminStorage: SoftkeyAdminStorage,
+  pendingSoftkeyCleanupStorage: PendingSoftkeyCleanupStorage
+): Promise<void> {
+  let pendingRecords: Awaited<ReturnType<PendingSoftkeyCleanupStorage['list']>>;
+  try {
+    pendingRecords = await pendingSoftkeyCleanupStorage.list();
+  } catch {
+    return;
+  }
+
+  for (const record of pendingRecords) {
+    try {
+      const envelope = await softkeyAdminStorage.load(record.uuid);
+      if (!envelope) {
+        await pendingSoftkeyCleanupStorage.clear(record.uuid);
+        continue;
+      }
+
+      if (envelope.createdAt > record.markedAt) {
+        await pendingSoftkeyCleanupStorage.clear(record.uuid);
+        continue;
+      }
+
+      await softkeyAdminStorage.remove(record.uuid);
+      await pendingSoftkeyCleanupStorage.clear(record.uuid);
+    } catch {
+      // Keep pending record for next retry.
+    }
+  }
+}
+
 async function executeCreateChannel(
   deps: ResolvedDeps,
   input: CreateChannelInput
 ): Promise<CryptoOrchestratorResult<CreateChannelOutput>> {
+  await retryPendingSoftkeyCleanup(deps.softkeyAdminStorage, deps.pendingSoftkeyCleanupStorage);
+
   const state = deps.createStore.getState();
   state.startCreateBegin();
 
@@ -463,6 +501,13 @@ async function executeCreateChannel(
         await deps.softkeyAdminStorage.remove(input.uuid);
       } catch {
         cleanupFailed = true;
+      }
+      if (cleanupFailed) {
+        try {
+          await deps.pendingSoftkeyCleanupStorage.mark(input.uuid, deps.now());
+        } catch {
+          // Ignore mark failure to preserve create.finish error semantics.
+        }
       }
       state.failCreateFinish(finishRes.error.code);
       return cleanupFailed
@@ -1052,6 +1097,8 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
     client: deps.apiClient ?? defaultApiClient,
     receiverKeyStorage: deps.receiverKeyStorage ?? createIndexedDbReceiverKeyStorage(),
     softkeyAdminStorage: deps.softkeyAdminStorage ?? createIndexedDbSoftkeyAdminStorage(),
+    pendingSoftkeyCleanupStorage:
+      deps.pendingSoftkeyCleanupStorage ?? createIndexedDbPendingSoftkeyCleanupStorage(),
     createStore: deps.createStore ?? useCreateStore,
     lockStore: deps.lockStore ?? useLockStore,
     deliverStore: deps.deliverStore ?? useDeliverStore,
@@ -1061,8 +1108,17 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
       deps.randomBytes ?? ((length: number) => crypto.getRandomValues(new Uint8Array(length))),
   };
 
+  let createChannelQueue = Promise.resolve();
+
   return {
-    createChannel: (input) => executeCreateChannel(resolved, input),
+    createChannel: (input) => {
+      const next = createChannelQueue.then(() => executeCreateChannel(resolved, input));
+      createChannelQueue = next.then(
+        () => undefined,
+        () => undefined
+      );
+      return next;
+    },
     lockChannel: (input) => executeLockChannel(resolved, input),
     deliverSecret: (input) => executeDeliverSecret(resolved, input),
     deleteChannel: (input) => executeDeleteChannel(resolved, input),

@@ -6,6 +6,7 @@ import { Base64UrlSchema, HexStringSchema, UUIDSchema } from '@zerolink/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createIndexedDbPendingSoftkeyCleanupStorage,
   createIndexedDbReceiverKeyStorage,
   createIndexedDbSoftkeyAdminStorage,
   type ReceiverKeyEnvelope,
@@ -208,6 +209,73 @@ describe('indexeddb softkey admin storage', () => {
     });
 
     await expect(storage.save(SAMPLE_SOFTKEY_ENVELOPE)).rejects.toMatchObject({
+      code: 'KEY_STORAGE_ERROR',
+    });
+
+    Object.defineProperty(globalThis, 'indexedDB', {
+      configurable: true,
+      value: originalIndexedDb,
+    });
+  });
+});
+
+describe('indexeddb pending softkey cleanup storage', () => {
+  it('marks and lists pending cleanup records', async () => {
+    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
+      dbName: 'test-softkey-pending-roundtrip',
+      storeName: 'pending-softkey-cleanup',
+    });
+
+    await storage.mark(VALID_UUID, NOW);
+    await storage.mark('bbbbbbbbbbbbbbbbbbbbb', NOW + 1);
+
+    const records = await storage.list();
+    const sorted = [...records].sort((a, b) => String(a.uuid).localeCompare(String(b.uuid)));
+
+    expect(sorted).toEqual([
+      { uuid: VALID_UUID, markedAt: NOW },
+      { uuid: 'bbbbbbbbbbbbbbbbbbbbb', markedAt: NOW + 1 },
+    ]);
+  });
+
+  it('upserts mark for the same uuid', async () => {
+    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
+      dbName: 'test-softkey-pending-upsert',
+      storeName: 'pending-softkey-cleanup',
+    });
+
+    await storage.mark(VALID_UUID, NOW);
+    await storage.mark(VALID_UUID, NOW + 500);
+
+    const records = await storage.list();
+    expect(records).toEqual([{ uuid: VALID_UUID, markedAt: NOW + 500 }]);
+  });
+
+  it('clears pending cleanup record by uuid', async () => {
+    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
+      dbName: 'test-softkey-pending-clear',
+      storeName: 'pending-softkey-cleanup',
+    });
+
+    await storage.mark(VALID_UUID, NOW);
+    await storage.clear(VALID_UUID);
+
+    expect(await storage.list()).toEqual([]);
+  });
+
+  it('throws KEY_STORAGE_ERROR when indexeddb API is unavailable', async () => {
+    const originalIndexedDb = globalThis.indexedDB;
+    Object.defineProperty(globalThis, 'indexedDB', {
+      configurable: true,
+      value: undefined,
+    });
+
+    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
+      dbName: 'test-softkey-pending-missing',
+      storeName: 'pending-softkey-cleanup',
+    });
+
+    await expect(storage.list()).rejects.toMatchObject({
       code: 'KEY_STORAGE_ERROR',
     });
 

@@ -155,6 +155,23 @@ export interface IndexedDbSoftkeyAdminStorageOptions {
   version?: number;
 }
 
+export interface PendingSoftkeyCleanupRecord {
+  uuid: UUID | string;
+  markedAt: number;
+}
+
+export interface PendingSoftkeyCleanupStorage {
+  mark: (uuid: UUID | string, markedAt: number) => Promise<void>;
+  list: () => Promise<ReadonlyArray<PendingSoftkeyCleanupRecord>>;
+  clear: (uuid: UUID | string) => Promise<void>;
+}
+
+export interface IndexedDbPendingSoftkeyCleanupStorageOptions {
+  dbName?: string;
+  storeName?: string;
+  version?: number;
+}
+
 /**
  * Creates the default IndexedDB-backed storage for softkey admin credentials.
  */
@@ -182,6 +199,41 @@ export function createIndexedDbSoftkeyAdminStorage(
     },
 
     async remove(uuid) {
+      await withTransaction(dbPromise, storeName, 'readwrite', async (store) => {
+        await requestToPromise(store.delete(uuid), 'delete');
+      });
+    },
+  };
+}
+
+/**
+ * Creates the default IndexedDB-backed storage for pending softkey cleanup records.
+ */
+export function createIndexedDbPendingSoftkeyCleanupStorage(
+  options: IndexedDbPendingSoftkeyCleanupStorageOptions = {}
+): PendingSoftkeyCleanupStorage {
+  const dbName = options.dbName ?? 'zerolink-softkey-cleanup';
+  const storeName = options.storeName ?? 'pending-softkey-cleanup';
+  const version = options.version ?? 1;
+
+  const dbPromise = initializeDatabase(dbName, version, storeName);
+
+  return {
+    async mark(uuid, markedAt) {
+      await withTransaction(dbPromise, storeName, 'readwrite', async (store) => {
+        const record: PendingSoftkeyCleanupRecord = { uuid, markedAt };
+        await requestToPromise(store.put(record), 'put');
+      });
+    },
+
+    async list() {
+      return withTransaction(dbPromise, storeName, 'readonly', async (store) => {
+        const result = await requestToPromise(store.getAll(), 'getAll');
+        return (result ?? []) as ReadonlyArray<PendingSoftkeyCleanupRecord>;
+      });
+    },
+
+    async clear(uuid) {
       await withTransaction(dbPromise, storeName, 'readwrite', async (store) => {
         await requestToPromise(store.delete(uuid), 'delete');
       });
