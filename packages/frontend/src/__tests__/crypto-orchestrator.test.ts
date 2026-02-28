@@ -397,6 +397,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        adminMode: 'webauthn',
       },
     });
     vi.mocked(assertWithWebAuthn).mockResolvedValue({
@@ -462,6 +463,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        adminMode: 'webauthn',
       },
     });
 
@@ -487,6 +489,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 0,
+        adminMode: 'webauthn',
       },
     });
 
@@ -526,6 +529,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        adminMode: 'webauthn',
       },
     });
 
@@ -562,6 +566,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 3,
+        adminMode: 'webauthn',
       },
     });
     vi.mocked(assertWithWebAuthn).mockResolvedValue({
@@ -616,6 +621,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 3,
+        adminMode: 'webauthn',
       },
     });
 
@@ -675,6 +681,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
+        adminMode: 'webauthn',
       },
     });
     vi.mocked(assertWithWebAuthn).mockResolvedValue({
@@ -774,6 +781,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
+        adminMode: 'webauthn',
       },
     });
     vi.mocked(assertWithWebAuthn).mockResolvedValue({

@@ -237,6 +237,9 @@ describe('ManagePage integration', () => {
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'top secret payload' },
     });
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Compat#Manage123' },
+    });
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
     await waitFor(() => {
@@ -247,6 +250,7 @@ describe('ManagePage integration', () => {
     expect(callArg?.uuid).toBe(VALID_UUID);
     expect(callArg?.profile).toBe(SECURITY_PROFILE.STRICT);
     expect(callArg?.plaintext).toBe('top secret payload');
+    expect(callArg?.softkeyPassphrase).toBe('Compat#Manage123');
 
     expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
   });
@@ -276,7 +280,10 @@ describe('ManagePage integration', () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
-    const deferred = createDeferred<{ ok: true; data: Record<string, never> }>();
+    const deferred = createDeferred<{
+      ok: true;
+      data: Record<string, never>;
+    }>();
     deliverSecretMock.mockReturnValueOnce(deferred.promise);
 
     renderManagePage();
@@ -321,7 +328,10 @@ describe('ManagePage integration', () => {
       return Promise.reject(new Error(`Unexpected fetch call: ${url}`));
     });
 
-    const deferred = createDeferred<{ ok: true; data: Record<string, never> }>();
+    const deferred = createDeferred<{
+      ok: true;
+      data: Record<string, never>;
+    }>();
     deliverSecretMock.mockReturnValueOnce(deferred.promise);
 
     const { router } = renderManagePageWithRouter();
@@ -465,7 +475,10 @@ describe('ManagePage integration', () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
-    const deferred = createDeferred<{ ok: true; data: Record<string, never> }>();
+    const deferred = createDeferred<{
+      ok: true;
+      data: Record<string, never>;
+    }>();
     deleteChannelMock.mockReturnValueOnce(deferred.promise);
 
     renderManagePage();

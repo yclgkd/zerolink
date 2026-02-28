@@ -9,6 +9,7 @@ import {
   computeIntentHash,
   type DecryptFetchResponse,
   type DeleteIntent,
+  type ECDSAPublicKeyJWK,
   type HexString,
   type LockBeginResponse,
   NONCE_BYTES,
@@ -41,9 +42,18 @@ import {
 } from './protocol-utils';
 import { deriveSafetyCodeDisplay } from './safety-code-derive';
 import {
+  exportSoftkeyPublicJwk,
+  generateSoftkeyPair,
+  softkeySign,
+  unwrapSoftkeyPrivateKey,
+  wrapSoftkeyPrivateKey,
+} from './softkey';
+import {
   createIndexedDbReceiverKeyStorage,
+  createIndexedDbSoftkeyAdminStorage,
   type ReceiverKeyEnvelope,
   type ReceiverKeyStorage,
+  type SoftkeyAdminStorage,
 } from './storage';
 import {
   assertWithWebAuthn,
@@ -103,6 +113,7 @@ type DecryptStore = typeof useDecryptStore;
 export interface CryptoOrchestratorDeps {
   apiClient?: ApiClient;
   receiverKeyStorage?: ReceiverKeyStorage;
+  softkeyAdminStorage?: SoftkeyAdminStorage;
   createStore?: CreateStore;
   lockStore?: LockStore;
   deliverStore?: DeliverStore;
@@ -118,6 +129,9 @@ export interface CreateChannelInput {
   uuid: string;
   profile: SecurityProfile;
   lockSecretB64u?: string;
+  useCompatibilityMode?: boolean;
+  /** Required when useCompatibilityMode is true. Used as Argon2id passphrase to wrap the softkey private key. Must be a user-supplied secret, never the channel UUID. */
+  softkeyPassphrase?: string;
 }
 
 /**
@@ -156,6 +170,8 @@ export interface DeliverSecretInput {
   profile: SecurityProfile;
   plaintext: string | Uint8Array;
   expireAt?: number | null;
+  /** Required when the channel uses softkey compatibility mode. Must match the passphrase used at create time. */
+  softkeyPassphrase?: string;
 }
 
 /**
@@ -174,6 +190,8 @@ export interface DeliverSecretOutput {
 export interface DeleteChannelInput {
   uuid: string;
   profile: SecurityProfile;
+  /** Required when the channel uses softkey compatibility mode. Must match the passphrase used at create time. */
+  softkeyPassphrase?: string;
 }
 
 /**
@@ -225,6 +243,7 @@ export interface CryptoOrchestrator {
 interface ResolvedDeps {
   client: ApiClient;
   receiverKeyStorage: ReceiverKeyStorage;
+  softkeyAdminStorage: SoftkeyAdminStorage;
   createStore: CreateStore;
   lockStore: LockStore;
   deliverStore: DeliverStore;
@@ -400,15 +419,6 @@ async function executeCreateChannel(
   state.completeCreateBegin(beginRes.data);
   const lockSecretB64u = input.lockSecretB64u ?? randomBase64Url(32, deps.randomBytes);
 
-  const regRes = await registerWithWebAuthn({
-    profile: input.profile,
-    creationOptions: beginRes.data.creationOptions as unknown as CredentialCreationOptionsJSON,
-  });
-  if (!regRes.ok) {
-    state.failCreateFinish(regRes.error.code);
-    return mapWebAuthnError(regRes.error.code, 'create.register');
-  }
-
   let lockKeyB64u: Base64Url;
   try {
     lockKeyB64u = await deriveLockKeyB64u(input.uuid, lockSecretB64u);
@@ -420,8 +430,69 @@ async function executeCreateChannel(
     );
   }
 
+  if (input.useCompatibilityMode) {
+    if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
+      return toError('PASSPHRASE_REQUIRED', 'create.softkey-passphrase');
+    }
+    let softkeyPubJwk: ECDSAPublicKeyJWK;
+    try {
+      const keypair = await generateSoftkeyPair();
+      softkeyPubJwk = await exportSoftkeyPublicJwk(keypair.publicKey);
+      const wrappedPrivateKey = await wrapSoftkeyPrivateKey(
+        keypair.privateKey,
+        input.softkeyPassphrase
+      );
+      await deps.softkeyAdminStorage.save({
+        uuid: input.uuid,
+        softkeyPubJwk,
+        wrappedPrivateKey,
+        createdAt: deps.now(),
+      });
+    } catch {
+      state.failCreateFinish('CRYPTO_ERROR');
+      return toError('CRYPTO_ERROR', 'create.softkey');
+    }
+
+    state.startCreateFinish();
+    const finishRes = await deps.client.createFinish({
+      adminMode: 'softkey',
+      uuid: input.uuid,
+      softkeyPubJwk,
+      lockKeyB64u,
+      timestamp: deps.now(),
+    });
+    if (!finishRes.ok) {
+      state.failCreateFinish(finishRes.error.code);
+      return toError(finishRes.error.code, 'create.finish');
+    }
+
+    state.completeCreateFinish(finishRes.data);
+    state.setCreatedProfile(input.profile);
+
+    return {
+      ok: true,
+      data: {
+        shareUrl: finishRes.data.shareUrl,
+        manageUrl: finishRes.data.manageUrl,
+        shareUrlWithFragment: buildShareUrlWithFragment(finishRes.data.shareUrl, lockSecretB64u),
+        lockSecretB64u,
+        lockKeyB64u,
+      },
+    };
+  }
+
+  const regRes = await registerWithWebAuthn({
+    profile: input.profile,
+    creationOptions: beginRes.data.creationOptions as unknown as CredentialCreationOptionsJSON,
+  });
+  if (!regRes.ok) {
+    state.failCreateFinish(regRes.error.code);
+    return mapWebAuthnError(regRes.error.code, 'create.register');
+  }
+
   state.startCreateFinish();
   const finishRes = await deps.client.createFinish({
+    adminMode: 'webauthn',
     uuid: input.uuid,
     attestation: regRes.data as AttestationJSON,
     lockKeyB64u,
@@ -559,7 +630,10 @@ async function executeLockChannel(
 
   return {
     ok: true,
-    data: { receiverPubJwk: cryptoData.receiverPubJwk, receiverPubFpr: cryptoData.receiverPubFpr },
+    data: {
+      receiverPubJwk: cryptoData.receiverPubJwk,
+      receiverPubFpr: cryptoData.receiverPubFpr,
+    },
   };
 }
 
@@ -572,9 +646,16 @@ async function buildDeliverUpdateIntent(
   const aad = toUtf8Bytes(input.uuid);
   const aesKey = await generateAesKey();
   const rawContentKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
-  const encrypted = await encryptAesGcm({ key: aesKey, plaintext: plaintextBytes, aad });
+  const encrypted = await encryptAesGcm({
+    key: aesKey,
+    plaintext: plaintextBytes,
+    aad,
+  });
   const receiverPublicKey = await importReceiverPublicKeyFromJwk(beginData.receiverPubJwk);
-  const encContentKey = await wrapContentKey({ receiverPublicKey, contentKey: rawContentKey });
+  const encContentKey = await wrapContentKey({
+    receiverPublicKey,
+    contentKey: rawContentKey,
+  });
   const ciphertextHash = await computeSha256Hex(encrypted.ciphertext);
 
   const cipherBundle = toCipherBundleTransport({
@@ -608,6 +689,23 @@ async function buildDeliverUpdateIntent(
   return { intent, intentHash, expectedChallenge, cipherBundle };
 }
 
+/**
+ * Loads the stored softkey envelope for `uuid`, unwraps the private key with
+ * `passphrase`, and signs `expectedChallengeB64u` (decoded to raw bytes).
+ * Shared by executeDeliverSecret and executeDeleteChannel.
+ */
+async function signChallengeWithSoftkey(
+  softkeyAdminStorage: SoftkeyAdminStorage,
+  uuid: string,
+  passphrase: string,
+  expectedChallengeB64u: Base64Url
+): Promise<HexString> {
+  const envelope = await softkeyAdminStorage.load(uuid);
+  if (!envelope) throw new Error('missing softkey');
+  const privateKey = await unwrapSoftkeyPrivateKey(envelope.wrappedPrivateKey, passphrase);
+  return softkeySign(privateKey, decodeBase64UrlBytes(expectedChallengeB64u));
+}
+
 async function executeDeliverSecret(
   deps: ResolvedDeps,
   input: DeliverSecretInput
@@ -632,12 +730,12 @@ async function executeDeliverSecret(
   if (!beginData.receiverPubJwk || !beginData.receiverPubFpr)
     return toError('MISSING_RECEIVER_IDENTITY', 'deliver.validate');
 
-  const resolvedBeginData: ResolvedDeliverBeginData = {
+  const resolvedBeginData = {
     ...beginData,
     challenge: beginData.challenge,
     receiverPubJwk: beginData.receiverPubJwk,
     receiverPubFpr: beginData.receiverPubFpr,
-  };
+  } as ResolvedDeliverBeginData;
 
   let intentData: Awaited<ReturnType<typeof buildDeliverUpdateIntent>>;
   try {
@@ -656,23 +754,62 @@ async function executeDeliverSecret(
   applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
     state.startCompoundCommit();
   });
-  const assertRes = await assertWithWebAuthn({
-    profile: input.profile,
-    requestOptions: { publicKey: { challenge: intentData.expectedChallenge } },
-  });
-  if (!assertRes.ok) {
-    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
-      state.failCompoundCommit(assertRes.error.code);
+
+  let assertion: AssertionJSON | undefined;
+  let softkeySignature: HexString | undefined;
+
+  if (resolvedBeginData.adminMode === 'softkey') {
+    if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit('PASSPHRASE_REQUIRED');
+      });
+      return toError('PASSPHRASE_REQUIRED', 'deliver.softkey-passphrase');
+    }
+    try {
+      softkeySignature = await signChallengeWithSoftkey(
+        deps.softkeyAdminStorage,
+        input.uuid,
+        input.softkeyPassphrase,
+        intentData.expectedChallenge as Base64Url
+      );
+    } catch {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit('CRYPTO_ERROR');
+      });
+      return toError('CRYPTO_ERROR', 'deliver.softkey');
+    }
+  } else {
+    const assertRes = await assertWithWebAuthn({
+      profile: input.profile,
+      requestOptions: {
+        publicKey: { challenge: intentData.expectedChallenge },
+      },
     });
-    return mapWebAuthnError(assertRes.error.code, 'deliver.assert');
+    if (!assertRes.ok) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit(assertRes.error.code);
+      });
+      return mapWebAuthnError(assertRes.error.code, 'deliver.assert');
+    }
+    assertion = assertRes.data as AssertionJSON;
   }
 
-  const commitRes = await deps.client.compoundCommit({
-    uuid: input.uuid,
-    assertion: assertRes.data as AssertionJSON,
-    intentHash: intentData.intentHash,
-    intent: intentData.intent,
-  });
+  const commitPayload = softkeySignature
+    ? {
+        adminMode: 'softkey' as const,
+        uuid: input.uuid,
+        softkeySignature,
+        intentHash: intentData.intentHash,
+        intent: intentData.intent,
+      }
+    : {
+        uuid: input.uuid,
+        assertion: assertion as AssertionJSON,
+        intentHash: intentData.intentHash,
+        intent: intentData.intent,
+      };
+
+  const commitRes = await deps.client.compoundCommit(commitPayload);
   if (!commitRes.ok) {
     applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
       state.failCompoundCommit(commitRes.error.code);
@@ -729,23 +866,60 @@ async function executeDeleteChannel(
   applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
     state.startCompoundCommit();
   });
-  const assertRes = await assertWithWebAuthn({
-    profile: input.profile,
-    requestOptions: { publicKey: { challenge: expectedChallenge } },
-  });
-  if (!assertRes.ok) {
-    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
-      state.failCompoundCommit(assertRes.error.code);
+
+  let assertion: AssertionJSON | undefined;
+  let softkeySignature: HexString | undefined;
+
+  if (beginData.adminMode === 'softkey') {
+    if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit('PASSPHRASE_REQUIRED');
+      });
+      return toError('PASSPHRASE_REQUIRED', 'delete.softkey-passphrase');
+    }
+    try {
+      softkeySignature = await signChallengeWithSoftkey(
+        deps.softkeyAdminStorage,
+        input.uuid,
+        input.softkeyPassphrase,
+        expectedChallenge as Base64Url
+      );
+    } catch (_error) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit('CRYPTO_ERROR');
+      });
+      return toError('CRYPTO_ERROR', 'delete.softkey');
+    }
+  } else {
+    const assertRes = await assertWithWebAuthn({
+      profile: input.profile,
+      requestOptions: { publicKey: { challenge: expectedChallenge } },
     });
-    return mapWebAuthnError(assertRes.error.code, 'delete.assert');
+    if (!assertRes.ok) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit(assertRes.error.code);
+      });
+      return mapWebAuthnError(assertRes.error.code, 'delete.assert');
+    }
+    assertion = assertRes.data as AssertionJSON;
   }
 
-  const commitRes = await deps.client.deleteCommit({
-    uuid: input.uuid,
-    assertion: assertRes.data as AssertionJSON,
-    intentHash,
-    intent,
-  });
+  const commitPayload = softkeySignature
+    ? {
+        adminMode: 'softkey' as const,
+        uuid: input.uuid,
+        softkeySignature,
+        intentHash,
+        intent,
+      }
+    : {
+        uuid: input.uuid,
+        assertion: assertion as AssertionJSON,
+        intentHash,
+        intent,
+      };
+
+  const commitRes = await deps.client.deleteCommit(commitPayload);
   if (!commitRes.ok) {
     applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
       state.failCompoundCommit(commitRes.error.code);
@@ -794,7 +968,10 @@ async function performDecryptionPipeline(
     aad: decodeBase64UrlBytes(payload.cipherBundle.aad),
   });
 
-  return { plaintextBytes, plaintext: new TextDecoder().decode(plaintextBytes) };
+  return {
+    plaintextBytes,
+    plaintext: new TextDecoder().decode(plaintextBytes),
+  };
 }
 
 async function executeDecryptDelivered(
@@ -877,6 +1054,7 @@ export function createCryptoOrchestrator(deps: CryptoOrchestratorDeps = {}): Cry
   const resolved: ResolvedDeps = {
     client: deps.apiClient ?? defaultApiClient,
     receiverKeyStorage: deps.receiverKeyStorage ?? createIndexedDbReceiverKeyStorage(),
+    softkeyAdminStorage: deps.softkeyAdminStorage ?? createIndexedDbSoftkeyAdminStorage(),
     createStore: deps.createStore ?? useCreateStore,
     lockStore: deps.lockStore ?? useLockStore,
     deliverStore: deps.deliverStore ?? useDeliverStore,

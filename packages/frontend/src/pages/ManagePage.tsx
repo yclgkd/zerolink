@@ -21,6 +21,7 @@ import {
   StateNotice,
   StatusBadge,
 } from '../components/layout';
+import { PassphraseInput } from '../components/lock/passphrase-input';
 import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
@@ -38,6 +39,8 @@ function mapActionError(code: string): string {
       return 'Unable to fetch challenge from server. Please retry.';
     case 'MISSING_RECEIVER_IDENTITY':
       return 'Receiver identity is unavailable. Ask receiver to lock again.';
+    case 'PASSPHRASE_REQUIRED':
+      return 'Compatibility mode passphrase is required for this action.';
     case 'NETWORK_ERROR':
       return 'Network error while performing manage action. Please retry.';
     case 'BAD_REQUEST':
@@ -428,6 +431,7 @@ function useManageDeliveryLogic(
   setActionError: (error: string | null) => void,
   setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
+  softkeyPassphrase: string,
   profile: SecurityProfile
 ) {
   const store = useDeliverStore();
@@ -461,6 +465,7 @@ function useManageDeliveryLogic(
         uuid: actionUuid,
         profile,
         plaintext: secretInput,
+        ...(softkeyPassphrase.trim().length > 0 ? { softkeyPassphrase } : {}),
       });
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
@@ -491,6 +496,7 @@ function useManageDestructionLogic(
   setIsActionPending: (pending: boolean) => void,
   setActionError: (error: string | null) => void,
   setIsSecretInputInvalid: (invalid: boolean) => void,
+  softkeyPassphrase: string,
   profile: SecurityProfile,
   isActiveActionContext: (scope: number, actionUuid: string) => boolean
 ) {
@@ -521,7 +527,11 @@ function useManageDestructionLogic(
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.deleteChannel>>;
     try {
-      result = await cryptoOrchestrator.deleteChannel({ uuid: actionUuid, profile });
+      result = await cryptoOrchestrator.deleteChannel({
+        uuid: actionUuid,
+        profile,
+        ...(softkeyPassphrase.trim().length > 0 ? { softkeyPassphrase } : {}),
+      });
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
@@ -549,6 +559,7 @@ function useManagePageState(uuid?: string) {
   const actionScopeRef = useRef(0);
 
   const [secretInput, setSecretInput] = useState('');
+  const [softkeyPassphrase, setSoftkeyPassphrase] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
@@ -566,6 +577,7 @@ function useManagePageState(uuid?: string) {
     actionScopeRef.current += 1;
     setIsActionPending(false);
     setSecretInput('');
+    setSoftkeyPassphrase('');
     setActionError(null);
     setIsSecretInputInvalid(false);
     setPublicStatusError(null);
@@ -606,6 +618,7 @@ function useManagePageState(uuid?: string) {
     setActionError,
     setIsSecretInputInvalid,
     secretInput,
+    softkeyPassphrase,
     profile
   );
 
@@ -616,6 +629,7 @@ function useManagePageState(uuid?: string) {
     setIsActionPending,
     setActionError,
     setIsSecretInputInvalid,
+    softkeyPassphrase,
     profile,
     isActiveActionContext
   );
@@ -626,6 +640,7 @@ function useManagePageState(uuid?: string) {
     copied,
     shareLink,
     secretInput,
+    softkeyPassphrase,
     safetyCode,
     actionError,
     isSecretInputInvalid,
@@ -637,6 +652,12 @@ function useManagePageState(uuid?: string) {
       if (actionError || isSecretInputInvalid) {
         setActionError(null);
         setIsSecretInputInvalid(false);
+      }
+    },
+    handleSoftkeyPassphraseChange: (value: string) => {
+      setSoftkeyPassphrase(value);
+      if (actionError) {
+        setActionError(null);
       }
     },
     handleDeliver,
@@ -687,6 +708,20 @@ export function ManagePage(): ReactElement {
           onChange={state.handleSecretChange}
           value={state.secretInput}
         />
+
+        <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
+          <p className="text-xs text-muted-foreground">
+            Compatibility mode channels require this passphrase for deliver/destroy actions.
+          </p>
+          <PassphraseInput
+            inputId="manage-softkey-passphrase"
+            label="Compatibility passphrase"
+            onChange={state.handleSoftkeyPassphraseChange}
+            placeholder="Enter compatibility passphrase"
+            showStrength={false}
+            value={state.softkeyPassphrase}
+          />
+        </section>
 
         {state.actionError ? (
           <StateNotice

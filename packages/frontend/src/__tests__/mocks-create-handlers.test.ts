@@ -81,6 +81,7 @@ describe('mock handlers: create contracts', () => {
 
   it('accepts create_finish with valid payload and returns schema-valid response', async () => {
     const response = await postJson(`/api/create_finish/${VALID_UUID}`, {
+      adminMode: 'webauthn',
       uuid: VALID_UUID,
       attestation: VALID_ATTESTATION,
       lockKeyB64u: 'bW9ja19sb2NrX2tleQ',
@@ -94,6 +95,7 @@ describe('mock handlers: create contracts', () => {
 
   it('rejects create_finish for invalid lockKeyB64u or missing attestation', async () => {
     const invalidLockKeyResponse = await postJson(`/api/create_finish/${VALID_UUID}`, {
+      adminMode: 'webauthn',
       uuid: VALID_UUID,
       attestation: VALID_ATTESTATION,
       lockKeyB64u: 'bad+lock+key',
@@ -118,6 +120,9 @@ describe('mock handlers: create contracts', () => {
     expect(invalidLockKeyPayload).toEqual({ ok: false, code: 'BAD_REQUEST' });
 
     expect(missingAttestationResponse.status).toBe(400);
-    expect(missingAttestationPayload).toEqual({ ok: false, code: 'BAD_REQUEST' });
+    expect(missingAttestationPayload).toEqual({
+      ok: false,
+      code: 'BAD_REQUEST',
+    });
   });
 });

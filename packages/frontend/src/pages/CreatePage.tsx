@@ -12,6 +12,7 @@ import {
   RoleBadge,
   StateNotice,
 } from '../components/layout';
+import { PassphraseInput } from '../components/lock/passphrase-input';
 import { Button } from '../components/ui/button';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
@@ -33,6 +34,7 @@ const profileLabelMap: Record<SecurityProfile, string> = {
 interface CreatedLinks {
   shareUrlWithFragment: string;
   manageUrl: string;
+  isCompatibilityMode: boolean;
 }
 
 const FALLBACK_UNAVAILABLE_MESSAGE =
@@ -44,6 +46,8 @@ function mapCreateError(code: string): string {
       return FALLBACK_UNAVAILABLE_MESSAGE;
     case 'PROFILE_BLOCKED':
       return 'This security profile requires WebAuthn support in your environment.';
+    case 'PASSPHRASE_REQUIRED':
+      return 'Compatibility mode passphrase is required.';
     case 'NETWORK_ERROR':
       return 'Network error while creating channel. Please retry.';
     case 'BAD_REQUEST':
@@ -97,12 +101,16 @@ function WebAuthnWarning({ strictOrHardwareBlocked }: { strictOrHardwareBlocked:
 function CompatibilityPanel({
   compatibilityAccepted,
   setCompatibilityAccepted,
+  passphrase,
+  onPassphraseChange,
   onContinue,
   onCancel,
   loading,
 }: {
   compatibilityAccepted: boolean;
   setCompatibilityAccepted: (accepted: boolean) => void;
+  passphrase: string;
+  onPassphraseChange: (value: string) => void;
   onContinue: () => void;
   onCancel: () => void;
   loading: boolean;
@@ -114,9 +122,17 @@ function CompatibilityPanel({
     >
       <p className="font-medium text-foreground">Compatibility Mode (Lower Security)</p>
       <p>
-        Compatibility mode fallback is not implemented in this build. Use a WebAuthn-capable
-        environment to create channels.
+        Hardware authentication is unavailable. Compatibility mode will generate a software key
+        stored in your browser to manage this channel.
       </p>
+      <PassphraseInput
+        inputId="create-compatibility-passphrase"
+        label="Compatibility passphrase"
+        onChange={onPassphraseChange}
+        placeholder="Set compatibility passphrase"
+        showStrength
+        value={passphrase}
+      />
       <label className="flex items-start gap-2">
         <input
           checked={compatibilityAccepted}
@@ -125,13 +141,14 @@ function CompatibilityPanel({
           type="checkbox"
         />
         <span>
-          I understand that compatibility mode is currently unavailable and want to attempt anyway.
+          I understand this provides lower security than hardware authentication and wish to
+          proceed.
         </span>
       </label>
       <div className="flex flex-wrap gap-2">
         <Button
           data-testid="create-compatibility-continue"
-          disabled={!compatibilityAccepted || loading}
+          disabled={!compatibilityAccepted || passphrase.trim().length === 0 || loading}
           onClick={onContinue}
           size="sm"
           type="button"
@@ -163,9 +180,6 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
       >
         {disabled ? 'Creating...' : 'Create Secure Channel'}
       </Button>
-      <p className="text-xs text-muted-foreground">
-        Integration mode: create flow calls API + WebAuthn through orchestrator.
-      </p>
     </div>
   );
 }
@@ -185,6 +199,14 @@ function SuccessSummary({
       title="Secure channel created."
       tone="success"
     >
+      {links.isCompatibilityMode ? (
+        <div
+          className="mb-2 inline-block rounded-md border border-neon-orange/40 bg-neon-orange/10 px-2 py-0.5 text-xs font-semibold text-neon-orange"
+          data-testid="create-compatibility-badge"
+        >
+          Compatibility Mode (Lower Security)
+        </div>
+      ) : null}
       <p>
         Selected profile: <span className="font-semibold">{profileLabelMap[createdProfile]}</span>
       </p>
@@ -216,6 +238,7 @@ function useCreatePageLogic() {
   const store = useCreateStore();
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [compatibilityPassphrase, setCompatibilityPassphrase] = useState('');
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
@@ -235,7 +258,11 @@ function useCreatePageLogic() {
     store.setCreatedProfile(null);
   }
 
-  function showFallbackUnavailableError(): void {
+  function resetCompatibilityPassphrase(): void {
+    setCompatibilityPassphrase('');
+  }
+
+  function _showFallbackUnavailableError(): void {
     setSubmitError(FALLBACK_UNAVAILABLE_MESSAGE);
     setCreatedLinks(null);
     store.setCreatedProfile(null);
@@ -249,11 +276,6 @@ function useCreatePageLogic() {
   }
 
   async function runCreate(): Promise<void> {
-    if (compatibilityAvailable) {
-      showFallbackUnavailableError();
-      return;
-    }
-
     clearLocalFeedback();
     store.startCreateBegin();
 
@@ -262,6 +284,8 @@ function useCreatePageLogic() {
       result = await cryptoOrchestrator.createChannel({
         uuid: generateChannelUuid(),
         profile: store.selectedProfile,
+        useCompatibilityMode: store.compatibilityAccepted,
+        ...(store.compatibilityAccepted ? { softkeyPassphrase: compatibilityPassphrase } : {}),
       });
     } catch {
       store.failCreateBegin('INTERNAL_ERROR');
@@ -280,9 +304,11 @@ function useCreatePageLogic() {
     setCreatedLinks({
       shareUrlWithFragment: result.data.shareUrlWithFragment,
       manageUrl: result.data.manageUrl,
+      isCompatibilityMode: store.compatibilityAccepted,
     });
     store.setShowCompatibilityConfirm(false);
     store.setCompatibilityAccepted(false);
+    resetCompatibilityPassphrase();
   }
 
   function handleCreate(): void {
@@ -293,9 +319,7 @@ function useCreatePageLogic() {
         store.setShowCompatibilityConfirm(true);
         return;
       }
-      if (!store.compatibilityAccepted) return;
-      showFallbackUnavailableError();
-      return;
+      if (!store.compatibilityAccepted || compatibilityPassphrase.trim().length === 0) return;
     }
 
     void runCreate();
@@ -304,16 +328,13 @@ function useCreatePageLogic() {
   function handleCompatibilityCancel(): void {
     store.setShowCompatibilityConfirm(false);
     store.setCompatibilityAccepted(false);
+    resetCompatibilityPassphrase();
     setSubmitError(null);
   }
 
   function handleCompatibilityContinue(): void {
-    if (!store.compatibilityAccepted || isSubmitting) return;
-
-    if (compatibilityAvailable) {
-      showFallbackUnavailableError();
+    if (!store.compatibilityAccepted || compatibilityPassphrase.trim().length === 0 || isSubmitting)
       return;
-    }
 
     void runCreate();
   }
@@ -322,6 +343,7 @@ function useCreatePageLogic() {
     state: store,
     createdLinks,
     submitError,
+    compatibilityPassphrase,
     strictOrHardwareBlocked,
     compatibilityAvailable,
     isSubmitting,
@@ -329,6 +351,12 @@ function useCreatePageLogic() {
     handleCreate,
     handleCompatibilityCancel,
     handleCompatibilityContinue,
+    handleCompatibilityPassphraseChange: (value: string) => {
+      setCompatibilityPassphrase(value);
+      if (submitError) {
+        setSubmitError(null);
+      }
+    },
   };
 }
 
@@ -363,6 +391,8 @@ export function CreatePage(): ReactElement {
             loading={logic.isSubmitting}
             onCancel={logic.handleCompatibilityCancel}
             onContinue={logic.handleCompatibilityContinue}
+            onPassphraseChange={logic.handleCompatibilityPassphraseChange}
+            passphrase={logic.compatibilityPassphrase}
             setCompatibilityAccepted={logic.state.setCompatibilityAccepted}
           />
         ) : null}
