@@ -134,53 +134,63 @@ describe('CreatePage integration', () => {
     });
   });
 
-  it('keeps compatibility continue disabled until checkbox is checked', () => {
+  it('keeps compatibility continue disabled until checkbox and passphrase are provided', () => {
     mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
     const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
+    const passphraseInput = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+
     expect(continueButton.disabled).toBe(true);
+
+    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
+    expect(continueButton.disabled).toBe(true);
+
+    fireEvent.change(passphraseInput, { target: { value: 'Compat#Pass123' } });
+    expect(continueButton.disabled).toBe(false);
   });
 
-  it('shows fallback unavailable error and does not call createChannel via compatibility continue', async () => {
+  it('calls createChannel with useCompatibilityMode via compatibility continue', async () => {
     mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Compat#Pass123' },
+    });
     fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
     fireEvent.click(screen.getByTestId('create-compatibility-continue'));
 
     await waitFor(() => {
-      expect(createChannelMock).not.toHaveBeenCalled();
+      expect(createChannelMock).toHaveBeenCalledTimes(1);
     });
-    const error = screen.getByTestId('create-submit-error');
-    expect(error).toBeTruthy();
-    expect(error.getAttribute('role')).toBe('alert');
-    expect(error.getAttribute('aria-live')).toBe('assertive');
-    expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
-    expect(screen.queryByTestId('create-success-share-link')).toBeNull();
-    expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
+
+    const callArg = createChannelMock.mock.calls[0]?.[0];
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(callArg?.useCompatibilityMode).toBe(true);
+    expect(callArg?.softkeyPassphrase).toBe('Compat#Pass123');
   });
 
-  it('shows fallback unavailable error and does not call createChannel via primary create button', async () => {
+  it('calls createChannel with useCompatibilityMode via primary create button', async () => {
     mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Compat#Pass123' },
+    });
     fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
-      expect(createChannelMock).not.toHaveBeenCalled();
+      expect(createChannelMock).toHaveBeenCalledTimes(1);
     });
-    const error = screen.getByTestId('create-submit-error');
-    expect(error).toBeTruthy();
-    expect(error.getAttribute('role')).toBe('alert');
-    expect(error.getAttribute('aria-live')).toBe('assertive');
-    expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
-    expect(screen.queryByTestId('create-success-share-link')).toBeNull();
-    expect(screen.queryByTestId('create-success-manage-link')).toBeNull();
+
+    const callArg = createChannelMock.mock.calls[0]?.[0];
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(callArg?.useCompatibilityMode).toBe(true);
+    expect(callArg?.softkeyPassphrase).toBe('Compat#Pass123');
   });
 
   it('calls createChannel with selected profile and valid uuid when supported', async () => {
@@ -269,12 +279,12 @@ describe('CreatePage integration', () => {
     expect(continueButton.disabled).toBe(true);
   });
 
-  it('does not show passphrase input inside compatibility panel', () => {
+  it('shows passphrase input inside compatibility panel', () => {
     mockWebAuthnSupport(false);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
-    expect(screen.queryByTestId('passphrase-input-root')).toBeNull();
-    expect(screen.queryByTestId('passphrase-input-field')).toBeNull();
+    expect(screen.getByTestId('passphrase-input-root')).toBeTruthy();
+    expect(screen.getByTestId('passphrase-input-field')).toBeTruthy();
   });
 });

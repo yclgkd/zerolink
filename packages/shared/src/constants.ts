@@ -294,6 +294,24 @@ export const SAFETY_CODE = {
   INPUT_BYTES: 32, // SHA-256 output
 } as const;
 
+// ─── ECDSA P-256 (Softkey Compat Mode) ───────────────────────────────────────
+
+/**
+ * ECDSA P-256 (ES256) constants for the softkey compatibility-mode admin credential.
+ * PRD §9: when WebAuthn is unavailable on Standard profile, an ECDSA keypair
+ * is used in place of a hardware authenticator.
+ *
+ * ALGORITHM_NAME / CURVE / HASH_ALGORITHM → WebCrypto API strings.
+ * KEY_USAGES_SIGN / KEY_USAGES_VERIFY     → declare usages at importKey time.
+ */
+export const ECDSA = {
+  ALGORITHM_NAME: 'ECDSA',
+  CURVE: 'P-256',
+  HASH_ALGORITHM: 'SHA-256',
+  KEY_USAGES_SIGN: ['sign'] as const,
+  KEY_USAGES_VERIFY: ['verify'] as const,
+} as const;
+
 // ─── WebAuthn ────────────────────────────────────────────────────────────────
 
 /**

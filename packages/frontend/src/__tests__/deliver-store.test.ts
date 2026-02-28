@@ -32,12 +32,14 @@ function buildCompoundBeginResponse(): CompoundBeginResponse {
       key_ops: ['encrypt'],
     },
     currentVersion: 3,
+    adminMode: 'webauthn',
   });
 
   return {
     ok: parsed.ok,
     challenge: parsed.challenge,
     currentVersion: parsed.currentVersion,
+    adminMode: parsed.adminMode,
     ...(parsed.receiverPubFpr ? { receiverPubFpr: parsed.receiverPubFpr } : {}),
     ...(parsed.receiverPubJwk ? { receiverPubJwk: parsed.receiverPubJwk } : {}),
   };
@@ -65,8 +67,16 @@ describe('useDeliverStore', () => {
     expect(state.currentVersion).toBeNull();
     expect(state.receiverPubFpr).toBeNull();
     expect(state.receiverPubJwk).toBeNull();
-    expect(state.compoundBegin).toEqual({ status: 'idle', data: null, errorCode: null });
-    expect(state.compoundCommit).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(state.compoundBegin).toEqual({
+      status: 'idle',
+      data: null,
+      errorCode: null,
+    });
+    expect(state.compoundCommit).toEqual({
+      status: 'idle',
+      data: null,
+      errorCode: null,
+    });
   });
 
   it('handles status transitions and keeps destroy confirm panel in sync', () => {
@@ -177,8 +187,16 @@ describe('useDeliverStore', () => {
     expect(nextState.currentVersion).toBeNull();
     expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
-    expect(nextState.compoundBegin).toEqual({ status: 'idle', data: null, errorCode: null });
-    expect(nextState.compoundCommit).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(nextState.compoundBegin).toEqual({
+      status: 'idle',
+      data: null,
+      errorCode: null,
+    });
+    expect(nextState.compoundCommit).toEqual({
+      status: 'idle',
+      data: null,
+      errorCode: null,
+    });
   });
 
   it('does not reset when uuid is unchanged', () => {
@@ -227,7 +245,15 @@ describe('useDeliverStore', () => {
     expect(nextState.currentVersion).toBeNull();
     expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
-    expect(nextState.compoundBegin).toEqual({ status: 'idle', data: null, errorCode: null });
-    expect(nextState.compoundCommit).toEqual({ status: 'idle', data: null, errorCode: null });
+    expect(nextState.compoundBegin).toEqual({
+      status: 'idle',
+      data: null,
+      errorCode: null,
+    });
+    expect(nextState.compoundCommit).toEqual({
+      status: 'idle',
+      data: null,
+      errorCode: null,
+    });
   });
 });

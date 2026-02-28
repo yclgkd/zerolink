@@ -10,6 +10,7 @@ import {
 } from './constants.ts';
 import type {
   Base64Url,
+  ECDSAPublicKeyJWK,
   HexString,
   SafetyCodeColor,
   SafetyCodeEmoji,
@@ -104,6 +105,18 @@ export const RSAPublicKeyJWKSchema = z.object({
   ext: z.literal(true),
   key_ops: z.tuple([z.literal('encrypt')]),
 });
+
+// ─── ECDSAPublicKeyJWK Schema ─────────────────────────────────────────────────
+
+/** ECDSA P-256 public key in JWK format (used by softkey compat mode). */
+export const ECDSAPublicKeyJWKSchema = z.object({
+  kty: z.literal('EC'),
+  crv: z.literal('P-256'),
+  x: Base64UrlSchema,
+  y: Base64UrlSchema,
+  ext: z.literal(true),
+  key_ops: z.tuple([z.literal('verify')]),
+}) as z.ZodType<ECDSAPublicKeyJWK>;
 
 // ─── KDF Parameter Schemas ────────────────────────────────────────────────────
 
@@ -281,12 +294,26 @@ export const CreateBeginResponseSchema = z.object({
   creationOptions: z.record(z.string(), z.unknown()),
 });
 
-export const CreateFinishRequestSchema = z.object({
+const CreateFinishWebAuthnSchema = z.object({
+  adminMode: z.literal('webauthn'),
   uuid: UUIDSchema,
   attestation: AttestationJSONSchema,
   lockKeyB64u: Base64UrlSchema,
   timestamp: UnixMsSchema,
 });
+
+const CreateFinishSoftkeySchema = z.object({
+  adminMode: z.literal('softkey'),
+  uuid: UUIDSchema,
+  softkeyPubJwk: ECDSAPublicKeyJWKSchema,
+  lockKeyB64u: Base64UrlSchema,
+  timestamp: UnixMsSchema,
+});
+
+export const CreateFinishRequestSchema = z.discriminatedUnion('adminMode', [
+  CreateFinishWebAuthnSchema,
+  CreateFinishSoftkeySchema,
+]);
 
 export const CreateFinishResponseSchema = z.object({
   ok: z.literal(true),
@@ -326,6 +353,7 @@ export const CompoundBeginResponseSchema = z.object({
   receiverPubFpr: HexStringSchema.optional(),
   receiverPubJwk: RSAPublicKeyJWKSchema.optional(),
   currentVersion: z.number().int().nonnegative(),
+  adminMode: AdminModeSchema,
 });
 
 // ─── Intent Schemas ───────────────────────────────────────────────────────────
@@ -361,6 +389,24 @@ export const CompoundCommitRequestSchema = z.object({
   intentHash: HexStringSchema,
   intent: ManageIntentSchema,
 });
+
+/**
+ * Compound commit request using a softkey ECDSA signature.
+ * Used when channel adminMode is 'softkey'. PRD §9.
+ *
+ * Strict: extra fields (e.g. an assertion) are rejected, making this schema
+ * mutually exclusive with CompoundCommitRequestSchema and preventing a
+ * type-confusion request that carries both adminMode:"softkey" and assertion.
+ */
+export const SoftkeyCompoundCommitRequestSchema = z
+  .object({
+    adminMode: z.literal('softkey'),
+    uuid: UUIDSchema,
+    softkeySignature: HexStringSchema,
+    intentHash: HexStringSchema,
+    intent: ManageIntentSchema,
+  })
+  .strict();
 
 export const CompoundCommitResponseSchema = z.object({
   ok: z.literal(true),

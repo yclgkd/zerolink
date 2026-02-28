@@ -1,8 +1,6 @@
 import {
   CHANNEL_STATE,
   type ChannelState,
-  type DecryptFetchResponse,
-  DecryptFetchResponseSchema,
   PublicStatusResponseSchema,
   UUIDSchema,
 } from '@zerolink/shared';

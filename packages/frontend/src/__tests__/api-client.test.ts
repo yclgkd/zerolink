@@ -3,7 +3,6 @@ import {
   type CompoundCommitRequestSchema,
   CompoundCommitResponseSchema,
   CreateBeginResponseSchema,
-  type CreateFinishRequestSchema,
   CreateFinishResponseSchema,
   DecryptFetchResponseSchema,
   LockBeginResponseSchema,
@@ -24,10 +23,10 @@ const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc
 const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
 const MOCK_TIMESTAMP = 1_700_000_000_000;
 
-const VALID_ATTESTATION: z.input<typeof CreateFinishRequestSchema>['attestation'] = {
+const VALID_ATTESTATION = {
   id: VALID_B64U,
   rawId: VALID_B64U,
-  type: 'public-key',
+  type: 'public-key' as const,
   response: {
     clientDataJSON: VALID_B64U,
     attestationObject: VALID_B64U,
@@ -84,6 +83,7 @@ describe('api client', () => {
   it('returns success for createFinish', async () => {
     const client = createClient();
     const result = await client.createFinish({
+      adminMode: 'webauthn',
       uuid: VALID_UUID,
       attestation: VALID_ATTESTATION,
       lockKeyB64u: VALID_B64U,
@@ -142,6 +142,7 @@ describe('api client', () => {
     if (!result.ok) return;
 
     expect(CompoundBeginResponseSchema.safeParse(result.data).success).toBe(true);
+    expect(result.data.adminMode).toBe('webauthn');
   });
 
   it('returns success for compoundCommit', async () => {

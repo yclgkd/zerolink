@@ -16,6 +16,7 @@ import {
   LockCommitRequestSchema,
   LockCommitResponseSchema,
   PublicStatusResponseSchema,
+  SoftkeyCompoundCommitRequestSchema,
   UUIDSchema,
 } from '@zerolink/shared';
 import { z } from 'zod';
@@ -62,12 +63,29 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+const ManageCommitUnionSchema = z.union([
+  CompoundCommitRequestSchema,
+  SoftkeyCompoundCommitRequestSchema,
+]);
+
 const DeleteCommitRequestSchema = CompoundCommitRequestSchema.extend({
   intent: DeleteIntentSchema,
 }).refine((value) => value.intent.uuid === value.uuid, {
   path: ['intent', 'uuid'],
   message: 'intent.uuid must match uuid',
 });
+
+const SoftkeyDeleteCommitRequestSchema = SoftkeyCompoundCommitRequestSchema.extend({
+  intent: DeleteIntentSchema,
+}).refine((value) => value.intent.uuid === value.uuid, {
+  path: ['intent', 'uuid'],
+  message: 'intent.uuid must match uuid',
+});
+
+const DeleteCommitUnionSchema = z.union([
+  DeleteCommitRequestSchema,
+  SoftkeyDeleteCommitRequestSchema,
+]);
 
 const DeleteCommitResponseSchema = z.object({
   ok: z.literal(true),
@@ -76,7 +94,7 @@ const DeleteCommitResponseSchema = z.object({
 /**
  * Type alias for a delete commit request.
  */
-export type DeleteCommitRequest = z.input<typeof DeleteCommitRequestSchema>;
+export type DeleteCommitRequest = z.input<typeof DeleteCommitUnionSchema>;
 
 /**
  * Type alias for a delete commit response.
@@ -103,7 +121,7 @@ export interface ApiClient {
     input: z.input<typeof CompoundBeginRequestSchema>
   ) => Promise<ApiResult<z.output<typeof CompoundBeginResponseSchema>>>;
   compoundCommit: (
-    input: z.input<typeof CompoundCommitRequestSchema>
+    input: z.input<typeof ManageCommitUnionSchema>
   ) => Promise<ApiResult<z.output<typeof CompoundCommitResponseSchema>>>;
   deleteCommit: (input: DeleteCommitRequest) => Promise<ApiResult<DeleteCommitResponse>>;
   publicStatus: (
@@ -192,19 +210,28 @@ async function executeRequest<TInput, TRequest, TResponse>(
     const errorPayload = await readJson(response);
     const parsedError = ErrorResponseSchema.safeParse(errorPayload);
     if (parsedError.success) {
-      return { ok: false, error: createError(parsedError.data.code, response.status) };
+      return {
+        ok: false,
+        error: createError(parsedError.data.code, response.status),
+      };
     }
     return { ok: false, error: createError('HTTP_ERROR', response.status) };
   }
 
   const payload = await readJson(response);
   if (payload === null) {
-    return { ok: false, error: createError('INVALID_RESPONSE', response.status) };
+    return {
+      ok: false,
+      error: createError('INVALID_RESPONSE', response.status),
+    };
   }
 
   const parsedResponse = options.responseSchema.safeParse(payload);
   if (!parsedResponse.success) {
-    return { ok: false, error: createError('INVALID_RESPONSE', response.status) };
+    return {
+      ok: false,
+      error: createError('INVALID_RESPONSE', response.status),
+    };
   }
 
   return { ok: true, data: parsedResponse.data, status: response.status };
@@ -282,12 +309,12 @@ function buildManageApi(basePath: string, fetchImpl: typeof fetch) {
         basePath,
         fetchImpl
       ),
-    compoundCommit: (input: z.input<typeof CompoundCommitRequestSchema>) =>
+    compoundCommit: (input: z.input<typeof ManageCommitUnionSchema>) =>
       executeRequest(
         {
           method: 'POST',
           input,
-          requestSchema: CompoundCommitRequestSchema,
+          requestSchema: ManageCommitUnionSchema,
           buildPath: (request) => `manage/compound_commit/${request.uuid}`,
           responseSchema: CompoundCommitResponseSchema,
         },
@@ -299,7 +326,7 @@ function buildManageApi(basePath: string, fetchImpl: typeof fetch) {
         {
           method: 'POST',
           input,
-          requestSchema: DeleteCommitRequestSchema,
+          requestSchema: DeleteCommitUnionSchema,
           buildPath: (request) => `delete_commit/${request.uuid}`,
           responseSchema: DeleteCommitResponseSchema,
         },

@@ -1,4 +1,4 @@
-import type { HexString, UUID, WrappedPrivateKey } from '@zerolink/shared';
+import type { ECDSAPublicKeyJWK, HexString, UUID, WrappedPrivateKey } from '@zerolink/shared';
 
 /**
  * Encapsulates the encrypted private key and receiver identity for a specific channel.
@@ -119,6 +119,65 @@ export function createIndexedDbReceiverKeyStorage(
       return withTransaction(dbPromise, storeName, 'readonly', async (store) => {
         const result = await requestToPromise(store.get(uuid), 'get');
         return (result ?? null) as ReceiverKeyEnvelope | null;
+      });
+    },
+
+    async remove(uuid) {
+      await withTransaction(dbPromise, storeName, 'readwrite', async (store) => {
+        await requestToPromise(store.delete(uuid), 'delete');
+      });
+    },
+  };
+}
+
+// ─── Softkey Admin Storage ────────────────────────────────────────────────────
+
+/**
+ * Stores the wrapped ECDSA softkey credential for a channel (compat mode).
+ * PRD §9: admin credential when WebAuthn is unavailable under Standard profile.
+ */
+export interface SoftkeyAdminEnvelope {
+  uuid: UUID | string;
+  softkeyPubJwk: ECDSAPublicKeyJWK;
+  wrappedPrivateKey: WrappedPrivateKey;
+  createdAt: number;
+}
+
+export interface SoftkeyAdminStorage {
+  save: (envelope: SoftkeyAdminEnvelope) => Promise<void>;
+  load: (uuid: UUID | string) => Promise<SoftkeyAdminEnvelope | null>;
+  remove: (uuid: UUID | string) => Promise<void>;
+}
+
+export interface IndexedDbSoftkeyAdminStorageOptions {
+  dbName?: string;
+  storeName?: string;
+  version?: number;
+}
+
+/**
+ * Creates the default IndexedDB-backed storage for softkey admin credentials.
+ */
+export function createIndexedDbSoftkeyAdminStorage(
+  options: IndexedDbSoftkeyAdminStorageOptions = {}
+): SoftkeyAdminStorage {
+  const dbName = options.dbName ?? 'zerolink-softkey';
+  const storeName = options.storeName ?? 'softkey-admin';
+  const version = options.version ?? 1;
+
+  const dbPromise = initializeDatabase(dbName, version, storeName);
+
+  return {
+    async save(envelope) {
+      await withTransaction(dbPromise, storeName, 'readwrite', async (store) => {
+        await requestToPromise(store.put(envelope), 'put');
+      });
+    },
+
+    async load(uuid) {
+      return withTransaction(dbPromise, storeName, 'readonly', async (store) => {
+        const result = await requestToPromise(store.get(uuid), 'get');
+        return (result ?? null) as SoftkeyAdminEnvelope | null;
       });
     },
 

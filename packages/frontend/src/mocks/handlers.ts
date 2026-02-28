@@ -15,6 +15,7 @@ import {
   LockCommitRequestSchema,
   LockCommitResponseSchema,
   ROUTE_PATTERN,
+  SoftkeyCompoundCommitRequestSchema,
   UnixMsSchema,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -110,8 +111,17 @@ function getCompoundCommitBody(body: RequestBody | null) {
     return null;
   }
 
-  const result = CompoundCommitRequestSchema.safeParse(body);
-  return result.success ? result.data : null;
+  const webauthnResult = CompoundCommitRequestSchema.safeParse(body);
+  if (webauthnResult.success) {
+    return webauthnResult.data;
+  }
+
+  const softkeyResult = SoftkeyCompoundCommitRequestSchema.safeParse(body);
+  if (softkeyResult.success) {
+    return softkeyResult.data;
+  }
+
+  return null;
 }
 
 export const handlers = [
@@ -280,6 +290,7 @@ export const handlers = [
         key_ops: ['encrypt'],
       },
       currentVersion: 0,
+      adminMode: 'webauthn' as const,
     };
     const parsedPayload = CompoundBeginResponseSchema.safeParse(payload);
     if (!parsedPayload.success) {

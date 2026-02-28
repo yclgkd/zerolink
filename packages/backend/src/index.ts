@@ -3,6 +3,7 @@ import {
   CompoundCommitRequestSchema,
   LockBeginRequestSchema,
   LockCommitRequestSchema,
+  SoftkeyCompoundCommitRequestSchema,
 } from '@zerolink/shared';
 
 export interface Env {
@@ -219,20 +220,26 @@ async function handleCompoundCommit(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  const parsed = CompoundCommitRequestSchema.safeParse(body);
-  if (!parsed.success) {
+  const parsedWebAuthn = CompoundCommitRequestSchema.safeParse(body);
+  const parsedSoftkey = SoftkeyCompoundCommitRequestSchema.safeParse(body);
+  const parsedData = parsedSoftkey.success
+    ? parsedSoftkey.data
+    : parsedWebAuthn.success
+      ? parsedWebAuthn.data
+      : null;
+  if (!parsedData) {
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  if (parsed.data.uuid !== pathnameUuid || parsed.data.intent.uuid !== pathnameUuid) {
+  if (parsedData.uuid !== pathnameUuid || parsedData.intent.uuid !== pathnameUuid) {
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  if (deleteOnly && parsed.data.intent.op !== 'delete') {
+  if (deleteOnly && parsedData.intent.op !== 'delete') {
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsed.data);
+  return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsedData);
 }
 
 async function handleApiRequest(request: Request, pathname: string, env: Env): Promise<Response> {

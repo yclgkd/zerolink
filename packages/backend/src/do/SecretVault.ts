@@ -5,11 +5,12 @@ import type {
   CipherBundle,
   CompoundChallenge,
   HexString,
-  LockChallenge,
   LockCommitRequest,
   ManageIntent,
   NonceRecord,
   RSAPublicKeyJWK,
+  SoftkeyCredential,
+  StoredCredential,
   UnixMs,
 } from '@zerolink/shared';
 import {
@@ -21,8 +22,10 @@ import {
   computeIntentHash,
   DOMAIN,
   LockBeginRequestSchema,
+  type LockChallenge,
   LockCommitRequestSchema,
   NONCE_TTL_MS,
+  SoftkeyCompoundCommitRequestSchema,
   TIMESTAMP_SKEW_MS,
 } from '@zerolink/shared';
 
@@ -36,6 +39,7 @@ import {
   sha256Hex,
   toUtf8Bytes,
 } from '../crypto/bytes.ts';
+import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { verifyAssertion } from '../crypto/webauthn.ts';
 
 export interface SecretVaultEnv {
@@ -65,12 +69,23 @@ export interface CommitLockChallengeParams {
   lockedAt: UnixMs;
 }
 
-export interface CompoundCommitParams {
+export interface WebAuthnCompoundCommitParams {
+  adminMode?: 'webauthn';
   uuid: string;
   assertion: AssertionJSON;
   intentHash: HexString;
   intent: ManageIntent;
 }
+
+export interface SoftkeyCompoundCommitParams {
+  adminMode: 'softkey';
+  uuid: string;
+  softkeySignature: HexString;
+  intentHash: HexString;
+  intent: ManageIntent;
+}
+
+export type CompoundCommitParams = WebAuthnCompoundCommitParams | SoftkeyCompoundCommitParams;
 
 interface StoredLockChallenge {
   id: Base64Url;
@@ -335,6 +350,7 @@ export class SecretVault {
     receiverPubFpr?: HexString;
     receiverPubJwk?: RSAPublicKeyJWK;
     currentVersion: number;
+    adminMode: ChannelRecord['adminMode'];
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadRecord();
@@ -356,9 +372,15 @@ export class SecretVault {
         currentVersion: number;
         receiverPubFpr?: HexString;
         receiverPubJwk?: RSAPublicKeyJWK;
+        adminMode: ChannelRecord['adminMode'];
       } = {
-        challenge: { id: stored.id, seed: stored.seed, expiresAt: stored.expiresAt },
+        challenge: {
+          id: stored.id,
+          seed: stored.seed,
+          expiresAt: stored.expiresAt,
+        },
         currentVersion: record.version,
+        adminMode: record.adminMode,
       };
       if (record.receiver) {
         response.receiverPubFpr = record.receiver.pubFpr;
@@ -430,8 +452,8 @@ export class SecretVault {
         throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge expired');
       }
 
-      // Derive expected WebAuthn challenge:
-      // SHA-256("GLv2.5" || uuid || challengeId || intentHash || seed) → base64url
+      // Derive expected challenge:
+      // SHA-256("GLv2.5" || uuid || challengeId || intentHash || seed)
       const expectedChallengeBytes = await sha256Bytes([
         toUtf8Bytes(DOMAIN.CHALLENGE),
         toUtf8Bytes(record.uuid),
@@ -439,18 +461,44 @@ export class SecretVault {
         toUtf8Bytes(params.intentHash),
         decodeBase64Url(challenge.seed),
       ]);
-      const expectedChallengeB64u = encodeBase64Url(expectedChallengeBytes);
 
-      // Verify WebAuthn assertion
-      const verifyResult = await verifyAssertion({
-        assertion: params.assertion,
-        expectedChallenge: expectedChallengeB64u,
-        storedCredential: record.adminCredential,
-        rpId: this.env.RP_ID,
-        rpOrigin: this.env.RP_ORIGIN,
-      });
-      if (!verifyResult.ok) {
-        throw new StateTransitionError('ASSERTION_INVALID', verifyResult.error);
+      let verifiedWebAuthnSignCount: number | null = null;
+
+      if (record.adminMode === 'softkey') {
+        if (params.adminMode !== 'softkey' || !('softkeySignature' in params)) {
+          throw new StateTransitionError(
+            'ASSERTION_INVALID',
+            'softkey commit payload required for softkey channel'
+          );
+        }
+
+        const verifyResult = await verifySoftkeySignature({
+          softkeyPubJwk: (record.adminCredential as SoftkeyCredential).softkeyPubJwk,
+          payload: expectedChallengeBytes,
+          signatureHex: params.softkeySignature,
+        });
+        if (!verifyResult.ok) {
+          throw new StateTransitionError('ASSERTION_INVALID', verifyResult.error);
+        }
+      } else {
+        if ('adminMode' in params && params.adminMode === 'softkey') {
+          throw new StateTransitionError(
+            'ASSERTION_INVALID',
+            'webauthn commit payload required for webauthn channel'
+          );
+        }
+
+        const verifyResult = await verifyAssertion({
+          assertion: params.assertion,
+          expectedChallenge: encodeBase64Url(expectedChallengeBytes),
+          storedCredential: record.adminCredential as StoredCredential,
+          rpId: this.env.RP_ID,
+          rpOrigin: this.env.RP_ORIGIN,
+        });
+        if (!verifyResult.ok) {
+          throw new StateTransitionError('ASSERTION_INVALID', verifyResult.error);
+        }
+        verifiedWebAuthnSignCount = verifyResult.newSignCount;
       }
 
       // Apply state transition
@@ -485,14 +533,16 @@ export class SecretVault {
         consumedAt: asUnixMs(now),
       });
 
-      // Update signCount on credential
-      const updatedRecord: ChannelRecord = {
-        ...nextRecord,
-        adminCredential: {
-          ...nextRecord.adminCredential,
-          signCount: verifyResult.newSignCount,
-        },
-      };
+      const updatedRecord: ChannelRecord =
+        verifiedWebAuthnSignCount === null
+          ? nextRecord
+          : {
+              ...nextRecord,
+              adminCredential: {
+                ...(nextRecord.adminCredential as StoredCredential),
+                signCount: verifiedWebAuthnSignCount,
+              },
+            };
 
       await this.saveRecord(updatedRecord);
     });
@@ -786,18 +836,30 @@ export class SecretVault {
       return this.jsonError('BAD_REQUEST', 400);
     }
 
-    const parsed = CompoundCommitRequestSchema.safeParse(body);
-    if (!parsed.success) {
+    const parsedWebAuthn = CompoundCommitRequestSchema.safeParse(body);
+    const parsedSoftkey = SoftkeyCompoundCommitRequestSchema.safeParse(body);
+    if (!parsedWebAuthn.success && !parsedSoftkey.success) {
       return this.jsonError('BAD_REQUEST', 400);
     }
 
     try {
-      await this.commitCompound({
-        uuid: parsed.data.uuid,
-        assertion: this.normalizeAssertion(parsed.data.assertion),
-        intentHash: parsed.data.intentHash,
-        intent: parsed.data.intent,
-      });
+      if (parsedSoftkey.success) {
+        await this.commitCompound({
+          adminMode: 'softkey',
+          uuid: parsedSoftkey.data.uuid,
+          softkeySignature: parsedSoftkey.data.softkeySignature,
+          intentHash: parsedSoftkey.data.intentHash,
+          intent: parsedSoftkey.data.intent,
+        });
+      } else if (parsedWebAuthn.success) {
+        await this.commitCompound({
+          uuid: parsedWebAuthn.data.uuid,
+          assertion: this.normalizeAssertion(parsedWebAuthn.data.assertion),
+          intentHash: parsedWebAuthn.data.intentHash,
+          intent: parsedWebAuthn.data.intent,
+        });
+      }
+
       return this.jsonResponse({ ok: true }, 200);
     } catch (error) {
       return this.mapError(error);

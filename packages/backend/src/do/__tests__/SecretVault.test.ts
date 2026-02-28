@@ -8,6 +8,7 @@ import type {
   HexString,
   LockChallenge,
   RSAPublicKeyJWK,
+  StoredCredential,
   UnixMs,
   UpdateIntent,
   UUID,
@@ -22,9 +23,10 @@ import {
   SECURITY_PROFILE,
   TIMESTAMP_SKEW_MS,
 } from '@zerolink/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
+import * as softkeyCrypto from '../../crypto/softkey.ts';
 import {
   CHANNEL_RECORD_KEY,
   COMPOUND_CHALLENGE_KEY,
@@ -39,6 +41,10 @@ import {
   SecretVaultStateMachine,
   StateTransitionError,
 } from '../SecretVault.ts';
+
+vi.mock('../../crypto/softkey.ts', () => ({
+  verifySoftkeySignature: vi.fn(),
+}));
 
 function asUuid(value: string): UUID {
   return value as UUID;
@@ -193,7 +199,10 @@ function createDeleteIntent(
   };
 }
 
-function createChannelRecord(state: ChannelState = CHANNEL_STATE.WAITING): ChannelRecord {
+function createChannelRecord(
+  state: ChannelState = CHANNEL_STATE.WAITING,
+  adminMode: 'webauthn' | 'softkey' = 'webauthn'
+): ChannelRecord {
   return {
     uuid: asUuid('abcdefghijklmnopqrstu'),
     state,
@@ -201,13 +210,26 @@ function createChannelRecord(state: ChannelState = CHANNEL_STATE.WAITING): Chann
     expiresAt: asUnixMs(1_730_086_400_000),
     ttl: CHANNEL_TTL_MS.ONE_DAY,
     securityProfile: SECURITY_PROFILE.STANDARD,
-    adminMode: 'webauthn',
-    adminCredential: {
-      credentialId: asBase64Url('credential-id'),
-      publicKey: asBase64Url('public-key'),
-      signCount: 1,
-      aaguid: asBase64Url('aaguid-value'),
-    },
+    adminMode,
+    adminCredential:
+      adminMode === 'softkey'
+        ? {
+            type: 'softkey',
+            softkeyPubJwk: {
+              kty: 'EC',
+              crv: 'P-256',
+              x: asBase64Url('softkeyx'),
+              y: asBase64Url('softkeyy'),
+              ext: true,
+              key_ops: ['verify'],
+            },
+          }
+        : {
+            credentialId: asBase64Url('credential-id'),
+            publicKey: asBase64Url('public-key'),
+            signCount: 1,
+            aaguid: asBase64Url('aaguid-value'),
+          },
     lockKey: createLockKey(),
     version: 0,
   };
@@ -730,7 +752,7 @@ describe('SecretVault lock challenge flow', () => {
 });
 
 describe('SecretVault compound/delete flow', () => {
-  it('issues and stores compound challenge with current version and receiver info', async () => {
+  it('issues and stores compound challenge with current version, receiver info, and adminMode', async () => {
     const now = 1_730_001_000_000;
     const lockParams = createCommitLockParams();
     const lockedRecord = new SecretVaultStateMachine(
@@ -747,6 +769,7 @@ describe('SecretVault compound/delete flow', () => {
     };
 
     expect(result.currentVersion).toBe(lockedRecord.version);
+    expect(result.adminMode).toBe(lockedRecord.adminMode);
     expect(result.receiverPubFpr).toBe(lockParams.receiverPubFpr);
     expect(result.receiverPubJwk).toEqual(lockParams.receiverPubJwk);
     expect(result.challenge.id).toBe(storedChallenge.id);
@@ -778,7 +801,7 @@ describe('SecretVault compound/delete flow', () => {
       begin.challenge.seed
     );
     const assertionFixture = await createMockAssertion({
-      credentialId: lockedRecord.adminCredential.credentialId,
+      credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
       challenge: expectedChallenge,
@@ -822,7 +845,7 @@ describe('SecretVault compound/delete flow', () => {
     expect(updated.version).toBe(lockedRecord.version + 1);
     expect(updated.cipherBundle).toEqual(intent.cipherBundle);
     expect(updated.deliveredAt).toBe(intent.timestamp);
-    expect(updated.adminCredential.signCount).toBe(7);
+    expect((updated.adminCredential as StoredCredential).signCount).toBe(7);
     expect(nonceRecord.expiresAt).toBe(expectedNonceExpiry);
     expect(nonceIndexKey).toBe(createNonceIndexKey(expectedNonceExpiry, intent.nonce));
     expect(consumedChallenge.consumedAt).toBeDefined();
@@ -849,7 +872,7 @@ describe('SecretVault compound/delete flow', () => {
       begin.challenge.seed
     );
     const assertionFixture = await createMockAssertion({
-      credentialId: record.adminCredential.credentialId,
+      credentialId: (record.adminCredential as StoredCredential).credentialId,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
       challenge: expectedChallenge,
@@ -896,7 +919,9 @@ describe('SecretVault compound/delete flow', () => {
       vault.commitCompound(
         {
           uuid: record.uuid,
-          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          assertion: createAssertionFixture(
+            (record.adminCredential as StoredCredential).credentialId
+          ),
           intentHash,
           intent,
         },
@@ -928,7 +953,9 @@ describe('SecretVault compound/delete flow', () => {
       vault.commitCompound(
         {
           uuid: record.uuid,
-          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          assertion: createAssertionFixture(
+            (record.adminCredential as StoredCredential).credentialId
+          ),
           intentHash,
           intent,
         },
@@ -994,7 +1021,9 @@ describe('SecretVault compound/delete flow', () => {
       vault.commitCompound(
         {
           uuid: record.uuid,
-          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          assertion: createAssertionFixture(
+            (record.adminCredential as StoredCredential).credentialId
+          ),
           intentHash,
           intent,
         },
@@ -1020,7 +1049,9 @@ describe('SecretVault compound/delete flow', () => {
       vault.commitCompound(
         {
           uuid: record.uuid,
-          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          assertion: createAssertionFixture(
+            (record.adminCredential as StoredCredential).credentialId
+          ),
           intentHash: asHex('00'),
           intent,
         },
@@ -1047,7 +1078,9 @@ describe('SecretVault compound/delete flow', () => {
       vault.commitCompound(
         {
           uuid: record.uuid,
-          assertion: createAssertionFixture(record.adminCredential.credentialId),
+          assertion: createAssertionFixture(
+            (record.adminCredential as StoredCredential).credentialId
+          ),
           intentHash,
           intent,
         },
@@ -1077,7 +1110,7 @@ describe('SecretVault compound/delete flow', () => {
       begin.challenge.seed
     );
     const assertionFixture = await createMockAssertion({
-      credentialId: record.adminCredential.credentialId,
+      credentialId: (record.adminCredential as StoredCredential).credentialId,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
       challenge: wrongChallenge,
@@ -1095,5 +1128,51 @@ describe('SecretVault compound/delete flow', () => {
         now + 1_000
       )
     ).rejects.toMatchObject({ code: 'ASSERTION_INVALID' });
+  });
+
+  it('commits update intent with softkey signature for softkey admin channel', async () => {
+    const now = 1_730_001_900_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING, 'softkey')
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now + 1_000),
+      asBase64Url('nonce_softkey_01'),
+      lockParams.receiverPubFpr
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    const verifySoftkeySignatureMock = vi.mocked(softkeyCrypto.verifySoftkeySignature);
+    verifySoftkeySignatureMock.mockResolvedValueOnce({
+      ok: true,
+      data: undefined,
+    });
+
+    await vault.commitCompound(
+      {
+        adminMode: 'softkey',
+        uuid: lockedRecord.uuid,
+        softkeySignature: asHex(
+          'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef'
+        ),
+        intentHash,
+        intent,
+      },
+      now + 1_000
+    );
+
+    const updated = await vault.getRecord();
+    expect(updated.state).toBe(CHANNEL_STATE.DELIVERED);
+    expect(updated.version).toBe(lockedRecord.version + 1);
+    expect(updated.adminMode).toBe('softkey');
+    expect(verifySoftkeySignatureMock).toHaveBeenCalledTimes(1);
+
+    verifySoftkeySignatureMock.mockReset();
   });
 });
