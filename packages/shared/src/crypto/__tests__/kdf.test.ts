@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AES_GCM, ARGON2ID } from '../../constants.ts';
+import { AES_GCM, ARGON2ID, ECDSA } from '../../constants.ts';
 import type { WrappedPrivateKey } from '../../types.ts';
-import { unwrapPrivateKey, wrapPrivateKey } from '../kdf.ts';
+import { unwrapEcdsaPrivateKey, unwrapPrivateKey, wrapPrivateKey } from '../kdf.ts';
 import { generateReceiverKeyPair, unwrapContentKey, wrapContentKey } from '../rsa.ts';
 
 const TEST_TIMEOUT_MS = 30_000;
@@ -267,6 +267,78 @@ describe('unwrapPrivateKey', () => {
       const decodedIvLength = atob(wrapped.iv.replaceAll('-', '+').replaceAll('_', '/')).length;
 
       expect(decodedIvLength).toBe(AES_GCM.IV_LENGTH);
+    },
+    TEST_TIMEOUT_MS
+  );
+});
+
+describe('unwrapEcdsaPrivateKey', () => {
+  async function generateEcdsaKeyPair(): Promise<CryptoKeyPair> {
+    return crypto.subtle.generateKey(
+      { name: ECDSA.ALGORITHM_NAME, namedCurve: ECDSA.CURVE },
+      true,
+      [...ECDSA.KEY_USAGES_SIGN, ...ECDSA.KEY_USAGES_VERIFY]
+    );
+  }
+
+  it(
+    'wraps and unwraps an ECDSA private key with Argon2id-derived AES key',
+    async () => {
+      const password = 'softkey-passphrase';
+      const keyPair = await generateEcdsaKeyPair();
+
+      const wrapped = await wrapPrivateKey({
+        privateKey: keyPair.privateKey,
+        password,
+      });
+      const unwrapped = await unwrapEcdsaPrivateKey({ wrapped, password });
+
+      const payload = crypto.getRandomValues(new Uint8Array(32));
+      const sig = await crypto.subtle.sign(
+        { name: ECDSA.ALGORITHM_NAME, hash: ECDSA.HASH_ALGORITHM },
+        unwrapped,
+        payload
+      );
+      const verified = await crypto.subtle.verify(
+        { name: ECDSA.ALGORITHM_NAME, hash: ECDSA.HASH_ALGORITHM },
+        keyPair.publicKey,
+        sig,
+        payload
+      );
+
+      expect(verified).toBe(true);
+    },
+    TEST_TIMEOUT_MS
+  );
+
+  it(
+    'fails unwrap with wrong password',
+    async () => {
+      const keyPair = await generateEcdsaKeyPair();
+      const wrapped = await wrapPrivateKey({
+        privateKey: keyPair.privateKey,
+        password: 'correct',
+      });
+
+      await expect(unwrapEcdsaPrivateKey({ wrapped, password: 'wrong' })).rejects.toThrow(
+        'ECDSA private key unwrap failed'
+      );
+    },
+    TEST_TIMEOUT_MS
+  );
+
+  it(
+    'rejects empty password',
+    async () => {
+      const keyPair = await generateEcdsaKeyPair();
+      const wrapped = await wrapPrivateKey({
+        privateKey: keyPair.privateKey,
+        password: 'pw',
+      });
+
+      await expect(unwrapEcdsaPrivateKey({ wrapped, password: '' })).rejects.toThrow(
+        'password must not be empty'
+      );
     },
     TEST_TIMEOUT_MS
   );

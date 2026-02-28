@@ -1,6 +1,6 @@
 import { argon2idAsync } from '@noble/hashes/argon2.js';
 
-import { AES_GCM, ARGON2ID, RSA_OAEP } from '../constants.ts';
+import { AES_GCM, ARGON2ID, ECDSA, RSA_OAEP } from '../constants.ts';
 import type { Argon2idParams, Base64Url, WrappedPrivateKey } from '../types.ts';
 
 const ARGON2_VERSION = 19 as const;
@@ -168,61 +168,122 @@ export async function wrapPrivateKey({
   }
 }
 
+interface DecodedWrappedKey {
+  salt: Uint8Array;
+  iv: Uint8Array;
+  encryptedKey: Uint8Array;
+  m: number;
+  t: number;
+  p: number;
+  version: number;
+}
+
+/**
+ * Validates kdfType and decodes the three base64url fields of a wrapped key.
+ * Throws descriptive errors for unsupported kdfType or bad encoding.
+ * Called outside try-catch so its errors propagate with their original message.
+ */
+function validateAndDecodeWrapped(wrapped: WrappedPrivateKey): DecodedWrappedKey {
+  if (wrapped.kdf.kdfType !== 'argon2id') {
+    throw new Error('Unsupported kdfType for unwrap');
+  }
+
+  // kdfType is narrowed to "argon2id" here, so m/t/p/version are accessible.
+  const { m, t, p, version } = wrapped.kdf;
+
+  try {
+    const salt = decodeBase64Url(wrapped.kdf.salt);
+    const iv = decodeBase64Url(wrapped.iv);
+    const encryptedKey = decodeBase64Url(wrapped.encryptedKey);
+    assertSaltLength(salt);
+    assertIvLength(iv);
+    return { salt, iv, encryptedKey, m, t, p, version };
+  } catch (error) {
+    throw new Error('Invalid wrapped private key encoding', { cause: error });
+  }
+}
+
+/**
+ * Derives the Argon2id wrapping key and AES-GCM decrypts a wrapped PKCS8 blob.
+ * Shared by unwrapPrivateKey (RSA-OAEP) and unwrapEcdsaPrivateKey (ECDSA).
+ * Must be called inside the caller's try-catch so crypto failures (wrong
+ * password, tampered ciphertext) are wrapped with a descriptive message.
+ */
+async function decryptPkcs8(
+  decoded: DecodedWrappedKey,
+  password: string,
+  cryptoApi: Crypto
+): Promise<ArrayBuffer> {
+  const wrappingKey = await deriveArgon2idAesKey({
+    password,
+    salt: decoded.salt,
+    m: decoded.m,
+    t: decoded.t,
+    p: decoded.p,
+    version: decoded.version,
+  });
+
+  return cryptoApi.subtle.decrypt(
+    {
+      name: AES_GCM.ALGORITHM_NAME,
+      iv: toArrayBuffer(decoded.iv),
+      tagLength: AES_GCM.TAG_LENGTH_BITS,
+    },
+    wrappingKey,
+    toArrayBuffer(decoded.encryptedKey)
+  );
+}
+
+async function importPkcs8Key(
+  pkcs8: ArrayBuffer,
+  algorithm: RsaHashedImportParams | EcKeyImportParams,
+  keyUsages: ReadonlyArray<KeyUsage>
+): Promise<CryptoKey> {
+  return getCryptoApi().subtle.importKey('pkcs8', pkcs8, algorithm, true, [...keyUsages]);
+}
+
 export async function unwrapPrivateKey({
   wrapped,
   password,
 }: UnwrapPrivateKeyParams): Promise<CryptoKey> {
   const cryptoApi = getCryptoApi();
   assertPassword(password);
-
-  if (wrapped.kdf.kdfType !== 'argon2id') {
-    throw new Error('Unsupported kdfType for unwrap');
-  }
-
-  let salt: Uint8Array;
-  let iv: Uint8Array;
-  let encryptedKey: Uint8Array;
+  const decoded = validateAndDecodeWrapped(wrapped);
 
   try {
-    salt = decodeBase64Url(wrapped.kdf.salt);
-    iv = decodeBase64Url(wrapped.iv);
-    encryptedKey = decodeBase64Url(wrapped.encryptedKey);
-    assertSaltLength(salt);
-    assertIvLength(iv);
-  } catch (error) {
-    throw new Error('Invalid wrapped private key encoding', { cause: error });
-  }
-
-  try {
-    const wrappingKey = await deriveArgon2idAesKey({
-      password,
-      salt,
-      m: wrapped.kdf.m,
-      t: wrapped.kdf.t,
-      p: wrapped.kdf.p,
-      version: wrapped.kdf.version,
-    });
-    const pkcs8 = await cryptoApi.subtle.decrypt(
-      {
-        name: AES_GCM.ALGORITHM_NAME,
-        iv: toArrayBuffer(iv),
-        tagLength: AES_GCM.TAG_LENGTH_BITS,
-      },
-      wrappingKey,
-      toArrayBuffer(encryptedKey)
-    );
-
-    return await cryptoApi.subtle.importKey(
-      'pkcs8',
+    const pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
+    return await importPkcs8Key(
       pkcs8,
       {
         name: RSA_OAEP.ALGORITHM_NAME,
         hash: RSA_OAEP.HASH_ALGORITHM,
       },
-      true,
-      [...RSA_OAEP.KEY_USAGES_PRIVATE]
+      RSA_OAEP.KEY_USAGES_PRIVATE
     );
   } catch (error) {
     throw new Error('Private key unwrap failed', { cause: error });
+  }
+}
+
+export async function unwrapEcdsaPrivateKey({
+  wrapped,
+  password,
+}: UnwrapPrivateKeyParams): Promise<CryptoKey> {
+  const cryptoApi = getCryptoApi();
+  assertPassword(password);
+  const decoded = validateAndDecodeWrapped(wrapped);
+
+  try {
+    const pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
+    return await importPkcs8Key(
+      pkcs8,
+      {
+        name: ECDSA.ALGORITHM_NAME,
+        namedCurve: ECDSA.CURVE,
+      },
+      ECDSA.KEY_USAGES_SIGN
+    );
+  } catch (error) {
+    throw new Error('ECDSA private key unwrap failed', { cause: error });
   }
 }

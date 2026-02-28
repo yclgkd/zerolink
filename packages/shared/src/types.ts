@@ -63,8 +63,12 @@ export interface ChannelRecord {
   securityProfile: SecurityProfile;
   adminMode: AdminMode;
 
-  /** Sender's WebAuthn credential used to verify compound_commit assertions. */
-  adminCredential: StoredCredential;
+  /**
+   * Sender's admin credential used to verify compound_commit requests.
+   * For 'webauthn' admin_mode: StoredCredential.
+   * For 'softkey' admin_mode: SoftkeyCredential.
+   */
+  adminCredential: StoredCredential | SoftkeyCredential;
 
   /**
    * lock_key = SHA-256("GL-lockkey" || uuid || lock_secret).
@@ -266,6 +270,33 @@ export interface StoredCredential {
   transports?: AuthenticatorTransport[];
 }
 
+/**
+ * ECDSA P-256 public key in JWK format used for software-key (softkey) admin auth.
+ * PRD §9 兼容模式 / Appendix I.
+ */
+export interface ECDSAPublicKeyJWK {
+  kty: 'EC';
+  crv: 'P-256';
+  /** x coordinate (base64url). */
+  x: Base64Url;
+  /** y coordinate (base64url). */
+  y: Base64Url;
+  ext: true;
+  key_ops: readonly ['verify'];
+}
+
+/**
+ * Softkey credential stored when admin_mode is 'softkey'.
+ * Replaces StoredCredential for channels created with software-key fallback.
+ * Only valid under Standard security profile.
+ * PRD §9 兼容模式.
+ */
+export interface SoftkeyCredential {
+  readonly type: 'softkey';
+  /** ECDSA P-256 public key used to verify softkey signatures. */
+  softkeyPubJwk: ECDSAPublicKeyJWK;
+}
+
 // ─── Challenge & Nonce Types ──────────────────────────────────────────────────
 
 /**
@@ -365,13 +396,26 @@ export interface CreateBeginResponse {
   creationOptions: Record<string, unknown>;
 }
 
-export interface CreateFinishRequest {
+export interface CreateFinishWebAuthnRequest {
+  adminMode: 'webauthn';
   uuid: UUID;
   attestation: AttestationJSON;
   /** base64url of lock_key = SHA-256("GL-lockkey" || uuid || lock_secret). */
   lockKeyB64u: Base64Url;
   timestamp: UnixMs;
 }
+
+export interface CreateFinishSoftkeyRequest {
+  adminMode: 'softkey';
+  uuid: UUID;
+  /** ECDSA P-256 public key replacing attestation for softkey channels. */
+  softkeyPubJwk: ECDSAPublicKeyJWK;
+  /** base64url of lock_key = SHA-256("GL-lockkey" || uuid || lock_secret). */
+  lockKeyB64u: Base64Url;
+  timestamp: UnixMs;
+}
+
+export type CreateFinishRequest = CreateFinishWebAuthnRequest | CreateFinishSoftkeyRequest;
 
 export interface CreateFinishResponse {
   ok: true;
@@ -420,6 +464,8 @@ export interface CompoundBeginResponse {
   /** Present when state is 'locked' or 'delivered'. */
   receiverPubJwk?: RSAPublicKeyJWK;
   currentVersion: number;
+  /** Admin mode of the channel; controls how compound_commit is authenticated. */
+  adminMode: AdminMode;
 }
 
 /** Canonical update payload; SHA-256 of its JSON form becomes intent_hash. */
@@ -450,6 +496,32 @@ export interface CompoundCommitRequest {
   uuid: UUID;
   assertion: AssertionJSON;
   /** hex(SHA-256(canonical_json(intent))). Binds assertion to exact payload. */
+  intentHash: HexString;
+  intent: ManageIntent;
+}
+
+/**
+ * Compound commit request using a softkey ECDSA signature instead of WebAuthn assertion.
+ * Only valid when channel adminMode is 'softkey'.
+ * PRD §9 兼容模式.
+ */
+export interface SoftkeyCompoundCommitRequest {
+  adminMode: 'softkey';
+  uuid: UUID;
+  /**
+   * ECDSA-P256-SHA-256 signature over `expectedChallenge` bytes, encoded as
+   * lowercase hex (IEEE P1363 / 64-byte fixed-length format).
+   *
+   * `expectedChallenge = SHA-256("GLv2.5" || uuid || challengeId || intentHash || seed)`
+   *
+   * The raw 32-byte `expectedChallenge` is passed as the payload to
+   * `crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, ...)`, which
+   * internally applies SHA-256 again before the ECDSA primitive. The backend
+   * verifies with the corresponding `crypto.subtle.verify` call over the same
+   * `expectedChallenge` bytes.
+   */
+  softkeySignature: HexString;
+  /** hex(SHA-256(canonical_json(intent))). Binds signature to exact payload. */
   intentHash: HexString;
   intent: ManageIntent;
 }

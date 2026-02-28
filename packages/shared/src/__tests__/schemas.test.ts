@@ -19,6 +19,7 @@ import {
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
   DeleteIntentSchema,
+  ECDSAPublicKeyJWKSchema,
   ErrorResponseSchema,
   HexStringSchema,
   KdfParamsSchema,
@@ -35,6 +36,7 @@ import {
   SafetyCodeEmojiSchema,
   SafetyCodeSchema,
   SecurityProfileSchema,
+  SoftkeyCompoundCommitRequestSchema,
   StoredCredentialSchema,
   UnixMsSchema,
   UpdateIntentSchema,
@@ -62,6 +64,16 @@ const validJwk = {
   e: b64,
   ext: true as const,
   key_ops: ['encrypt'] as const,
+};
+
+/** Minimal valid ECDSA P-256 JWK. */
+const validEcdsaJwk = {
+  kty: 'EC' as const,
+  crv: 'P-256' as const,
+  x: b64,
+  y: b64,
+  ext: true as const,
+  key_ops: ['verify'] as const,
 };
 
 /** Minimal valid CipherBundle. */
@@ -255,10 +267,20 @@ describe('RSAPublicKeyJWKSchema', () => {
 // ─── KDF Parameter Schemas ────────────────────────────────────────────────────
 
 describe('Argon2idParamsSchema', () => {
-  const valid = { kdfType: 'argon2id', version: 19, m: 65536, t: 3, p: 1, salt: b64 };
+  const valid = {
+    kdfType: 'argon2id',
+    version: 19,
+    m: 65536,
+    t: 3,
+    p: 1,
+    salt: b64,
+  };
 
   it('accepts valid argon2id params', () => {
-    expect(Argon2idParamsSchema.parse(valid)).toMatchObject({ kdfType: 'argon2id', version: 19 });
+    expect(Argon2idParamsSchema.parse(valid)).toMatchObject({
+      kdfType: 'argon2id',
+      version: 19,
+    });
   });
 
   it('rejects version != 19', () => {
@@ -274,7 +296,9 @@ describe('Pbkdf2ParamsSchema', () => {
   const valid = { kdfType: 'pbkdf2', iterations: 600_000, salt: b64 };
 
   it('accepts valid PBKDF2 params', () => {
-    expect(Pbkdf2ParamsSchema.parse(valid)).toMatchObject({ kdfType: 'pbkdf2' });
+    expect(Pbkdf2ParamsSchema.parse(valid)).toMatchObject({
+      kdfType: 'pbkdf2',
+    });
   });
 
   it('rejects iterations below 600 000', () => {
@@ -296,7 +320,11 @@ describe('KdfParamsSchema (discriminatedUnion)', () => {
   });
 
   it('selects pbkdf2 variant by kdfType', () => {
-    const result = KdfParamsSchema.parse({ kdfType: 'pbkdf2', iterations: 600_000, salt: b64 });
+    const result = KdfParamsSchema.parse({
+      kdfType: 'pbkdf2',
+      iterations: 600_000,
+      salt: b64,
+    });
     expect(result.kdfType).toBe('pbkdf2');
   });
 
@@ -312,7 +340,14 @@ describe('WrappedPrivateKeySchema', () => {
     const result = WrappedPrivateKeySchema.parse({
       encryptedKey: b64,
       iv: b64,
-      kdf: { kdfType: 'argon2id', version: 19, m: 65536, t: 3, p: 1, salt: b64 },
+      kdf: {
+        kdfType: 'argon2id',
+        version: 19,
+        m: 65536,
+        t: 3,
+        p: 1,
+        salt: b64,
+      },
     });
     expect(result.kdf.kdfType).toBe('argon2id');
   });
@@ -335,12 +370,17 @@ describe('WrappedPrivateKeySchema', () => {
 
 describe('CipherBundleSchema', () => {
   it('accepts a valid cipher bundle', () => {
-    expect(CipherBundleSchema.parse(validCipherBundle)).toMatchObject({ padBlock: 4096 });
+    expect(CipherBundleSchema.parse(validCipherBundle)).toMatchObject({
+      padBlock: 4096,
+    });
   });
 
   it('rejects uppercase hex in ciphertextHash', () => {
     expect(() =>
-      CipherBundleSchema.parse({ ...validCipherBundle, ciphertextHash: 'DEADBEEF' })
+      CipherBundleSchema.parse({
+        ...validCipherBundle,
+        ciphertextHash: 'DEADBEEF',
+      })
     ).toThrow();
   });
 
@@ -367,18 +407,26 @@ describe('SafetyCodeEmojiSchema', () => {
   };
 
   it('accepts exactly 8 emojis', () => {
-    expect(SafetyCodeEmojiSchema.parse(validEmoji)).toMatchObject({ type: 'emoji' });
+    expect(SafetyCodeEmojiSchema.parse(validEmoji)).toMatchObject({
+      type: 'emoji',
+    });
   });
 
   it('rejects 7 emojis (tuple too short)', () => {
     expect(() =>
-      SafetyCodeEmojiSchema.parse({ ...validEmoji, emojis: validEmoji.emojis.slice(0, 7) })
+      SafetyCodeEmojiSchema.parse({
+        ...validEmoji,
+        emojis: validEmoji.emojis.slice(0, 7),
+      })
     ).toThrow();
   });
 
   it('rejects 9 emojis (tuple too long)', () => {
     expect(() =>
-      SafetyCodeEmojiSchema.parse({ ...validEmoji, emojis: [...validEmoji.emojis, '🐯'] })
+      SafetyCodeEmojiSchema.parse({
+        ...validEmoji,
+        emojis: [...validEmoji.emojis, '🐯'],
+      })
     ).toThrow();
   });
 });
@@ -390,24 +438,35 @@ describe('SafetyCodeColorSchema', () => {
   };
 
   it('accepts a valid 4×4 color grid', () => {
-    expect(SafetyCodeColorSchema.parse(validColor)).toMatchObject({ type: 'color' });
+    expect(SafetyCodeColorSchema.parse(validColor)).toMatchObject({
+      type: 'color',
+    });
   });
 
   it('rejects 15 cells (too few)', () => {
     expect(() =>
-      SafetyCodeColorSchema.parse({ ...validColor, cells: validColor.cells.slice(0, 15) })
+      SafetyCodeColorSchema.parse({
+        ...validColor,
+        cells: validColor.cells.slice(0, 15),
+      })
     ).toThrow();
   });
 
   it('rejects a cell value of 16 (above max 15)', () => {
     expect(() =>
-      SafetyCodeColorSchema.parse({ ...validColor, cells: [16, ...validColor.cells.slice(1)] })
+      SafetyCodeColorSchema.parse({
+        ...validColor,
+        cells: [16, ...validColor.cells.slice(1)],
+      })
     ).toThrow();
   });
 
   it('rejects a cell value of -1 (below min 0)', () => {
     expect(() =>
-      SafetyCodeColorSchema.parse({ ...validColor, cells: [-1, ...validColor.cells.slice(1)] })
+      SafetyCodeColorSchema.parse({
+        ...validColor,
+        cells: [-1, ...validColor.cells.slice(1)],
+      })
     ).toThrow();
   });
 });
@@ -445,11 +504,16 @@ describe('StoredCredentialSchema', () => {
   };
 
   it('accepts a credential without transports', () => {
-    expect(StoredCredentialSchema.parse(valid)).toMatchObject({ signCount: 42 });
+    expect(StoredCredentialSchema.parse(valid)).toMatchObject({
+      signCount: 42,
+    });
   });
 
   it('accepts a credential with transports', () => {
-    const result = StoredCredentialSchema.parse({ ...valid, transports: ['usb', 'nfc'] });
+    const result = StoredCredentialSchema.parse({
+      ...valid,
+      transports: ['usb', 'nfc'],
+    });
     expect(result.transports).toEqual(['usb', 'nfc']);
   });
 
@@ -494,7 +558,9 @@ describe('CompoundChallengeSchema', () => {
 
 describe('AttestationJSONSchema', () => {
   it('accepts a minimal attestation without transports', () => {
-    expect(AttestationJSONSchema.parse(validAttestation)).toMatchObject({ type: 'public-key' });
+    expect(AttestationJSONSchema.parse(validAttestation)).toMatchObject({
+      type: 'public-key',
+    });
   });
 
   it('accepts attestation with transports array', () => {
@@ -514,7 +580,9 @@ describe('AttestationJSONSchema', () => {
 
 describe('AssertionJSONSchema', () => {
   it('accepts assertion without userHandle', () => {
-    expect(AssertionJSONSchema.parse(validAssertion)).toMatchObject({ type: 'public-key' });
+    expect(AssertionJSONSchema.parse(validAssertion)).toMatchObject({
+      type: 'public-key',
+    });
   });
 
   it('accepts assertion with userHandle as base64url string', () => {
@@ -557,7 +625,11 @@ describe('ReceiverIdentitySchema', () => {
 
   it('rejects uppercase pubFpr', () => {
     expect(() =>
-      ReceiverIdentitySchema.parse({ pubJwk: validJwk, pubFpr: 'DEADBEEF', lockedAt: 1000 })
+      ReceiverIdentitySchema.parse({
+        pubJwk: validJwk,
+        pubFpr: 'DEADBEEF',
+        lockedAt: 1000,
+      })
     ).toThrow();
   });
 });
@@ -618,20 +690,29 @@ describe('CreateFinishResponseSchema', () => {
 
   it('rejects empty shareUrl', () => {
     expect(() =>
-      CreateFinishResponseSchema.parse({ ok: true, shareUrl: '', manageUrl: '/m/abc' })
+      CreateFinishResponseSchema.parse({
+        ok: true,
+        shareUrl: '',
+        manageUrl: '/m/abc',
+      })
     ).toThrow();
   });
 
   it('rejects empty manageUrl', () => {
     expect(() =>
-      CreateFinishResponseSchema.parse({ ok: true, shareUrl: '/s/abc', manageUrl: '' })
+      CreateFinishResponseSchema.parse({
+        ok: true,
+        shareUrl: '/s/abc',
+        manageUrl: '',
+      })
     ).toThrow();
   });
 });
 
 describe('CreateFinishRequestSchema', () => {
-  it('accepts a valid create-finish request', () => {
+  it('accepts a valid webauthn create-finish request', () => {
     const result = CreateFinishRequestSchema.parse({
+      adminMode: 'webauthn',
       uuid: uuid21(),
       attestation: validAttestation,
       lockKeyB64u: b64,
@@ -640,9 +721,32 @@ describe('CreateFinishRequestSchema', () => {
     expect(result.lockKeyB64u).toBe(b64);
   });
 
-  it('rejects lockKeyB64u with padding', () => {
+  it('accepts a valid softkey create-finish request', () => {
+    const result = CreateFinishRequestSchema.parse({
+      adminMode: 'softkey',
+      uuid: uuid21(),
+      softkeyPubJwk: validEcdsaJwk,
+      lockKeyB64u: b64,
+      timestamp: 1_730_000_000_000,
+    });
+    expect(result.lockKeyB64u).toBe(b64);
+  });
+
+  it('rejects request missing adminMode', () => {
     expect(() =>
       CreateFinishRequestSchema.parse({
+        uuid: uuid21(),
+        attestation: validAttestation,
+        lockKeyB64u: b64,
+        timestamp: 1000,
+      })
+    ).toThrow();
+  });
+
+  it('rejects lockKeyB64u with padding (webauthn variant)', () => {
+    expect(() =>
+      CreateFinishRequestSchema.parse({
+        adminMode: 'webauthn',
         uuid: uuid21(),
         attestation: validAttestation,
         lockKeyB64u: 'abc=',
@@ -679,7 +783,9 @@ describe('LockCommitRequestSchema', () => {
   };
 
   it('accepts a valid lock-commit request', () => {
-    expect(LockCommitRequestSchema.parse(valid)).toMatchObject({ lockProof: hex });
+    expect(LockCommitRequestSchema.parse(valid)).toMatchObject({
+      lockProof: hex,
+    });
   });
 
   it('rejects uppercase lockProof', () => {
@@ -704,6 +810,7 @@ describe('CompoundBeginResponseSchema', () => {
       ok: true,
       challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
       currentVersion: 0,
+      adminMode: 'webauthn',
     });
     expect(result.currentVersion).toBe(0);
     expect(result.receiverPubFpr).toBeUndefined();
@@ -716,8 +823,30 @@ describe('CompoundBeginResponseSchema', () => {
       currentVersion: 1,
       receiverPubFpr: hex,
       receiverPubJwk: validJwk,
+      adminMode: 'webauthn',
     });
     expect(result.receiverPubFpr).toBe(hex);
+  });
+
+  it('accepts response with adminMode softkey', () => {
+    const result = CompoundBeginResponseSchema.parse({
+      ok: true,
+      challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
+      currentVersion: 2,
+      adminMode: 'softkey',
+    });
+    expect(result.adminMode).toBe('softkey');
+  });
+
+  it('rejects unknown adminMode', () => {
+    expect(() =>
+      CompoundBeginResponseSchema.parse({
+        ok: true,
+        challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
+        currentVersion: 0,
+        adminMode: 'unknown',
+      })
+    ).toThrow();
   });
 });
 
@@ -740,7 +869,10 @@ describe('UpdateIntentSchema', () => {
   });
 
   it('accepts an update intent with expireAt as a timestamp', () => {
-    const result = UpdateIntentSchema.parse({ ...valid, expireAt: 1_740_000_000_000 });
+    const result = UpdateIntentSchema.parse({
+      ...valid,
+      expireAt: 1_740_000_000_000,
+    });
     expect(result.expireAt).toBe(1_740_000_000_000);
   });
 
@@ -834,7 +966,9 @@ describe('CompoundCommitRequestSchema', () => {
 
 describe('CompoundCommitResponseSchema', () => {
   it('accepts { ok: true }', () => {
-    expect(CompoundCommitResponseSchema.parse({ ok: true })).toEqual({ ok: true });
+    expect(CompoundCommitResponseSchema.parse({ ok: true })).toEqual({
+      ok: true,
+    });
   });
 });
 
@@ -853,7 +987,10 @@ describe('PublicStatusResponseSchema', () => {
 
 describe('ErrorResponseSchema', () => {
   it('accepts a valid error response', () => {
-    const result = ErrorResponseSchema.parse({ ok: false, code: 'CHANNEL_NOT_FOUND' });
+    const result = ErrorResponseSchema.parse({
+      ok: false,
+      code: 'CHANNEL_NOT_FOUND',
+    });
     expect(result.code).toBe('CHANNEL_NOT_FOUND');
   });
 
@@ -863,5 +1000,90 @@ describe('ErrorResponseSchema', () => {
 
   it('rejects ok:true', () => {
     expect(() => ErrorResponseSchema.parse({ ok: true, code: 'X' })).toThrow();
+  });
+});
+
+// ─── ECDSAPublicKeyJWK Schema ─────────────────────────────────────────────────
+
+describe('ECDSAPublicKeyJWKSchema', () => {
+  it('accepts a valid ECDSA P-256 JWK', () => {
+    const result = ECDSAPublicKeyJWKSchema.parse(validEcdsaJwk);
+    expect(result.kty).toBe('EC');
+    expect(result.crv).toBe('P-256');
+  });
+
+  it('rejects wrong kty', () => {
+    expect(() => ECDSAPublicKeyJWKSchema.parse({ ...validEcdsaJwk, kty: 'RSA' })).toThrow();
+  });
+
+  it('rejects wrong crv', () => {
+    expect(() => ECDSAPublicKeyJWKSchema.parse({ ...validEcdsaJwk, crv: 'P-384' })).toThrow();
+  });
+
+  it('rejects wrong key_ops', () => {
+    expect(() => ECDSAPublicKeyJWKSchema.parse({ ...validEcdsaJwk, key_ops: ['sign'] })).toThrow();
+  });
+
+  it('rejects x with padding character', () => {
+    expect(() => ECDSAPublicKeyJWKSchema.parse({ ...validEcdsaJwk, x: 'abc=' })).toThrow();
+  });
+});
+
+// ─── SoftkeyCompoundCommitRequest Schema ─────────────────────────────────────
+
+describe('SoftkeyCompoundCommitRequestSchema', () => {
+  const validDeleteIntent = {
+    op: 'delete' as const,
+    uuid: uuid21(),
+    version: 1,
+    timestamp: 1_730_000_000_000,
+    nonce: b64,
+  };
+
+  it('accepts a valid softkey compound-commit request', () => {
+    const result = SoftkeyCompoundCommitRequestSchema.parse({
+      adminMode: 'softkey',
+      uuid: uuid21(),
+      softkeySignature: hex,
+      intentHash: hex,
+      intent: validDeleteIntent,
+    });
+    expect(result.adminMode).toBe('softkey');
+    expect(result.softkeySignature).toBe(hex);
+  });
+
+  it('rejects wrong adminMode', () => {
+    expect(() =>
+      SoftkeyCompoundCommitRequestSchema.parse({
+        adminMode: 'webauthn',
+        uuid: uuid21(),
+        softkeySignature: hex,
+        intentHash: hex,
+        intent: validDeleteIntent,
+      })
+    ).toThrow();
+  });
+
+  it('rejects uppercase softkeySignature', () => {
+    expect(() =>
+      SoftkeyCompoundCommitRequestSchema.parse({
+        adminMode: 'softkey',
+        uuid: uuid21(),
+        softkeySignature: 'DEADBEEF',
+        intentHash: hex,
+        intent: validDeleteIntent,
+      })
+    ).toThrow();
+  });
+
+  it('rejects missing intent', () => {
+    expect(() =>
+      SoftkeyCompoundCommitRequestSchema.parse({
+        adminMode: 'softkey',
+        uuid: uuid21(),
+        softkeySignature: hex,
+        intentHash: hex,
+      })
+    ).toThrow();
   });
 });
