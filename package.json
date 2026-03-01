@@ -19,7 +19,10 @@
     "prepare": "husky",
     "changeset": "changeset",
     "changeset:version": "changeset version && pnpm install --lockfile-only",
-    "changeset:publish": "pnpm build && changeset publish"
+    "changeset:publish": "pnpm build && changeset publish",
+    "manifest:generate": "tsx scripts/generate-manifest.ts",
+    "manifest:sign": "tsx scripts/sign-manifest.ts",
+    "manifest:verify": "tsx scripts/verify-manifest.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
@@ -28,7 +31,9 @@
     "@commitlint/config-conventional": "^20.4.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "typescript": "^5.9.3"
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,md}": [

@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
+import { ManifestInfo } from './components/manifest-info';
 import { Badge } from './components/ui/badge';
 import { buttonVariants } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
@@ -146,7 +147,8 @@ function AppShellLayout(): ReactElement {
           </p>
         </CardContent>
       </Card>
-      <section className="mt-6 md:mt-8">
+      <section className="mt-6 space-y-4 md:mt-8">
+        <ManifestInfo />
         <Outlet />
       </section>
     </main>

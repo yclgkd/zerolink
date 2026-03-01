@@ -24,6 +24,7 @@ describe('App shell routes rendering', () => {
 
     expect(await screen.findByTestId('app-shell')).toBeTruthy();
     expect(screen.getByText('Zero')).toBeTruthy();
+    expect(screen.getByTestId('manifest-info-card')).toBeTruthy();
     expect(screen.getByTestId('page-create')).toBeTruthy();
     expect(screen.getByTestId('current-path').textContent).toBe('/');
   });
