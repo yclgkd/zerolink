@@ -701,6 +701,48 @@ describe('SecretVault lock challenge flow', () => {
     ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
   });
 
+  // PRD §14.1 — TOFU preemption: an attacker who does not know the lock_secret
+  // can still compute a structurally valid SHA-256 proof (correct domain, uuid,
+  // challenge id, and challenge bytes) but uses a wrong lockKey. The server must
+  // reject it with LOCK_FORBIDDEN because the proof will not match the stored
+  // lockKey on the channel record.
+  it('rejects lock_commit from attacker who does not know lock_secret (PRD §14.1 TOFU preemption)', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    // Step 1: begin challenge (same as the honest flow)
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+
+    // Step 2: attacker uses a guessed lockKey that differs from record.lockKey.
+    // The attacker still calls computeLockProof, so the proof is structurally
+    // valid (correct HMAC domain, correct uuid, correct challenge bytes) but
+    // is computed over the wrong key material.
+    // Use encodeBase64Url to produce a properly-encoded key with different bytes
+    // than createLockKey() which uses [1, 35, 69, 103, 137, 171, 205, 239].
+    const attackerLockKey = encodeBase64Url(
+      Uint8Array.from([255, 254, 253, 252, 251, 250, 249, 248])
+    );
+    const attackerProof = await computeLockProof(record.uuid, challenge, attackerLockKey);
+
+    // Step 3: submit the attacker's structurally-valid-but-wrong proof
+    await expect(
+      vault.commitLockChallenge(
+        {
+          uuid: record.uuid,
+          lockChallengeId: challenge.id,
+          lockProof: attackerProof,
+          receiverPubJwk: lockParams.receiverPubJwk,
+          receiverPubFpr: lockParams.receiverPubFpr,
+          lockedAt: lockParams.lockedAt,
+        },
+        now + 1_000
+      )
+    ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
+  });
+
   it('returns 405 for non-POST method in fetch', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
