@@ -1262,6 +1262,33 @@ describe('SecretVault create flow', () => {
     ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
   });
 
+  it('rejects creation for HARDWARE_ONLY with all-zero AAGUID (software emulator)', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    // verified: true but AAGUID is all zeros (software authenticator)
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: true,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: encodeBase64Url(new Uint8Array(16)), // all-zero AAGUID
+      signCount: 0,
+    });
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+  });
+
   it('allows creation for STRICT with unverified attestation', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);

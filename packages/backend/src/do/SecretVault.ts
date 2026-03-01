@@ -466,11 +466,20 @@ export class SecretVault {
           );
         }
 
-        if (record.securityProfile === 'hardware_only' && !verification.verified) {
-          throw new StateTransitionError(
-            'ATTESTATION_UNVERIFIABLE',
-            'Hardware attestation could not be verified'
-          );
+        if (record.securityProfile === 'hardware_only') {
+          if (!verification.verified) {
+            throw new StateTransitionError(
+              'ATTESTATION_UNVERIFIABLE',
+              'Hardware attestation could not be verified'
+            );
+          }
+          const aaguidBytes = decodeBase64Url(verification.aaguid);
+          if (aaguidBytes.every((b) => b === 0)) {
+            throw new StateTransitionError(
+              'ATTESTATION_UNVERIFIABLE',
+              'Authenticator AAGUID is all zeros; hardware key identity could not be established'
+            );
+          }
         }
 
         adminCredential = {

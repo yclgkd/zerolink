@@ -249,6 +249,12 @@ export async function verifyAttestation(params: {
         decoded.attStmt,
         authData.credentialPublicKey
       );
+      if (verified) {
+        warning =
+          'packed self-attestation verified; no certificate chain — hardware origin is not cryptographically proven';
+      }
+    } else {
+      throw new Error('packed attestation missing sig field; cannot verify');
     }
   } else if (decoded.fmt !== 'none') {
     throw new Error(`Attestation format '${decoded.fmt}' is not supported`);
