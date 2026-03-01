@@ -211,6 +211,7 @@ export async function verifyAttestation(params: {
   expectedRpId: string;
   expectedOrigin: string;
   expectedChallenge: Uint8Array;
+  requireUserVerification?: boolean;
 }): Promise<AttestationVerificationResult> {
   const decoded = decode(decodeBase64Url(params.attestationObjectB64u)) as {
     fmt: string;
@@ -229,6 +230,9 @@ export async function verifyAttestation(params: {
   });
 
   if (!(authData.flags & 0x01)) throw new Error('User presence flag not set');
+  if (params.requireUserVerification && !(authData.flags & 0x04)) {
+    throw new Error('User verification flag not set');
+  }
 
   let verified = false;
   let warning: string | undefined;

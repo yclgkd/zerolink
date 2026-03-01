@@ -22,11 +22,13 @@ function toB64u(bytes: Uint8Array): string {
 /**
  * Builds a minimal fmt:none attestation fixture with the given challenge.
  * The rpIdHash is the SHA-256 of rpId (computed via WebCrypto).
+ * @param flags - authData flags byte (default 0x41 = AT | UP, no UV)
  */
 async function buildTestAttestation(params: {
   challenge: Uint8Array;
   rpId: string;
   origin: string;
+  flags?: number;
 }): Promise<{ attestationObjectB64u: string; clientDataJSONB64u: string }> {
   const rpIdHashBuffer = await crypto.subtle.digest(
     'SHA-256',
@@ -41,7 +43,7 @@ async function buildTestAttestation(params: {
 
   const authData = new Uint8Array(37 + 16 + 2 + credId.length + pubKeyBytes.length);
   authData.set(rpIdHash, 0);
-  authData[32] = 0x41; // AT | UP
+  authData[32] = params.flags ?? 0x41; // AT | UP (no UV by default)
   new DataView(authData.buffer).setUint16(37 + 16, credId.length, false);
   authData.set(credId, 37 + 16 + 2);
   authData.set(pubKeyBytes, 37 + 16 + 2 + credId.length);
@@ -288,6 +290,70 @@ describe('attestation', () => {
           expectedChallenge: challenge,
         })
       ).rejects.toThrow("'tpm'");
+    });
+
+    it('rejects when UV flag not set and requireUserVerification is true', async () => {
+      const challenge = new Uint8Array(32).fill(0x11);
+      // flags = 0x41 = AT | UP only, UV (0x04) not set
+      const fixture = await buildTestAttestation({
+        challenge,
+        rpId,
+        origin,
+        flags: 0x41,
+      });
+
+      await expect(
+        verifyAttestation({
+          ...fixture,
+          expectedRpId: rpId,
+          expectedOrigin: origin,
+          expectedChallenge: challenge,
+          requireUserVerification: true,
+        })
+      ).rejects.toThrow('User verification flag not set');
+    });
+
+    it('passes when UV flag is set and requireUserVerification is true', async () => {
+      const challenge = new Uint8Array(32).fill(0x22);
+      // flags = 0x45 = AT | UP | UV
+      const fixture = await buildTestAttestation({
+        challenge,
+        rpId,
+        origin,
+        flags: 0x45,
+      });
+
+      const result = await verifyAttestation({
+        ...fixture,
+        expectedRpId: rpId,
+        expectedOrigin: origin,
+        expectedChallenge: challenge,
+        requireUserVerification: true,
+      });
+
+      expect(result.verified).toBe(false); // fmt:none → unverified
+      expect(result.credentialId).toBeTruthy();
+    });
+
+    it('passes when UV flag not set and requireUserVerification is false (default)', async () => {
+      const challenge = new Uint8Array(32).fill(0x33);
+      // flags = 0x41 = AT | UP only, no UV
+      const fixture = await buildTestAttestation({
+        challenge,
+        rpId,
+        origin,
+        flags: 0x41,
+      });
+
+      const result = await verifyAttestation({
+        ...fixture,
+        expectedRpId: rpId,
+        expectedOrigin: origin,
+        expectedChallenge: challenge,
+        // requireUserVerification omitted → defaults to false
+      });
+
+      expect(result.credentialId).toBeTruthy();
     });
   });
 });

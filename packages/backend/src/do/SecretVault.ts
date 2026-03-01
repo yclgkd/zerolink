@@ -457,6 +457,7 @@ export class SecretVault {
             expectedRpId: this.env.RP_ID,
             expectedOrigin: this.env.RP_ORIGIN,
             expectedChallenge: decodeBase64Url(storedChallenge),
+            requireUserVerification: record.securityProfile !== 'standard',
           });
         } catch (err) {
           throw new StateTransitionError(
