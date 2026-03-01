@@ -311,6 +311,47 @@ describe('crypto orchestrator', () => {
     expect(useCreateStore.getState().createFinish.errorCode).toBe('FALLBACK_REQUIRED');
   });
 
+  it('fails create channel when backend returns ATTESTATION_UNVERIFIABLE', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+
+    vi.mocked(apiClient.createBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        creationOptions: { publicKey: {} },
+      },
+    });
+    vi.mocked(registerWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ATTESTATION,
+    });
+    vi.mocked(apiClient.createFinish).mockResolvedValue({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'ATTESTATION_UNVERIFIABLE',
+        status: 403,
+      },
+    });
+
+    const result = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.HARDWARE_ONLY,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'ATTESTATION_UNVERIFIABLE',
+        stage: 'create.finish',
+      },
+    });
+    expect(useCreateStore.getState().createFinish.status).toBe('error');
+    expect(useCreateStore.getState().createFinish.errorCode).toBe('ATTESTATION_UNVERIFIABLE');
+  });
+
   it('removes softkey admin envelope when compatibility createFinish fails', async () => {
     const softkeyAdminStorage = createIndexedDbSoftkeyAdminStorage({
       dbName: `test-orchestrator-softkey-cleanup-${Math.random().toString(16).slice(2)}`,

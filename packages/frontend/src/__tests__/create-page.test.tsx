@@ -287,4 +287,95 @@ describe('CreatePage integration', () => {
     expect(screen.getByTestId('passphrase-input-root')).toBeTruthy();
     expect(screen.getByTestId('passphrase-input-field')).toBeTruthy();
   });
+
+  it('shows downgrade dialog when createChannel returns ATTESTATION_UNVERIFIABLE', async () => {
+    mockWebAuthnSupport(true);
+    createChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'ATTESTATION_UNVERIFIABLE',
+        stage: 'create.finish',
+      },
+    });
+
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-downgrade-dialog')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('create-submit-error')).toBeNull();
+  });
+
+  it('retries with STRICT profile when downgrade is confirmed', async () => {
+    mockWebAuthnSupport(true);
+    createChannelMock
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          ok: false,
+          code: 'ATTESTATION_UNVERIFIABLE',
+          stage: 'create.finish',
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          shareUrl: '/s/retried',
+          manageUrl: '/m/retried',
+          shareUrlWithFragment: '/s/retried#k=key',
+          lockSecretB64u: 'key',
+          lockKeyB64u: 'lock',
+        },
+      });
+
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-downgrade-dialog')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-downgrade-confirm'));
+
+    await waitFor(() => {
+      expect(createChannelMock).toHaveBeenCalledTimes(2);
+    });
+
+    const secondCall = createChannelMock.mock.calls[1]?.[0];
+    expect(secondCall?.profile).toBe(SECURITY_PROFILE.STRICT);
+    expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+  });
+
+  it('shows error notice when downgrade is cancelled', async () => {
+    mockWebAuthnSupport(true);
+    createChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'ATTESTATION_UNVERIFIABLE',
+        stage: 'create.finish',
+      },
+    });
+
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-downgrade-dialog')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-downgrade-cancel'));
+
+    expect(screen.queryByTestId('create-downgrade-dialog')).toBeNull();
+    expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    expect(screen.getByTestId('create-submit-error').textContent).toContain('cancelled');
+  });
 });
