@@ -35,6 +35,7 @@ import {
   type CommitDeliveryParams,
   type CommitLockChallengeParams,
   type CommitLockParams,
+  CREATION_CHALLENGE_KEY,
   LOCK_CHALLENGE_KEY_PREFIX,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
@@ -1284,5 +1285,74 @@ describe('SecretVault create flow', () => {
     const updated = await vault.getRecord();
     expect(updated.securityProfile).toBe(SECURITY_PROFILE.STRICT);
     expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
+  });
+
+  it('beginCreate stores creation challenge under CREATION_CHALLENGE_KEY', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const storedChallenge = snapshot.get(CREATION_CHALLENGE_KEY) as string;
+    expect(storedChallenge).toBeDefined();
+    expect(decodeBase64Url(storedChallenge).byteLength).toBe(32);
+  });
+
+  it('commitCreate passes expectedChallenge to verifyAttestation and deletes the key', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const storedChallengeB64u = snapshot.get(CREATION_CHALLENGE_KEY) as string;
+    expect(storedChallengeB64u).toBeDefined();
+    const expectedChallenge = decodeBase64Url(storedChallengeB64u);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: true,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    expect(verifyAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedChallenge,
+        expectedRpId: RP_ID,
+        expectedOrigin: RP_ORIGIN,
+      })
+    );
+    // Challenge must be deleted after use (one-time)
+    expect(snapshot.get(CREATION_CHALLENGE_KEY)).toBeUndefined();
+  });
+
+  it('commitCreate throws CHALLENGE_INVALID when no creation challenge exists', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    // Simulate missing challenge (e.g. already consumed or never set)
+    snapshot.delete(CREATION_CHALLENGE_KEY);
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
   });
 });

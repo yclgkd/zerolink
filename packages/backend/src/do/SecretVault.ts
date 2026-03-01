@@ -1,7 +1,6 @@
 import {
   type AssertionJSON,
   type AttestationJSON,
-  type AuthenticatorTransport,
   type Base64Url,
   CHALLENGE_BYTES,
   CHALLENGE_TTL_MS,
@@ -30,7 +29,6 @@ import {
   type StoredCredential,
   TIMESTAMP_SKEW_MS,
   type UnixMs,
-  type UpdateIntent,
   type UUID,
 } from '@zerolink/shared';
 import { verifyAttestation } from '../crypto/attestation.ts';
@@ -157,6 +155,7 @@ export class StateTransitionError extends Error {
 }
 
 export const CHANNEL_RECORD_KEY = 'channel_record' as const;
+export const CREATION_CHALLENGE_KEY = 'creation_challenge' as const;
 export const LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
 export const COMPOUND_CHALLENGE_KEY = 'compound_challenge_active' as const;
 export const NONCE_KEY_PREFIX = 'nonce:' as const;
@@ -369,7 +368,6 @@ export class SecretVault {
 
       const cryptoApi = getCryptoApi();
       const challenge = cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
-      const id = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(16)));
 
       // Save a "half-initialized" record or just store the challenge.
       // PRD says channel is created at create_begin.
@@ -393,11 +391,9 @@ export class SecretVault {
       };
 
       await this.saveRecord(record);
-      await this.ctx.storage.put(lockChallengeStorageKey(id), {
-        id,
-        challenge: encodeBase64Url(challenge),
-        expiresAt: asUnixMs(now + CHALLENGE_TTL_MS),
-      } satisfies StoredLockChallenge);
+      // Store the creation challenge under a fixed key so commitCreate can
+      // retrieve it without needing the random challenge id.
+      await this.ctx.storage.put(CREATION_CHALLENGE_KEY, encodeBase64Url(challenge));
 
       return generateCreationOptions({
         rpId: this.env.RP_ID,
@@ -447,11 +443,18 @@ export class SecretVault {
           );
         }
 
+        const storedChallenge = await this.ctx.storage.get<Base64Url>(CREATION_CHALLENGE_KEY);
+        if (!storedChallenge) {
+          throw new StateTransitionError('CHALLENGE_INVALID', 'creation challenge not found');
+        }
+        await this.ctx.storage.delete(CREATION_CHALLENGE_KEY);
+
         const verification = await verifyAttestation({
           attestationObjectB64u: params.attestation.response.attestationObject,
           clientDataJSONB64u: params.attestation.response.clientDataJSON,
           expectedRpId: this.env.RP_ID,
           expectedOrigin: this.env.RP_ORIGIN,
+          expectedChallenge: decodeBase64Url(storedChallenge),
         });
 
         if (record.securityProfile === 'hardware_only' && !verification.verified) {

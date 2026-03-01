@@ -1,6 +1,64 @@
 import { encode } from 'cborg';
 import { describe, expect, it } from 'vitest';
-import { coseKeyToSpki, parseAuthenticatorData } from '../attestation.ts';
+import { coseKeyToSpki, parseAuthenticatorData, verifyAttestation } from '../attestation.ts';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function bytesToBinary(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return binary;
+}
+
+function toB64u(bytes: Uint8Array): string {
+  return btoa(bytesToBinary(bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}
+
+/**
+ * Builds a minimal fmt:none attestation fixture with the given challenge.
+ * The rpIdHash is the SHA-256 of rpId (computed via WebCrypto).
+ */
+async function buildTestAttestation(params: {
+  challenge: Uint8Array;
+  rpId: string;
+  origin: string;
+}): Promise<{ attestationObjectB64u: string; clientDataJSONB64u: string }> {
+  const rpIdHashBuffer = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(params.rpId)
+  );
+  const rpIdHash = new Uint8Array(rpIdHashBuffer);
+
+  // Minimal credential data for the AT flag (aaguid all zeros is valid)
+  const _aaguid = new Uint8Array(16);
+  const credId = new Uint8Array(4).fill(0x01);
+  const pubKeyBytes = new Uint8Array(8).fill(0x02);
+
+  const authData = new Uint8Array(37 + 16 + 2 + credId.length + pubKeyBytes.length);
+  authData.set(rpIdHash, 0);
+  authData[32] = 0x41; // AT | UP
+  new DataView(authData.buffer).setUint16(37 + 16, credId.length, false);
+  authData.set(credId, 37 + 16 + 2);
+  authData.set(pubKeyBytes, 37 + 16 + 2 + credId.length);
+
+  const clientDataJSON = JSON.stringify({
+    type: 'webauthn.create',
+    challenge: toB64u(params.challenge),
+    origin: params.origin,
+  });
+
+  const attestationObject = encode({ fmt: 'none', attStmt: {}, authData });
+
+  return {
+    attestationObjectB64u: toB64u(attestationObject),
+    clientDataJSONB64u: toB64u(new TextEncoder().encode(clientDataJSON)),
+  };
+}
 
 describe('attestation', () => {
   describe('parseAuthenticatorData', () => {
@@ -73,6 +131,46 @@ describe('attestation', () => {
       expect(spki[26]).toBe(0x04); // Uncompressed point
       expect(spki.slice(27, 27 + 32)).toEqual(x);
       expect(spki.slice(27 + 32, 27 + 64)).toEqual(y);
+    });
+  });
+
+  describe('verifyAttestation', () => {
+    const rpId = 'example.com';
+    const origin = 'https://example.com';
+
+    it('rejects when challenge does not match expected', async () => {
+      const correctChallenge = new Uint8Array(32).fill(0xaa);
+      const wrongChallenge = new Uint8Array(32).fill(0xbb);
+      const fixture = await buildTestAttestation({
+        challenge: correctChallenge,
+        rpId,
+        origin,
+      });
+
+      await expect(
+        verifyAttestation({
+          ...fixture,
+          expectedRpId: rpId,
+          expectedOrigin: origin,
+          expectedChallenge: wrongChallenge,
+        })
+      ).rejects.toThrow('Challenge mismatch');
+    });
+
+    it('resolves when challenge matches (fmt:none → unverified)', async () => {
+      const challenge = new Uint8Array(32).fill(0xcc);
+      const fixture = await buildTestAttestation({ challenge, rpId, origin });
+
+      const result = await verifyAttestation({
+        ...fixture,
+        expectedRpId: rpId,
+        expectedOrigin: origin,
+        expectedChallenge: challenge,
+      });
+
+      expect(result.verified).toBe(false);
+      expect(result.fmt).toBe('none');
+      expect(result.credentialId).toBeTruthy();
     });
   });
 });

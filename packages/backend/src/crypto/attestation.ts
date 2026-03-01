@@ -135,11 +135,12 @@ export function coseKeyToSpki(coseKey: Uint8Array): Uint8Array {
 }
 
 /**
- * Verifies rpIdHash and clientData origin/type.
+ * Verifies rpIdHash and clientData origin/type/challenge.
  */
 async function validateContext(params: {
   rpId: string;
   origin: string;
+  expectedChallenge: Uint8Array;
   rpIdHash: Uint8Array;
   clientDataJSON: Uint8Array;
 }): Promise<void> {
@@ -154,6 +155,11 @@ async function validateContext(params: {
   }
   if (clientData.origin !== params.origin) {
     throw new Error('Invalid origin');
+  }
+
+  const challengeBytes = decodeBase64Url(clientData.challenge as string);
+  if (!constantTimeEqual(challengeBytes, params.expectedChallenge)) {
+    throw new Error('Challenge mismatch');
   }
 }
 
@@ -204,6 +210,7 @@ export async function verifyAttestation(params: {
   clientDataJSONB64u: string;
   expectedRpId: string;
   expectedOrigin: string;
+  expectedChallenge: Uint8Array;
 }): Promise<AttestationVerificationResult> {
   const decoded = decode(decodeBase64Url(params.attestationObjectB64u)) as {
     fmt: string;
@@ -216,6 +223,7 @@ export async function verifyAttestation(params: {
   await validateContext({
     rpId: params.expectedRpId,
     origin: params.expectedOrigin,
+    expectedChallenge: params.expectedChallenge,
     rpIdHash: authData.rpIdHash,
     clientDataJSON,
   });
