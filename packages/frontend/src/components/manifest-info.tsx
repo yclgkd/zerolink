@@ -13,7 +13,7 @@ export function normalizeManifestHash(value: string): string {
   if (trimmed === FALLBACK_MANIFEST_HASH) {
     return FALLBACK_MANIFEST_HASH;
   }
-  const isHex = /^[0-9a-f]+$/u.test(trimmed);
+  const isHex = /^[0-9a-f]{64}$/u.test(trimmed);
   return isHex ? trimmed : FALLBACK_MANIFEST_HASH;
 }
 
@@ -24,7 +24,10 @@ export function ManifestInfo(): ReactElement {
   useEffect(() => {
     let cancelled = false;
     fetch('/manifest-hash.txt')
-      .then((r) => r.text())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
       .then((text) => {
         if (!cancelled) setRawHash(text);
       })

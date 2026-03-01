@@ -38,10 +38,10 @@ This will:
 ### 1. Verify the Ed25519 signature
 
 ```bash
-# Decode the base64url signature to binary
+# Decode the base64url signature to binary (adds required = padding)
 SIG=$(cat packages/frontend/dist/manifest.sig | tr -d '\n' | \
-  sed 's/-/+/g; s/_/\//g' | \
-  awk '{ printf "%s", $0 }' | \
+  tr -- '-_' '+/' | \
+  awk '{ l=length($0); pad=(4-l%4)%4; printf "%s%.*s\n", $0, pad, "====" }' | \
   base64 --decode)
 
 # Verify using openssl
@@ -49,7 +49,7 @@ openssl pkeyutl \
   -verify \
   -pubin \
   -inkey keys/manifest-signing.pub \
-  -sigfile <(echo -n "$SIG") \
+  -sigfile <(printf '%s' "$SIG") \
   -in packages/frontend/dist/manifest.json
 ```
 

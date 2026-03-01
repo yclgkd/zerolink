@@ -37,6 +37,14 @@ describe('normalizeManifestHash', () => {
     expect(normalizeManifestHash('not-a-hex-value')).toBe('manifest-hash-unavailable');
   });
 
+  it('returns fallback for hex string shorter than 64 chars', () => {
+    expect(normalizeManifestHash('deadbeef')).toBe('manifest-hash-unavailable');
+  });
+
+  it('returns fallback for hex string longer than 64 chars', () => {
+    expect(normalizeManifestHash(`${VALID_HASH}00`)).toBe('manifest-hash-unavailable');
+  });
+
   it('returns normalised lowercase hex for valid hash', () => {
     expect(normalizeManifestHash(VALID_HASH)).toBe(VALID_HASH);
   });
@@ -71,6 +79,17 @@ describe('ManifestInfo', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('manifest-hash-short').textContent).toBe(VALID_HASH.slice(0, 16));
+    });
+  });
+
+  it('shows fallback when fetch returns 4xx (r.ok is false)', async () => {
+    mockFetchWith(new Response('Not Found', { status: 404 }));
+    render(<ManifestInfo />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(
+        'manifest-hash-unavailable'
+      );
     });
   });
 

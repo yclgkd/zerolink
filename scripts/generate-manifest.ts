@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -67,15 +67,10 @@ export function toPosixRelativePath(absolutePath: string, rootDir: string): stri
 
 function readFrontendVersion(): string {
   try {
-    const raw = execSync(
-      "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('packages/frontend/package.json','utf8'));process.stdout.write(p.version||'0.0.0');\"",
-      {
-        cwd: REPO_ROOT,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }
-    ).trim();
-    return raw.length > 0 ? raw : '0.0.0';
+    const pkg = JSON.parse(readFileSync(path.resolve(FRONTEND_DIR, 'package.json'), 'utf8')) as {
+      version?: string;
+    };
+    return typeof pkg.version === 'string' && pkg.version.length > 0 ? pkg.version : '0.0.0';
   } catch {
     return '0.0.0';
   }
