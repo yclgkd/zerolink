@@ -21,6 +21,7 @@ const FRONTEND_DIR = path.resolve(REPO_ROOT, 'packages', 'frontend');
 const DIST_DIR = path.resolve(FRONTEND_DIR, 'dist');
 const MANIFEST_PATH = path.resolve(DIST_DIR, 'manifest.json');
 const MANIFEST_HASH_PATH = path.resolve(DIST_DIR, 'manifest-hash.txt');
+const SIGNATURE_PATH = path.resolve(DIST_DIR, 'manifest.sig');
 
 export async function collectFilePaths(rootDir: string): Promise<string[]> {
   const result: string[] = [];
@@ -38,7 +39,11 @@ export async function collectFilePaths(rootDir: string): Promise<string[]> {
         if (!entry.isFile()) {
           return;
         }
-        if (absolutePath === MANIFEST_PATH) {
+        if (
+          absolutePath === MANIFEST_PATH ||
+          absolutePath === MANIFEST_HASH_PATH ||
+          absolutePath === SIGNATURE_PATH
+        ) {
           return;
         }
         result.push(absolutePath);
