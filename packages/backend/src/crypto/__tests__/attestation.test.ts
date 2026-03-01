@@ -60,6 +60,86 @@ async function buildTestAttestation(params: {
   };
 }
 
+/**
+ * Builds a minimal fmt:packed + x5c attestation fixture (dummy certificate chain).
+ */
+async function buildPackedX5cAttestation(params: {
+  challenge: Uint8Array;
+  rpId: string;
+  origin: string;
+}): Promise<{ attestationObjectB64u: string; clientDataJSONB64u: string }> {
+  const rpIdHashBuffer = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(params.rpId)
+  );
+  const rpIdHash = new Uint8Array(rpIdHashBuffer);
+  const credId = new Uint8Array(4).fill(0x01);
+  const pubKeyBytes = new Uint8Array(8).fill(0x02);
+
+  const authData = new Uint8Array(37 + 16 + 2 + credId.length + pubKeyBytes.length);
+  authData.set(rpIdHash, 0);
+  authData[32] = 0x41; // AT | UP
+  new DataView(authData.buffer).setUint16(37 + 16, credId.length, false);
+  authData.set(credId, 37 + 16 + 2);
+  authData.set(pubKeyBytes, 37 + 16 + 2 + credId.length);
+
+  const clientDataJSON = JSON.stringify({
+    type: 'webauthn.create',
+    challenge: toB64u(params.challenge),
+    origin: params.origin,
+  });
+
+  const attStmt = {
+    alg: -7,
+    sig: new Uint8Array(64).fill(0xab),
+    x5c: [new Uint8Array(100).fill(0xcd)], // Dummy DER certificate
+  };
+  const attestationObject = encode({ fmt: 'packed', attStmt, authData });
+
+  return {
+    attestationObjectB64u: toB64u(attestationObject),
+    clientDataJSONB64u: toB64u(new TextEncoder().encode(clientDataJSON)),
+  };
+}
+
+/**
+ * Builds a minimal attestation fixture with an arbitrary unsupported format.
+ */
+async function buildCustomFmtAttestation(params: {
+  challenge: Uint8Array;
+  rpId: string;
+  origin: string;
+  fmt: string;
+}): Promise<{ attestationObjectB64u: string; clientDataJSONB64u: string }> {
+  const rpIdHashBuffer = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(params.rpId)
+  );
+  const rpIdHash = new Uint8Array(rpIdHashBuffer);
+  const credId = new Uint8Array(4).fill(0x01);
+  const pubKeyBytes = new Uint8Array(8).fill(0x02);
+
+  const authData = new Uint8Array(37 + 16 + 2 + credId.length + pubKeyBytes.length);
+  authData.set(rpIdHash, 0);
+  authData[32] = 0x41; // AT | UP
+  new DataView(authData.buffer).setUint16(37 + 16, credId.length, false);
+  authData.set(credId, 37 + 16 + 2);
+  authData.set(pubKeyBytes, 37 + 16 + 2 + credId.length);
+
+  const clientDataJSON = JSON.stringify({
+    type: 'webauthn.create',
+    challenge: toB64u(params.challenge),
+    origin: params.origin,
+  });
+
+  const attestationObject = encode({ fmt: params.fmt, attStmt: {}, authData });
+
+  return {
+    attestationObjectB64u: toB64u(attestationObject),
+    clientDataJSONB64u: toB64u(new TextEncoder().encode(clientDataJSON)),
+  };
+}
+
 describe('attestation', () => {
   describe('parseAuthenticatorData', () => {
     it('should parse basic authData without attested credential data', () => {
@@ -171,6 +251,43 @@ describe('attestation', () => {
       expect(result.verified).toBe(false);
       expect(result.fmt).toBe('none');
       expect(result.credentialId).toBeTruthy();
+    });
+
+    it('rejects packed attestation with x5c (certificate chain not supported)', async () => {
+      const challenge = new Uint8Array(32).fill(0xdd);
+      const fixture = await buildPackedX5cAttestation({
+        challenge,
+        rpId,
+        origin,
+      });
+
+      await expect(
+        verifyAttestation({
+          ...fixture,
+          expectedRpId: rpId,
+          expectedOrigin: origin,
+          expectedChallenge: challenge,
+        })
+      ).rejects.toThrow('x5c');
+    });
+
+    it('rejects unsupported attestation format', async () => {
+      const challenge = new Uint8Array(32).fill(0xee);
+      const fixture = await buildCustomFmtAttestation({
+        challenge,
+        rpId,
+        origin,
+        fmt: 'tpm',
+      });
+
+      await expect(
+        verifyAttestation({
+          ...fixture,
+          expectedRpId: rpId,
+          expectedOrigin: origin,
+          expectedChallenge: challenge,
+        })
+      ).rejects.toThrow("'tpm'");
     });
   });
 });

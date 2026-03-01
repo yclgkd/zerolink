@@ -31,7 +31,7 @@ import {
   type UnixMs,
   type UUID,
 } from '@zerolink/shared';
-import { verifyAttestation } from '../crypto/attestation.ts';
+import { type AttestationVerificationResult, verifyAttestation } from '../crypto/attestation.ts';
 import {
   asUnixMs,
   constantTimeEqual,
@@ -449,18 +449,26 @@ export class SecretVault {
         }
         await this.ctx.storage.delete(CREATION_CHALLENGE_KEY);
 
-        const verification = await verifyAttestation({
-          attestationObjectB64u: params.attestation.response.attestationObject,
-          clientDataJSONB64u: params.attestation.response.clientDataJSON,
-          expectedRpId: this.env.RP_ID,
-          expectedOrigin: this.env.RP_ORIGIN,
-          expectedChallenge: decodeBase64Url(storedChallenge),
-        });
+        let verification: AttestationVerificationResult;
+        try {
+          verification = await verifyAttestation({
+            attestationObjectB64u: params.attestation.response.attestationObject,
+            clientDataJSONB64u: params.attestation.response.clientDataJSON,
+            expectedRpId: this.env.RP_ID,
+            expectedOrigin: this.env.RP_ORIGIN,
+            expectedChallenge: decodeBase64Url(storedChallenge),
+          });
+        } catch (err) {
+          throw new StateTransitionError(
+            'ATTESTATION_UNVERIFIABLE',
+            err instanceof Error ? err.message : 'Attestation verification failed'
+          );
+        }
 
         if (record.securityProfile === 'hardware_only' && !verification.verified) {
           throw new StateTransitionError(
             'ATTESTATION_UNVERIFIABLE',
-            verification.warning || 'Hardware attestation failed'
+            'Hardware attestation could not be verified'
           );
         }
 

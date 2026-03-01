@@ -235,7 +235,9 @@ export async function verifyAttestation(params: {
 
   if (decoded.fmt === 'packed') {
     if (decoded.attStmt.x5c) {
-      warning = 'Full x5c attestation not yet implemented';
+      throw new Error(
+        "x5c attestation (certificate chain) is not yet supported; only packed self-attestation and fmt:'none' are accepted"
+      );
     } else if (decoded.attStmt.sig && authData.credentialPublicKey) {
       verified = await verifyPackedSelf(
         decoded.authData,
@@ -245,7 +247,7 @@ export async function verifyAttestation(params: {
       );
     }
   } else if (decoded.fmt !== 'none') {
-    warning = `Attestation format ${decoded.fmt} not implemented`;
+    throw new Error(`Attestation format '${decoded.fmt}' is not supported`);
   }
 
   if (!authData.credentialId || !authData.credentialPublicKey) {

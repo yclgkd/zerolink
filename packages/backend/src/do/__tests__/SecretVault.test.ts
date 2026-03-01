@@ -1355,4 +1355,24 @@ describe('SecretVault create flow', () => {
       })
     ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
   });
+
+  it('commitCreate maps verifyAttestation throw to ATTESTATION_UNVERIFIABLE', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
+
+    vi.mocked(verifyAttestation).mockRejectedValueOnce(
+      new Error('x5c attestation (certificate chain) is not yet supported')
+    );
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+  });
 });
