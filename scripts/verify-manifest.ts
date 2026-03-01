@@ -43,6 +43,14 @@ export async function verifyManifestSignature(opts: {
   return verifyData(null, manifestBytes, publicKey, signature);
 }
 
+export function checkManifestHash(
+  manifestBytes: Buffer,
+  expectedHash: string
+): { ok: boolean; actual: string } {
+  const actual = hashBufferHex(manifestBytes);
+  return { ok: expectedHash.length === 0 || actual === expectedHash, actual };
+}
+
 export async function verifyFileHashes(
   manifest: Manifest,
   distDir: string
@@ -160,14 +168,16 @@ async function run(): Promise<void> {
   const manifestHashExpected = (
     await fs.readFile(MANIFEST_HASH_PATH, 'utf8').catch(() => '')
   ).trim();
-  const manifestHashActual = hashBufferHex(manifestBytes);
+  const hashCheck = checkManifestHash(manifestBytes, manifestHashExpected);
 
   process.stdout.write('\nManifest hash:\n');
-  process.stdout.write(`  ${manifestHashActual}\n`);
-  if (manifestHashExpected.length > 0 && manifestHashExpected !== manifestHashActual) {
+  process.stdout.write(`  ${hashCheck.actual}\n`);
+  if (!hashCheck.ok) {
     process.stderr.write(
-      `WARNING: manifest-hash.txt (${manifestHashExpected}) does not match computed hash.\n`
+      `FAIL  manifest-hash.txt (${manifestHashExpected}) does not match computed hash.\n`
     );
+    process.exitCode = 1;
+    return;
   }
 
   process.stdout.write('\nAll checks passed. Build integrity verified.\n');

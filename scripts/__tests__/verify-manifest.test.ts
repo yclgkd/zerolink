@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  checkManifestHash,
   fromBase64Url,
   hashBufferHex,
   verifyFileHashes,
@@ -237,5 +238,30 @@ describe('verifyFileHashes', () => {
     const results = await verifyFileHashes(manifest, tmpDir);
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.ok)).toBe(true);
+  });
+});
+
+describe('checkManifestHash', () => {
+  it('returns ok=true when expectedHash is empty (no manifest-hash.txt present)', () => {
+    const manifestBytes = Buffer.from('{"version":"1.0.0"}');
+    const result = checkManifestHash(manifestBytes, '');
+    expect(result.ok).toBe(true);
+    expect(result.actual).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('returns ok=true when hashes match', () => {
+    const manifestBytes = Buffer.from('{"version":"1.0.0"}');
+    const expected = createHash('sha256').update(manifestBytes).digest('hex');
+    const result = checkManifestHash(manifestBytes, expected);
+    expect(result.ok).toBe(true);
+    expect(result.actual).toBe(expected);
+  });
+
+  it('returns ok=false when hashes differ', () => {
+    const manifestBytes = Buffer.from('{"version":"1.0.0"}');
+    const result = checkManifestHash(manifestBytes, 'wronghash');
+    expect(result.ok).toBe(false);
+    expect(result.actual).toMatch(/^[0-9a-f]{64}$/u);
+    expect(result.actual).not.toBe('wronghash');
   });
 });
