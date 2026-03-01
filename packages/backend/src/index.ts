@@ -1,6 +1,8 @@
 import {
   CompoundBeginRequestSchema,
   CompoundCommitRequestSchema,
+  CreateBeginRequestSchema,
+  CreateFinishRequestSchema,
   LockBeginRequestSchema,
   LockCommitRequestSchema,
   SoftkeyCompoundCommitRequestSchema,
@@ -116,7 +118,13 @@ function toJsonObject(value: unknown): Record<string, unknown> | null {
 async function forwardToSecretVault(
   env: Env,
   uuid: string,
-  path: '/lock_begin' | '/lock_commit' | '/compound_begin' | '/compound_commit',
+  path:
+    | '/lock_begin'
+    | '/lock_commit'
+    | '/compound_begin'
+    | '/compound_commit'
+    | '/create_begin'
+    | '/create_finish',
   payload: Record<string, unknown>
 ): Promise<Response> {
   try {
@@ -185,6 +193,50 @@ async function handleLockCommit(
   }
 
   return forwardToSecretVault(env, pathnameUuid, '/lock_commit', parsed.data);
+}
+
+async function handleCreateBegin(
+  request: Request,
+  env: Env,
+  pathnameUuid: string
+): Promise<Response> {
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  const parsed = CreateBeginRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  if (parsed.data.uuid !== pathnameUuid) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  return forwardToSecretVault(env, pathnameUuid, '/create_begin', parsed.data);
+}
+
+async function handleCreateFinish(
+  request: Request,
+  env: Env,
+  pathnameUuid: string
+): Promise<Response> {
+  const body = await readJsonBody(request);
+  if (body === null) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  const parsed = CreateFinishRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  if (parsed.data.uuid !== pathnameUuid) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  return forwardToSecretVault(env, pathnameUuid, '/create_finish', parsed.data);
 }
 
 async function handleCompoundBegin(
@@ -281,6 +333,24 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     }
 
     return handleCompoundCommit(request, env, compoundCommitMatch[1] ?? '', false);
+  }
+
+  const createBeginMatch = pathname.match(/^\/api\/create_begin\/([^/]+)$/u);
+  if (createBeginMatch) {
+    if (request.method !== 'POST') {
+      return methodNotAllowed('POST');
+    }
+
+    return handleCreateBegin(request, env, createBeginMatch[1] ?? '');
+  }
+
+  const createFinishMatch = pathname.match(/^\/api\/create_finish\/([^/]+)$/u);
+  if (createFinishMatch) {
+    if (request.method !== 'POST') {
+      return methodNotAllowed('POST');
+    }
+
+    return handleCreateFinish(request, env, createFinishMatch[1] ?? '');
   }
 
   const deleteCommitMatch = pathname.match(DELETE_COMMIT_PATH);

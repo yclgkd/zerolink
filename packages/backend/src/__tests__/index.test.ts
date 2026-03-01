@@ -18,11 +18,7 @@ const ctx = {
   waitUntil(_promise: Promise<unknown>): void {},
 } as ExecutionContext;
 
-const STUB_ROUTES = [
-  { method: 'GET', path: '/api/public/abc123' },
-  { method: 'POST', path: '/api/create_begin/abc123' },
-  { method: 'POST', path: '/api/create_finish/abc123' },
-] as const;
+const STUB_ROUTES = [{ method: 'GET', path: '/api/public/abc123' }] as const;
 
 const VALID_UUID = 'abcdefghijklmnopqrstu';
 const OTHER_UUID = 'zzzzzzzzzzzzzzzzzzzzz';
@@ -55,6 +51,16 @@ const VALID_ASSERTION = {
     clientDataJSON: 'client_data',
     authenticatorData: 'auth_data',
     signature: 'signature_data',
+  },
+} as const;
+
+const VALID_ATTESTATION = {
+  id: 'credential_id',
+  rawId: 'credential_id',
+  type: 'public-key',
+  response: {
+    clientDataJSON: 'client_data',
+    attestationObject: 'attestation_data',
   },
 } as const;
 
@@ -241,6 +247,52 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.pathname).toBe('/lock_begin');
     expect(calls[0]?.method).toBe('POST');
+  });
+
+  it('forwards create_begin request to SecretVault DO', async () => {
+    const creationOptions = { publicKey: { challenge: 'abc' } };
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true, creationOptions }), {
+        status: 200,
+      });
+    });
+
+    const response = await dispatch(env, `/api/create_begin/${VALID_UUID}`, 'POST', {
+      uuid: VALID_UUID,
+      timestamp: 1_730_000_000_000,
+      securityProfile: 'standard',
+    });
+    const payload = (await response.json()) as {
+      ok: true;
+      creationOptions: Record<string, unknown>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.creationOptions).toEqual(creationOptions);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/create_begin');
+  });
+
+  it('forwards create_finish request to SecretVault DO', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true, shareUrl: '/s/abc', manageUrl: '/m/abc' }), {
+        status: 200,
+      });
+    });
+
+    const response = await dispatch(env, `/api/create_finish/${VALID_UUID}`, 'POST', {
+      uuid: VALID_UUID,
+      adminMode: 'webauthn',
+      attestation: VALID_ATTESTATION,
+      lockKeyB64u: 'lock-key',
+      timestamp: 1_730_000_000_000,
+    });
+    const payload = (await response.json()) as { ok: true };
+
+    expect(response.status).toBe(200);
+    expect(payload.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/create_finish');
   });
 
   it('forwards lock_commit request to SecretVault DO and returns ok response', async () => {
