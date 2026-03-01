@@ -98,6 +98,51 @@ function WebAuthnWarning({ strictOrHardwareBlocked }: { strictOrHardwareBlocked:
   );
 }
 
+function DowngradeDialog({
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div
+      className="space-y-3 rounded-xl border border-neon-blue/35 bg-neon-blue/10 p-4 text-sm"
+      data-testid="create-downgrade-dialog"
+    >
+      <p className="font-medium text-foreground">Hardware Attestation Unavailable</p>
+      <p>
+        Your authenticator provided a valid credential but does not support hardware attestation
+        required for the Hardware-Only profile.
+      </p>
+      <p>Would you like to continue using the Strict profile instead?</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          data-testid="create-downgrade-confirm"
+          disabled={loading}
+          onClick={onConfirm}
+          size="sm"
+          type="button"
+        >
+          Continue with Strict
+        </Button>
+        <Button
+          data-testid="create-downgrade-cancel"
+          disabled={loading}
+          onClick={onCancel}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function CompatibilityPanel({
   compatibilityAccepted,
   setCompatibilityAccepted,
@@ -239,6 +284,7 @@ function useCreatePageLogic() {
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [compatibilityPassphrase, setCompatibilityPassphrase] = useState('');
+  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
@@ -256,6 +302,7 @@ function useCreatePageLogic() {
     setSubmitError(null);
     setCreatedLinks(null);
     store.setCreatedProfile(null);
+    setShowDowngradeDialog(false);
   }
 
   function resetCompatibilityPassphrase(): void {
@@ -276,6 +323,7 @@ function useCreatePageLogic() {
   }
 
   async function runCreate(): Promise<void> {
+    const latestState = useCreateStore.getState();
     clearLocalFeedback();
     store.startCreateBegin();
 
@@ -283,9 +331,11 @@ function useCreatePageLogic() {
     try {
       result = await cryptoOrchestrator.createChannel({
         uuid: generateChannelUuid(),
-        profile: store.selectedProfile,
-        useCompatibilityMode: store.compatibilityAccepted,
-        ...(store.compatibilityAccepted ? { softkeyPassphrase: compatibilityPassphrase } : {}),
+        profile: latestState.selectedProfile,
+        useCompatibilityMode: latestState.compatibilityAccepted,
+        ...(latestState.compatibilityAccepted
+          ? { softkeyPassphrase: compatibilityPassphrase }
+          : {}),
       });
     } catch {
       store.failCreateBegin('INTERNAL_ERROR');
@@ -294,6 +344,12 @@ function useCreatePageLogic() {
     }
 
     if (!result.ok) {
+      if (result.error.code === 'ATTESTATION_UNVERIFIABLE') {
+        store.failCreateBegin('ATTESTATION_UNVERIFIABLE');
+        setShowDowngradeDialog(true);
+        return;
+      }
+
       store.failCreateBegin(result.error.code);
       setSubmitError(mapCreateError(result.error.code));
       return;
@@ -309,6 +365,7 @@ function useCreatePageLogic() {
     store.setShowCompatibilityConfirm(false);
     store.setCompatibilityAccepted(false);
     resetCompatibilityPassphrase();
+    setShowDowngradeDialog(false);
   }
 
   function handleCreate(): void {
@@ -339,11 +396,23 @@ function useCreatePageLogic() {
     void runCreate();
   }
 
+  function handleDowngradeConfirm(): void {
+    store.setSelectedProfile(SECURITY_PROFILE.STRICT);
+    setShowDowngradeDialog(false);
+    void runCreate();
+  }
+
+  function handleDowngradeCancel(): void {
+    setShowDowngradeDialog(false);
+    setSubmitError('Creation cancelled due to attestation failure.');
+  }
+
   return {
     state: store,
     createdLinks,
     submitError,
     compatibilityPassphrase,
+    showDowngradeDialog,
     strictOrHardwareBlocked,
     compatibilityAvailable,
     isSubmitting,
@@ -351,6 +420,8 @@ function useCreatePageLogic() {
     handleCreate,
     handleCompatibilityCancel,
     handleCompatibilityContinue,
+    handleDowngradeConfirm,
+    handleDowngradeCancel,
     handleCompatibilityPassphraseChange: (value: string) => {
       setCompatibilityPassphrase(value);
       if (submitError) {
@@ -385,6 +456,13 @@ export function CreatePage(): ReactElement {
           selectedProfile={logic.state.selectedProfile}
         />
         <WebAuthnWarning strictOrHardwareBlocked={logic.strictOrHardwareBlocked} />
+        {logic.showDowngradeDialog ? (
+          <DowngradeDialog
+            loading={logic.isSubmitting}
+            onCancel={logic.handleDowngradeCancel}
+            onConfirm={logic.handleDowngradeConfirm}
+          />
+        ) : null}
         {logic.state.showCompatibilityConfirm && logic.compatibilityAvailable ? (
           <CompatibilityPanel
             compatibilityAccepted={logic.state.compatibilityAccepted}
