@@ -1,34 +1,39 @@
-import type {
-  AssertionJSON,
-  Base64Url,
-  ChannelRecord,
-  CipherBundle,
-  CompoundChallenge,
-  HexString,
-  LockCommitRequest,
-  ManageIntent,
-  NonceRecord,
-  RSAPublicKeyJWK,
-  SoftkeyCredential,
-  StoredCredential,
-  UnixMs,
-} from '@zerolink/shared';
 import {
+  type AssertionJSON,
+  type AttestationJSON,
+  type AuthenticatorTransport,
+  type Base64Url,
   CHALLENGE_BYTES,
   CHALLENGE_TTL_MS,
   CHANNEL_STATE,
+  type ChannelRecord,
+  type CipherBundle,
   CompoundBeginRequestSchema,
+  type CompoundChallenge,
   CompoundCommitRequestSchema,
+  CreateBeginRequestSchema,
+  CreateFinishRequestSchema,
   computeIntentHash,
   DOMAIN,
+  type ECDSAPublicKeyJWK,
+  type HexString,
   LockBeginRequestSchema,
   type LockChallenge,
+  type LockCommitRequest,
   LockCommitRequestSchema,
+  type ManageIntent,
   NONCE_TTL_MS,
+  type NonceRecord,
+  type RSAPublicKeyJWK,
   SoftkeyCompoundCommitRequestSchema,
+  type SoftkeyCredential,
+  type StoredCredential,
   TIMESTAMP_SKEW_MS,
+  type UnixMs,
+  type UpdateIntent,
+  type UUID,
 } from '@zerolink/shared';
-
+import { verifyAttestation } from '../crypto/attestation.ts';
 import {
   asUnixMs,
   constantTimeEqual,
@@ -40,7 +45,7 @@ import {
   toUtf8Bytes,
 } from '../crypto/bytes.ts';
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
-import { verifyAssertion } from '../crypto/webauthn.ts';
+import { generateCreationOptions, verifyAssertion } from '../crypto/webauthn.ts';
 
 export interface SecretVaultEnv {
   SECRET_VAULT: DurableObjectNamespace;
@@ -138,7 +143,8 @@ type StateTransitionErrorCode =
   | 'NONCE_REPLAY'
   | 'TIMESTAMP_OUT_OF_RANGE'
   | 'ASSERTION_INVALID'
-  | 'INTENT_HASH_MISMATCH';
+  | 'INTENT_HASH_MISMATCH'
+  | 'ATTESTATION_UNVERIFIABLE';
 
 export class StateTransitionError extends Error {
   readonly code: StateTransitionErrorCode;
@@ -291,6 +297,14 @@ export class SecretVault {
       return this.methodNotAllowed();
     }
 
+    if (url.pathname === '/create_begin') {
+      return this.handleCreateBegin(request);
+    }
+
+    if (url.pathname === '/create_finish') {
+      return this.handleCreateFinish(request);
+    }
+
     if (url.pathname === '/lock_begin') {
       return this.handleLockBegin(request);
     }
@@ -340,6 +354,132 @@ export class SecretVault {
 
   async expire(): Promise<ChannelRecord> {
     return this.applyTransition((machine) => machine.expire());
+  }
+
+  async beginCreate(
+    uuid: string,
+    securityProfile: ChannelRecord['securityProfile'],
+    now: number = Date.now()
+  ): Promise<Record<string, unknown>> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const existing = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+      if (existing) {
+        throw new StateTransitionError('INVALID_TRANSITION', 'channel already exists');
+      }
+
+      const cryptoApi = getCryptoApi();
+      const challenge = cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
+      const id = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(16)));
+
+      // Save a "half-initialized" record or just store the challenge.
+      // PRD says channel is created at create_begin.
+      const expiresAt = asUnixMs(now + 3600000); // Default 1h for initialization
+      const record: ChannelRecord = {
+        uuid: uuid as UUID,
+        state: CHANNEL_STATE.WAITING,
+        createdAt: asUnixMs(now),
+        expiresAt,
+        ttl: 3600000,
+        securityProfile,
+        adminMode: 'webauthn', // Default, might be changed by create_finish
+        adminCredential: {
+          credentialId: '' as Base64Url,
+          publicKey: '' as Base64Url,
+          signCount: 0,
+          aaguid: '' as Base64Url,
+        },
+        lockKey: '' as Base64Url,
+        version: 0,
+      };
+
+      await this.saveRecord(record);
+      await this.ctx.storage.put(lockChallengeStorageKey(id), {
+        id,
+        challenge: encodeBase64Url(challenge),
+        expiresAt: asUnixMs(now + CHALLENGE_TTL_MS),
+      } satisfies StoredLockChallenge);
+
+      return generateCreationOptions({
+        rpId: this.env.RP_ID,
+        rpName: 'ZeroLink',
+        uuid,
+        challenge,
+        securityProfile,
+      });
+    });
+  }
+
+  async commitCreate(
+    params: {
+      uuid: string;
+      adminMode: 'webauthn' | 'softkey';
+      attestation?: AttestationJSON;
+      softkeyPubJwk?: ECDSAPublicKeyJWK;
+      lockKeyB64u: Base64Url;
+    },
+    _now: number = Date.now()
+  ): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const record = await this.loadRecord();
+      this.assertUuidMatch(record.uuid, params.uuid);
+      if (record.lockKey !== '') {
+        throw new StateTransitionError('INVALID_TRANSITION', 'channel already finalized');
+      }
+
+      let adminCredential: StoredCredential | SoftkeyCredential;
+
+      if (params.adminMode === 'softkey') {
+        if (!params.softkeyPubJwk) {
+          throw new StateTransitionError(
+            'LOCK_FORBIDDEN',
+            'softkeyPubJwk required for softkey mode'
+          );
+        }
+        adminCredential = {
+          type: 'softkey',
+          softkeyPubJwk: params.softkeyPubJwk,
+        };
+      } else {
+        if (!params.attestation) {
+          throw new StateTransitionError(
+            'LOCK_FORBIDDEN',
+            'attestation required for webauthn mode'
+          );
+        }
+
+        const verification = await verifyAttestation({
+          attestationObjectB64u: params.attestation.response.attestationObject,
+          clientDataJSONB64u: params.attestation.response.clientDataJSON,
+          expectedRpId: this.env.RP_ID,
+          expectedOrigin: this.env.RP_ORIGIN,
+        });
+
+        if (record.securityProfile === 'hardware_only' && !verification.verified) {
+          throw new StateTransitionError(
+            'ATTESTATION_UNVERIFIABLE',
+            verification.warning || 'Hardware attestation failed'
+          );
+        }
+
+        adminCredential = {
+          credentialId: verification.credentialId,
+          publicKey: verification.publicKey,
+          signCount: verification.signCount,
+          aaguid: verification.aaguid,
+          ...(verification.transports ? { transports: verification.transports } : {}),
+        };
+      }
+
+      // biome-ignore lint/suspicious/noExplicitAny: transports mismatch between DOM and shared types
+      const updatedRecord: any = {
+        ...record,
+        adminMode: params.adminMode,
+        adminCredential,
+        lockKey: params.lockKeyB64u,
+      };
+
+      await this.saveRecord(updatedRecord as ChannelRecord);
+    });
   }
 
   async beginCompoundChallenge(
@@ -786,6 +926,71 @@ export class SecretVault {
     });
   }
 
+  private async handleCreateBegin(request: Request): Promise<Response> {
+    const body = await this.readJsonBody(request);
+    if (body === null) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    const parsed = CreateBeginRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    try {
+      const creationOptions = await this.beginCreate(parsed.data.uuid, parsed.data.securityProfile);
+      return this.jsonResponse(
+        {
+          ok: true,
+          creationOptions,
+        },
+        200
+      );
+    } catch (error) {
+      return this.mapError(error);
+    }
+  }
+
+  private async handleCreateFinish(request: Request): Promise<Response> {
+    const body = await this.readJsonBody(request);
+    if (body === null) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    const parsed = CreateFinishRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return this.jsonError('BAD_REQUEST', 400);
+    }
+
+    try {
+      // biome-ignore lint/suspicious/noExplicitAny: complex union schema mismatch
+      const commitParams: any = {
+        uuid: parsed.data.uuid,
+        adminMode: parsed.data.adminMode,
+        attestation: parsed.data.adminMode === 'webauthn' ? parsed.data.attestation : undefined,
+        softkeyPubJwk:
+          parsed.data.adminMode === 'softkey'
+            ? // biome-ignore lint/suspicious/noExplicitAny: Discriminated union narrowing in ternary
+              (parsed.data as any).softkeyPubJwk
+            : undefined,
+        lockKeyB64u: parsed.data.lockKeyB64u,
+      };
+      await this.commitCreate(commitParams);
+
+      const origin = new URL(request.url).origin;
+      return this.jsonResponse(
+        {
+          ok: true,
+          shareUrl: `${origin}/s/${parsed.data.uuid}`,
+          manageUrl: `${origin}/m/${parsed.data.uuid}`,
+        },
+        200
+      );
+    } catch (error) {
+      return this.mapError(error);
+    }
+  }
+
   private async handleLockBegin(request: Request): Promise<Response> {
     const body = await this.readJsonBody(request);
     if (body === null) {
@@ -956,6 +1161,9 @@ export class SecretVault {
     }
     if (error.code === 'ASSERTION_INVALID') {
       return this.jsonError('ASSERTION_INVALID', 403);
+    }
+    if (error.code === 'ATTESTATION_UNVERIFIABLE') {
+      return this.jsonError('ATTESTATION_UNVERIFIABLE', 403);
     }
 
     return this.jsonError('INTERNAL_ERROR', 500);
