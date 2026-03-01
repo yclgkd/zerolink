@@ -189,4 +189,60 @@ describe('AES-256-GCM', () => {
 
     expect(shortCipher.ciphertext.byteLength).toBe(longCipher.ciphertext.byteLength);
   });
+
+  // PRD §14.3 — padBlock=8192 bucket boundary
+  // All plaintexts whose padded form falls within the same 8192-byte block
+  // must produce identical ciphertext lengths (same padded size + GCM tag).
+  // boundary = padBlock - AES_GCM.PAD_LENGTH_PREFIX_BYTES = 8192 - 4 = 8188
+  it('maps all plaintexts in the same padBlock=8192 bucket to the same ciphertext length', async () => {
+    const key = await generateAesKey();
+    const padBlock = 8192;
+    // boundary is the largest plaintext that still fits in the first block
+    const boundary = padBlock - AES_GCM.PAD_LENGTH_PREFIX_BYTES; // 8188
+
+    const sizes = [0, 1, 100, 4096, boundary - 1, boundary];
+    const ciphertexts = await Promise.all(
+      sizes.map((size) => encryptAesGcm({ key, plaintext: randomBytes(size), padBlock }))
+    );
+
+    // All ciphertexts in this bucket must share the same length
+    const expectedLength = ciphertexts[0]?.ciphertext.byteLength ?? 0;
+    for (const result of ciphertexts) {
+      expect(result.ciphertext.byteLength).toBe(expectedLength);
+    }
+
+    // A plaintext one byte over the boundary falls into the next bucket
+    const nextBucket = await encryptAesGcm({
+      key,
+      plaintext: randomBytes(boundary + 1),
+      padBlock,
+    });
+    expect(nextBucket.ciphertext.byteLength).toBeGreaterThan(expectedLength);
+  });
+
+  // PRD §14.3 — padBlock=16384 bucket boundary
+  // boundary = padBlock - AES_GCM.PAD_LENGTH_PREFIX_BYTES = 16384 - 4 = 16380
+  it('maps all plaintexts in the same padBlock=16384 bucket to the same ciphertext length', async () => {
+    const key = await generateAesKey();
+    const padBlock = 16384;
+    const boundary = padBlock - AES_GCM.PAD_LENGTH_PREFIX_BYTES; // 16380
+
+    const sizes = [0, 1, 500, 8000, boundary - 1, boundary];
+    const ciphertexts = await Promise.all(
+      sizes.map((size) => encryptAesGcm({ key, plaintext: randomBytes(size), padBlock }))
+    );
+
+    const expectedLength = ciphertexts[0]?.ciphertext.byteLength ?? 0;
+    for (const result of ciphertexts) {
+      expect(result.ciphertext.byteLength).toBe(expectedLength);
+    }
+
+    // A plaintext one byte over the boundary falls into the next bucket
+    const nextBucket = await encryptAesGcm({
+      key,
+      plaintext: randomBytes(boundary + 1),
+      padBlock,
+    });
+    expect(nextBucket.ciphertext.byteLength).toBeGreaterThan(expectedLength);
+  });
 });
