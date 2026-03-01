@@ -47,9 +47,30 @@ export async function verifyFileHashes(
   manifest: Manifest,
   distDir: string
 ): Promise<{ path: string; expected: string; actual: string; ok: boolean }[]> {
+  const distDirBoundary = distDir.endsWith(path.sep) ? distDir : distDir + path.sep;
+
   return Promise.all(
     Object.entries(manifest.files).map(async ([relativePath, expected]) => {
-      const absolutePath = path.resolve(distDir, ...relativePath.split('/'));
+      // Reject absolute paths, traversal segments, and empty segments before resolving.
+      const segments = relativePath.split('/');
+      if (path.isAbsolute(relativePath) || segments.includes('..') || segments.includes('')) {
+        return {
+          path: relativePath,
+          expected,
+          actual: 'PATH_TRAVERSAL',
+          ok: false,
+        };
+      }
+
+      const absolutePath = path.resolve(distDir, ...segments);
+      if (!absolutePath.startsWith(distDirBoundary)) {
+        return {
+          path: relativePath,
+          expected,
+          actual: 'PATH_TRAVERSAL',
+          ok: false,
+        };
+      }
       let actual: string;
       try {
         const content = await fs.readFile(absolutePath);

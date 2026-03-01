@@ -173,6 +173,51 @@ describe('verifyFileHashes', () => {
     expect(results[0]?.actual).toBe('FILE_NOT_FOUND');
   });
 
+  it('rejects path traversal entries with ok=false and actual="PATH_TRAVERSAL"', async () => {
+    const manifest = {
+      version: '1.0.0',
+      commitHash: 'abc',
+      buildTime: new Date().toISOString(),
+      files: { '../../etc/passwd': 'somehash' },
+    };
+
+    const results = await verifyFileHashes(manifest, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.actual).toBe('PATH_TRAVERSAL');
+  });
+
+  it('rejects absolute path entries with ok=false and actual="PATH_TRAVERSAL"', async () => {
+    const manifest = {
+      version: '1.0.0',
+      commitHash: 'abc',
+      buildTime: new Date().toISOString(),
+      files: { '/etc/passwd': 'somehash' },
+    };
+
+    const results = await verifyFileHashes(manifest, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.actual).toBe('PATH_TRAVERSAL');
+  });
+
+  it('rejects a path that starts with distDir string but escapes it', async () => {
+    // e.g. distDir = /tmp/zl-test-abc, attack = /tmp/zl-test-abc-evil/secret
+    // path.resolve would produce /tmp/zl-test-abc-evil/secret which starts with
+    // distDir but is NOT inside it — the sep boundary check prevents this.
+    const manifest = {
+      version: '1.0.0',
+      commitHash: 'abc',
+      buildTime: new Date().toISOString(),
+      // Craft a relative path that resolves outside distDir
+      files: { '../outside-file.txt': 'somehash' },
+    };
+
+    const results = await verifyFileHashes(manifest, tmpDir);
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.actual).toBe('PATH_TRAVERSAL');
+  });
+
   it('verifies multiple files concurrently', async () => {
     const files = { 'a.js': 'content-a', 'b.css': 'content-b' };
     const manifestFiles: Record<string, string> = {};
