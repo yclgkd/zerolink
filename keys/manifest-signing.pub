@@ -1,0 +1,25 @@
+# ZeroLink Manifest Signing Public Key
+# Algorithm: Ed25519
+# Purpose: Verifying signed build manifests (manifest.json)
+#
+# This key corresponds to the MANIFEST_SIGNING_KEY stored in GitHub Actions secrets.
+# Replace the placeholder below with the actual public key after key generation.
+#
+# To generate a key pair (run once, store private key in GitHub secret):
+#   node -e "
+#     const { generateKeyPairSync } = require('crypto');
+#     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+#     console.log('=== PUBLIC KEY (commit this file) ===');
+#     console.log(publicKey.export({ type: 'spki', format: 'pem' }));
+#     console.log('=== PRIVATE KEY (add to GitHub secret MANIFEST_SIGNING_KEY) ===');
+#     console.log(privateKey.export({ type: 'pkcs8', format: 'pem' }));
+#   "
+#
+# To verify fingerprint (SHA-256 of DER-encoded public key):
+#   openssl pkey -in manifest-signing.pub -pubin -outform DER | sha256sum
+#
+# Key fingerprint: REPLACE_WITH_ACTUAL_FINGERPRINT_AFTER_KEY_GENERATION
+#
+-----BEGIN PUBLIC KEY-----
+REPLACE_WITH_ACTUAL_PUBLIC_KEY_AFTER_KEY_GENERATION
+-----END PUBLIC KEY-----

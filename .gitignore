@@ -9,6 +9,7 @@ build/
 out/
 .next/
 .turbo/
+packages/frontend/dist/
 
 # Testing
 coverage/
@@ -45,6 +46,10 @@ yarn-error.log*
 # Cloudflare Workers
 .wrangler/
 .dev.vars
+
+# Signing keys — never commit private keys
+keys/*.pem
+keys/*.key
 
 # Changesets
 .changeset/*.md
