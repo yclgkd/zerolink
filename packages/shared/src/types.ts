@@ -255,6 +255,11 @@ export interface SafetyCodeDisplay {
 // ─── WebAuthn Credential Storage ─────────────────────────────────────────────
 
 /**
+ * Supported authenticator transports.
+ */
+export type AuthenticatorTransport = 'usb' | 'nfc' | 'ble' | 'internal' | 'hybrid';
+
+/**
  * WebAuthn credential record persisted by the Durable Object.
  * All binary fields are base64url-encoded to survive JSON serialisation.
  * PRD §6 / SECURITY.md §"WebAuthn".

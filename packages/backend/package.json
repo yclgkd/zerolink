@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@zerolink/shared": "workspace:*"
+    "@zerolink/shared": "workspace:*",
+    "cborg": "^4.5.8"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260304.0",

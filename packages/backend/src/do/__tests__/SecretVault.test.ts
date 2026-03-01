@@ -1,5 +1,6 @@
 import type {
   AssertionJSON,
+  AttestationJSON,
   Base64Url,
   ChannelRecord,
   ChannelState,
@@ -26,6 +27,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
+import { verifyAttestation } from '../../crypto/attestation.ts';
 import * as softkeyCrypto from '../../crypto/softkey.ts';
 import {
   CHANNEL_RECORD_KEY,
@@ -33,6 +35,7 @@ import {
   type CommitDeliveryParams,
   type CommitLockChallengeParams,
   type CommitLockParams,
+  CREATION_CHALLENGE_KEY,
   LOCK_CHALLENGE_KEY_PREFIX,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
@@ -44,6 +47,10 @@ import {
 
 vi.mock('../../crypto/softkey.ts', () => ({
   verifySoftkeySignature: vi.fn(),
+}));
+
+vi.mock('../../crypto/attestation.ts', () => ({
+  verifyAttestation: vi.fn(),
 }));
 
 function asUuid(value: string): UUID {
@@ -1174,5 +1181,358 @@ describe('SecretVault compound/delete flow', () => {
     expect(verifySoftkeySignatureMock).toHaveBeenCalledTimes(1);
 
     verifySoftkeySignatureMock.mockReset();
+  });
+});
+
+describe('SecretVault create flow', () => {
+  it('begins creation and initializes a record with WAITING state', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+
+    const options = (await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY)) as {
+      challenge: unknown;
+      user: { id: unknown };
+      attestation: unknown;
+    };
+    const record = snapshot.get(CHANNEL_RECORD_KEY) as ChannelRecord;
+
+    expect(record.uuid).toBe(uuid);
+    expect(record.state).toBe(CHANNEL_STATE.WAITING);
+    expect(record.securityProfile).toBe(SECURITY_PROFILE.HARDWARE_ONLY);
+    expect(options.challenge).toBeDefined();
+    expect(options.user.id).toBeDefined();
+    expect(options.attestation).toBe('direct');
+  });
+
+  it('commits creation successfully for HARDWARE_ONLY with valid attestation', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: true,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    const lockKeyB64u = asBase64Url('lock-key');
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u,
+    });
+
+    const updated = await vault.getRecord();
+    expect(updated.adminMode).toBe('webauthn');
+    expect(updated.lockKey).toBe(lockKeyB64u);
+    expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
+  });
+
+  it('rejects creation for HARDWARE_ONLY with unverified attestation', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: false,
+      fmt: 'none',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+      warning: 'none attestation is considered unverified',
+    });
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+  });
+
+  it('rejects creation for HARDWARE_ONLY with all-zero AAGUID (software emulator)', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    // verified: true but AAGUID is all zeros (software authenticator)
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: true,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: encodeBase64Url(new Uint8Array(16)), // all-zero AAGUID
+      signCount: 0,
+    });
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+  });
+
+  it('allows creation for STRICT with unverified attestation', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: false,
+      fmt: 'none',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    const updated = await vault.getRecord();
+    expect(updated.securityProfile).toBe(SECURITY_PROFILE.STRICT);
+    expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
+  });
+
+  it('beginCreate stores creation challenge under CREATION_CHALLENGE_KEY', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const storedChallenge = snapshot.get(CREATION_CHALLENGE_KEY) as string;
+    expect(storedChallenge).toBeDefined();
+    expect(decodeBase64Url(storedChallenge).byteLength).toBe(32);
+  });
+
+  it('commitCreate passes expectedChallenge to verifyAttestation and deletes the key', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const storedChallengeB64u = snapshot.get(CREATION_CHALLENGE_KEY) as string;
+    expect(storedChallengeB64u).toBeDefined();
+    const expectedChallenge = decodeBase64Url(storedChallengeB64u);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: true,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    expect(verifyAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedChallenge,
+        expectedRpId: RP_ID,
+        expectedOrigin: RP_ORIGIN,
+      })
+    );
+    // Challenge must be deleted after use (one-time)
+    expect(snapshot.get(CREATION_CHALLENGE_KEY)).toBeUndefined();
+  });
+
+  it('commitCreate throws CHALLENGE_INVALID when no creation challenge exists', async () => {
+    const { state, snapshot } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    // Simulate missing challenge (e.g. already consumed or never set)
+    snapshot.delete(CREATION_CHALLENGE_KEY);
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
+  });
+
+  it('commitCreate maps verifyAttestation throw to ATTESTATION_UNVERIFIABLE', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
+
+    vi.mocked(verifyAttestation).mockRejectedValueOnce(
+      new Error('x5c attestation (certificate chain) is not yet supported')
+    );
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+  });
+
+  it('create_finish response uses RP_ORIGIN for shareUrl/manageUrl (not internal DO hostname)', async () => {
+    // UUID must be exactly 21 chars (NanoID format required by schema)
+    const uuid = 'abcdefghijklmnopqrstu';
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    await vault.beginCreate(asUuid(uuid), SECURITY_PROFILE.STANDARD);
+
+    // Softkey mode: no attestation needed, simpler setup
+    const payload = {
+      adminMode: 'softkey',
+      uuid,
+      softkeyPubJwk: {
+        kty: 'EC',
+        crv: 'P-256',
+        x: 'aBcDeFgHiJkLmNoPqRsTuVw',
+        y: 'bBcDeFgHiJkLmNoPqRsTuVw',
+        ext: true,
+        key_ops: ['verify'],
+      },
+      lockKeyB64u: 'bG9ja2tleQ',
+      timestamp: 1730000100000,
+    };
+
+    // Request arrives at an internal DO hostname, not the public RP_ORIGIN
+    const response = await vault.fetch(
+      new Request('https://fake-internal.workers.dev/create_finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+    const body = (await response.json()) as {
+      ok: boolean;
+      shareUrl?: string;
+      manageUrl?: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    // Must use RP_ORIGIN, not the internal DO hostname
+    expect(body.shareUrl).toBe(`${RP_ORIGIN}/s/${uuid}`);
+    expect(body.manageUrl).toBe(`${RP_ORIGIN}/m/${uuid}`);
+    expect(body.shareUrl).not.toContain('fake-internal');
+    expect(body.manageUrl).not.toContain('fake-internal');
+  });
+
+  it('commitCreate passes requireUserVerification:true for STRICT profile', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: false,
+      fmt: 'none',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    expect(verifyAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requireUserVerification: true })
+    );
+  });
+
+  it('commitCreate passes requireUserVerification:true for HARDWARE_ONLY profile', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: true,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    expect(verifyAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requireUserVerification: true })
+    );
+  });
+
+  it('commitCreate passes requireUserVerification:false for STANDARD profile', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.STANDARD);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: false,
+      fmt: 'none',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    expect(verifyAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requireUserVerification: false })
+    );
   });
 });

@@ -2,6 +2,7 @@ import type { AssertionJSON, Base64Url, StoredCredential } from '@zerolink/share
 
 import {
   decodeBase64Url,
+  encodeBase64Url,
   getCryptoApi,
   sha256Bytes,
   toArrayBufferBytes,
@@ -35,15 +36,44 @@ const UP_FLAG_BIT = 0x01;
 const UV_FLAG_BIT = 0x04;
 
 /**
+ * Generates WebAuthn PublicKeyCredentialCreationOptions.
+ */
+export function generateCreationOptions(params: {
+  rpId: string;
+  rpName: string;
+  uuid: string;
+  challenge: Uint8Array;
+  securityProfile: 'standard' | 'strict' | 'hardware_only';
+}): Record<string, unknown> {
+  const { rpId, rpName, uuid, challenge, securityProfile } = params;
+
+  return {
+    challenge: encodeBase64Url(challenge),
+    rp: {
+      name: rpName,
+      id: rpId,
+    },
+    user: {
+      id: encodeBase64Url(toUtf8Bytes(uuid)),
+      name: `zerolink-${uuid}`,
+      displayName: `ZeroLink (${uuid})`,
+    },
+    pubKeyCredParams: [
+      { type: 'public-key', alg: -7 }, // ES256
+      { type: 'public-key', alg: -257 }, // RS256
+    ],
+    authenticatorSelection: {
+      userVerification: securityProfile === 'standard' ? 'preferred' : 'required',
+      residentKey: 'discouraged',
+      requireResidentKey: false,
+    },
+    attestation: securityProfile === 'hardware_only' ? 'direct' : 'none',
+    timeout: 60000,
+  };
+}
+
+/**
  * Verifies a WebAuthn assertion against stored credential data.
- *
- * Steps (per PRD Appendix H):
- * 1. credentialId match
- * 2. Decode clientDataJSON; check type, origin, challenge
- * 3. Parse authenticatorData; verify rpIdHash, UP+UV flags
- * 4. Construct signedData = authenticatorData || SHA-256(clientDataJSON)
- * 5. Verify ECDSA P-256 signature with stored public key
- * 6. Check signCount regression (warn, don't hard-block)
  */
 export async function verifyAssertion(params: WebAuthnVerifyParams): Promise<WebAuthnVerifyResult> {
   const { assertion, expectedChallenge, storedCredential, rpId, rpOrigin } = params;
@@ -65,7 +95,10 @@ export async function verifyAssertion(params: WebAuthnVerifyParams): Promise<Web
   }
 
   if (clientData.type !== 'webauthn.get') {
-    return { ok: false, error: `unexpected clientData type: ${clientData.type}` };
+    return {
+      ok: false,
+      error: `unexpected clientData type: ${clientData.type}`,
+    };
   }
 
   if (clientData.origin !== rpOrigin) {
