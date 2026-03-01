@@ -988,12 +988,11 @@ export class SecretVault {
       };
       await this.commitCreate(commitParams);
 
-      const origin = new URL(request.url).origin;
       return this.jsonResponse(
         {
           ok: true,
-          shareUrl: `${origin}/s/${parsed.data.uuid}`,
-          manageUrl: `${origin}/m/${parsed.data.uuid}`,
+          shareUrl: `${this.env.RP_ORIGIN}/s/${parsed.data.uuid}`,
+          manageUrl: `${this.env.RP_ORIGIN}/m/${parsed.data.uuid}`,
         },
         200
       );

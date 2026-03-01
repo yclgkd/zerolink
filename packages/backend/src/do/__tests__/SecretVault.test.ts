@@ -1190,8 +1190,11 @@ describe('SecretVault create flow', () => {
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
 
-    // biome-ignore lint/suspicious/noExplicitAny: test convenience
-    const options = (await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY)) as any;
+    const options = (await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY)) as {
+      challenge: unknown;
+      user: { id: unknown };
+      attestation: unknown;
+    };
     const record = snapshot.get(CHANNEL_RECORD_KEY) as ChannelRecord;
 
     expect(record.uuid).toBe(uuid);
@@ -1374,5 +1377,51 @@ describe('SecretVault create flow', () => {
         lockKeyB64u: asBase64Url('lock-key'),
       })
     ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+  });
+
+  it('create_finish response uses RP_ORIGIN for shareUrl/manageUrl (not internal DO hostname)', async () => {
+    // UUID must be exactly 21 chars (NanoID format required by schema)
+    const uuid = 'abcdefghijklmnopqrstu';
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    await vault.beginCreate(asUuid(uuid), SECURITY_PROFILE.STANDARD);
+
+    // Softkey mode: no attestation needed, simpler setup
+    const payload = {
+      adminMode: 'softkey',
+      uuid,
+      softkeyPubJwk: {
+        kty: 'EC',
+        crv: 'P-256',
+        x: 'aBcDeFgHiJkLmNoPqRsTuVw',
+        y: 'bBcDeFgHiJkLmNoPqRsTuVw',
+        ext: true,
+        key_ops: ['verify'],
+      },
+      lockKeyB64u: 'bG9ja2tleQ',
+      timestamp: 1730000100000,
+    };
+
+    // Request arrives at an internal DO hostname, not the public RP_ORIGIN
+    const response = await vault.fetch(
+      new Request('https://fake-internal.workers.dev/create_finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    );
+    const body = (await response.json()) as {
+      ok: boolean;
+      shareUrl?: string;
+      manageUrl?: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    // Must use RP_ORIGIN, not the internal DO hostname
+    expect(body.shareUrl).toBe(`${RP_ORIGIN}/s/${uuid}`);
+    expect(body.manageUrl).toBe(`${RP_ORIGIN}/m/${uuid}`);
+    expect(body.shareUrl).not.toContain('fake-internal');
+    expect(body.manageUrl).not.toContain('fake-internal');
   });
 });
