@@ -721,10 +721,9 @@ describe('SecretVault lock challenge flow', () => {
     // valid (correct HMAC domain, correct uuid, correct challenge bytes) but
     // is computed over the wrong key material.
     // Use encodeBase64Url to produce a properly-encoded key with different bytes
-    // than createLockKey() which uses [1, 35, 69, 103, 137, 171, 205, 239].
-    const attackerLockKey = encodeBase64Url(
-      Uint8Array.from([255, 254, 253, 252, 251, 250, 249, 248])
-    );
+    // than the real lockKey. Use 32 bytes (LOCK_KEY_BYTES) of 0xff to model
+    // a realistic attacker who guesses the full-length key material.
+    const attackerLockKey = encodeBase64Url(new Uint8Array(32).fill(0xff));
     const attackerProof = await computeLockProof(record.uuid, challenge, attackerLockKey);
 
     // Step 3: submit the attacker's structurally-valid-but-wrong proof
