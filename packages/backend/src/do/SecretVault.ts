@@ -1,12 +1,11 @@
 import {
-  type AssertionJSON,
   type AttestationJSON,
   type Base64Url,
   CHALLENGE_BYTES,
   CHALLENGE_TTL_MS,
   CHANNEL_STATE,
+  CHANNEL_TTL_MS,
   type ChannelRecord,
-  type CipherBundle,
   CompoundBeginRequestSchema,
   type CompoundChallenge,
   CompoundCommitRequestSchema,
@@ -17,10 +16,7 @@ import {
   type ECDSAPublicKeyJWK,
   type HexString,
   LockBeginRequestSchema,
-  type LockChallenge,
-  type LockCommitRequest,
   LockCommitRequestSchema,
-  type ManageIntent,
   NONCE_TTL_MS,
   type NonceRecord,
   type RSAPublicKeyJWK,
@@ -44,242 +40,70 @@ import {
 } from '../crypto/bytes.ts';
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { generateCreationOptions, verifyAssertion } from '../crypto/webauthn.ts';
+import {
+  assertNonTerminal,
+  assertUuidMatch,
+  assertWaitingState,
+  jsonError,
+  jsonResponse,
+  mapError,
+  methodNotAllowed,
+  normalizeAssertion,
+  notFound,
+  readJsonBody,
+} from './SecretVaultHttp.ts';
+import { scheduleNextNonceCleanup, sweepExpiredNonces } from './SecretVaultNonces.ts';
 
-export interface SecretVaultEnv {
-  SECRET_VAULT: DurableObjectNamespace;
-  SECRETS_KV: KVNamespace;
-  RP_ID: string;
-  RP_ORIGIN: string;
-}
+// ---------------------------------------------------------------------------
+// Re-exports for backward compatibility (tests import from this module)
+// ---------------------------------------------------------------------------
 
-export interface CommitLockParams {
-  receiverPubJwk: RSAPublicKeyJWK;
-  receiverPubFpr: HexString;
-  lockedAt: UnixMs;
-}
+export { SecretVaultStateMachine } from './SecretVaultStateMachine.ts';
+export type {
+  CommitDeliveryParams,
+  CommitLockChallengeParams,
+  CommitLockParams,
+  CompoundCommitParams,
+  SecretVaultEnv,
+  SoftkeyCompoundCommitParams,
+  StoredCompoundChallenge,
+  StoredLockChallenge,
+  WebAuthnCompoundCommitParams,
+} from './SecretVaultTypes.ts';
+export {
+  CHANNEL_RECORD_KEY,
+  COMPOUND_CHALLENGE_KEY,
+  CREATION_CHALLENGE_KEY,
+  LOCK_CHALLENGE_KEY_PREFIX,
+  lockChallengeStorageKey,
+  NONCE_INDEX_KEY_PREFIX,
+  NONCE_KEY_PREFIX,
+  nonceIndexStorageKey,
+  nonceStorageKey,
+  StateTransitionError,
+} from './SecretVaultTypes.ts';
 
-export interface CommitDeliveryParams {
-  cipherBundle: CipherBundle;
-  deliveredAt: UnixMs;
-}
-
-export interface CommitLockChallengeParams {
-  uuid: string;
-  lockChallengeId: Base64Url;
-  lockProof: HexString;
-  receiverPubJwk: RSAPublicKeyJWK;
-  receiverPubFpr: HexString;
-  lockedAt: UnixMs;
-}
-
-export interface WebAuthnCompoundCommitParams {
-  adminMode?: 'webauthn';
-  uuid: string;
-  assertion: AssertionJSON;
-  intentHash: HexString;
-  intent: ManageIntent;
-}
-
-export interface SoftkeyCompoundCommitParams {
-  adminMode: 'softkey';
-  uuid: string;
-  softkeySignature: HexString;
-  intentHash: HexString;
-  intent: ManageIntent;
-}
-
-export type CompoundCommitParams = WebAuthnCompoundCommitParams | SoftkeyCompoundCommitParams;
-
-interface StoredLockChallenge {
-  id: Base64Url;
-  challenge: Base64Url;
-  expiresAt: UnixMs;
-  consumedAt?: UnixMs;
-}
-
-interface StoredCompoundChallenge {
-  id: Base64Url;
-  seed: Base64Url;
-  expiresAt: UnixMs;
-  consumedAt?: UnixMs;
-}
-
-interface NonceIndexRecord {
-  nonce: Base64Url;
-  expiresAt: UnixMs;
-}
-
-interface LooseAssertionJson {
-  id: Base64Url;
-  rawId: Base64Url;
-  type: 'public-key';
-  response: {
-    clientDataJSON: Base64Url;
-    authenticatorData: Base64Url;
-    signature: Base64Url;
-    userHandle?: Base64Url | null | undefined;
-  };
-}
-
-interface ErrorResponse {
-  ok: false;
-  code: string;
-}
-
-interface MethodNotAllowedResponse extends ErrorResponse {
-  code: 'METHOD_NOT_ALLOWED';
-}
-
-type StateTransitionErrorCode =
-  | 'INVALID_TRANSITION'
-  | 'TERMINAL_STATE'
-  | 'RECORD_NOT_FOUND'
-  | 'CHALLENGE_INVALID'
-  | 'CHALLENGE_CONSUMED'
-  | 'LOCK_FORBIDDEN'
-  | 'VERSION_MISMATCH'
-  | 'NONCE_REPLAY'
-  | 'TIMESTAMP_OUT_OF_RANGE'
-  | 'ASSERTION_INVALID'
-  | 'INTENT_HASH_MISMATCH'
-  | 'ATTESTATION_UNVERIFIABLE';
-
-export class StateTransitionError extends Error {
-  readonly code: StateTransitionErrorCode;
-
-  constructor(code: StateTransitionErrorCode, message: string) {
-    super(message);
-    this.name = 'StateTransitionError';
-    this.code = code;
-  }
-}
-
-export const CHANNEL_RECORD_KEY = 'channel_record' as const;
-export const CREATION_CHALLENGE_KEY = 'creation_challenge' as const;
-export const LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
-export const COMPOUND_CHALLENGE_KEY = 'compound_challenge_active' as const;
-export const NONCE_KEY_PREFIX = 'nonce:' as const;
-export const NONCE_INDEX_KEY_PREFIX = 'nonce_index:' as const;
-
-const LOCK_CHALLENGE_ID_BYTES = 16;
-const COMPOUND_CHALLENGE_ID_BYTES = 16;
-const NONCE_INDEX_TIMESTAMP_WIDTH = 16;
-const NONCE_SWEEP_BATCH_SIZE = 128;
-const NONCE_SWEEP_RETRY_DELAY_MS = 1_000;
-
-function lockChallengeStorageKey(id: Base64Url): string {
-  return `${LOCK_CHALLENGE_KEY_PREFIX}${id}`;
-}
-
-function nonceStorageKey(nonce: Base64Url): string {
-  return `${NONCE_KEY_PREFIX}${nonce}`;
-}
-
-function nonceIndexStorageKey(expiresAt: UnixMs, nonce: Base64Url): string {
-  const paddedExpiresAt = String(expiresAt).padStart(NONCE_INDEX_TIMESTAMP_WIDTH, '0');
-  return `${NONCE_INDEX_KEY_PREFIX}${paddedExpiresAt}:${nonce}`;
-}
-
-export class SecretVaultStateMachine {
-  private readonly record: ChannelRecord;
-
-  constructor(record: ChannelRecord) {
-    this.record = record;
-  }
-
-  commitLock({ receiverPubJwk, receiverPubFpr, lockedAt }: CommitLockParams): ChannelRecord {
-    if (
-      this.record.state === CHANNEL_STATE.DELETED ||
-      this.record.state === CHANNEL_STATE.EXPIRED
-    ) {
-      throw new StateTransitionError(
-        'TERMINAL_STATE',
-        `cannot lock when state is ${this.record.state}`
-      );
-    }
-
-    if (this.record.state !== CHANNEL_STATE.WAITING) {
-      throw new StateTransitionError(
-        'INVALID_TRANSITION',
-        `lock transition requires waiting state, got ${this.record.state}`
-      );
-    }
-
-    return {
-      ...this.record,
-      state: CHANNEL_STATE.LOCKED,
-      receiver: {
-        pubJwk: receiverPubJwk,
-        pubFpr: receiverPubFpr,
-        lockedAt,
-      },
-    };
-  }
-
-  commitDelivery({ cipherBundle, deliveredAt }: CommitDeliveryParams): ChannelRecord {
-    if (
-      this.record.state === CHANNEL_STATE.DELETED ||
-      this.record.state === CHANNEL_STATE.EXPIRED
-    ) {
-      throw new StateTransitionError(
-        'TERMINAL_STATE',
-        `cannot deliver when state is ${this.record.state}`
-      );
-    }
-
-    if (
-      this.record.state !== CHANNEL_STATE.LOCKED &&
-      this.record.state !== CHANNEL_STATE.DELIVERED
-    ) {
-      throw new StateTransitionError(
-        'INVALID_TRANSITION',
-        `delivery transition requires locked or delivered state, got ${this.record.state}`
-      );
-    }
-
-    return {
-      ...this.record,
-      state: CHANNEL_STATE.DELIVERED,
-      cipherBundle,
-      deliveredAt,
-      version: this.record.version + 1,
-    };
-  }
-
-  commitDelete(): ChannelRecord {
-    if (
-      this.record.state === CHANNEL_STATE.DELETED ||
-      this.record.state === CHANNEL_STATE.EXPIRED
-    ) {
-      throw new StateTransitionError(
-        'TERMINAL_STATE',
-        `cannot delete when state is ${this.record.state}`
-      );
-    }
-
-    return {
-      ...this.record,
-      state: CHANNEL_STATE.DELETED,
-    };
-  }
-
-  expire(): ChannelRecord {
-    if (
-      this.record.state === CHANNEL_STATE.DELETED ||
-      this.record.state === CHANNEL_STATE.EXPIRED
-    ) {
-      throw new StateTransitionError(
-        'TERMINAL_STATE',
-        `cannot expire when state is ${this.record.state}`
-      );
-    }
-
-    return {
-      ...this.record,
-      state: CHANNEL_STATE.EXPIRED,
-    };
-  }
-}
+import { SecretVaultStateMachine } from './SecretVaultStateMachine.ts';
+import type {
+  CommitDeliveryParams,
+  CommitLockChallengeParams,
+  CommitLockParams,
+  CompoundCommitParams,
+  SecretVaultEnv,
+  StoredCompoundChallenge,
+  StoredLockChallenge,
+} from './SecretVaultTypes.ts';
+import {
+  CHANNEL_RECORD_KEY,
+  COMPOUND_CHALLENGE_ID_BYTES,
+  COMPOUND_CHALLENGE_KEY,
+  CREATION_CHALLENGE_KEY,
+  LOCK_CHALLENGE_ID_BYTES,
+  lockChallengeStorageKey,
+  nonceIndexStorageKey,
+  nonceStorageKey,
+  StateTransitionError,
+} from './SecretVaultTypes.ts';
 
 export class SecretVault {
   private readonly ctx: DurableObjectState;
@@ -293,7 +117,7 @@ export class SecretVault {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== 'POST') {
-      return this.methodNotAllowed();
+      return methodNotAllowed();
     }
 
     if (url.pathname === '/create_begin') {
@@ -320,13 +144,13 @@ export class SecretVault {
       return this.handleCompoundCommit(request);
     }
 
-    return this.notFound();
+    return notFound();
   }
 
   async alarm(now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      await this.sweepExpiredNonces(now);
-      await this.scheduleNextNonceCleanup(now);
+      await sweepExpiredNonces(this.ctx.storage, now);
+      await scheduleNextNonceCleanup(this.ctx.storage, now);
     });
   }
 
@@ -369,17 +193,15 @@ export class SecretVault {
       const cryptoApi = getCryptoApi();
       const challenge = cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
 
-      // Save a "half-initialized" record or just store the challenge.
-      // PRD says channel is created at create_begin.
-      const expiresAt = asUnixMs(now + 3600000); // Default 1h for initialization
+      const expiresAt = asUnixMs(now + CHANNEL_TTL_MS.ONE_HOUR);
       const record: ChannelRecord = {
         uuid: uuid as UUID,
         state: CHANNEL_STATE.WAITING,
         createdAt: asUnixMs(now),
         expiresAt,
-        ttl: 3600000,
+        ttl: CHANNEL_TTL_MS.ONE_HOUR,
         securityProfile,
-        adminMode: 'webauthn', // Default, might be changed by create_finish
+        adminMode: 'webauthn',
         adminCredential: {
           credentialId: '' as Base64Url,
           publicKey: '' as Base64Url,
@@ -391,8 +213,6 @@ export class SecretVault {
       };
 
       await this.saveRecord(record);
-      // Store the creation challenge under a fixed key so commitCreate can
-      // retrieve it without needing the random challenge id.
       await this.ctx.storage.put(CREATION_CHALLENGE_KEY, encodeBase64Url(challenge));
 
       return generateCreationOptions({
@@ -405,19 +225,16 @@ export class SecretVault {
     });
   }
 
-  async commitCreate(
-    params: {
-      uuid: string;
-      adminMode: 'webauthn' | 'softkey';
-      attestation?: AttestationJSON;
-      softkeyPubJwk?: ECDSAPublicKeyJWK;
-      lockKeyB64u: Base64Url;
-    },
-    _now: number = Date.now()
-  ): Promise<void> {
+  async commitCreate(params: {
+    uuid: string;
+    adminMode: 'webauthn' | 'softkey';
+    attestation?: AttestationJSON;
+    softkeyPubJwk?: ECDSAPublicKeyJWK;
+    lockKeyB64u: Base64Url;
+  }): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadRecord();
-      this.assertUuidMatch(record.uuid, params.uuid);
+      assertUuidMatch(record.uuid, params.uuid);
       if (record.lockKey !== '') {
         throw new StateTransitionError('INVALID_TRANSITION', 'channel already finalized');
       }
@@ -515,8 +332,8 @@ export class SecretVault {
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadRecord();
-      this.assertNonTerminal(record);
-      this.assertUuidMatch(record.uuid, uuid);
+      assertNonTerminal(record);
+      assertUuidMatch(record.uuid, uuid);
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
@@ -555,15 +372,14 @@ export class SecretVault {
   async commitCompound(params: CompoundCommitParams, now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadRecord();
-      this.assertNonTerminal(record);
-      this.assertUuidMatch(record.uuid, params.uuid);
+      assertNonTerminal(record);
+      assertUuidMatch(record.uuid, params.uuid);
 
       const { intent } = params;
       if (intent.uuid !== record.uuid) {
         throw new StateTransitionError('LOCK_FORBIDDEN', 'intent uuid mismatch');
       }
 
-      // Version check
       if (intent.version !== record.version) {
         throw new StateTransitionError(
           'VERSION_MISMATCH',
@@ -571,7 +387,6 @@ export class SecretVault {
         );
       }
 
-      // Timestamp skew check
       const skew = Math.abs(intent.timestamp - now);
       if (skew > TIMESTAMP_SKEW_MS) {
         throw new StateTransitionError(
@@ -580,7 +395,6 @@ export class SecretVault {
         );
       }
 
-      // Nonce replay check
       const nonceKey = nonceStorageKey(intent.nonce);
       const existingNonce = await this.ctx.storage.get<NonceRecord>(nonceKey);
       if (existingNonce) {
@@ -594,13 +408,11 @@ export class SecretVault {
         ]);
       }
 
-      // Intent hash verification
       const computedHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
       if (!constantTimeEqual(computedHash, params.intentHash)) {
         throw new StateTransitionError('INTENT_HASH_MISMATCH', 'intent hash does not match');
       }
 
-      // Load and validate compound challenge
       const challenge = await this.ctx.storage.get<StoredCompoundChallenge>(COMPOUND_CHALLENGE_KEY);
       if (!challenge) {
         throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge not found');
@@ -613,8 +425,6 @@ export class SecretVault {
         throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge expired');
       }
 
-      // Derive expected challenge:
-      // SHA-256("GLv2.5" || uuid || challengeId || intentHash || seed)
       const expectedChallengeBytes = await sha256Bytes([
         toUtf8Bytes(DOMAIN.CHALLENGE),
         toUtf8Bytes(record.uuid),
@@ -662,7 +472,6 @@ export class SecretVault {
         verifiedWebAuthnSignCount = verifyResult.newSignCount;
       }
 
-      // Apply state transition
       const machine = new SecretVaultStateMachine(record);
       let nextRecord: ChannelRecord;
       if (intent.op === 'delete') {
@@ -674,7 +483,6 @@ export class SecretVault {
         });
       }
 
-      // Store nonce with TTL and track it in a sweep-friendly index.
       const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
       const nonceRecord: NonceRecord = {
         nonce: intent.nonce,
@@ -685,10 +493,9 @@ export class SecretVault {
       await this.ctx.storage.put(nonceIndexStorageKey(nonceExpiresAt, intent.nonce), {
         nonce: intent.nonce,
         expiresAt: nonceExpiresAt,
-      } satisfies NonceIndexRecord);
+      });
       await this.ensureNonceCleanupAlarm(nonceExpiresAt);
 
-      // Mark challenge consumed
       await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, {
         ...challenge,
         consumedAt: asUnixMs(now),
@@ -709,11 +516,14 @@ export class SecretVault {
     });
   }
 
-  async beginLockChallenge(uuid: string, now: number = Date.now()): Promise<LockChallenge> {
+  async beginLockChallenge(
+    uuid: string,
+    now: number = Date.now()
+  ): Promise<import('@zerolink/shared').LockChallenge> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadRecord();
-      this.assertWaitingState(record);
-      this.assertUuidMatch(record.uuid, uuid);
+      assertWaitingState(record);
+      assertUuidMatch(record.uuid, uuid);
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
@@ -745,8 +555,8 @@ export class SecretVault {
   ): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadRecord();
-      this.assertWaitingState(record);
-      this.assertUuidMatch(record.uuid, uuid);
+      assertWaitingState(record);
+      assertUuidMatch(record.uuid, uuid);
 
       const challenge = await this.loadLockChallenge(lockChallengeId);
       if (!challenge) {
@@ -760,7 +570,13 @@ export class SecretVault {
         throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge expired');
       }
 
-      const expectedProof = await this.computeExpectedLockProof(record, challenge);
+      const expectedProof = await sha256Hex([
+        toUtf8Bytes(DOMAIN.LOCK_PROOF),
+        toUtf8Bytes(record.uuid),
+        decodeBase64Url(challenge.id),
+        decodeBase64Url(challenge.challenge),
+        decodeBase64Url(record.lockKey),
+      ]);
       if (!constantTimeEqual(expectedProof, lockProof)) {
         throw new StateTransitionError('LOCK_FORBIDDEN', 'lock proof mismatch');
       }
@@ -797,103 +613,6 @@ export class SecretVault {
     }
   }
 
-  private async sweepExpiredNonces(now: number): Promise<void> {
-    const nonceIndexes = await this.ctx.storage.list<NonceIndexRecord>({
-      prefix: NONCE_INDEX_KEY_PREFIX,
-      limit: NONCE_SWEEP_BATCH_SIZE,
-    });
-    if (nonceIndexes.size === 0) {
-      return;
-    }
-
-    const keysToDelete: string[] = [];
-    for (const [indexKey, indexRecord] of nonceIndexes) {
-      const resolved = this.resolveNonceIndexEntry(indexKey, indexRecord);
-      if (!resolved) {
-        keysToDelete.push(indexKey);
-        continue;
-      }
-      if (resolved.expiresAt > now) {
-        break;
-      }
-
-      keysToDelete.push(indexKey, nonceStorageKey(resolved.nonce));
-    }
-
-    if (keysToDelete.length > 0) {
-      await this.ctx.storage.delete(keysToDelete);
-    }
-  }
-
-  private async scheduleNextNonceCleanup(now: number): Promise<void> {
-    while (true) {
-      const firstEntry = await this.readEarliestNonceIndexEntry();
-      if (!firstEntry) {
-        await this.ctx.storage.deleteAlarm();
-        return;
-      }
-
-      const [indexKey, indexRecord] = firstEntry;
-      const resolved = this.resolveNonceIndexEntry(indexKey, indexRecord);
-      if (!resolved) {
-        await this.ctx.storage.delete(indexKey);
-        continue;
-      }
-
-      const nextAlarmAt =
-        resolved.expiresAt <= now ? now + NONCE_SWEEP_RETRY_DELAY_MS : resolved.expiresAt;
-      await this.ctx.storage.setAlarm(nextAlarmAt);
-      return;
-    }
-  }
-
-  private async readEarliestNonceIndexEntry(): Promise<
-    [string, NonceIndexRecord | undefined] | undefined
-  > {
-    const nonceIndexes = await this.ctx.storage.list<NonceIndexRecord>({
-      prefix: NONCE_INDEX_KEY_PREFIX,
-      limit: 1,
-    });
-    const firstEntry = nonceIndexes.entries().next().value;
-    if (!firstEntry) {
-      return undefined;
-    }
-
-    return [firstEntry[0], firstEntry[1]];
-  }
-
-  private resolveNonceIndexEntry(
-    indexKey: string,
-    indexRecord: NonceIndexRecord | undefined
-  ): { nonce: Base64Url; expiresAt: number } | undefined {
-    if (
-      indexRecord &&
-      typeof indexRecord.nonce === 'string' &&
-      Number.isFinite(indexRecord.expiresAt)
-    ) {
-      return {
-        nonce: indexRecord.nonce,
-        expiresAt: Number(indexRecord.expiresAt),
-      };
-    }
-
-    const suffix = indexKey.slice(NONCE_INDEX_KEY_PREFIX.length);
-    const separator = suffix.indexOf(':');
-    if (separator <= 0 || separator === suffix.length - 1) {
-      return undefined;
-    }
-
-    const expiresAt = Number.parseInt(suffix.slice(0, separator), 10);
-    if (!Number.isFinite(expiresAt)) {
-      return undefined;
-    }
-
-    return {
-      nonce: suffix.slice(separator + 1) as Base64Url,
-      expiresAt,
-    };
-  }
-
   private async loadRecord(): Promise<ChannelRecord> {
     const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
     if (!record) {
@@ -906,81 +625,46 @@ export class SecretVault {
     await this.ctx.storage.put(CHANNEL_RECORD_KEY, record);
   }
 
-  private methodNotAllowed(): Response {
-    return this.jsonResponse<MethodNotAllowedResponse>(
-      {
-        ok: false,
-        code: 'METHOD_NOT_ALLOWED',
-      },
-      405,
-      {
-        Allow: 'POST',
-      }
-    );
+  private async loadLockChallenge(id: Base64Url): Promise<StoredLockChallenge | undefined> {
+    return this.ctx.storage.get<StoredLockChallenge>(lockChallengeStorageKey(id));
   }
 
-  private notFound(): Response {
-    return this.jsonError('NOT_FOUND', 404);
+  private async saveLockChallenge(challenge: StoredLockChallenge): Promise<void> {
+    await this.ctx.storage.put(lockChallengeStorageKey(challenge.id), challenge);
   }
 
-  private jsonError(code: string, status: number): Response {
-    return this.jsonResponse<ErrorResponse>(
-      {
-        ok: false,
-        code,
-      },
-      status
-    );
-  }
-
-  private jsonResponse<T extends object>(
-    payload: T,
-    status: number,
-    extraHeaders?: HeadersInit
-  ): Response {
-    const headers = new Headers(extraHeaders);
-    headers.set('Content-Type', 'application/json; charset=utf-8');
-
-    return new Response(JSON.stringify(payload), {
-      status,
-      headers,
-    });
+  private async deleteLockChallenge(id: Base64Url): Promise<void> {
+    await this.ctx.storage.delete(lockChallengeStorageKey(id));
   }
 
   private async handleCreateBegin(request: Request): Promise<Response> {
-    const body = await this.readJsonBody(request);
+    const body = await readJsonBody(request);
     if (body === null) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     const parsed = CreateBeginRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     try {
       const creationOptions = await this.beginCreate(parsed.data.uuid, parsed.data.securityProfile);
-      return this.jsonResponse(
-        {
-          ok: true,
-          creationOptions,
-        },
-        200
-      );
+      return jsonResponse({ ok: true, creationOptions }, 200);
     } catch (error) {
-      return this.mapError(error);
+      return mapError(error);
     }
   }
 
   private async handleCreateFinish(request: Request): Promise<Response> {
-    const body = await this.readJsonBody(request);
+    const body = await readJsonBody(request);
     if (body === null) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     const parsed = CreateFinishRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     try {
@@ -998,7 +682,7 @@ export class SecretVault {
       };
       await this.commitCreate(commitParams);
 
-      return this.jsonResponse(
+      return jsonResponse(
         {
           ok: true,
           shareUrl: `${this.env.RP_ORIGIN}/s/${parsed.data.uuid}`,
@@ -1007,64 +691,58 @@ export class SecretVault {
         200
       );
     } catch (error) {
-      return this.mapError(error);
+      return mapError(error);
     }
   }
 
   private async handleLockBegin(request: Request): Promise<Response> {
-    const body = await this.readJsonBody(request);
+    const body = await readJsonBody(request);
     if (body === null) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     const parsed = LockBeginRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     try {
       const lockChallenge = await this.beginLockChallenge(parsed.data.uuid);
-      return this.jsonResponse(
-        {
-          ok: true,
-          lockChallenge,
-        },
-        200
-      );
+      return jsonResponse({ ok: true, lockChallenge }, 200);
     } catch (error) {
-      return this.mapError(error);
+      return mapError(error);
     }
   }
 
   private async handleCompoundBegin(request: Request): Promise<Response> {
-    const body = await this.readJsonBody(request);
+    const body = await readJsonBody(request);
     if (body === null) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     const parsed = CompoundBeginRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     try {
       const result = await this.beginCompoundChallenge(parsed.data.uuid);
-      return this.jsonResponse({ ok: true, ...result }, 200);
+      return jsonResponse({ ok: true, ...result }, 200);
     } catch (error) {
-      return this.mapError(error);
+      return mapError(error);
     }
   }
 
   private async handleCompoundCommit(request: Request): Promise<Response> {
-    const body = await this.readJsonBody(request);
+    const body = await readJsonBody(request);
     if (body === null) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     const parsedWebAuthn = CompoundCommitRequestSchema.safeParse(body);
     const parsedSoftkey = SoftkeyCompoundCommitRequestSchema.safeParse(body);
     if (!parsedWebAuthn.success && !parsedSoftkey.success) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     try {
@@ -1079,168 +757,35 @@ export class SecretVault {
       } else if (parsedWebAuthn.success) {
         await this.commitCompound({
           uuid: parsedWebAuthn.data.uuid,
-          assertion: this.normalizeAssertion(parsedWebAuthn.data.assertion),
+          assertion: normalizeAssertion(parsedWebAuthn.data.assertion),
           intentHash: parsedWebAuthn.data.intentHash,
           intent: parsedWebAuthn.data.intent,
         });
       }
 
-      return this.jsonResponse({ ok: true }, 200);
+      return jsonResponse({ ok: true }, 200);
     } catch (error) {
-      return this.mapError(error);
+      return mapError(error);
     }
   }
 
   private async handleLockCommit(request: Request): Promise<Response> {
-    const body = await this.readJsonBody(request);
+    const body = await readJsonBody(request);
     if (body === null) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     const parsed = LockCommitRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return this.jsonError('BAD_REQUEST', 400);
+      return jsonError('BAD_REQUEST', 400);
     }
 
     try {
-      await this.commitLockChallenge(this.toCommitLockChallengeParams(parsed.data));
-      return this.jsonResponse({ ok: true }, 200);
+      // LockCommitRequest is structurally compatible with CommitLockChallengeParams
+      await this.commitLockChallenge(parsed.data as unknown as CommitLockChallengeParams);
+      return jsonResponse({ ok: true }, 200);
     } catch (error) {
-      return this.mapError(error);
+      return mapError(error);
     }
-  }
-
-  private async readJsonBody(request: Request): Promise<unknown | null> {
-    try {
-      return await request.json();
-    } catch {
-      return null;
-    }
-  }
-
-  private toCommitLockChallengeParams(request: LockCommitRequest): CommitLockChallengeParams {
-    return {
-      uuid: request.uuid,
-      lockChallengeId: request.lockChallengeId,
-      lockProof: request.lockProof,
-      receiverPubJwk: request.receiverPubJwk,
-      receiverPubFpr: request.receiverPubFpr,
-      lockedAt: request.lockedAt,
-    };
-  }
-
-  private normalizeAssertion(assertion: LooseAssertionJson): AssertionJSON {
-    const { userHandle, ...restResponse } = assertion.response;
-
-    if (userHandle === undefined) {
-      return {
-        ...assertion,
-        response: restResponse,
-      };
-    }
-
-    return {
-      ...assertion,
-      response: {
-        ...restResponse,
-        userHandle,
-      },
-    };
-  }
-
-  private mapError(error: unknown): Response {
-    if (error instanceof StateTransitionError) {
-      return this.mapStateTransitionError(error);
-    }
-
-    return this.jsonError('INTERNAL_ERROR', 500);
-  }
-
-  private mapStateTransitionError(error: StateTransitionError): Response {
-    if (error.code === 'RECORD_NOT_FOUND') {
-      return this.jsonError('NOT_FOUND', 404);
-    }
-    if (error.code === 'CHALLENGE_INVALID') {
-      return this.jsonError('CHALLENGE_INVALID', 401);
-    }
-    if (error.code === 'CHALLENGE_CONSUMED') {
-      return this.jsonError('CHALLENGE_CONSUMED', 409);
-    }
-    if (
-      error.code === 'LOCK_FORBIDDEN' ||
-      error.code === 'INVALID_TRANSITION' ||
-      error.code === 'TERMINAL_STATE'
-    ) {
-      return this.jsonError('LOCK_FORBIDDEN', 403);
-    }
-    if (error.code === 'VERSION_MISMATCH' || error.code === 'NONCE_REPLAY') {
-      return this.jsonError(error.code, 409);
-    }
-    if (error.code === 'TIMESTAMP_OUT_OF_RANGE' || error.code === 'INTENT_HASH_MISMATCH') {
-      return this.jsonError(error.code, 400);
-    }
-    if (error.code === 'ASSERTION_INVALID') {
-      return this.jsonError('ASSERTION_INVALID', 403);
-    }
-    if (error.code === 'ATTESTATION_UNVERIFIABLE') {
-      return this.jsonError('ATTESTATION_UNVERIFIABLE', 403);
-    }
-
-    return this.jsonError('INTERNAL_ERROR', 500);
-  }
-
-  private assertNonTerminal(record: ChannelRecord): void {
-    if (record.state === CHANNEL_STATE.DELETED || record.state === CHANNEL_STATE.EXPIRED) {
-      throw new StateTransitionError(
-        'TERMINAL_STATE',
-        `operation forbidden for terminal state ${record.state}`
-      );
-    }
-  }
-
-  private assertWaitingState(record: ChannelRecord): void {
-    if (record.state === CHANNEL_STATE.DELETED || record.state === CHANNEL_STATE.EXPIRED) {
-      throw new StateTransitionError(
-        'TERMINAL_STATE',
-        `lock challenge flow forbidden for terminal state ${record.state}`
-      );
-    }
-    if (record.state !== CHANNEL_STATE.WAITING) {
-      throw new StateTransitionError(
-        'INVALID_TRANSITION',
-        `lock challenge flow requires waiting state, got ${record.state}`
-      );
-    }
-  }
-
-  private assertUuidMatch(recordUuid: string, requestUuid: string): void {
-    if (recordUuid !== requestUuid) {
-      throw new StateTransitionError('LOCK_FORBIDDEN', 'uuid mismatch');
-    }
-  }
-
-  private async computeExpectedLockProof(
-    record: ChannelRecord,
-    challenge: StoredLockChallenge
-  ): Promise<HexString> {
-    return sha256Hex([
-      toUtf8Bytes(DOMAIN.LOCK_PROOF),
-      toUtf8Bytes(record.uuid),
-      decodeBase64Url(challenge.id),
-      decodeBase64Url(challenge.challenge),
-      decodeBase64Url(record.lockKey),
-    ]);
-  }
-
-  private async loadLockChallenge(id: Base64Url): Promise<StoredLockChallenge | undefined> {
-    return this.ctx.storage.get<StoredLockChallenge>(lockChallengeStorageKey(id));
-  }
-
-  private async saveLockChallenge(challenge: StoredLockChallenge): Promise<void> {
-    await this.ctx.storage.put(lockChallengeStorageKey(challenge.id), challenge);
-  }
-
-  private async deleteLockChallenge(id: Base64Url): Promise<void> {
-    await this.ctx.storage.delete(lockChallengeStorageKey(id));
   }
 }

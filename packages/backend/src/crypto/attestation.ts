@@ -157,7 +157,11 @@ async function validateContext(params: {
     throw new Error('Invalid origin');
   }
 
-  const challengeBytes = decodeBase64Url(clientData.challenge as string);
+  const rawChallenge: unknown = clientData.challenge;
+  if (typeof rawChallenge !== 'string') {
+    throw new Error('challenge field in clientData is not a string');
+  }
+  const challengeBytes = decodeBase64Url(rawChallenge);
   if (!constantTimeEqual(challengeBytes, params.expectedChallenge)) {
     throw new Error('Challenge mismatch');
   }
@@ -256,7 +260,10 @@ export async function verifyAttestation(params: {
     } else {
       throw new Error('packed attestation missing sig field; cannot verify');
     }
-  } else if (decoded.fmt !== 'none') {
+  } else if (decoded.fmt === 'none') {
+    warning =
+      "fmt:'none' attestation — no attestation statement provided; credential origin is unverifiable";
+  } else {
     throw new Error(`Attestation format '${decoded.fmt}' is not supported`);
   }
 
