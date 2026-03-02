@@ -988,6 +988,23 @@ pnpm --filter @zerolink/backend deploy
 # compatibility_date = "2024-01-01"
 ```
 
+### 计费模型与限制 (Cost & Limits)
+
+ZeroLink 核心逻辑依赖 **Cloudflare Durable Objects (DO)**。自 2026 年起，Cloudflare 为 DO 提供了完整的**免费层 (Free Tier)**，开发者无需付费订阅即可运行本项目。
+
+| 计费项 | 免费层额度 (Free Plan) | 说明 |
+|------|-------------------|------|
+| **计算请求 (Requests)** | 100,000 次/日 | 超过限额后 DO 将停止响应直至次日重置 |
+| **计算时长 (Duration)** | 12,800 GB-s/日 | 基于 wall-clock time 计费 (每个 DO 固定按 128MB 内存计算) |
+| **SQLite 存储读取** | 5,000,000 行/日 | 本项目推荐并使用 SQLite 作为 DO 存储后端 |
+| **SQLite 存储写入** | 100,000 行/日 | 包含原子性事务写入 |
+| **总存储容量** | 5 GB | DO 持久化数据的总上限 |
+
+**关键提示**:
+1. **免费层限制**: 免费层仅支持 **SQLite 存储后端**。本项目已适配 SQLite。
+2. **付费版 (Paid Plan)**: 如果需要更高额度或使用传统的 KV 存储后端，需开通 Workers Paid 计划（每月 $5 起）。
+3. **休眠机制**: 本项目利用 WebSocket 自动休眠（Hibernation）降低计算时长消耗。
+
 ---
 
 ## 配置文件清单

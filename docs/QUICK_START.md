@@ -186,9 +186,12 @@ cd ../..
 
 ### 5. 初始化 backend 包
 
+> **提示**: ZeroLink 后端使用 Cloudflare Durable Objects。
+> 自 2026 年起，Durable Objects 已提供**免费层 (Free Tier)**（每日 10 万次请求 + 5GB SQLite 存储），使用免费 Cloudflare Workers 账号即可开始开发，无需绑定信用卡或订阅。
+
 ```bash
 cd packages/backend
-
+...
 # 创建 package.json
 cat > package.json << 'EOF'
 {
