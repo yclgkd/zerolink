@@ -7,7 +7,8 @@ function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-border/70 bg-card/80 text-card-foreground shadow-[0_20px_64px_rgb(0_0_0_/_0.45)] backdrop-blur-xl',
+        'relative overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 text-card-foreground shadow-[0_20px_64px_rgb(0_0_0_/_0.45)] backdrop-blur-xl',
+        'before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent',
         className
       )}
       data-slot="card"

@@ -1,10 +1,12 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { CHANNEL_STATE } from '@zerolink/shared';
+import { KeyRound, Unlock } from 'lucide-react';
 
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
 import { SafetyCode } from '../../components/safety/safety-code';
 import { Button } from '../../components/ui/button';
+import { Spinner } from '../../components/ui/spinner';
 
 export const onboardingItems = [
   {
@@ -127,7 +129,14 @@ export function LockStep({
           onClick={onGenerate}
           type="button"
         >
-          {lockPending ? 'Locking...' : 'Generate Key & Lock'}
+          {lockPending ? (
+            'Locking...'
+          ) : (
+            <>
+              <KeyRound aria-hidden="true" className="size-4" />
+              Generate Key & Lock
+            </>
+          )}
         </Button>
       </div>
     </section>
@@ -244,7 +253,14 @@ export function DeliveredStep({
             onClick={onDecrypt}
             type="button"
           >
-            {decryptPending ? 'Decrypting...' : 'Decrypt'}
+            {decryptPending ? (
+              'Decrypting...'
+            ) : (
+              <>
+                <Unlock aria-hidden="true" className="size-4" />
+                Decrypt
+              </>
+            )}
           </Button>
           <Button
             data-testid="share-decrypt-burn"
@@ -293,7 +309,10 @@ export function LoadingStep() {
       title="Loading Channel State"
       tone="info"
     >
-      <p className="text-xs text-muted-foreground">Fetching secure channel status for this link.</p>
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Spinner className="size-3" />
+        Fetching secure channel status for this link.
+      </p>
     </StateNotice>
   );
 }

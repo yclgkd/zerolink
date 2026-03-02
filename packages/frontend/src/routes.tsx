@@ -1,4 +1,5 @@
 import { ROUTE_PATTERN } from '@zerolink/shared';
+import { ExternalLink, Link2, Plus, Settings } from 'lucide-react';
 import type { ReactElement } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -86,9 +87,7 @@ function AppShellLayout(): ReactElement {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[var(--neon-magenta)] shadow-[0_0_20px_rgb(168_85_247_/_0.45)]">
-                <span aria-hidden className="text-lg font-semibold text-white">
-                  +
-                </span>
+                <Link2 aria-hidden className="size-5 text-white" />
               </div>
               <div>
                 <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
@@ -113,6 +112,7 @@ function AppShellLayout(): ReactElement {
             <ul className="flex flex-wrap gap-3">
               <li>
                 <NavLink className={({ isActive }) => navLinkClassName(isActive)} end to="/">
+                  <Plus aria-hidden="true" className="size-3.5" />
                   Create
                 </NavLink>
               </li>
@@ -121,6 +121,7 @@ function AppShellLayout(): ReactElement {
                   className={({ isActive }) => navLinkClassName(isActive)}
                   to={shareDemoPath}
                 >
+                  <ExternalLink aria-hidden="true" className="size-3.5" />
                   Share
                 </NavLink>
               </li>
@@ -129,6 +130,7 @@ function AppShellLayout(): ReactElement {
                   className={({ isActive }) => navLinkClassName(isActive)}
                   to={manageDemoPath}
                 >
+                  <Settings aria-hidden="true" className="size-3.5" />
                   Manage
                 </NavLink>
               </li>

@@ -17,7 +17,7 @@ type PageCardProps = ComponentProps<'div'> & {
 };
 
 function PageCard({ tone = 'purple', className, ...props }: PageCardProps) {
-  return <Card className={cn(toneClasses[tone], className)} {...props} />;
+  return <Card className={cn('animate-fade-in-up', toneClasses[tone], className)} {...props} />;
 }
 
 function PageCardHeader({ className, ...props }: ComponentProps<'div'>) {
