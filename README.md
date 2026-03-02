@@ -54,7 +54,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - Argon2id (KDF)
 
 ### 后端
-- Cloudflare Workers + Durable Objects + KV
+- Cloudflare Workers + Durable Objects + KV（提供免费层，支持 SQLite 后端）
 - 可选：Docker Compose 自托管
 
 ## 安全特性
