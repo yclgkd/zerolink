@@ -1349,7 +1349,7 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED },
+      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,
@@ -1472,7 +1472,7 @@ describe('crypto orchestrator', () => {
     statusDeferred.resolve({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED },
+      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
     });
 
     const decryptResult = await decryptPromise;
@@ -1492,7 +1492,7 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.WAITING },
+      data: { ok: true, state: CHANNEL_STATE.WAITING, adminMode: 'webauthn' as const },
     });
 
     const result = await orchestrator.decryptDelivered({
@@ -1541,7 +1541,7 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED },
+      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,
