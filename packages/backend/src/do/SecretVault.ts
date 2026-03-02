@@ -144,6 +144,14 @@ export class SecretVault {
       return this.handleCompoundCommit(request);
     }
 
+    if (url.pathname === '/get_public_state') {
+      return this.handleGetPublicState();
+    }
+
+    if (url.pathname === '/get_decrypt_payload') {
+      return this.handleGetDecryptPayload();
+    }
+
     return notFound();
   }
 
@@ -784,6 +792,48 @@ export class SecretVault {
       // LockCommitRequest is structurally compatible with CommitLockChallengeParams
       await this.commitLockChallenge(parsed.data as unknown as CommitLockChallengeParams);
       return jsonResponse({ ok: true }, 200);
+    } catch (error) {
+      return mapError(error);
+    }
+  }
+
+  private async handleGetPublicState(): Promise<Response> {
+    try {
+      const record = await this.loadRecord();
+      const body: Record<string, unknown> = {
+        ok: true,
+        state: record.state,
+        adminMode: record.adminMode,
+      };
+      if (record.receiver?.pubFpr) {
+        body['receiverPubFpr'] = record.receiver.pubFpr;
+      }
+      return jsonResponse(body, 200);
+    } catch (error) {
+      return mapError(error);
+    }
+  }
+
+  private async handleGetDecryptPayload(): Promise<Response> {
+    try {
+      const record = await this.loadRecord();
+      if (
+        record.state !== CHANNEL_STATE.DELIVERED ||
+        !record.cipherBundle ||
+        !record.receiver ||
+        record.deliveredAt == null
+      ) {
+        return jsonError('CHANNEL_NOT_DELIVERED', 409);
+      }
+      return jsonResponse(
+        {
+          ok: true,
+          cipherBundle: record.cipherBundle,
+          receiverPubFpr: record.receiver.pubFpr,
+          deliveredAt: record.deliveredAt,
+        },
+        200
+      );
     } catch (error) {
       return mapError(error);
     }
