@@ -90,6 +90,12 @@ All work is tracked in `_project_specs/todos/`:
 - `backlog.md` - Future work
 - `completed.md` - Done (for reference)
 
+**Atomic Update Rule (CRITICAL)**:
+- Every code change (feat, fix, refactor) MUST include a corresponding update to `_project_specs/`.
+- Update `current-state.md` with the new progress/phase.
+- Move completed tasks from `active.md` to `completed.md`.
+- No PR or commit should be made without synchronizing these files.
+
 Every todo must have validation criteria and test cases. See base.md skill for format.
 
 ## Session Management

@@ -37,6 +37,15 @@ This is append-only. Never delete entries.
 **Reasoning**: Audited library; pure JS; no WASM complications; maintained by Paulmillr
 **Trade-offs**: Larger bundle than PBKDF2 (pure WebCrypto); @noble/hashes is worth the security
 
+## [2026-03-02] Atomic Project Specs Update Rule
+
+**Decision**: Enforce an "Atomic Update Rule" where every code change must include a corresponding update to `_project_specs/`.
+**Rationale**: The `_project_specs` directory was becoming outdated (stale context), leading to AI assistants losing track of project progress and architectural decisions. Versioning these files alongside code ensures the project's "external brain" is always accurate.
+**Mechanism**: 
+1. Every `feat` or `fix` commit must bundle updates to `current-state.md` and `active.md/completed.md`.
+2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
+**Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
+
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update
 
 **Decision**: Support Cloudflare Durable Objects Free Tier with SQLite backend.
