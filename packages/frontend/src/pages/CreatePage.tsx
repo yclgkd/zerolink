@@ -1,4 +1,5 @@
 import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
+import { ChevronRight, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -126,6 +127,7 @@ function DowngradeDialog({
           size="sm"
           type="button"
         >
+          <ChevronRight aria-hidden="true" className="size-3.5" />
           Continue with Strict
         </Button>
         <Button
@@ -223,7 +225,14 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
         onClick={onCreate}
         type="button"
       >
-        {disabled ? 'Creating...' : 'Create Secure Channel'}
+        {disabled ? (
+          'Creating...'
+        ) : (
+          <>
+            <Zap aria-hidden="true" className="size-4" />
+            Create Secure Channel
+          </>
+        )}
       </Button>
     </div>
   );

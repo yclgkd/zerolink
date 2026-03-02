@@ -44,6 +44,8 @@ export type SecurityProfileCardConfig = {
   tone: PageCardTone;
   /** The CSS class string to apply when the card is selected */
   selectedRingClass: string;
+  /** Icon color class when selected */
+  selectedIconClass: string;
 };
 
 /**
@@ -62,7 +64,8 @@ export const SecurityProfileCardConfigs: Record<SecurityProfile, SecurityProfile
       'Recommended for most channels. Supports platform passkeys while preserving strong cryptographic defaults.',
     icon: ShieldCheck,
     tone: 'purple',
-    selectedRingClass: 'ring-2 ring-neon-purple/60',
+    selectedRingClass: 'ring-2 ring-neon-purple/60 shadow-[0_0_20px_rgba(168,85,247,0.3)]',
+    selectedIconClass: 'border-neon-purple/50 bg-neon-purple/10 text-neon-purple',
   },
   strict: {
     title: 'Strict',
@@ -76,7 +79,8 @@ export const SecurityProfileCardConfigs: Record<SecurityProfile, SecurityProfile
       'Use when both participants can satisfy stricter policy checks and need more explicit identity assurance.',
     icon: ShieldAlert,
     tone: 'magenta',
-    selectedRingClass: 'ring-2 ring-neon-magenta/60',
+    selectedRingClass: 'ring-2 ring-neon-magenta/60 shadow-[0_0_20px_rgba(236,72,153,0.3)]',
+    selectedIconClass: 'border-neon-magenta/50 bg-neon-magenta/10 text-neon-magenta',
   },
   hardware_only: {
     title: 'Hardware-Only',
@@ -90,16 +94,19 @@ export const SecurityProfileCardConfigs: Record<SecurityProfile, SecurityProfile
       'Best fit for high-risk handoffs where both parties can use external security keys and hardware-backed credentials.',
     icon: KeyRound,
     tone: 'orange',
-    selectedRingClass: 'ring-2 ring-neon-orange/60',
+    selectedRingClass: 'ring-2 ring-neon-orange/60 shadow-[0_0_20px_rgba(249,115,22,0.3)]',
+    selectedIconClass: 'border-neon-orange/50 bg-neon-orange/10 text-neon-orange',
   },
 };
 
 function CardHeaderContent({
   profile,
   config,
+  selected,
 }: {
   profile: SecurityProfile;
   config: SecurityProfileCardConfig;
+  selected: boolean;
 }) {
   const Icon = config.icon;
   return (
@@ -107,7 +114,12 @@ function CardHeaderContent({
       <div className="flex items-start justify-between gap-3">
         <PageCardTitle className="text-lg text-foreground">{config.title}</PageCardTitle>
         <span
-          className="rounded-md border border-border/70 bg-card/60 p-2 text-muted-foreground"
+          className={cn(
+            'rounded-md border p-2 transition-colors',
+            selected
+              ? config.selectedIconClass
+              : 'border-border/70 bg-card/60 text-muted-foreground'
+          )}
           data-testid={`security-profile-icon-${profile}`}
         >
           <Icon aria-hidden="true" className="size-4" />
@@ -136,13 +148,16 @@ function CardActionButtons({
       <button
         aria-pressed={selected}
         className={cn(
-          'inline-flex rounded-md border px-2.5 py-1.5 text-xs font-medium transition',
+          'inline-flex rounded-md border px-2.5 py-1.5 text-xs font-medium transition-all duration-200',
           selected
             ? 'border-primary/70 bg-primary/10 text-primary'
             : 'border-border/70 bg-card/60 text-foreground hover:bg-card'
         )}
         data-testid={`security-profile-select-${profile}`}
-        onClick={() => onSelect(profile)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(profile);
+        }}
         type="button"
       >
         {selected ? 'Selected' : 'Select profile'}
@@ -151,7 +166,10 @@ function CardActionButtons({
         aria-expanded={expanded}
         className="inline-flex text-xs font-medium text-primary hover:text-primary/80"
         data-testid={`security-profile-learn-more-${profile}`}
-        onClick={onToggleExpand}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleExpand();
+        }}
         type="button"
       >
         Learn more
@@ -172,17 +190,28 @@ export function SecurityProfileCard({
   const [expanded, setExpanded] = useState(false);
   const config = SecurityProfileCardConfigs[profile];
 
+  function handleCardKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelect(profile);
+    }
+  }
+
   return (
     <PageCard
       className={cn(
-        'group h-full transition',
+        'group h-full cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-border/60',
         selected ? config.selectedRingClass : 'ring-1 ring-transparent',
         className
       )}
       data-testid={`security-profile-card-${profile}`}
+      onClick={() => onSelect(profile)}
+      onKeyDown={handleCardKeyDown}
+      role="button"
+      tabIndex={0}
       tone={config.tone}
     >
-      <CardHeaderContent config={config} profile={profile} />
+      <CardHeaderContent config={config} profile={profile} selected={selected} />
       <PageCardContent className="space-y-3 text-sm text-muted-foreground">
         <ul className="list-disc space-y-1 pl-5">
           {config.points.map((point) => (

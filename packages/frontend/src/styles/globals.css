@@ -50,7 +50,7 @@
   --font-weight-medium: 500;
   --font-weight-normal: 400;
 
-  --background: #0a0a0f;
+  --background: #07070c;
   --foreground: #f8fafc;
 
   --card: rgb(20 20 30 / 40%);
@@ -117,11 +117,16 @@
 
   body {
     @apply bg-background font-sans text-foreground antialiased;
+    font-family: 'Sora', system-ui, sans-serif;
     margin: 0;
+    background-color: #07070c;
     background-image:
-      radial-gradient(circle at 12% -18%, rgb(168 85 247 / 22%), transparent 42%),
-      radial-gradient(circle at 84% -20%, rgb(236 72 153 / 16%), transparent 48%),
-      linear-gradient(180deg, #0a0a0f 0%, #090b14 52%, #090a12 100%);
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(139, 92, 246, 0.2) 0%, transparent 60%),
+      linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px);
+    background-size: auto, 40px 40px, 40px 40px;
+    background-attachment: fixed;
+    min-height: 100vh;
     line-height: 1.5;
   }
 
@@ -169,5 +174,30 @@
 
   code {
     @apply font-mono;
+  }
+
+  code, kbd, pre {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up {
+    animation: none;
   }
 }

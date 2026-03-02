@@ -7,6 +7,7 @@ import {
   type SecurityProfile,
   UUIDSchema,
 } from '@zerolink/shared';
+import { ClipboardCheck, Copy, Send, Trash2 } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -123,7 +124,17 @@ function ShareLinkCard({
           size="sm"
           type="button"
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? (
+            <>
+              <ClipboardCheck aria-hidden="true" className="size-3.5 text-neon-green" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy aria-hidden="true" className="size-3.5" />
+              Copy
+            </>
+          )}
         </Button>
       </div>
     </section>
@@ -278,7 +289,14 @@ function DestroyConfirmPanel({
           type="button"
           variant="danger"
         >
-          {pending ? 'Destroying...' : 'Confirm Destroy'}
+          {pending ? (
+            'Destroying...'
+          ) : (
+            <>
+              <Trash2 aria-hidden="true" className="size-3.5" />
+              Confirm Destroy
+            </>
+          )}
         </Button>
       </div>
     </div>
@@ -317,7 +335,14 @@ function ActionPanel({
           onClick={onDeliver}
           type="button"
         >
-          {pending ? 'Delivering...' : 'Deliver'}
+          {pending ? (
+            'Delivering...'
+          ) : (
+            <>
+              <Send aria-hidden="true" className="size-4" />
+              Deliver
+            </>
+          )}
         </Button>
         <Button
           data-testid="manage-destroy-button"
@@ -326,6 +351,7 @@ function ActionPanel({
           type="button"
           variant="danger"
         >
+          <Trash2 aria-hidden="true" className="size-4" />
           Destroy
         </Button>
       </div>
