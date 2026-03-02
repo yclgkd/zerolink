@@ -1,11 +1,18 @@
-import type { SafetyCodeDisplay } from '@zerolink/shared';
-import { useState } from 'react';
+import type { SafetyCodeDisplay } from "@zerolink/shared";
+import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 
-import { cn } from '../../lib/utils';
-import { PageCard, PageCardContent, PageCardHeader, PageCardTitle } from '../layout';
-import { resolveSafetyCodeColors } from './safety-code-colors';
+import { cn } from "../../lib/utils";
+import {
+  PageCard,
+  PageCardContent,
+  PageCardHeader,
+  PageCardTitle,
+} from "../layout";
+import { resolveSafetyCodeColors } from "./safety-code-colors";
 
-const DEFAULT_VERIFY_HINT = 'Verify this code via another channel (phone, video call)';
+const DEFAULT_VERIFY_HINT =
+  "Verify this code via another channel (phone, video call)";
 
 /**
  * Props for rendering Safety Code in emoji/color modes with advanced fingerprint details.
@@ -16,14 +23,14 @@ export type SafetyCodeProps = {
   /** Optional additional CSS classes to apply to the root container. */
   className?: string;
   /** The default view to show on initial render (emoji or color). */
-  defaultView?: 'emoji' | 'color';
+  defaultView?: "emoji" | "color";
   /** Optional custom palette to map color indices. */
   palette?: readonly string[];
   /** Optional hint text to display to the user for verification context. */
   verifyHint?: string;
 };
 
-type ViewType = 'emoji' | 'color';
+type ViewType = "emoji" | "color";
 
 function SafetyCodeHeaderToggle({
   verifyHint,
@@ -43,27 +50,27 @@ function SafetyCodeHeaderToggle({
         </div>
         <div className="flex gap-2">
           <button
-            aria-pressed={view === 'emoji'}
+            aria-pressed={view === "emoji"}
             className={cn(
-              'rounded-lg border px-3 py-1.5 text-xs transition-colors',
-              view === 'emoji'
-                ? 'border-neon-magenta/50 bg-neon-magenta/15 text-neon-magenta'
-                : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'
+              "rounded-lg border px-3 py-1.5 text-xs transition-colors",
+              view === "emoji"
+                ? "border-neon-magenta/50 bg-neon-magenta/15 text-neon-magenta"
+                : "border-border/70 bg-card/60 text-muted-foreground hover:text-foreground"
             )}
-            onClick={() => setView('emoji')}
+            onClick={() => setView("emoji")}
             type="button"
           >
             Emoji
           </button>
           <button
-            aria-pressed={view === 'color'}
+            aria-pressed={view === "color"}
             className={cn(
-              'rounded-lg border px-3 py-1.5 text-xs transition-colors',
-              view === 'color'
-                ? 'border-neon-magenta/50 bg-neon-magenta/15 text-neon-magenta'
-                : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'
+              "rounded-lg border px-3 py-1.5 text-xs transition-colors",
+              view === "color"
+                ? "border-neon-magenta/50 bg-neon-magenta/15 text-neon-magenta"
+                : "border-border/70 bg-card/60 text-muted-foreground hover:text-foreground"
             )}
-            onClick={() => setView('color')}
+            onClick={() => setView("color")}
             type="button"
           >
             Colors
@@ -74,7 +81,11 @@ function SafetyCodeHeaderToggle({
   );
 }
 
-function EmojiGrid({ cells }: { cells: { id: string; testId: string; emoji: string }[] }) {
+function EmojiGrid({
+  cells,
+}: {
+  cells: { id: string; testId: string; emoji: string }[];
+}) {
   return (
     <div className="flex flex-wrap justify-center gap-2">
       {cells.map((item) => (
@@ -90,7 +101,11 @@ function EmojiGrid({ cells }: { cells: { id: string; testId: string; emoji: stri
   );
 }
 
-function ColorGrid({ cells }: { cells: { id: string; testId: string; color: string }[] }) {
+function ColorGrid({
+  cells,
+}: {
+  cells: { id: string; testId: string; color: string }[];
+}) {
   return (
     <div className="mx-auto grid max-w-xs grid-cols-4 gap-2">
       {cells.map((item) => (
@@ -118,22 +133,36 @@ function AdvancedFingerprintSection({
     <div className="border-t border-border/50 pt-3">
       <button
         aria-expanded={showAdvanced}
-        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         onClick={() => setShowAdvanced((current) => !current)}
         type="button"
       >
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "size-3.5 transition-transform",
+            showAdvanced && "rotate-180"
+          )}
+        />
         Advanced fingerprint
       </button>
 
       {showAdvanced ? (
-        <div className="mt-3 space-y-2" data-testid="safety-code-advanced-content">
+        <div
+          className="mt-3 space-y-2"
+          data-testid="safety-code-advanced-content"
+        >
           <div>
             <p className="text-xs text-muted-foreground">Short fingerprint</p>
             <code className="text-xs text-neon-cyan">{display.shortFpr}</code>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Full hex fingerprint</p>
-            <code className="break-all text-xs text-neon-cyan">{display.fullFpr}</code>
+            <p className="text-xs text-muted-foreground">
+              Full hex fingerprint
+            </p>
+            <code className="break-all text-xs text-neon-cyan">
+              {display.fullFpr}
+            </code>
           </div>
         </div>
       ) : null}
@@ -147,7 +176,7 @@ function AdvancedFingerprintSection({
 export function SafetyCode({
   display,
   className,
-  defaultView = 'emoji',
+  defaultView = "emoji",
   palette,
   verifyHint = DEFAULT_VERIFY_HINT,
 }: SafetyCodeProps) {
@@ -157,26 +186,43 @@ export function SafetyCode({
 
   const emojiCells = display.emoji.emojis.map((emoji, index) => ({
     emoji,
-    id: `${display.shortFpr}-emoji-${display.fullFpr.slice(index * 2, index * 2 + 2)}-${emoji}`,
+    id: `${display.shortFpr}-emoji-${display.fullFpr.slice(
+      index * 2,
+      index * 2 + 2
+    )}-${emoji}`,
     testId: `safety-code-emoji-cell-${index}`,
   }));
 
   const colorCells = colors.map((color, index) => ({
     color,
-    id: `${display.shortFpr}-color-${display.fullFpr.slice(index * 2, index * 2 + 2)}-${color}`,
+    id: `${display.shortFpr}-color-${display.fullFpr.slice(
+      index * 2,
+      index * 2 + 2
+    )}-${color}`,
     testId: `safety-code-color-cell-${index}`,
   }));
 
   return (
     <PageCard
-      className={cn('border-neon-magenta/30 shadow-[0_0_30px] shadow-neon-magenta/15', className)}
+      className={cn(
+        "border-neon-magenta/30 shadow-[0_0_30px] shadow-neon-magenta/15",
+        className
+      )}
       data-testid="safety-code-root"
       tone="magenta"
     >
-      <SafetyCodeHeaderToggle setView={setView} verifyHint={verifyHint} view={view} />
+      <SafetyCodeHeaderToggle
+        setView={setView}
+        verifyHint={verifyHint}
+        view={view}
+      />
 
       <PageCardContent className="space-y-4">
-        {view === 'emoji' ? <EmojiGrid cells={emojiCells} /> : <ColorGrid cells={colorCells} />}
+        {view === "emoji" ? (
+          <EmojiGrid cells={emojiCells} />
+        ) : (
+          <ColorGrid cells={colorCells} />
+        )}
 
         <AdvancedFingerprintSection
           display={display}

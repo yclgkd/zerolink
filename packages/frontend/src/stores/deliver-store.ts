@@ -1,5 +1,6 @@
 import {
   CHANNEL_STATE,
+  type AdminMode,
   type ChannelState,
   type CompoundBeginResponse,
   type CompoundChallenge,
@@ -7,8 +8,8 @@ import {
   type HexString,
   type RSAPublicKeyJWK,
   type UUID,
-} from '@zerolink/shared';
-import { create } from 'zustand';
+} from "@zerolink/shared";
+import { create } from "zustand";
 
 import {
   type AsyncRequestState,
@@ -16,7 +17,7 @@ import {
   createIdleRequestState,
   createLoadingState,
   createSuccessState,
-} from './request-state';
+} from "./request-state";
 
 /**
  * State properties for the sender-side channel management and delivery flow.
@@ -24,6 +25,7 @@ import {
 export interface DeliverStoreState {
   uuid: UUID | null;
   channelState: ChannelState;
+  adminMode: AdminMode | null;
   showDestroyConfirm: boolean;
   copied: boolean;
   compoundBegin: AsyncRequestState<CompoundBeginResponse>;
@@ -40,6 +42,8 @@ export interface DeliverStoreState {
 export interface DeliverStoreActions {
   setDeliverUuid: (uuid: UUID | null) => void;
   setChannelState: (state: ChannelState) => void;
+  setAdminMode: (mode: AdminMode | null) => void;
+  setReceiverPubFpr: (fpr: HexString | null) => void;
   setShowDestroyConfirm: (show: boolean) => void;
   setCopied: (copied: boolean) => void;
   startCompoundBegin: () => void;
@@ -62,6 +66,7 @@ function createInitialState(): DeliverStoreState {
   return {
     uuid: null,
     channelState: CHANNEL_STATE.WAITING,
+    adminMode: null,
     showDestroyConfirm: false,
     copied: false,
     compoundBegin: createIdleRequestState<CompoundBeginResponse>(),
@@ -92,6 +97,10 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
       channelState: state,
       showDestroyConfirm: false,
     })),
+
+  setAdminMode: (mode) => set(() => ({ adminMode: mode })),
+
+  setReceiverPubFpr: (fpr) => set(() => ({ receiverPubFpr: fpr })),
 
   setShowDestroyConfirm: (show) => set(() => ({ showDestroyConfirm: show })),
 
@@ -125,13 +134,19 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
     })),
 
   startCompoundCommit: () =>
-    set(() => ({ compoundCommit: createLoadingState<CompoundCommitResponse>() })),
+    set(() => ({
+      compoundCommit: createLoadingState<CompoundCommitResponse>(),
+    })),
 
   completeCompoundCommit: (payload) =>
-    set(() => ({ compoundCommit: createSuccessState<CompoundCommitResponse>(payload) })),
+    set(() => ({
+      compoundCommit: createSuccessState<CompoundCommitResponse>(payload),
+    })),
 
   failCompoundCommit: (errorCode) =>
-    set(() => ({ compoundCommit: createErrorState<CompoundCommitResponse>(errorCode) })),
+    set(() => ({
+      compoundCommit: createErrorState<CompoundCommitResponse>(errorCode),
+    })),
 
   markDelivered: () =>
     set(() => ({

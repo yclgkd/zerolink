@@ -6,11 +6,11 @@ import {
   SECURITY_PROFILE,
   type SecurityProfile,
   UUIDSchema,
-} from '@zerolink/shared';
-import { ClipboardCheck, Copy, Send, Trash2 } from 'lucide-react';
-import type { ReactElement, RefObject } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+} from "@zerolink/shared";
+import { ClipboardCheck, Copy, Send, Trash2 } from "lucide-react";
+import type { ReactElement, RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 
 import {
   PageCard,
@@ -21,38 +21,38 @@ import {
   RoleBadge,
   StateNotice,
   StatusBadge,
-} from '../components/layout';
-import { PassphraseInput } from '../components/lock/passphrase-input';
-import { SafetyCode } from '../components/safety/safety-code';
-import { Button } from '../components/ui/button';
-import { cryptoOrchestrator } from '../crypto/orchestrator';
-import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
-import { useCreateStore } from '../stores/create-store';
-import { useDeliverStore } from '../stores/deliver-store';
+} from "../components/layout";
+import { PassphraseInput } from "../components/lock/passphrase-input";
+import { SafetyCode } from "../components/safety/safety-code";
+import { Button } from "../components/ui/button";
+import { cryptoOrchestrator } from "../crypto/orchestrator";
+import { deriveSafetyCodeDisplay } from "../crypto/safety-code-derive";
+import { useCreateStore } from "../stores/create-store";
+import { useDeliverStore } from "../stores/deliver-store";
 
 function mapActionError(code: string): string {
   switch (code) {
-    case 'FALLBACK_REQUIRED':
-      return 'Compatibility fallback is unavailable for this action in the current build.';
-    case 'PROFILE_BLOCKED':
-      return 'Selected security profile requires WebAuthn support.';
-    case 'MISSING_LOCK_CHALLENGE':
-      return 'Unable to fetch challenge from server. Please retry.';
-    case 'MISSING_RECEIVER_IDENTITY':
-      return 'Receiver identity is unavailable. Ask receiver to lock again.';
-    case 'PASSPHRASE_REQUIRED':
-      return 'Compatibility mode passphrase is required for this action.';
-    case 'NETWORK_ERROR':
-      return 'Network error while performing manage action. Please retry.';
-    case 'BAD_REQUEST':
-    case 'INVALID_REQUEST':
-      return 'Manage request was rejected. Please retry.';
-    case 'WEBAUTHN_ERROR':
-    case 'NOT_ALLOWED':
-    case 'ABORTED':
-      return 'WebAuthn verification was not completed.';
-    case 'INTERNAL_ERROR':
-      return 'Unexpected internal error. Please retry.';
+    case "FALLBACK_REQUIRED":
+      return "Compatibility fallback is unavailable for this action in the current build.";
+    case "PROFILE_BLOCKED":
+      return "Selected security profile requires WebAuthn support.";
+    case "MISSING_LOCK_CHALLENGE":
+      return "Unable to fetch challenge from server. Please retry.";
+    case "MISSING_RECEIVER_IDENTITY":
+      return "Receiver identity is unavailable. Ask receiver to lock again.";
+    case "PASSPHRASE_REQUIRED":
+      return "Compatibility mode passphrase is required for this action.";
+    case "NETWORK_ERROR":
+      return "Network error while performing manage action. Please retry.";
+    case "BAD_REQUEST":
+    case "INVALID_REQUEST":
+      return "Manage request was rejected. Please retry.";
+    case "WEBAUTHN_ERROR":
+    case "NOT_ALLOWED":
+    case "ABORTED":
+      return "WebAuthn verification was not completed.";
+    case "INTERNAL_ERROR":
+      return "Unexpected internal error. Please retry.";
     default:
       return `Manage action failed: ${code}`;
   }
@@ -80,12 +80,12 @@ function ManagePageHeader({ status }: { status: ChannelState }) {
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   return (
     <p>
-      UUID:{' '}
+      UUID:{" "}
       <code
         className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground"
         data-testid="manage-uuid"
       >
-        {uuid ?? '(missing uuid)'}
+        {uuid ?? "(missing uuid)"}
       </code>
     </p>
   );
@@ -126,7 +126,10 @@ function ShareLinkCard({
         >
           {copied ? (
             <>
-              <ClipboardCheck aria-hidden="true" className="size-3.5 text-neon-green" />
+              <ClipboardCheck
+                aria-hidden="true"
+                className="size-3.5 text-neon-green"
+              />
               Copied
             </>
           ) : (
@@ -151,9 +154,12 @@ function StatusContent({
   if (status === CHANNEL_STATE.WAITING) {
     return (
       <section className="space-y-2" data-testid="manage-state-waiting">
-        <h3 className="text-base font-semibold text-foreground">Waiting for Receiver Lock</h3>
+        <h3 className="text-base font-semibold text-foreground">
+          Waiting for Receiver Lock
+        </h3>
         <p className="text-xs text-muted-foreground">
-          Receiver has not locked the channel yet. Share the link and wait for confirmation.
+          Receiver has not locked the channel yet. Share the link and wait for
+          confirmation.
         </p>
       </section>
     );
@@ -163,7 +169,9 @@ function StatusContent({
     return (
       <section className="space-y-4" data-testid="manage-state-locked">
         <div className="space-y-1">
-          <h3 className="text-base font-semibold text-foreground">Receiver Locked the Channel</h3>
+          <h3 className="text-base font-semibold text-foreground">
+            Receiver Locked the Channel
+          </h3>
           <p className="text-xs text-muted-foreground">
             Verify the Safety Code out-of-band before delivering the secret.
           </p>
@@ -178,8 +186,8 @@ function StatusContent({
             tone="warning"
           >
             <p className="mt-1 text-xs text-neon-orange">
-              Safety Code is generated locally and can only be shown when receiver fingerprint is
-              available on this device.
+              Safety Code is generated locally and can only be shown when
+              receiver fingerprint is available on this device.
             </p>
           </StateNotice>
         )}
@@ -190,9 +198,12 @@ function StatusContent({
   if (status === CHANNEL_STATE.DELIVERED) {
     return (
       <section className="space-y-2" data-testid="manage-state-delivered">
-        <h3 className="text-base font-semibold text-foreground">Delivery Completed</h3>
+        <h3 className="text-base font-semibold text-foreground">
+          Delivery Completed
+        </h3>
         <p className="text-xs text-muted-foreground">
-          Ciphertext has been delivered to the receiver flow. Await receiver-side decrypt.
+          Ciphertext has been delivered to the receiver flow. Await
+          receiver-side decrypt.
         </p>
       </section>
     );
@@ -201,7 +212,9 @@ function StatusContent({
   if (status === CHANNEL_STATE.DELETED) {
     return (
       <section className="space-y-2" data-testid="manage-state-deleted">
-        <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
+        <h3 className="text-base font-semibold text-foreground">
+          Channel Deleted
+        </h3>
         <p className="text-xs text-muted-foreground">
           This channel has been destroyed and cannot be recovered.
         </p>
@@ -211,7 +224,9 @@ function StatusContent({
 
   return (
     <section className="space-y-2" data-testid="manage-state-expired">
-      <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
+      <h3 className="text-base font-semibold text-foreground">
+        Channel Expired
+      </h3>
       <p className="text-xs text-muted-foreground">
         The channel exceeded its lifetime and is no longer valid for delivery.
       </p>
@@ -290,7 +305,7 @@ function DestroyConfirmPanel({
           variant="danger"
         >
           {pending ? (
-            'Destroying...'
+            "Destroying..."
           ) : (
             <>
               <Trash2 aria-hidden="true" className="size-3.5" />
@@ -322,7 +337,8 @@ function ActionPanel({
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
-  const terminal = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
+  const terminal =
+    status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
   const deliverDisabled = terminal || pending || !canDeliver;
   const destroyDisabled = terminal || pending;
 
@@ -336,7 +352,7 @@ function ActionPanel({
           type="button"
         >
           {pending ? (
-            'Delivering...'
+            "Delivering..."
           ) : (
             <>
               <Send aria-hidden="true" className="size-4" />
@@ -377,9 +393,11 @@ function useShareLinkGenerator(uuid?: string) {
   const [copied, setCopied] = useState(false);
 
   const shareLink = useMemo(() => {
-    if (!uuid) return '(missing uuid)';
-    const sharePath = ROUTE_PATTERN.SHARE.replace(':uuid', uuid);
-    return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
+    if (!uuid) return "(missing uuid)";
+    const sharePath = ROUTE_PATTERN.SHARE.replace(":uuid", uuid);
+    return typeof window === "undefined"
+      ? sharePath
+      : `${window.location.origin}${sharePath}`;
   }, [uuid]);
 
   const handleCopyShareLink = async () => {
@@ -390,7 +408,7 @@ function useShareLinkGenerator(uuid?: string) {
 
     try {
       const writeText =
-        typeof navigator !== 'undefined'
+        typeof navigator !== "undefined"
           ? navigator.clipboard?.writeText?.bind(navigator.clipboard)
           : undefined;
       if (!writeText) {
@@ -408,9 +426,14 @@ function useShareLinkGenerator(uuid?: string) {
   return { copied, shareLink, handleCopyShareLink };
 }
 
-function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<boolean>) {
+function usePublicStatusFetcher(
+  uuid: string | undefined,
+  mountedRef: RefObject<boolean>
+) {
   const store = useDeliverStore();
-  const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
+  const [publicStatusError, setPublicStatusError] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     let canceled = false;
@@ -426,17 +449,21 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
 
         const payload = (await response.json()) as unknown;
         const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
-        if (!parsedPayload.success) throw new Error('INVALID_RESPONSE');
+        if (!parsedPayload.success) throw new Error("INVALID_RESPONSE");
 
         if (canceled || !mountedRef.current) return;
         setPublicStatusError(null);
         store.setShowDestroyConfirm(false);
         store.setChannelState(parsedPayload.data.state);
+        store.setAdminMode(parsedPayload.data.adminMode);
+        store.setReceiverPubFpr(parsedPayload.data.receiverPubFpr ?? null);
       } catch {
         if (canceled || !mountedRef.current) return;
         store.setShowDestroyConfirm(false);
         store.setChannelState(CHANNEL_STATE.WAITING);
-        setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
+        setPublicStatusError(
+          "Unable to load channel state right now. Showing safe default state."
+        );
       }
     };
 
@@ -444,7 +471,14 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
     return () => {
       canceled = true;
     };
-  }, [uuid, store.setChannelState, store.setShowDestroyConfirm, mountedRef]);
+  }, [
+    uuid,
+    store.setAdminMode,
+    store.setChannelState,
+    store.setReceiverPubFpr,
+    store.setShowDestroyConfirm,
+    mountedRef,
+  ]);
 
   return { publicStatusError, setPublicStatusError };
 }
@@ -462,7 +496,10 @@ function useManageDeliveryLogic(
 ) {
   const store = useDeliverStore();
 
-  const isActiveActionContext = (scope: number, actionUuid: string): boolean => {
+  const isActiveActionContext = (
+    scope: number,
+    actionUuid: string
+  ): boolean => {
     if (!mountedRef.current) return false;
     if (actionScopeRef.current !== scope) return false;
     return useDeliverStore.getState().uuid === actionUuid;
@@ -472,11 +509,11 @@ function useManageDeliveryLogic(
     if (isActionPending) return;
     if (!store.uuid) {
       setIsSecretInputInvalid(false);
-      return setActionError('Channel UUID is missing and cannot be delivered.');
+      return setActionError("Channel UUID is missing and cannot be delivered.");
     }
     if (secretInput.trim().length === 0) {
       setIsSecretInputInvalid(true);
-      return setActionError('Secret payload is required before delivery.');
+      return setActionError("Secret payload is required before delivery.");
     }
 
     setIsSecretInputInvalid(false);
@@ -497,7 +534,7 @@ function useManageDeliveryLogic(
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
       setIsSecretInputInvalid(false);
-      return setActionError(mapActionError('INTERNAL_ERROR'));
+      return setActionError(mapActionError("INTERNAL_ERROR"));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
@@ -542,7 +579,7 @@ function useManageDestructionLogic(
     if (isActionPending) return;
     if (!store.uuid) {
       setIsSecretInputInvalid(false);
-      return setActionError('Channel UUID is missing and cannot be destroyed.');
+      return setActionError("Channel UUID is missing and cannot be destroyed.");
     }
 
     setIsSecretInputInvalid(false);
@@ -562,7 +599,7 @@ function useManageDestructionLogic(
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
       setIsSecretInputInvalid(false);
-      return setActionError(mapActionError('INTERNAL_ERROR'));
+      return setActionError(mapActionError("INTERNAL_ERROR"));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
@@ -584,8 +621,8 @@ function useManagePageState(uuid?: string) {
   const mountedRef = useRef(true);
   const actionScopeRef = useRef(0);
 
-  const [secretInput, setSecretInput] = useState('');
-  const [softkeyPassphrase, setSoftkeyPassphrase] = useState('');
+  const [secretInput, setSecretInput] = useState("");
+  const [softkeyPassphrase, setSoftkeyPassphrase] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
@@ -596,14 +633,18 @@ function useManagePageState(uuid?: string) {
     };
   }, []);
 
-  const { publicStatusError, setPublicStatusError } = usePublicStatusFetcher(uuid, mountedRef);
-  const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
+  const { publicStatusError, setPublicStatusError } = usePublicStatusFetcher(
+    uuid,
+    mountedRef
+  );
+  const { copied, shareLink, handleCopyShareLink } =
+    useShareLinkGenerator(uuid);
 
   useEffect(() => {
     actionScopeRef.current += 1;
     setIsActionPending(false);
-    setSecretInput('');
-    setSoftkeyPassphrase('');
+    setSecretInput("");
+    setSoftkeyPassphrase("");
     setActionError(null);
     setIsSecretInputInvalid(false);
     setPublicStatusError(null);
@@ -615,7 +656,12 @@ function useManagePageState(uuid?: string) {
     const parsedUuid = UUIDSchema.safeParse(uuid);
     store.setDeliverUuid(parsedUuid.success ? parsedUuid.data : null);
     store.setShowDestroyConfirm(false);
-  }, [uuid, store.setDeliverUuid, store.setShowDestroyConfirm, setPublicStatusError]);
+  }, [
+    uuid,
+    store.setDeliverUuid,
+    store.setShowDestroyConfirm,
+    setPublicStatusError,
+  ]);
 
   useEffect(() => {
     return () => store.resetDeliverStore();
@@ -648,20 +694,22 @@ function useManagePageState(uuid?: string) {
     profile
   );
 
-  const { handleDestroyConfirm, handleApplyDestroy } = useManageDestructionLogic(
-    mountedRef,
-    actionScopeRef,
-    isActionPending,
-    setIsActionPending,
-    setActionError,
-    setIsSecretInputInvalid,
-    softkeyPassphrase,
-    profile,
-    isActiveActionContext
-  );
+  const { handleDestroyConfirm, handleApplyDestroy } =
+    useManageDestructionLogic(
+      mountedRef,
+      actionScopeRef,
+      isActionPending,
+      setIsActionPending,
+      setActionError,
+      setIsSecretInputInvalid,
+      softkeyPassphrase,
+      profile,
+      isActiveActionContext
+    );
 
   return {
     status: store.channelState,
+    adminMode: store.adminMode,
     showDestroyConfirm: store.showDestroyConfirm,
     copied,
     shareLink,
@@ -727,7 +775,9 @@ export function ManagePage(): ReactElement {
 
         <SecretInput
           ariaDescribedBy={
-            state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
+            state.actionError && state.isSecretInputInvalid
+              ? "manage-action-error"
+              : undefined
           }
           ariaInvalid={state.isSecretInputInvalid ? true : undefined}
           disabled={state.isActionPending}
@@ -735,19 +785,25 @@ export function ManagePage(): ReactElement {
           value={state.secretInput}
         />
 
-        <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
-          <p className="text-xs text-muted-foreground">
-            Compatibility mode channels require this passphrase for deliver/destroy actions.
-          </p>
-          <PassphraseInput
-            inputId="manage-softkey-passphrase"
-            label="Compatibility passphrase"
-            onChange={state.handleSoftkeyPassphraseChange}
-            placeholder="Enter compatibility passphrase"
-            showStrength={false}
-            value={state.softkeyPassphrase}
-          />
-        </section>
+        {state.adminMode === "softkey" ? (
+          <section
+            className="space-y-2"
+            data-testid="manage-softkey-passphrase-section"
+          >
+            <p className="text-xs text-muted-foreground">
+              This channel uses compatibility mode. Enter the passphrase you set
+              when creating this channel.
+            </p>
+            <PassphraseInput
+              inputId="manage-softkey-passphrase"
+              label="Compatibility passphrase"
+              onChange={state.handleSoftkeyPassphraseChange}
+              placeholder="Enter compatibility passphrase"
+              showStrength={false}
+              value={state.softkeyPassphrase}
+            />
+          </section>
+        ) : null}
 
         {state.actionError ? (
           <StateNotice
