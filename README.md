@@ -81,7 +81,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ### 一键部署到 Cloudflare / One-click Deploy
 
-[![Deploy to Cloudflare Workers](https://deploy.cloudflare.com/button)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
+[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
 > **注意**: 一键部署仅部署后端 Worker。部署完成后需手动创建 KV namespace、设置 `RP_ID`/`RP_ORIGIN` 环境变量，并单独部署前端。
 >

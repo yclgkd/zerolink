@@ -68,7 +68,7 @@ Frontend SPA    ──→    Pages (CDN 静态托管)
 
 点击下方按钮，将 ZeroLink Worker 部署到你的 Cloudflare 账号：
 
-[![Deploy to Cloudflare Workers](https://deploy.cloudflare.com/button)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
+[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
 > **注意 / Note**: 一键部署完成后，仍需手动完成以下步骤：
 > After one-click deploy, you still need to manually:

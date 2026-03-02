@@ -110,7 +110,7 @@ success "Node.js v$NODE_VERSION"
 step "验证 Wrangler 登录状态"
 
 if $WRANGLER_CMD whoami &>/dev/null 2>&1; then
-  WRANGLER_USER=$($WRANGLER_CMD whoami 2>/dev/null | grep -oP '(?<=You are logged in with an )\S+' || echo "已登录")
+  WRANGLER_USER="已登录"
   success "已登录到 Cloudflare"
 else
   info "需要登录 Cloudflare..."
@@ -166,9 +166,9 @@ if [ "$DRY_RUN" = true ]; then
   warn "Dry-run 模式：跳过 KV ID 提取"
 else
   echo "$KV_OUTPUT"
-  # 从输出中提取 KV ID
-  KV_ID=$(echo "$KV_OUTPUT" | grep -oP '(?<=id = ")[^"]+' || \
-          echo "$KV_OUTPUT" | grep -oP '[0-9a-f]{32}' | head -1 || \
+  # 从输出中提取 KV ID（POSIX 兼容，支持 macOS / Linux）
+  KV_ID=$(echo "$KV_OUTPUT" | grep -o 'id = "[^"]*"' | grep -o '"[^"]*"' | tr -d '"' | head -1 || \
+          echo "$KV_OUTPUT" | grep -oE '[0-9a-f]{32}' | head -1 || \
           echo "")
 
   if [ -z "$KV_ID" ]; then
@@ -198,8 +198,7 @@ else
   # 替换 KV ID
   if command -v sed &>/dev/null; then
     # macOS 和 Linux 兼容的 sed
-    CURRENT_KV_ID=$(grep -oP '(?<=id = ")[^"]+' "$WRANGLER_TOML" || \
-                    grep -oP "(?<=id = ')[^']+" "$WRANGLER_TOML" || \
+    CURRENT_KV_ID=$(grep -o 'id = "[^"]*"' "$WRANGLER_TOML" | grep -o '"[^"]*"' | tr -d '"' | head -1 || \
                     echo "b8313bed33c9492885c12c9d26034420")
 
     if grep -q "$CURRENT_KV_ID" "$WRANGLER_TOML"; then
