@@ -97,12 +97,12 @@ chmod +x scripts/setup-cloudflare.sh
 ```
 
 ### 前提条件 / Prerequisites
+### 前提要求
 
-- Cloudflare 账号（需开启 **Workers Paid** 计划，Durable Objects 要求）
+- Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
 - Node.js 20+ · pnpm 9+ · Wrangler CLI 3+
 
 完整部署文档见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
-
 ---
 
 ## 快速开始（本地开发）/ Quick Start (Local Dev)

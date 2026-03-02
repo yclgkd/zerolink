@@ -24,13 +24,14 @@
 
 | 要求 | 说明 | 最低版本 |
 |------|------|---------|
-| Cloudflare 账号 | 需开启 Workers Paid 计划（Durable Objects 要求） | — |
+| Cloudflare 账号 | 免费版即可（支持 Durable Objects 免费层） | — |
 | Node.js | JavaScript 运行时 | 20.x |
 | pnpm | 包管理器 | 9.x |
 | Wrangler CLI | Cloudflare 官方部署工具 | 3.x |
 
-> **重要 / Important**: Durable Objects 需要 **Workers Paid** 计划（$5/月起）。
-> Durable Objects require the **Workers Paid** plan (starting $5/month).
+> **重要 / Important**: Durable Objects 自 2026 年起提供 **免费层 (Free Tier)**。
+> 本项目已适配 **SQLite 存储后端**，支持在免费计划下运行（每日 10 万次请求限额）。
+> Durable Objects now offer a **Free Tier**. This project uses the **SQLite backend**, which is supported on the free plan (100k daily requests).
 
 安装 Wrangler CLI / Install Wrangler CLI:
 ```bash
