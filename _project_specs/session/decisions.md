@@ -37,6 +37,12 @@ This is append-only. Never delete entries.
 **Reasoning**: Audited library; pure JS; no WASM complications; maintained by Paulmillr
 **Trade-offs**: Larger bundle than PBKDF2 (pure WebCrypto); @noble/hashes is worth the security
 
+## [2026-03-02] Cloudflare Durable Objects Pricing Update
+
+**Decision**: Support Cloudflare Durable Objects Free Tier with SQLite backend.
+**Rationale**: Cloudflare introduced a free tier for Durable Objects (100k requests/day) specifically for the SQLite storage backend. This significantly lowers the barrier to entry for self-hosting ZeroLink.
+**Status**: Implemented in docs and README. PR #82 merged.
+
 ## [2026-02-24] Cloudflare Workers + Durable Objects for backend
 
 **Decision**: Cloudflare Workers for API, Durable Objects for atomic state
