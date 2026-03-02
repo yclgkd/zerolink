@@ -32,6 +32,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ### 快速开始
 - [快速启动指南](./docs/QUICK_START.md) - 从零到运行开发环境
+- [部署指南](./docs/DEPLOYMENT.md) - 部署到 Cloudflare（含一键部署）
 - [技术栈规范](./docs/TECH_STACK.md) - 完整技术栈与工具链
 
 ### 设计文档
@@ -76,7 +77,35 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - ✅ 前端完整性可验证（CSP/SRI）
 - ✅ 管理权私钥不可导出
 
-## 快速开始
+## 部署 / Deploy
+
+### 一键部署到 Cloudflare / One-click Deploy
+
+[![Deploy to Cloudflare Workers](https://deploy.cloudflare.com/button)](https://deploy.cloudflare.com/?url=https://github.com/yourusername/ZeroLink)
+
+> **注意**: 一键部署仅部署后端 Worker。部署完成后需手动创建 KV namespace、设置 `RP_ID`/`RP_ORIGIN` 环境变量，并单独部署前端。
+>
+> **Note**: One-click deploy only deploys the backend Worker. After deployment, you need to manually create the KV namespace, set `RP_ID`/`RP_ORIGIN` env vars, and deploy the frontend separately.
+
+### 使用自动化脚本 / Automated Setup
+
+```bash
+git clone https://github.com/yourusername/ZeroLink.git
+cd ZeroLink
+chmod +x scripts/setup-cloudflare.sh
+./scripts/setup-cloudflare.sh
+```
+
+### 前提条件 / Prerequisites
+
+- Cloudflare 账号（需开启 **Workers Paid** 计划，Durable Objects 要求）
+- Node.js 20+ · pnpm 9+ · Wrangler CLI 3+
+
+完整部署文档见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+
+---
+
+## 快速开始（本地开发）/ Quick Start (Local Dev)
 
 ```bash
 # 1. 克隆仓库
