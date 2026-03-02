@@ -18,8 +18,6 @@ const ctx = {
   waitUntil(_promise: Promise<unknown>): void {},
 } as ExecutionContext;
 
-const STUB_ROUTES = [{ method: 'GET', path: '/api/public/abc123' }] as const;
-
 const VALID_UUID = 'abcdefghijklmnopqrstu';
 const OTHER_UUID = 'zzzzzzzzzzzzzzzzzzzzz';
 
@@ -199,26 +197,26 @@ async function dispatch(
 }
 
 describe('backend worker routing + lock/compound forwarding', () => {
-  for (const route of STUB_ROUTES) {
-    it(`returns 501 stub response for ${route.method} ${route.path}`, async () => {
-      const { env, calls } = createMockEnv(async () => {
-        return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
-          status: 500,
-        });
-      });
-      const response = await dispatch(env, route.path, route.method);
-      const payload = (await response.json()) as ApiErrorResponse;
-
-      expect(response.status).toBe(501);
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
-      expect(payload).toEqual({
-        ok: false,
-        code: 'NOT_IMPLEMENTED',
-      });
-      expect(calls).toHaveLength(0);
+  it('forwards GET /api/public/:uuid to SecretVault DO get_public_state', async () => {
+    const publicStateResponse = {
+      ok: true,
+      channelState: 'waiting',
+      adminMode: 'webauthn',
+    };
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify(publicStateResponse), { status: 200 });
     });
-  }
+
+    const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(payload).toEqual(publicStateResponse);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/get_public_state');
+    expect(calls[0]?.method).toBe('POST');
+  });
 
   it('forwards lock_begin request to SecretVault DO and returns challenge response', async () => {
     const challengeResponse = {

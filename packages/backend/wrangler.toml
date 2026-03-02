@@ -1,6 +1,6 @@
 name = "zerolink-api"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-01-01"
 
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
@@ -8,12 +8,10 @@ class_name = "SecretVault"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["SecretVault"]
+new_sqlite_classes = ["SecretVault"]
 
 [[kv_namespaces]]
 binding = "SECRETS_KV"
-id = "replace-with-kv-namespace-id"
+id = "b8313bed33c9492885c12c9d26034420"
 
-[vars]
-RP_ID = "zerolink.test"
-RP_ORIGIN = "https://zerolink.test"
+# RP_ID and RP_ORIGIN are passed via --var at deploy time (not stored in git)
