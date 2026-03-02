@@ -860,7 +860,7 @@ describe('SecretVault compound/delete flow', () => {
       ...lockedRecord,
       adminCredential: {
         ...lockedRecord.adminCredential,
-        publicKey: assertionFixture.publicKeySpki,
+        publicKey: assertionFixture.publicKeyCose,
         signCount: 3,
       },
     });
@@ -931,7 +931,7 @@ describe('SecretVault compound/delete flow', () => {
       ...record,
       adminCredential: {
         ...record.adminCredential,
-        publicKey: assertionFixture.publicKeySpki,
+        publicKey: assertionFixture.publicKeyCose,
       },
     });
 

@@ -80,6 +80,12 @@ export function mapError(error: unknown): Response {
     return mapStateTransitionError(error);
   }
 
+  // Log unexpected errors so they appear in wrangler tail / Cloudflare dashboard
+  console.error(
+    '[SecretVault] unexpected error:',
+    error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error)
+  );
+
   return jsonError('INTERNAL_ERROR', 500);
 }
 
