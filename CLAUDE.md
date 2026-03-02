@@ -91,10 +91,9 @@ All work is tracked in `_project_specs/todos/`:
 - `completed.md` - Done (for reference)
 
 **Atomic Update Rule (CRITICAL)**:
-- Every code change (feat, fix, refactor) MUST include a corresponding update to `_project_specs/`.
-- Update `current-state.md` with the new progress/phase.
-- Move completed tasks from `active.md` to `completed.md`.
-- No PR or commit should be made without synchronizing these files.
+- **AI Agents**: Every code change (feat, fix, refactor) MUST include a corresponding update to `_project_specs/`.
+- **External Contributors**: Recommended but NOT required. Maintaining `_project_specs` is primarily the responsibility of AI collaborators and core maintainers.
+- **Workflow**: Update `current-state.md` with new progress/phase, and move completed tasks from `active.md` to `completed.md`. No AI-initiated PR should be made without synchronization.
 
 Every todo must have validation criteria and test cases. See base.md skill for format.
 
