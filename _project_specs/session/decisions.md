@@ -37,6 +37,16 @@ This is append-only. Never delete entries.
 **Reasoning**: Audited library; pure JS; no WASM complications; maintained by Paulmillr
 **Trade-offs**: Larger bundle than PBKDF2 (pure WebCrypto); @noble/hashes is worth the security
 
+## [2026-03-02] Graded Atomic Project Specs Update Rule
+
+**Decision**: Refine the "Atomic Update Rule" to differentiate between AI Agents and External Contributors.
+**Rationale**: To maintain project context without discouraging open-source contributions. AI agents have the strict duty to sync specs, while human contributors are exempt to reduce friction. Core maintainers (or AI in subsequent sessions) will bridge the gap for community PRs.
+**Mechanism**: 
+1. **AI Agents**: Mandatory synchronization in every PR.
+2. **External Contributors**: Recommended but NOT required.
+3. **Post-Merge**: AI will automatically sync the `_project_specs` after community code is merged.
+**Status**: Updated in `CLAUDE.md`.
+
 ## [2026-03-02] Atomic Project Specs Update Rule
 
 **Decision**: Enforce an "Atomic Update Rule" where every code change must include a corresponding update to `_project_specs/`.
