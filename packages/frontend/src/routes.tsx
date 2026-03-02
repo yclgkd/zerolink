@@ -36,37 +36,6 @@ function navLinkClassName(isActive: boolean): string {
   );
 }
 
-function CircuitBackdrop(): ReactElement {
-  return (
-    <svg
-      aria-hidden
-      className="absolute inset-0 h-full w-full opacity-[0.04]"
-      preserveAspectRatio="none"
-      viewBox="0 0 100 100"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <title>Decorative circuit backdrop</title>
-      <defs>
-        <pattern id="app-shell-circuit" height="24" patternUnits="userSpaceOnUse" width="24">
-          <path
-            d="M0 12h4M20 12h4M12 0v4M12 20v4M7 7h10M7 17h10"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="0.35"
-          />
-          <circle cx="7" cy="7" fill="currentColor" r="0.7" />
-          <circle cx="17" cy="7" fill="currentColor" r="0.7" />
-          <circle cx="7" cy="17" fill="currentColor" r="0.7" />
-          <circle cx="17" cy="17" fill="currentColor" r="0.7" />
-        </pattern>
-      </defs>
-      <g className="text-primary/70">
-        <rect fill="url(#app-shell-circuit)" height="100%" width="100%" />
-      </g>
-    </svg>
-  );
-}
-
 function AppShellLayout(): ReactElement {
   const location = useLocation();
   const shareDemoPath = ROUTE_PATTERN.SHARE.replace(':uuid', DEMO_UUID);
@@ -77,11 +46,6 @@ function AppShellLayout(): ReactElement {
       className="relative isolate mx-auto min-h-screen w-full max-w-5xl overflow-hidden px-4 py-8 md:px-6 md:py-10"
       data-testid="app-shell"
     >
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <CircuitBackdrop />
-        <div className="absolute -top-28 left-1/4 h-72 w-72 rounded-full bg-primary/25 blur-[110px]" />
-        <div className="absolute -bottom-28 right-1/4 h-72 w-72 rounded-full bg-[var(--neon-magenta)] opacity-20 blur-[120px]" />
-      </div>
       <Card className="border-border/70 bg-gradient-to-br from-secondary/60 via-card to-accent/70 backdrop-blur-xl">
         <CardHeader className="gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
