@@ -8,6 +8,7 @@
 docs/
 ├── INDEX.md           # 本文件 - 快速索引
 ├── QUICK_START.md    # 快速启动指南（从零到运行）
+├── DEPLOYMENT.md     # 部署指南（Cloudflare 一键部署 + 手动部署）
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
 ├── PRD-v2.5.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
@@ -23,6 +24,7 @@ docs/
 #### 项目概念
 - **项目是什么？** → [README.md](../README.md)
 - **如何快速开始？** → [QUICK_START.md](./QUICK_START.md)
+- **如何部署到 Cloudflare？** → [DEPLOYMENT.md](./DEPLOYMENT.md)
 - **核心价值主张** → [PRD-v2.5.md § 1. 产品概述](./PRD-v2.5.md#1-产品概述)
 - **用户流程** → [PRD-v2.5.md § 5. 用户流程](./PRD-v2.5.md#5-用户流程v25-ux-版)
 
@@ -104,10 +106,11 @@ docs/
 5. [SECURITY.md § 密码学规范](./SECURITY.md#密码学规范) - 加密参数
 
 ### DevOps / 部署
-1. [QUICK_START.md § CI 配置](./QUICK_START.md#添加-ci-配置github-actions) - GitHub Actions
-2. [TECH_STACK.md § 部署与发布](./TECH_STACK.md#部署与发布) - 前后端部署
-3. [TECH_STACK.md § 版本管理](./TECH_STACK.md#版本管理与发布流水线) - Changesets 工作流
-4. [ARCHITECTURE.md § 自托管](./ARCHITECTURE.md#123-自托管self-hosting) - 自托管选项
+1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **完整部署指南（一键部署 + 手动部署）**
+2. [QUICK_START.md § CI 配置](./QUICK_START.md#添加-ci-配置github-actions) - GitHub Actions
+3. [TECH_STACK.md § 部署与发布](./TECH_STACK.md#部署与发布) - 前后端部署
+4. [TECH_STACK.md § 版本管理](./TECH_STACK.md#版本管理与发布流水线) - Changesets 工作流
+5. [ARCHITECTURE.md § 自托管](./ARCHITECTURE.md#123-自托管self-hosting) - 自托管选项
 
 ---
 
