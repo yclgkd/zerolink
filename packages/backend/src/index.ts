@@ -32,8 +32,10 @@ const COMPOUND_BEGIN_PATH = /^\/api\/manage\/compound_begin\/([^/]+)$/u;
 const COMPOUND_COMMIT_PATH = /^\/api\/manage\/compound_commit\/([^/]+)$/u;
 const DELETE_COMMIT_PATH = /^\/api\/delete_commit\/([^/]+)$/u;
 
+const PUBLIC_STATUS_PATH = /^\/api\/public\/([^/]+)$/u;
+const DECRYPT_FETCH_PATH = /^\/api\/decrypt_fetch\/([^/]+)$/u;
+
 const API_ROUTES: readonly ApiRoute[] = [
-  { method: 'GET', pattern: /^\/api\/public\/[^/]+$/u },
   { method: 'POST', pattern: /^\/api\/create_begin\/[^/]+$/u },
   { method: 'POST', pattern: /^\/api\/create_finish\/[^/]+$/u },
 ];
@@ -124,7 +126,9 @@ async function forwardToSecretVault(
     | '/compound_begin'
     | '/compound_commit'
     | '/create_begin'
-    | '/create_finish',
+    | '/create_finish'
+    | '/get_public_state'
+    | '/get_decrypt_payload',
   payload: Record<string, unknown>
 ): Promise<Response> {
   try {
@@ -360,6 +364,24 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     }
 
     return handleCompoundCommit(request, env, deleteCommitMatch[1] ?? '', true);
+  }
+
+  const publicStatusMatch = pathname.match(PUBLIC_STATUS_PATH);
+  if (publicStatusMatch) {
+    if (request.method !== 'GET') {
+      return methodNotAllowed('GET');
+    }
+
+    return forwardToSecretVault(env, publicStatusMatch[1] ?? '', '/get_public_state', {});
+  }
+
+  const decryptFetchMatch = pathname.match(DECRYPT_FETCH_PATH);
+  if (decryptFetchMatch) {
+    if (request.method !== 'GET') {
+      return methodNotAllowed('GET');
+    }
+
+    return forwardToSecretVault(env, decryptFetchMatch[1] ?? '', '/get_decrypt_payload', {});
   }
 
   const route = API_ROUTES.find((candidate) => candidate.pattern.test(pathname));

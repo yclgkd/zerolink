@@ -415,6 +415,8 @@ export const CompoundCommitResponseSchema = z.object({
 export const PublicStatusResponseSchema = z.object({
   ok: z.literal(true),
   state: ChannelStateSchema,
+  adminMode: AdminModeSchema,
+  receiverPubFpr: HexStringSchema.optional(),
 });
 
 export const DecryptFetchResponseSchema = z.object({

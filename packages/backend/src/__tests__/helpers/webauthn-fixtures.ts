@@ -1,6 +1,12 @@
 import type { AssertionJSON, Base64Url } from '@zerolink/shared';
+import { encode } from 'cborg';
 
-import { encodeBase64Url, toArrayBufferBytes, toUtf8Bytes } from '../../crypto/bytes.ts';
+import {
+  decodeBase64Url,
+  encodeBase64Url,
+  toArrayBufferBytes,
+  toUtf8Bytes,
+} from '../../crypto/bytes.ts';
 
 export interface MockAssertionParams {
   credentialId: Base64Url;
@@ -13,13 +19,14 @@ export interface MockAssertionParams {
 
 export interface MockAssertionResult {
   assertion: AssertionJSON;
-  publicKeySpki: Base64Url;
+  /** COSE CBOR-encoded public key — matches what verifyAttestation stores in production. */
+  publicKeyCose: Base64Url;
 }
 
 /**
  * Creates a real WebAuthn-like assertion using a P-256 keypair.
  * Signs authenticatorData || SHA-256(clientDataJSON) with the private key.
- * Returns both the assertion and the SPKI-encoded public key for verification.
+ * Returns the assertion and a COSE CBOR-encoded public key matching production storage format.
  */
 export async function createMockAssertion(
   params: MockAssertionParams
@@ -32,9 +39,22 @@ export async function createMockAssertion(
     'verify',
   ]);
 
-  // Export SPKI public key
-  const spkiBuffer = await crypto.subtle.exportKey('spki', keyPair.publicKey);
-  const publicKeySpki = encodeBase64Url(new Uint8Array(spkiBuffer));
+  // Export JWK to extract x/y coordinates, then construct COSE key (EC2 / ES256 / P-256).
+  // This matches the CBOR-encoded credentialPublicKey stored by verifyAttestation in production.
+  const jwk = (await crypto.subtle.exportKey('jwk', keyPair.publicKey)) as {
+    x: string;
+    y: string;
+  };
+  const xBytes = decodeBase64Url(jwk.x as Base64Url);
+  const yBytes = decodeBase64Url(jwk.y as Base64Url);
+  const coseMap = new Map<number, unknown>([
+    [1, 2], // kty = EC (2)
+    [3, -7], // alg = ES256 (-7)
+    [-1, 1], // crv = P-256 (1)
+    [-2, xBytes],
+    [-3, yBytes],
+  ]);
+  const publicKeyCose = encodeBase64Url(encode(coseMap));
 
   // Build clientDataJSON
   const clientData = {
@@ -83,7 +103,7 @@ export async function createMockAssertion(
     },
   };
 
-  return { assertion, publicKeySpki };
+  return { assertion, publicKeyCose };
 }
 
 /**

@@ -33,7 +33,7 @@ async function buildVerifyParams(
   const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
   const challenge = overrides.challenge ?? encodeBase64Url(challengeBytes);
 
-  const { assertion, publicKeySpki } = await createMockAssertion({
+  const { assertion, publicKeyCose } = await createMockAssertion({
     credentialId,
     rpId,
     rpOrigin,
@@ -43,7 +43,7 @@ async function buildVerifyParams(
 
   const storedCredential: StoredCredential = {
     credentialId,
-    publicKey: publicKeySpki,
+    publicKey: publicKeyCose,
     signCount: storedSignCount,
     aaguid: AAGUID,
   };
@@ -109,7 +109,7 @@ describe('verifyAssertion', () => {
 
   it('rejects when signature is tampered', async () => {
     const challenge = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
-    const { assertion, publicKeySpki } = await createTamperedAssertion({
+    const { assertion, publicKeyCose } = await createTamperedAssertion({
       credentialId: CREDENTIAL_ID,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
@@ -119,7 +119,7 @@ describe('verifyAssertion', () => {
 
     const storedCredential: StoredCredential = {
       credentialId: CREDENTIAL_ID,
-      publicKey: publicKeySpki,
+      publicKey: publicKeyCose,
       signCount: 1,
       aaguid: AAGUID,
     };
@@ -138,7 +138,7 @@ describe('verifyAssertion', () => {
 
   it('rejects when UP flag is not set', async () => {
     const challenge = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
-    const { assertion, publicKeySpki } = await createMockAssertion({
+    const { assertion, publicKeyCose } = await createMockAssertion({
       credentialId: CREDENTIAL_ID,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
@@ -162,7 +162,7 @@ describe('verifyAssertion', () => {
 
     const storedCredential: StoredCredential = {
       credentialId: CREDENTIAL_ID,
-      publicKey: publicKeySpki,
+      publicKey: publicKeyCose,
       signCount: 1,
       aaguid: AAGUID,
     };
@@ -180,7 +180,7 @@ describe('verifyAssertion', () => {
 
   it('rejects when UV flag is not set', async () => {
     const challenge = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
-    const { assertion, publicKeySpki } = await createMockAssertion({
+    const { assertion, publicKeyCose } = await createMockAssertion({
       credentialId: CREDENTIAL_ID,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
@@ -191,7 +191,7 @@ describe('verifyAssertion', () => {
 
     const storedCredential: StoredCredential = {
       credentialId: CREDENTIAL_ID,
-      publicKey: publicKeySpki,
+      publicKey: publicKeyCose,
       signCount: 1,
       aaguid: AAGUID,
     };
@@ -204,7 +204,10 @@ describe('verifyAssertion', () => {
       rpOrigin: RP_ORIGIN,
     });
 
-    expect(result).toEqual({ ok: false, error: 'user verification flag not set' });
+    expect(result).toEqual({
+      ok: false,
+      error: 'user verification flag not set',
+    });
   });
 });
 
