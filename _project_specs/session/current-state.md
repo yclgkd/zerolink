@@ -1,41 +1,44 @@
 # Current Session State
 
-*Last updated: 2026-03-02*
+*Last updated: 2026-03-03*
 
 ## Active Task
-Finalizing documentation updates for Cloudflare DO pricing and assessing DO storage deletion logic.
+Restructuring the repo instruction system for Claude, generic agents, and Gemini CLI.
 
 ## Current Status
-- **Phase**: Implementation → Polish & Security Review
-- **Progress**: Core protocol (Create, Lock, Deliver, Decrypt) implemented. Monorepo stable.
+- **Phase**: Documentation workflow refactor
+- **Progress**: Root agent entrypoints, shared `.ai/` docs, and the `.agents/skills/` compatibility layout have been added on the working branch.
 - **Blocking Issues**: None
 
 ## Context Summary
-ZeroLink has transitioned from infrastructure setup to a functional prototype.
-- **Shared Package**: Constants, Zod schemas, types, and crypto primitives (Argon2id, RSA-OAEP, AES-GCM) are complete.
-- **Backend**: Durable Object (`SecretVault`) manages the state machine and secret storage.
-- **Frontend**: Full routing and UI for Create, Lock, Manage, and View pages are implemented.
-- **Pricing Update**: Documentation now reflects Cloudflare's 2026 DO free tier (SQLite backend).
+- Shared agent guidance is moving out of a long `CLAUDE.md` into short root routers plus `.ai/`.
+- `.agents/skills/` has been added as a compatibility copy of `.claude/skills/`.
+- AI-authored changes now require `branch -> PR -> merge`; direct implementation pushes to `main` are disallowed.
+- Branch names now use `<type>/<short-name>` and never include task IDs.
+- Tool-authorship wording is disallowed in code, commits, PRs, and PR comments.
 
 ## Files Recently Modified
 | File | Status | Notes |
 |------|--------|-------|
-| `docs/TECH_STACK.md` | updated | Added DO pricing info |
-| `docs/QUICK_START.md` | updated | Mentioned free tier |
-| `docs/DEPLOYMENT.md` | updated | Removed "Paid Plan" requirement |
-| `README.md` | updated | Corrected DO pricing note |
+| `CLAUDE.md` | rewritten | Reduced to a short Claude router |
+| `AGENTS.md` | created | Generic agent entrypoint |
+| `GEMINI.md` | created | Gemini CLI entrypoint |
+| `.ai/` | created | Shared workflow and project guidance |
+| `.agents/skills/` | created | Compatibility copy of `.claude/skills/` |
 
 ## Next Steps
-1. [ ] **Security Review**: Audit the Durable Object storage deletion logic (physical vs. logical delete).
-2. [ ] **Refactor**: Implement `storage.deleteAll()` or selective physical deletion for terminal states.
-3. [ ] **Testing**: Increase E2E coverage for the "expired" state flow.
-4. [ ] **CI/CD**: Finalize signed manifest automation.
+1. [ ] Review the diff for scope and wording compliance.
+2. [ ] Record validation results, including the existing unrelated lint failures.
+3. [ ] Commit the doc and workflow change on the branch.
+4. [ ] Push the branch and open a PR.
 
 ## Key Context to Preserve
-- **Durable Object Storage**: Current implementation uses logical deletion (state = 'deleted'). Physical deletion for `ChannelRecord` is missing.
-- **Free Tier**: 100k requests/day limit for DO is now the baseline for self-hosting.
-- **SQLite Backend**: Essential for free tier compatibility.
+- `.ai/` is the canonical shared guidance layer.
+- `.agents/skills/` is a compatibility copy and may drift from `.claude/skills/`.
+- Task IDs stay in issues and PRs, not in branch names.
+- Neutral wording rules apply to code, commits, PRs, and PR comments.
 
 ## Resume Instructions
-1. Review `_project_specs/session/current-state.md` and `active.md`.
-2. Address the physical deletion gap in `SecretVault.ts`.
+1. Review `.ai/workflows.md`.
+2. Review `docs/TASK_BREAKDOWN.md`, `.github/ISSUE_TEMPLATE/ai-task.md`, and `scripts/create-task-issues.sh`.
+3. Run validation and prepare the PR.

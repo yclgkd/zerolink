@@ -18,3 +18,12 @@ Installed 226 packages. Git hooks activated. Changesets initialized.
 
 Created CLAUDE.md, `.claude/skills/` with 7 skills (base, security, typescript, react-web,
 playwright-testing, session-management, code-review), and `_project_specs/` directory tree.
+
+## DONE-003: Multi-agent instruction structure
+
+**Completed**: 2026-03-03
+
+Replaced the long root `CLAUDE.md` with short agent routers, added `AGENTS.md`, `GEMINI.md`,
+and a shared `.ai/` guidance layer, copied `.claude/skills/` to `.agents/skills/` as a
+compatibility directory, migrated branch naming to `<type>/<short-name>`, and codified the
+branch-plus-PR workflow plus neutral wording policy for AI-authored changes.

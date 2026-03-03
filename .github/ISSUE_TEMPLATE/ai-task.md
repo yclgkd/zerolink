@@ -36,7 +36,11 @@ ZL-xxx
 - [ ] PR 描述包含风险与回滚说明
 
 ## Branch Naming
-`task/zl-xxx-<task-name>`
+`<type>/<short-name>`
+
+- `type` must be one of: `feat`, `fix`, `security`, `perf`, `refactor`, `test`, `docs`, `style`, `chore`, `ci`, `revert`
+- Do not include task IDs in the branch name.
+- Track task IDs in the issue and PR instead.
 
 ## PR Naming
 `[ZL-xxx] <summary>`
@@ -44,4 +48,3 @@ ZL-xxx
 ## Validation Steps
 1. `pnpm <command>`
 2. `pnpm <command>`
-
