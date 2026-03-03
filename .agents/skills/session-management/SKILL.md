@@ -252,9 +252,9 @@ Quick reference to important parts of the codebase.
 
 ---
 
-## CLAUDE.md Session Rules
+## Entrypoint Session Rules
 
-Add this section to CLAUDE.md:
+Add this section to the active repo entrypoint doc (`AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`):
 
 ```markdown
 ## Session Management
@@ -442,8 +442,8 @@ session-archive() {
 
 ## Enforcement Mechanisms
 
-### 1. CLAUDE.md as Entry Point
-CLAUDE.md must reference session-management.md in the Skills section. Claude reads CLAUDE.md first, which directs it to follow session rules.
+### 1. Active Agent Entrypoint
+If the current agent environment depends on a repo entrypoint document, that entrypoint should reference session-management guidance. Use the active entrypoint for the environment, such as `AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`.
 
 ### 2. Session File Headers with Reminders
 Include enforcement reminders in session file headers:
@@ -459,7 +459,7 @@ CHECKPOINT RULES (from session-management.md):
 ```
 
 ### 3. Self-Check Questions
-After completing any task, Claude should ask:
+After completing any task, the agent should ask:
 ```
 □ Did I make a decision? → Log it
 □ Did this take >10 tool calls? → Full checkpoint
@@ -468,13 +468,13 @@ After completing any task, Claude should ask:
 ```
 
 ### 4. Session Start Verification
-When starting a session, Claude must:
+When starting a session, the agent must:
 1. Check if `current-state.md` exists and read it
 2. Announce what it found: "Resuming from: [last state]"
 3. Confirm next steps before proceeding
 
 ### 5. Periodic Self-Audit
-Every ~20 tool calls, Claude should check:
+Every ~20 tool calls, the agent should check:
 - Is current-state.md up to date?
 - Are there unlogged decisions?
 - Is context getting heavy?
@@ -482,9 +482,9 @@ Every ~20 tool calls, Claude should check:
 ### 6. User Prompts
 Users can enforce by asking:
 - "Update session state" → Triggers checkpoint
-- "What's the current state?" → Claude reads and reports
+- "What's the current state?" → The agent reads and reports
 - "End session" → Triggers archive + handoff
-- "Resume from last session" → Claude reads state files first
+- "Resume from last session" → The agent reads state files first
 
 ---
 

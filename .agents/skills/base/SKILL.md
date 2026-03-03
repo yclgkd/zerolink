@@ -13,7 +13,7 @@ Complexity is the enemy. Every line of code is a liability. The goal is software
 
 ## Simplicity Rules (STRICTLY ENFORCED)
 
-**CRITICAL: These limits are non-negotiable. Claude MUST check and enforce these limits for EVERY file created or modified.**
+**CRITICAL: These limits are non-negotiable. The agent MUST check and enforce these limits for EVERY file created or modified.**
 
 ### Function Level
 - **Maximum 20 lines per function** - if longer, decompose IMMEDIATELY
@@ -126,7 +126,7 @@ project/
 │   │   ├── code-landmarks.md  # Important code locations
 │   │   └── archive/           # Past session summaries
 │   └── prompts/               # LLM prompt specifications (if AI-first)
-└── CLAUDE.md                  # Claude instructions (references skills)
+└── AGENTS.md                  # Agent entrypoint doc (or CLAUDE.md / GEMINI.md)
 ```
 
 ### What Goes Where
@@ -136,7 +136,7 @@ project/
 | `docs/` | Technical documentation, API refs, setup guides |
 | `_project_specs/` | Business logic, features, requirements, todos |
 | `_project_specs/session/` | Session state, decisions, context for resumability |
-| `CLAUDE.md` | Claude-specific instructions and skill references |
+| `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` | Agent entrypoint instructions and skill references |
 
 ---
 
@@ -501,83 +501,50 @@ When you notice code violating these rules, **stop and refactor** before continu
 
 ---
 
-## Automatic Iterative Mode (Ralph Wiggum)
+## Automatic Iterative TDD Mode
 
-**For any non-trivial task, Claude MUST automatically use iterative TDD loops.**
+**For any non-trivial task, the agent MUST use iterative TDD loops.**
 
-### When to Auto-Invoke Ralph Loop
+### When to Use Iterative TDD
 
 | Task Type | Action |
 |-----------|--------|
-| New feature (any size) | `/ralph-loop` with TDD template |
-| Bug fix | `/ralph-loop` with bug fix template |
-| Refactoring | `/ralph-loop` with refactor template |
-| API development | `/ralph-loop` with API template |
-| Simple question/explanation | Normal response (no loop) |
-| One-line fix (typo, etc.) | Normal response (no loop) |
+| New feature (any size) | Use a full RED -> GREEN -> VALIDATE cycle |
+| Bug fix | Reproduce with a failing test first |
+| Refactoring | Lock behavior with tests before changing structure |
+| API development | Define contracts and tests before implementation |
+| Simple question or explanation | No TDD loop required |
+| One-line typo or wording fix | Use judgment; tests may be unnecessary |
 
-### Auto-Transform User Requests
+### Default Iteration Workflow
 
-When user says something like:
+For requests such as:
 - "Add email validation"
 - "Fix the login bug"
 - "Build a REST API for todos"
 - "Refactor the auth module"
 
-Claude MUST automatically:
+the agent should:
 
-1. **Extract requirements** from the request
-2. **Define completion criteria** (tests passing, lint clean, etc.)
-3. **Structure as Ralph prompt** with TDD workflow
-4. **Invoke** `/ralph-loop` with appropriate `--max-iterations` and `--completion-promise`
+1. **Extract requirements** from the request.
+2. **Define completion criteria** such as tests passing, lint clean, and typecheck clean.
+3. **Write failing tests first** for the requested behavior or bug.
+4. **Implement the minimum change** to make the tests pass.
+5. **Run validation** including lint, typecheck, and relevant tests.
+6. **Repeat the loop** until the completion criteria are satisfied.
 
-### Auto-Transformation Example
+### Completion Criteria Template
 
-**User says:**
-> "Add a forgot password feature"
-
-**Claude automatically invokes:**
-```bash
-/ralph-loop "
-## Task: Add forgot password feature
-
-### Requirements (extracted from user request)
-- User can request password reset via email
-- Reset link sent to registered email
-- Link expires after 24 hours
-- User can set new password via link
-
-### TDD Workflow
-1. Write failing tests for each requirement
-2. Verify tests FAIL (RED)
-3. Implement feature
-4. Verify tests PASS (GREEN)
-5. Run lint + typecheck
-6. Repeat if failures
-
-### Completion Criteria
-- [ ] All tests passing
-- [ ] Coverage >= 80%
-- [ ] Lint clean
-- [ ] Security review (no token in URL params, etc.)
-
-### Exit Condition
-<promise>FORGOT PASSWORD COMPLETE</promise>
-" --completion-promise "FORGOT PASSWORD COMPLETE" --max-iterations 25
-```
-
-### Default Settings
-
-| Setting | Default | Rationale |
-|---------|---------|-----------|
-| `--max-iterations` | 20-30 | Safety net, adjust by complexity |
-| `--completion-promise` | Always set | Based on task (e.g., "TESTS PASSING") |
-| TDD workflow | Always included | Non-negotiable |
+Use a checklist like this for non-trivial work:
+- [ ] All relevant tests pass
+- [ ] New behavior is covered by tests
+- [ ] Lint passes
+- [ ] Typecheck passes
+- [ ] Security-sensitive paths were reviewed when applicable
 
 ### Opt-Out
 
-User can opt out of automatic Ralph loops by saying:
-- "Just explain..." (explanation only)
-- "Quick fix for..." (one-liner)
-- "Don't loop..." (explicit opt-out)
-- "Help me understand..." (learning/discussion)
+Iterative TDD can be skipped only when the task is truly non-implementation work, such as:
+- Explanation only
+- Small copy edit
+- Metadata-only documentation change

@@ -128,7 +128,7 @@ Before writing ANY component/hook implementation:
 - [ ] Tests run and FAIL (proves tests are valid)
 - [ ] Only THEN create implementation file
 
-**If tests are skipped, Claude MUST:**
+**If tests are skipped, the agent MUST:**
 ```
 ⚠️ TEST-FIRST VIOLATION
 
@@ -177,7 +177,7 @@ project/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts              # or next.config.js
-└── CLAUDE.md
+└── AGENTS.md                 # or CLAUDE.md / GEMINI.md
 ```
 
 ---
