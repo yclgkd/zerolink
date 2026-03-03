@@ -97,3 +97,12 @@ This is append-only. Never delete entries.
 **Choice**: Shared skills stay agent-neutral, Claude-specific automation remains local to `.claude/skills/`, and `CLAUDE.md` continues to load Claude-local mandatory skills explicitly.
 **Reasoning**: This preserves the multi-agent guidance layer without pretending Claude-only commands are portable, while keeping the original Claude workflow guarantees intact.
 **Trade-offs**: The shared and Claude-local skill directories can now diverge intentionally, so future changes must update the correct layer instead of assuming one copy fits every agent.
+
+## [2026-03-03] Follow-up fixes must stay on the existing open PR branch
+
+**Decision**: When the current branch already maps to an open PR and the task is addressing that PR's review, comments, or follow-up regressions, continue on that branch instead of creating a new branch and PR.
+**Context**: A review-driven fix was mistakenly moved to a child branch with a second PR, even though the work belonged on PR85.
+**Options Considered**: Always create a fresh branch for every change; use stacked PRs for all follow-up fixes; continue on the existing PR branch unless a stacked PR is explicitly requested.
+**Choice**: Keep review-driven fixes on the existing open PR branch by default, and only split them into a new PR when the user explicitly asks for stacked PRs.
+**Reasoning**: This keeps the review conversation, diff, and fixes in one place and avoids redundant PR churn.
+**Trade-offs**: Agents must do a quick branch/PR check before applying the generic "new branch for every change" rule.

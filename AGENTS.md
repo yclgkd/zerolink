@@ -2,8 +2,10 @@
 
 ## Rules
 - Create a new branch for every change.
+- If you are addressing review feedback or follow-up fixes on an existing open PR branch, continue on that branch instead of creating a new one.
 - Open a PR for every change.
 - Never push implementation changes directly to `main`.
+- Do not create a second PR for review-driven fixes unless the user explicitly asks for a stacked PR.
 - Use `<type>/<short-name>` for branch names.
 - `type` must come from the repo Conventional Commit types: `feat`, `fix`, `security`, `perf`, `refactor`, `test`, `docs`, `style`, `chore`, `ci`, `revert`.
 - Do not include task IDs in branch names.

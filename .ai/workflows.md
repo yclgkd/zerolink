@@ -6,6 +6,8 @@
 - Never push implementation changes directly to `main`.
 - Do not do implementation work on `main`.
 - Keep each branch scoped to one logical change.
+- If the current branch already has an open PR and the task is addressing that PR's review, comments, or follow-up fixes, continue on the existing branch instead of creating a new one.
+- Do not create a child branch or a second PR for review-driven fixes unless the user explicitly asks for a stacked PR.
 
 ## Branch Naming
 - Use `<type>/<short-name>`.
@@ -24,13 +26,14 @@
 
 ## AI Change Flow
 1. Read `.ai/workflows.md`, `.ai/project-context.md`, `.ai/coding-standards.md`, and the relevant task doc.
-2. Create a new branch from `main`.
-3. Make the smallest correct change.
-4. Run relevant validation.
-5. Update `_project_specs/`.
-6. Commit with a Conventional Commit message.
-7. Push the branch.
-8. Open a PR with summary, validation, risk, and rollback.
+2. Check whether the current branch already maps to an open PR and whether the task is a review or follow-up fix for that PR.
+3. If it is a follow-up on an open PR, continue on the current branch. Otherwise create a new branch from `main`.
+4. Make the smallest correct change.
+5. Run relevant validation.
+6. Update `_project_specs/`.
+7. Commit with a Conventional Commit message.
+8. Push the branch.
+9. Open a PR with summary, validation, risk, and rollback if the work is not already attached to an open PR.
 
 ## _project_specs Updates
 - Update `_project_specs/session/current-state.md` when active focus or status changes.
