@@ -49,7 +49,7 @@ project/
 │   └── integration/
 ├── package.json
 ├── tsconfig.json
-└── CLAUDE.md
+└── AGENTS.md                 # or CLAUDE.md / GEMINI.md
 ```
 
 ---

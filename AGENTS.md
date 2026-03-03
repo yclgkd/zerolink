@@ -26,5 +26,5 @@
 
 ## Agent Skills
 - Shared repo guidance lives in `.ai/`.
-- Reusable skills are available in `.agents/skills/`.
+- Agent-neutral reusable skills are available in `.agents/skills/`.
 - Claude-local compatibility assets remain under `.claude/skills/`.

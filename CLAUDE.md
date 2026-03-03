@@ -1,5 +1,18 @@
 # Claude Instructions
 
+## Skills
+Load these Claude-local mandatory skills before implementation work:
+- `.claude/skills/base/SKILL.md`
+- `.claude/skills/security/SKILL.md`
+- `.claude/skills/typescript/SKILL.md`
+- `.claude/skills/react-web/SKILL.md`
+- `.claude/skills/playwright-testing/SKILL.md`
+- `.claude/skills/session-management/SKILL.md`
+- `.claude/skills/code-review/SKILL.md`
+- `.claude/skills/commit-hygiene/SKILL.md`
+
+Shared repo guidance still lives in `.ai/`, while `.claude/skills/` remains the Claude-local mandatory skill layer and may keep Claude-specific automation.
+
 ## Rules
 - Create a new branch for every change.
 - Open a PR for every change.
@@ -26,5 +39,5 @@
 
 ## Claude Local
 - Shared repo guidance lives in `.ai/`.
-- `.claude/skills/` and `.claude/settings.local.json` are Claude-local compatibility assets.
-- `.agents/skills/` is the general skills compatibility directory.
+- `.claude/skills/` and `.claude/settings.local.json` are the Claude-local mandatory skill layer and compatibility assets.
+- `.agents/skills/` is the general, agent-neutral compatibility layer.

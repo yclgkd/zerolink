@@ -15,7 +15,7 @@ UPDATE WHEN:
 | `GEMINI.md` | Gemini CLI router |
 | `.ai/README.md` | Shared guidance index |
 | `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
-| `.agents/skills/` | General skills compatibility copy |
+| `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
 
 ## Entry Points
 | Location | Purpose |

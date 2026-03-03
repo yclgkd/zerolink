@@ -3,42 +3,42 @@
 *Last updated: 2026-03-03*
 
 ## Active Task
-Restructuring the repo instruction system for Claude, generic agents, and Gemini CLI.
+Fixing multi-agent instruction regressions in the shared skills and root entrypoints.
 
 ## Current Status
-- **Phase**: Documentation workflow refactor
-- **Progress**: Root agent entrypoints, shared `.ai/` docs, and the `.agents/skills/` compatibility layout have been added on the working branch.
+- **Phase**: Documentation regression fix -> validation complete
+- **Progress**: Shared `.agents/skills/` guidance has been neutralized, `CLAUDE.md` now restores explicit Claude-local skill loading, and the shared guidance docs now define the shared/local skill boundary. Static validation for forbidden Claude-only strings passed.
 - **Blocking Issues**: None
 
 ## Context Summary
-- Shared agent guidance is moving out of a long `CLAUDE.md` into short root routers plus `.ai/`.
-- `.agents/skills/` has been added as a compatibility copy of `.claude/skills/`.
-- AI-authored changes now require `branch -> PR -> merge`; direct implementation pushes to `main` are disallowed.
-- Branch names now use `<type>/<short-name>` and never include task IDs.
-- Tool-authorship wording is disallowed in code, commits, PRs, and PR comments.
+- The first multi-agent doc refactor left Claude-only commands inside `.agents/skills/`, which broke the new agent-neutral contract.
+- `CLAUDE.md` also lost its explicit `.claude/skills/*` entrypoint list, weakening the Claude-local workflow.
+- This follow-up change keeps `.ai/` as the shared source of truth while separating agent-neutral shared skills from Claude-local execution guidance.
 
 ## Files Recently Modified
 | File | Status | Notes |
 |------|--------|-------|
-| `CLAUDE.md` | rewritten | Reduced to a short Claude router |
-| `AGENTS.md` | created | Generic agent entrypoint |
-| `GEMINI.md` | created | Gemini CLI entrypoint |
-| `.ai/` | created | Shared workflow and project guidance |
-| `.agents/skills/` | created | Compatibility copy of `.claude/skills/` |
+| `CLAUDE.md` | updated | Restored explicit Claude-local mandatory skill loading |
+| `AGENTS.md` | updated | Clarified `.agents/skills/` as agent-neutral |
+| `GEMINI.md` | updated | Clarified `.agents/skills/` as agent-neutral |
+| `.ai/` | updated | Shared workflow guardrails now define the shared/local skill boundary |
+| `.agents/skills/` | updated | Shared skills are being rewritten as agent-neutral guidance |
 
 ## Next Steps
-1. [ ] Review the diff for scope and wording compliance.
-2. [ ] Record validation results, including the existing unrelated lint failures.
-3. [ ] Commit the doc and workflow change on the branch.
-4. [ ] Push the branch and open a PR.
+1. [ ] Review the final diff for wording and scope one last time.
+2. [ ] Commit the regression fix on the branch.
+3. [ ] Push the branch.
+4. [ ] Open the PR for review.
 
 ## Key Context to Preserve
 - `.ai/` is the canonical shared guidance layer.
-- `.agents/skills/` is a compatibility copy and may drift from `.claude/skills/`.
+- `.agents/skills/` is the agent-neutral shared skills layer.
+- `.claude/skills/` is the Claude-local execution layer.
+- The two skill directories may intentionally drift.
 - Task IDs stay in issues and PRs, not in branch names.
 - Neutral wording rules apply to code, commits, PRs, and PR comments.
 
 ## Resume Instructions
-1. Review `.ai/workflows.md`.
-2. Review `docs/TASK_BREAKDOWN.md`, `.github/ISSUE_TEMPLATE/ai-task.md`, and `scripts/create-task-issues.sh`.
-3. Run validation and prepare the PR.
+1. Review `CLAUDE.md`, `.ai/README.md`, and `.ai/workflows.md`.
+2. Review `.agents/skills/code-review/SKILL.md` and `.agents/skills/base/SKILL.md` for the shared-skill boundary.
+3. Prepare the commit and PR.

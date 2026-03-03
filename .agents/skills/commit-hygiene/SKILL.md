@@ -402,20 +402,20 @@ git add -p
 
 ---
 
-## Claude Integration
+## Agent Integration
 
 ### Periodic Check During Development
 
-**Claude should run this check after every significant change:**
+**The agent should run this check after every significant change:**
 
 ```bash
 # Quick status
 git diff --shortstat HEAD
 ```
 
-**Thresholds for Claude to advise committing:**
+**Thresholds for the agent to advise committing:**
 
-| Condition | Claude Action |
+| Condition | Agent Action |
 |-----------|---------------|
 | > 5 files changed | Suggest: "Consider committing current changes" |
 | > 200 lines changed | Suggest: "Changes are getting large, commit recommended" |
@@ -423,7 +423,7 @@ git diff --shortstat HEAD
 | Test just passed | Suggest: "Good checkpoint - commit these passing tests" |
 | Refactoring complete | Suggest: "Refactoring done - commit before adding features" |
 
-### Claude Commit Reminder Messages
+### Agent Commit Reminder Messages
 
 ```
 📊 Status: 7 files changed, +180 -45 (225 total)

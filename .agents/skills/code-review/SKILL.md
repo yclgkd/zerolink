@@ -1,34 +1,23 @@
 ---
 name: code-review
-description: Mandatory code reviews via /code-review before commits and deploys
+description: Mandatory code reviews before commits and deploys
 ---
 
 # Code Review Skill
 
 *Load with: base.md*
 
-**Purpose:** Enforce automated code reviews as a mandatory guardrail before every commit and deployment. Uses the official Claude Code Review plugin for comprehensive analysis.
+**Purpose:** Enforce automated code reviews as a mandatory guardrail before every commit and deployment. Use the current environment's review capability when available, or perform a structured manual diff review against the base branch.
 
 ---
 
 ## Core Philosophy
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  CODE REVIEW IS NON-NEGOTIABLE                                  │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  Every commit must pass code review.                            │
-│  Every PR must be reviewed before merge.                        │
-│  Every deployment must include review sign-off.                 │
-│                                                                 │
-│  AI catches what humans miss. Humans catch what AI misses.      │
-│  Together: fewer bugs, cleaner code, better security.           │
-├─────────────────────────────────────────────────────────────────┤
-│  INVOKE: /code-review                                           │
-│  PLUGIN: code-review@claude-plugins-official                    │
-└─────────────────────────────────────────────────────────────────┘
-```
+Code review is non-negotiable:
+- Every commit should pass review.
+- Every PR should be reviewed before merge.
+- Every deployment should include review sign-off.
+- Tests catch correctness issues; review catches security, performance, and maintainability gaps.
 
 ---
 
@@ -36,173 +25,65 @@ description: Mandatory code reviews via /code-review before commits and deploys
 
 ### Mandatory Review Points
 
-| Trigger | Action | Command |
-|---------|--------|---------|
-| **Before commit** | Review staged changes | `/code-review` |
-| **Before PR** | Review all changes vs base | `/code-review` |
-| **Before merge** | Final review of PR | `/code-review` |
-| **Before deploy** | Review deployment diff | `/code-review` |
+| Trigger | Action |
+|---------|--------|
+| Before commit | Review staged or local changes |
+| Before PR | Review the full branch diff against the base branch |
+| Before merge | Re-check the final PR state |
+| Before deploy | Review the deployment diff and rollback assumptions |
 
-### Automatic Integration
+### Commit Workflow
 
-**Run code review automatically before every commit:**
+1. Write or update tests.
+2. Run relevant validation.
+3. Review the diff with a review tool or manual diff inspection.
+4. Fix all critical and high-severity issues.
+5. Commit only after the review is clean.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  COMMIT WORKFLOW                                                │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  1. Write code                                                  │
-│  2. Run tests (TDD - must pass)                                 │
-│  3. Run /code-review  ← MANDATORY                               │
-│  4. Address critical/high issues                                │
-│  5. Commit                                                      │
-│  6. Push                                                        │
-│                                                                 │
-│  Skip step 3? ❌ NO COMMIT ALLOWED                              │
-└─────────────────────────────────────────────────────────────────┘
-```
+Skipping review is a workflow failure, not an optional shortcut.
 
 ---
 
-## Using the Code Review Plugin
+## How to Review
 
-### Basic Usage
+### Preferred Order
 
-```bash
-# Review current changes
-/code-review
+1. Use the environment's native review capability if one exists.
+2. Otherwise review the diff directly with `git diff --cached` before commit.
+3. For branch-wide review, inspect `git diff <base>...HEAD`.
+4. Re-run focused validation for any risk areas you touched while addressing review findings.
 
-# Review specific files
-/code-review src/auth/*.ts
+### Structured Manual Review
 
-# Review a PR
-/code-review --pr 123
+When reviewing manually, check the diff in this order:
 
-# Review with specific focus
-/code-review --focus security
-/code-review --focus performance
-/code-review --focus architecture
-```
+1. Public interfaces: contracts, schemas, types, CLI flags, config keys.
+2. Behavior: correctness, edge cases, state transitions, error handling.
+3. Security: secrets, input validation, auth, crypto, permissions.
+4. Performance: wasteful loops, duplicate work, large payloads, missing batching.
+5. Maintainability: complexity, duplication, confusing coupling, missing tests.
 
 ### Review Categories
 
-The code review plugin analyzes:
-
 | Category | What It Checks |
 |----------|----------------|
-| **Security** | Vulnerabilities, injection risks, auth issues, secrets |
-| **Performance** | N+1 queries, memory leaks, inefficient algorithms |
-| **Architecture** | Design patterns, SOLID principles, coupling |
-| **Code Quality** | Readability, complexity, duplication |
-| **Best Practices** | Language idioms, framework conventions |
-| **Testing** | Coverage gaps, test quality, edge cases |
-| **Documentation** | Missing docs, outdated comments |
+| Security | Vulnerabilities, injection risks, auth gaps, secrets exposure |
+| Performance | N+1 patterns, memory leaks, inefficient algorithms |
+| Architecture | Layering, coupling, design consistency |
+| Code Quality | Readability, complexity, duplication |
+| Best Practices | Language idioms, framework conventions |
+| Testing | Coverage gaps, weak assertions, missing edge cases |
+| Documentation | Missing or stale docs, unclear rollout notes |
 
 ### Severity Levels
 
 | Level | Action Required | Can Commit? |
 |-------|-----------------|-------------|
-| 🔴 **Critical** | Must fix immediately | ❌ NO |
-| 🟠 **High** | Should fix before commit | ❌ NO |
-| 🟡 **Medium** | Fix soon, can commit | ✅ YES |
-| 🟢 **Low** | Nice to have | ✅ YES |
-| ℹ️ **Info** | Suggestions only | ✅ YES |
-
----
-
-## Pre-Commit Hook Integration
-
-### Install Pre-Commit Hook
-
-```bash
-#!/bin/bash
-# .git/hooks/pre-commit
-
-echo "🔍 Running code review..."
-
-# Run Claude code review on staged files
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|py|go|rs)$')
-
-if [ -n "$STAGED_FILES" ]; then
-    # Invoke code review (requires claude CLI)
-    claude --print "/code-review $STAGED_FILES" > /tmp/code-review-result.txt 2>&1
-
-    # Check for critical/high issues
-    if grep -q "🔴\|Critical\|🟠\|High" /tmp/code-review-result.txt; then
-        echo "❌ Code review found critical/high issues:"
-        cat /tmp/code-review-result.txt
-        echo ""
-        echo "Fix these issues before committing."
-        exit 1
-    fi
-
-    echo "✅ Code review passed"
-fi
-
-exit 0
-```
-
-### Make Hook Executable
-
-```bash
-chmod +x .git/hooks/pre-commit
-```
-
----
-
-## CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-# .github/workflows/code-review.yml
-name: Code Review
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-jobs:
-  code-review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get changed files
-        id: changed-files
-        run: |
-          echo "files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | tr '\n' ' ')" >> $GITHUB_OUTPUT
-
-      - name: Run Claude Code Review
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          npx @anthropic-ai/claude-code --print "/code-review ${{ steps.changed-files.outputs.files }}" > review.md
-
-      - name: Post Review Comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const review = fs.readFileSync('review.md', 'utf8');
-
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `## 🔍 Claude Code Review\n\n${review}`
-            });
-
-      - name: Check for Critical Issues
-        run: |
-          if grep -q "Critical\|🔴" review.md; then
-            echo "❌ Critical issues found"
-            exit 1
-          fi
-```
+| Critical | Must fix immediately | No |
+| High | Should fix before commit | No |
+| Medium | Fix soon, can commit with awareness | Yes |
+| Low | Nice to have | Yes |
+| Info | Suggestion only | Yes |
 
 ---
 
@@ -210,181 +91,152 @@ jobs:
 
 ### Before Every Commit
 
-- [ ] Run `/code-review` on staged changes
-- [ ] No critical (🔴) issues
-- [ ] No high (🟠) issues
-- [ ] Security concerns addressed
-- [ ] Performance issues considered
+- [ ] Reviewed the changed files or staged diff
+- [ ] No critical issues remain
+- [ ] No high-severity issues remain
+- [ ] Security-sensitive paths were checked explicitly
+- [ ] Tests cover new or changed behavior
 
 ### Before Every PR
 
-- [ ] Full code review of all changes
-- [ ] All critical/high issues resolved
-- [ ] Tests added for new functionality
-- [ ] Documentation updated if needed
+- [ ] Reviewed the full branch diff against the base branch
+- [ ] Acceptance criteria still match the implementation
+- [ ] Documentation and rollout notes are updated when needed
+- [ ] Validation results are recorded accurately
 
 ### Before Every Deployment
 
-- [ ] Final review of deployment diff
-- [ ] Security scan passed
-- [ ] No new vulnerabilities introduced
-- [ ] Rollback plan documented
+- [ ] Final diff was reviewed after the last merge or rebase
+- [ ] Security assumptions still hold in the deployed environment
+- [ ] Rollback path is documented and still viable
 
 ---
 
 ## Common Review Findings
 
-### Security Issues (Always Fix)
+### Security Issues
 
 | Issue | Example | Fix |
 |-------|---------|-----|
-| SQL Injection | `query = f"SELECT * FROM users WHERE id = {id}"` | Use parameterized queries |
-| XSS | `innerHTML = userInput` | Sanitize or use textContent |
-| Secrets in code | `apiKey = "sk-xxx"` | Use environment variables |
-| Missing auth | Unprotected endpoints | Add authentication middleware |
-| Insecure crypto | MD5/SHA1 for passwords | Use bcrypt/argon2 |
+| SQL injection | Interpolated SQL strings | Use parameterized queries |
+| XSS | Raw `innerHTML` from user input | Sanitize or render as text |
+| Secrets in code | Hard-coded tokens or keys | Move to environment variables |
+| Missing auth | Sensitive route without auth | Add auth middleware or guards |
+| Insecure crypto | Weak hashing or custom crypto | Use vetted primitives |
 
-### Performance Issues (Should Fix)
-
-| Issue | Example | Fix |
-|-------|---------|-----|
-| N+1 queries | Loop with individual queries | Use batch/eager loading |
-| Memory leak | Unclosed connections | Use connection pooling |
-| Missing index | Slow queries | Add database indexes |
-| Large payload | Fetching unused fields | Select only needed fields |
-| No pagination | Loading all records | Implement pagination |
-
-### Code Quality (Nice to Fix)
+### Performance Issues
 
 | Issue | Example | Fix |
 |-------|---------|-----|
-| Long function | 100+ lines | Extract into smaller functions |
-| Deep nesting | 5+ levels | Early returns, extract methods |
-| Magic numbers | `if (status === 3)` | Use named constants |
-| Duplicate code | Copy-pasted blocks | Extract shared function |
-| Missing types | `any` everywhere | Add proper TypeScript types |
+| N+1 queries | Loop with one query per item | Batch or eager-load |
+| Memory leak | Unclosed handles or listeners | Clean up resources |
+| Missing index | Slow hot-path query | Add or tune indexes |
+| Large payload | Fetching unused fields | Select only required fields |
+| No pagination | Loading every record | Paginate or stream |
 
----
+### Maintainability Issues
 
-## Integration with TDD Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  TDD + CODE REVIEW WORKFLOW                                     │
-│  ─────────────────────────────────────────────────────────────  │
-│                                                                 │
-│  1. RED: Write failing tests                                    │
-│  2. GREEN: Write code to pass tests                             │
-│  3. REFACTOR: Clean up code                                     │
-│  4. REVIEW: Run /code-review  ← NEW STEP                        │
-│  5. FIX: Address critical/high issues                           │
-│  6. VALIDATE: Lint + TypeCheck + Coverage                       │
-│  7. COMMIT: Only after review passes                            │
-│                                                                 │
-│  Review catches what tests miss:                                │
-│  - Security vulnerabilities                                     │
-│  - Performance issues                                           │
-│  - Architecture problems                                        │
-│  - Code maintainability                                         │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Issue | Example | Fix |
+|-------|---------|-----|
+| Long function | 100+ line handler | Extract helpers |
+| Deep nesting | 5+ nested conditionals | Use early returns |
+| Magic values | `if (status === 3)` | Use named constants |
+| Duplicate logic | Repeated validation blocks | Extract shared utility |
+| Missing types | Overuse of `any` | Add explicit types |
 
 ---
 
 ## Review Response Template
 
-When code review finds issues, respond with:
+When review finds issues, summarize them with severity, impact, and the required follow-up:
 
 ```markdown
 ## Code Review Results
 
-### 🔴 Critical Issues (Must Fix)
-1. **SQL Injection in userController.ts:45**
-   - Issue: User input directly interpolated into query
-   - Fix: Use parameterized query
-   - Code: `db.query('SELECT * FROM users WHERE id = $1', [userId])`
+### Critical Issues
+1. Short summary of the blocking issue
+   - Impact: why this breaks correctness, security, or reliability
+   - Fix: the required remediation
 
-### 🟠 High Issues (Should Fix)
-1. **Missing authentication on /api/admin endpoints**
-   - Issue: Admin routes accessible without auth
-   - Fix: Add auth middleware
+### High Issues
+1. Short summary of the urgent issue
+   - Impact: where it appears and who it affects
+   - Fix: the required remediation
 
-### 🟡 Medium Issues (Fix Soon)
-1. **N+1 query in getOrders function**
-   - Consider eager loading or batch query
+### Medium Issues
+1. Short summary of a follow-up item
 
-### 🟢 Low Issues (Nice to Have)
-1. **Consider extracting validation logic to separate file**
+### Low Issues
+1. Optional improvement
 
-### ✅ Strengths
-- Good test coverage
-- Clear function names
-- Proper error handling
-
-### 📊 Summary
-- Critical: 1 | High: 1 | Medium: 1 | Low: 1
-- **Status: ❌ BLOCKED** - Fix critical/high issues before commit
+### Summary
+- Critical: 0
+- High: 0
+- Medium: 1
+- Low: 1
+- Status: Ready to commit
 ```
 
 ---
 
-## Claude Instructions
+## Agent Workflow
 
-### When to Invoke Code Review
+### When to Trigger Review
 
-Claude should automatically suggest or run code review:
+The agent should automatically trigger or suggest review:
 
-1. **After completing a feature** → "Let me run a code review before we commit"
-2. **Before creating a PR** → "Running code review on all changes"
-3. **When user says "commit"** → "First, let me review the changes"
-4. **After fixing bugs** → "Reviewing the fix for any issues"
+1. After completing a feature
+2. Before creating a PR
+3. When the user asks to commit or merge
+4. After fixing a bug or regression
 
-### Review Focus Areas
-
-Prioritize review based on change type:
+### Focus Areas by Change Type
 
 | Change Type | Focus Areas |
 |-------------|-------------|
-| Auth/Security code | Security, input validation, crypto |
-| Database code | SQL injection, N+1, transactions |
-| API endpoints | Auth, rate limiting, validation |
-| Frontend code | XSS, state management, performance |
-| Infrastructure | Secrets, permissions, logging |
+| Auth or security code | Security, input validation, crypto, permissions |
+| Database code | Query safety, indexes, transactions, data shape |
+| API endpoints | Auth, validation, rate limiting, error handling |
+| Frontend code | XSS, state management, render performance |
+| Infrastructure | Secrets, permissions, logging, rollback plan |
+
+### Manual Review Fallback
+
+If no specialized review tool is available, the agent should:
+
+1. Inspect the diff directly.
+2. Enumerate findings by severity.
+3. Confirm whether critical or high issues remain.
+4. Block commit or deploy until blocking issues are resolved.
+
+---
+
+## Integration with TDD Workflow
+
+1. RED: Write failing tests.
+2. GREEN: Implement the minimum change.
+3. REFACTOR: Simplify the implementation.
+4. REVIEW: Inspect the diff for bugs and risks.
+5. FIX: Resolve critical and high-severity findings.
+6. VALIDATE: Run lint, typecheck, and tests.
+7. COMMIT: Only after the review is clean.
 
 ---
 
 ## Quick Reference
 
-### Commands
-
-```bash
-# Basic review
-/code-review
-
-# Review specific files
-/code-review src/auth.ts src/users.ts
-
-# Review with focus
-/code-review --focus security
-
-# Review PR
-/code-review --pr 123
-```
-
 ### Severity Actions
 
-```
-🔴 Critical → STOP. Fix now. No commit.
-🟠 High     → STOP. Fix now. No commit.
-🟡 Medium   → Note it. Fix soon. Can commit.
-🟢 Low      → Optional. Nice to have.
-ℹ️ Info     → FYI only.
+```text
+Critical -> Stop. Fix now. No commit.
+High     -> Stop. Fix now. No commit.
+Medium   -> Track it. Fix soon. Commit allowed.
+Low      -> Optional improvement.
+Info     -> Context only.
 ```
 
-### Workflow
+### Minimal Workflow
 
-```
-Code → Test → Review → Fix → Commit → Push → PR → Review → Merge → Deploy
-              ↑                              ↑                    ↑
-           /code-review                /code-review          /code-review
+```text
+Code -> Test -> Review -> Fix -> Validate -> Commit -> Push -> PR -> Merge -> Deploy
 ```
