@@ -7,6 +7,16 @@ UPDATE WHEN:
 
 # Code Landmarks
 
+## Agent Docs
+| Location | Purpose |
+|----------|---------|
+| `CLAUDE.md` | Claude router for shared repo guidance |
+| `AGENTS.md` | Generic agent router and workflow summary |
+| `GEMINI.md` | Gemini CLI router |
+| `.ai/README.md` | Shared guidance index |
+| `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
+| `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
+
 ## Entry Points
 | Location | Purpose |
 |----------|---------|

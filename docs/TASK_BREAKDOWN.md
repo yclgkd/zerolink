@@ -1,13 +1,14 @@
 # ZeroLink Task Breakdown (AI Parallel Execution)
 
-Last Updated: 2026-02-25
+Last Updated: 2026-03-03
 
 ## Goal
 将大模块拆分为可独立执行、低冲突、可并行开发的任务。每个任务对应一个 Git 分支 + 一个 PR。
 
 ## Working Rules
-- 一任务一分支：`task/<task-id>-<short-name>`
+- 一任务一分支：`<type>/<short-name>`
 - 一任务一 PR：PR 仅包含当前任务目标，不混入其他改动
+- Task ID 跟踪放在 issue / PR 中，不放进分支名
 - 先契约后实现：优先完成 `shared` 的常量/类型/schema，再接 backend/frontend
 - 依赖未完成不启动下游任务（避免返工）
 - **Mock 驱动 UI**：前端 UI 开发必须同步实现 MSW Handlers，确保 UI 可独立运行。
@@ -286,7 +287,12 @@ Last Updated: 2026-02-25
 `[Task] ZL-xxx <task-name>`
 
 ## Branch Convention
-`task/zl-xxx-<task-name>`
+`<type>/<short-name>`
+
+- `type` must come from the repo Conventional Commit types:
+  `feat`, `fix`, `security`, `perf`, `refactor`, `test`, `docs`, `style`, `chore`, `ci`, `revert`
+- Do not include task IDs in branch names.
+- Do not use `task/`, `codex/`, `ai/`, `agent/`, `tmp/`, or `misc/` prefixes.
 
 ## PR Title Convention
 `[ZL-xxx] <summary>`

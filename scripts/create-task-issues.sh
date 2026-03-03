@@ -63,6 +63,7 @@ create_issue() {
   local depends="$4"
   local difficulty="$5"
   local ai_tier="$6"
+  local allowed_types="feat | fix | security | perf | refactor | test | docs | style | chore | ci | revert"
 
   local title="[Task] ${task_id} ${task_name}"
   local body
@@ -96,7 +97,11 @@ ${task_id}
 - [ ] PR 标题遵循：\`[${task_id}] <summary>\`
 
 ## Branch Naming
-\`task/$(echo "${task_id}" | tr '[:upper:]' '[:lower:]')-$(echo "${task_name}" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')\`
+\`<type>/<short-name>\`
+
+- \`type\` must be one of: \`${allowed_types}\`
+- Do not include task IDs in branch names.
+- Track task IDs in the issue and PR instead.
 EOF
 )"
 
