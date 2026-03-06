@@ -39,7 +39,7 @@ Current work in progress and remaining tasks.
 
 ## TODO-103: Automated Signed Manifest in CI
 
-**Status**: pending
+**Status**: in_progress (pending merge)
 **Priority**: P2
 
 **Description**: Ensure every build on `main` automatically generates and signs the `manifest.json`.
