@@ -117,14 +117,17 @@
 
   body {
     @apply bg-background font-sans text-foreground antialiased;
-    font-family: 'Sora', system-ui, sans-serif;
+    font-family: "Sora", system-ui, sans-serif;
     margin: 0;
     background-color: #07070c;
     background-image:
       radial-gradient(ellipse 80% 50% at 50% 0%, rgba(139, 92, 246, 0.2) 0%, transparent 60%),
       linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
       linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px);
-    background-size: auto, 40px 40px, 40px 40px;
+    background-size:
+      auto,
+      40px 40px,
+      40px 40px;
     background-attachment: fixed;
     min-height: 100vh;
     line-height: 1.5;
@@ -176,8 +179,10 @@
     @apply font-mono;
   }
 
-  code, kbd, pre {
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  code,
+  kbd,
+  pre {
+    font-family: "JetBrains Mono", "Courier New", monospace;
   }
 }
 

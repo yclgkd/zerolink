@@ -1,6 +1,6 @@
 import {
-  CHANNEL_STATE,
   type AdminMode,
+  CHANNEL_STATE,
   type ChannelState,
   type CompoundBeginResponse,
   type CompoundChallenge,
@@ -8,8 +8,8 @@ import {
   type HexString,
   type RSAPublicKeyJWK,
   type UUID,
-} from "@zerolink/shared";
-import { create } from "zustand";
+} from '@zerolink/shared';
+import { create } from 'zustand';
 
 import {
   type AsyncRequestState,
@@ -17,7 +17,7 @@ import {
   createIdleRequestState,
   createLoadingState,
   createSuccessState,
-} from "./request-state";
+} from './request-state';
 
 /**
  * State properties for the sender-side channel management and delivery flow.

@@ -806,6 +806,7 @@ export class SecretVault {
         adminMode: record.adminMode,
       };
       if (record.receiver?.pubFpr) {
+        // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
         body['receiverPubFpr'] = record.receiver.pubFpr;
       }
       return jsonResponse(body, 200);

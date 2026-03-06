@@ -81,6 +81,7 @@ export function mapError(error: unknown): Response {
   }
 
   // Log unexpected errors so they appear in wrangler tail / Cloudflare dashboard
+  // biome-ignore lint/suspicious/noConsole: intentional error logging for production observability
   console.error(
     '[SecretVault] unexpected error:',
     error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error)
