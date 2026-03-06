@@ -1,5 +1,0 @@
-# pnpm Monorepo workspace 配置
-# 将此文件复制到项目根目录
-
-packages:
-  - 'packages/*'

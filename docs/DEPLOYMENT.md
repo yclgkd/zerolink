@@ -77,18 +77,6 @@ Frontend SPA    ──→    Pages (CDN 静态托管)
 > 2. 设置 `RP_ID` 和 `RP_ORIGIN` 环境变量 / Set `RP_ID` and `RP_ORIGIN` env vars
 > 3. 单独部署前端到 Cloudflare Pages / Deploy frontend separately to Cloudflare Pages
 
-### 使用自动化脚本 / Using the Setup Script
-
-```bash
-# 克隆仓库
-git clone https://github.com/yourusername/ZeroLink.git
-cd ZeroLink
-
-# 运行一键配置脚本
-chmod +x scripts/setup-cloudflare.sh
-./scripts/setup-cloudflare.sh
-```
-
 ---
 
 ## 手动部署：后端 Worker

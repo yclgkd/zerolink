@@ -87,40 +87,23 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 >
 > **Note**: One-click deploy only deploys the backend Worker. After deployment, you need to manually create the KV namespace, set `RP_ID`/`RP_ORIGIN` env vars, and deploy the frontend separately.
 
-### 使用自动化脚本 / Automated Setup
-
-```bash
-git clone https://github.com/yclgkd/ZeroLink.git
-cd ZeroLink
-chmod +x scripts/setup-cloudflare.sh
-./scripts/setup-cloudflare.sh
-```
-
 ### 前提条件 / Prerequisites
-### 前提要求
 
 - Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
-- Node.js 20+ · pnpm 9+ · Wrangler CLI 3+
+- Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
 
 完整部署文档见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+
 ---
 
 ## 快速开始（本地开发）/ Quick Start (Local Dev)
 
 ```bash
-# 1. 克隆仓库
 git clone https://github.com/yclgkd/ZeroLink.git
 cd ZeroLink
-
-# 2. 运行初始化脚本
-chmod +x scripts/init-monorepo.sh
-./scripts/init-monorepo.sh
-
-# 3. 开始开发
+pnpm install
 pnpm dev
 ```
-
-详细步骤见 [快速启动指南](./docs/QUICK_START.md)
 
 ## License
 
