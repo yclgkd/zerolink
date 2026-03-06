@@ -1,0 +1,23 @@
+name: PR Checklist
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  checklist:
+    name: All tasks completed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for unchecked tasks
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if echo "$PR_BODY" | grep -qF '- [ ]'; then
+            echo "❌ PR has unchecked tasks. Complete all checklist items before merging."
+            echo ""
+            echo "Unchecked items:"
+            echo "$PR_BODY" | grep -F '- [ ]'
+            exit 1
+          fi
+          echo "✅ All tasks completed."
