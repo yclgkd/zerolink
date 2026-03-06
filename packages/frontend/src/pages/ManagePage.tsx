@@ -532,6 +532,7 @@ function useManageDestructionLogic(
   setActionError: (error: string | null) => void,
   setIsSecretInputInvalid: (invalid: boolean) => void,
   setSecretInput: (value: string) => void,
+  setSoftkeyPassphrase: (value: string) => void,
   softkeyPassphrase: string,
   profile: SecurityProfile,
   isActiveActionContext: (scope: number, actionUuid: string) => boolean
@@ -584,6 +585,7 @@ function useManageDestructionLogic(
     setIsSecretInputInvalid(false);
     setActionError(null);
     setSecretInput('');
+    setSoftkeyPassphrase('');
   };
 
   return { handleDestroyConfirm, handleApplyDestroy };
@@ -667,6 +669,7 @@ function useManagePageState(uuid?: string) {
     setActionError,
     setIsSecretInputInvalid,
     setSecretInput,
+    setSoftkeyPassphrase,
     softkeyPassphrase,
     profile,
     isActiveActionContext
@@ -738,31 +741,35 @@ export function ManagePage(): ReactElement {
 
         <StatusContent safetyCode={state.safetyCode} status={state.status} />
 
-        <SecretInput
-          ariaDescribedBy={
-            state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
-          }
-          ariaInvalid={state.isSecretInputInvalid ? true : undefined}
-          disabled={state.isActionPending}
-          onChange={state.handleSecretChange}
-          value={state.secretInput}
-        />
-
-        {state.adminMode === 'softkey' ? (
-          <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
-            <p className="text-xs text-muted-foreground">
-              This channel uses compatibility mode. Enter the passphrase you set when creating this
-              channel.
-            </p>
-            <PassphraseInput
-              inputId="manage-softkey-passphrase"
-              label="Compatibility passphrase"
-              onChange={state.handleSoftkeyPassphraseChange}
-              placeholder="Enter compatibility passphrase"
-              showStrength={false}
-              value={state.softkeyPassphrase}
+        {state.status !== CHANNEL_STATE.DELETED && state.status !== CHANNEL_STATE.EXPIRED ? (
+          <>
+            <SecretInput
+              ariaDescribedBy={
+                state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
+              }
+              ariaInvalid={state.isSecretInputInvalid ? true : undefined}
+              disabled={state.isActionPending}
+              onChange={state.handleSecretChange}
+              value={state.secretInput}
             />
-          </section>
+
+            {state.adminMode === 'softkey' ? (
+              <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
+                <p className="text-xs text-muted-foreground">
+                  This channel uses compatibility mode. Enter the passphrase you set when creating
+                  this channel.
+                </p>
+                <PassphraseInput
+                  inputId="manage-softkey-passphrase"
+                  label="Compatibility passphrase"
+                  onChange={state.handleSoftkeyPassphraseChange}
+                  placeholder="Enter compatibility passphrase"
+                  showStrength={false}
+                  value={state.softkeyPassphrase}
+                />
+              </section>
+            ) : null}
+          </>
         ) : null}
 
         {state.actionError ? (
