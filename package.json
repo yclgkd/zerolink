@@ -32,7 +32,7 @@
     "vitest": "^4.0.18"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,md}": [
+    "*.{ts,tsx,js,jsx,md,css}": [
       "biome check --write --no-errors-on-unmatched"
     ],
     "!(templates)/*.json": [
