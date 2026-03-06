@@ -14,4 +14,5 @@ new_sqlite_classes = ["SecretVault"]
 binding = "SECRETS_KV"
 id = "b8313bed33c9492885c12c9d26034420"
 
-# RP_ID and RP_ORIGIN are passed via --var at deploy time (not stored in git)
+# RP_ID and RP_ORIGIN are configured in the Cloudflare Dashboard (Workers > Settings > Variables and Secrets)
+# Do NOT add them here or pass via --var — values are environment-specific and must not be committed to git
