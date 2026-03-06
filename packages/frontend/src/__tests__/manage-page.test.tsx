@@ -597,6 +597,64 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
   });
 
+  it('hides SECRET PAYLOAD input after successful destroy', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderManagePage();
+    await screen.findByTestId('manage-state-waiting');
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'my secret text' },
+    });
+    expect((screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).value).toBe(
+      'my secret text'
+    );
+
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    await screen.findByTestId('manage-state-deleted');
+    expect(screen.queryByTestId('manage-secret-input')).toBeNull();
+  });
+
+  it('retains SECRET PAYLOAD content after destroy failure', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    deleteChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'PROFILE_BLOCKED', stage: 'delete.assert' },
+    });
+
+    renderManagePage();
+    await screen.findByTestId('manage-state-waiting');
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'my secret text' },
+    });
+
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    await screen.findByTestId('manage-action-error');
+    expect((screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).value).toBe(
+      'my secret text'
+    );
+  });
+
+  it('hides SECRET PAYLOAD input when channel is in expired state', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'expired', adminMode: 'webauthn' })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-expired');
+    expect(screen.queryByTestId('manage-secret-input')).toBeNull();
+  });
+
   it('keeps copy label when clipboard api is unavailable', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
