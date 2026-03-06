@@ -33,7 +33,7 @@ function AppShellLayout(): ReactElement {
         <CardHeader className="gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[var(--neon-magenta)] shadow-[0_0_20px_rgb(168_85_247_/_0.45)]">
-              <Link2 aria-hidden className="size-5 text-white" />
+              <Link2 aria-hidden="true" className="size-5 text-white" />
             </div>
             <div>
               <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
