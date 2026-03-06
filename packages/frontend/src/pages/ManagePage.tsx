@@ -7,10 +7,10 @@ import {
   type SecurityProfile,
   UUIDSchema,
 } from '@zerolink/shared';
-import { ClipboardCheck, Copy, Send, Trash2 } from 'lucide-react';
+import { ClipboardCheck, Copy, PlusCircle, Send, Trash2 } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import {
   PageCard,
@@ -303,6 +303,24 @@ function DestroyConfirmPanel({
   );
 }
 
+function TerminalActions(): ReactElement {
+  const navigate = useNavigate();
+
+  return (
+    <section data-testid="manage-terminal-actions">
+      <Button
+        data-testid="manage-create-new-button"
+        onClick={() => void navigate('/')}
+        type="button"
+        variant="secondary"
+      >
+        <PlusCircle aria-hidden="true" className="size-4" />
+        Create New Channel
+      </Button>
+    </section>
+  );
+}
+
 function ActionPanel({
   status,
   showDestroyConfirm,
@@ -323,15 +341,17 @@ function ActionPanel({
   onConfirmDestroy: () => void;
 }) {
   const terminal = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
-  const deliverDisabled = terminal || pending || !canDeliver;
-  const destroyDisabled = terminal || pending;
+
+  if (terminal) {
+    return <TerminalActions />;
+  }
 
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap gap-2">
         <Button
           data-testid="manage-deliver-button"
-          disabled={deliverDisabled}
+          disabled={pending || !canDeliver}
           onClick={onDeliver}
           type="button"
         >
@@ -346,7 +366,7 @@ function ActionPanel({
         </Button>
         <Button
           data-testid="manage-destroy-button"
-          disabled={destroyDisabled}
+          disabled={pending}
           onClick={onOpenDestroyConfirm}
           type="button"
           variant="danger"
