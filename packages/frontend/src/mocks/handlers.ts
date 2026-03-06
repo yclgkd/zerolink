@@ -134,6 +134,7 @@ export const handlers = [
     return HttpResponse.json({
       ok: true,
       state: CHANNEL_STATE.WAITING,
+      adminMode: 'webauthn',
     });
   }),
 

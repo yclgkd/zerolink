@@ -976,12 +976,14 @@ describe('CompoundCommitResponseSchema', () => {
 
 describe('PublicStatusResponseSchema', () => {
   it.each(['waiting', 'locked', 'delivered', 'deleted', 'expired'])('accepts state %s', (state) => {
-    const result = PublicStatusResponseSchema.parse({ ok: true, state });
+    const result = PublicStatusResponseSchema.parse({ ok: true, state, adminMode: 'webauthn' });
     expect(result.state).toBe(state);
   });
 
   it('rejects unknown state', () => {
-    expect(() => PublicStatusResponseSchema.parse({ ok: true, state: 'open' })).toThrow();
+    expect(() =>
+      PublicStatusResponseSchema.parse({ ok: true, state: 'open', adminMode: 'webauthn' })
+    ).toThrow();
   });
 });
 

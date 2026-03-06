@@ -78,6 +78,7 @@ function mockPublicState(fetchSpy: ReturnType<typeof vi.fn>, state: string) {
     jsonResponse({
       ok: true,
       state,
+      adminMode: 'webauthn',
     })
   );
 }
@@ -227,7 +228,10 @@ describe('ManagePage integration', () => {
 
   it('calls deliverSecret with uuid/profile/plaintext and transitions to delivered on success', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
+    // Use softkey adminMode so the compatibility passphrase input is visible
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'softkey' })
+    );
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
 

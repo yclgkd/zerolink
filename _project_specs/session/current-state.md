@@ -1,44 +1,40 @@
 # Current Session State
 
-*Last updated: 2026-03-03*
+*Last updated: 2026-03-06*
 
 ## Active Task
-Moving the regression fix back onto PR85 and codifying the "follow-up fixes stay on the existing PR branch" rule.
+CI/CD dual-environment automation (staging + production).
 
 ## Current Status
-- **Phase**: PR hygiene correction
-- **Progress**: The shared-skill regression fix has been cherry-picked onto `docs/multi-agent-instructions` so PR85 is the source of truth again, and the workflow docs are being updated to require follow-up fixes on the existing open PR branch.
+- **Phase**: PR review
+- **Progress**: Staging environment fully bootstrapped; deploy.yml rewritten; awaiting PR merge.
 - **Blocking Issues**: None
 
-## Context Summary
-- The regression fix no longer lives only on a separate child branch; it has been moved back onto `docs/multi-agent-instructions` so PR85 remains the review surface.
-- The workflow docs now need an explicit exception to the "new branch for every change" rule so review-driven fixes do not spawn redundant PRs.
-- PR86 should be closed after the updated PR85 branch is pushed.
+## What Was Done
+- Created staging KV namespace (`1a3fb3548446479a8f401d8bb54de4c0`)
+- Updated `packages/backend/wrangler.toml` with `[env.staging]` block
+- Deployed `zerolink-api-staging` worker, set `RP_ID`/`RP_ORIGIN` secrets via `wrangler secret put`
+- Deployed staging frontend to Cloudflare Pages (`zerolink` project, `staging` branch)
+- Rewrote `.github/workflows/deploy.yml`:
+  - `push: branches: main` → staging deploy
+  - `push: tags: v*` → production deploy
+  - Added `test` job gate (typecheck + tests) before deploy
+  - Removed `--var RP_ID/RP_ORIGIN` (secrets live in CF Dashboard)
+  - Fixed Pages project name: `zerolink-frontend` → `zerolink`
+  - Both staging and production sign manifest
 
 ## Files Recently Modified
 | File | Status | Notes |
 |------|--------|-------|
-| `CLAUDE.md` | updated | Restored explicit Claude-local mandatory skill loading |
-| `AGENTS.md` | updated | Clarified `.agents/skills/` as agent-neutral and added the follow-up-on-existing-PR rule |
-| `GEMINI.md` | updated | Clarified `.agents/skills/` as agent-neutral |
-| `.ai/` | updated | Shared workflow guardrails now define the shared/local skill boundary and the existing-PR follow-up rule |
-| `.agents/skills/` | updated | Shared skills are being rewritten as agent-neutral guidance |
+| `packages/backend/wrangler.toml` | updated | Added `[env.staging]` block |
+| `.github/workflows/deploy.yml` | rewritten | Dual-env CI/CD |
 
 ## Next Steps
-1. [ ] Run `git diff --check` and a final wording pass.
-2. [ ] Commit the branch-rule update on `docs/multi-agent-instructions`.
-3. [ ] Push `docs/multi-agent-instructions` to update PR85.
-4. [ ] Close PR86.
+1. [ ] Merge PR (squash)
+2. [ ] Tag a release when ready: `git tag v0.1.0 && git push origin v0.1.0`
 
 ## Key Context to Preserve
-- `.ai/` is the canonical shared guidance layer.
-- `.agents/skills/` is the agent-neutral shared skills layer.
-- `.claude/skills/` is the Claude-local execution layer.
-- The two skill directories may intentionally drift.
-- Task IDs stay in issues and PRs, not in branch names.
-- Neutral wording rules apply to code, commits, PRs, and PR comments.
-
-## Resume Instructions
-1. Review `.ai/workflows.md` and `AGENTS.md` for the follow-up-on-existing-PR rule.
-2. Confirm PR85 is updated from `docs/multi-agent-instructions`.
-3. Close PR86 after push.
+- Staging: `zerolink-api-staging` worker + `staging` Pages branch → `staging.zerolink.yaochunlai.com`
+- Production: `zerolink-api` worker + `main` Pages branch → `zerolink.yaochunlai.com`
+- RP_ID/RP_ORIGIN set via CF Dashboard, NOT in GitHub Secrets or wrangler.toml
+- GitHub Secrets hold: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `MANIFEST_SIGNING_KEY`
