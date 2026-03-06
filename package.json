@@ -17,16 +17,12 @@
     "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
     "clean": "pnpm -r exec rm -rf dist build .turbo node_modules",
     "prepare": "husky",
-    "changeset": "changeset",
-    "changeset:version": "changeset version && pnpm install --lockfile-only",
-    "changeset:publish": "pnpm build && changeset publish",
     "manifest:generate": "tsx scripts/generate-manifest.ts",
     "manifest:sign": "tsx scripts/sign-manifest.ts",
     "manifest:verify": "tsx scripts/verify-manifest.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
-    "@changesets/cli": "^2.29.8",
     "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2",
     "husky": "^9.1.7",
