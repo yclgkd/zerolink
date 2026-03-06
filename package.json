@@ -35,7 +35,7 @@
     "*.{ts,tsx,js,jsx,md,css}": [
       "biome check --write --no-errors-on-unmatched"
     ],
-    "!(templates)/*.json": [
+    "*.json": [
       "biome check --write --no-errors-on-unmatched"
     ]
   },
