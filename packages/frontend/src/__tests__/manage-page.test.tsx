@@ -469,6 +469,9 @@ describe('ManagePage integration', () => {
     expect(deleteChannelMock.mock.calls[0]?.[0]?.uuid).toBe(VALID_UUID);
     expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
     expect(await screen.findByTestId('manage-state-deleted')).toBeTruthy();
+    expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
   });
 
   it('disables confirm panel actions while delete request is pending', async () => {
@@ -566,22 +569,19 @@ describe('ManagePage integration', () => {
     });
   });
 
-  it('renders expired state from API and disables destructive actions', async () => {
+  it('renders expired state from API and shows create new button instead of action buttons', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'expired');
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'expired', adminMode: 'webauthn' })
+    );
 
     renderManagePage();
 
     expect(await screen.findByTestId('manage-state-expired')).toBeTruthy();
 
-    const deliverButton = screen.getByTestId('manage-deliver-button') as HTMLButtonElement;
-    const destroyButton = screen.getByTestId('manage-destroy-button') as HTMLButtonElement;
-
-    expect(deliverButton.disabled).toBe(true);
-    expect(destroyButton.disabled).toBe(true);
-
-    fireEvent.click(destroyButton);
-    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
+    expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
   });
 
   it('shows public status error when /api/public fails but keeps page interactive', async () => {
@@ -668,6 +668,44 @@ describe('ManagePage integration', () => {
     fireEvent.click(copyButton);
 
     expect(copyButton.textContent).toBe('Copy');
+  });
+
+  it('navigates to home when create new button is clicked after destroy', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    const router = createMemoryRouter(
+      [
+        { path: '/', element: <div data-testid="home-page">Home</div> },
+        { path: '/m/:uuid', element: <ManagePage /> },
+      ],
+      { initialEntries: [`/m/${VALID_UUID}`] }
+    );
+    render(<RouterProvider router={router} />);
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    await screen.findByTestId('manage-state-deleted');
+    fireEvent.click(screen.getByTestId('manage-create-new-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-page')).toBeTruthy();
+    });
+  });
+
+  it('shows create new button in terminal actions for both deleted and expired states', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'expired', adminMode: 'webauthn' })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-expired');
+    expect(screen.getByTestId('manage-terminal-actions')).toBeTruthy();
+    expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
   });
 
   it('shows copied label only after clipboard write succeeds', async () => {
