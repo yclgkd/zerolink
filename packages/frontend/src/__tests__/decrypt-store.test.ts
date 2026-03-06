@@ -17,6 +17,7 @@ function buildPublicStatusResponse() {
   return PublicStatusResponseSchema.parse({
     ok: true,
     state: CHANNEL_STATE.DELIVERED,
+    adminMode: 'webauthn',
   });
 }
 

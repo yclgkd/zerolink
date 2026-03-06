@@ -67,6 +67,7 @@ function mockPublicState(
     jsonResponse({
       ok: true,
       state,
+      adminMode: 'webauthn',
     })
   );
 }
@@ -564,6 +565,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -572,6 +574,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -653,6 +656,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -661,6 +665,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -727,6 +732,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -788,6 +794,7 @@ describe('SharePage', () => {
       jsonResponse({
         ok: true,
         state: 'delivered',
+        adminMode: 'webauthn',
       })
     );
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
@@ -846,6 +853,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -907,6 +915,7 @@ describe('SharePage', () => {
       jsonResponse({
         ok: true,
         state: 'delivered',
+        adminMode: 'webauthn',
       })
     );
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
@@ -1110,6 +1119,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'delivered',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -1157,6 +1167,7 @@ describe('SharePage', () => {
       jsonResponse({
         ok: true,
         state: 'waiting',
+        adminMode: 'webauthn',
       })
     );
 
@@ -1173,6 +1184,7 @@ describe('SharePage', () => {
           jsonResponse({
             ok: true,
             state: 'waiting',
+            adminMode: 'webauthn',
           })
         );
       }
