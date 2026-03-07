@@ -76,6 +76,7 @@ export interface WebAuthnProfilePolicy {
   residentKey: ResidentKeyRequirement;
   attestation: AttestationConveyancePreference;
   authenticatorAttachment?: AuthenticatorAttachment;
+  hints?: readonly string[];
 }
 
 /**
@@ -281,6 +282,7 @@ export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfile
         residentKey: 'preferred',
         attestation: 'direct',
         authenticatorAttachment: 'cross-platform',
+        hints: ['security-key'] as const,
       };
     default:
       return {
@@ -337,7 +339,9 @@ function applyCreationPolicy(
       ...options.publicKey,
       attestation: policy.attestation,
       authenticatorSelection: nextSelection,
-    },
+      // hints is a WebAuthn Level 3 field not yet typed by @github/webauthn-json
+      ...(policy.hints ? { hints: policy.hints } : {}),
+    } as CredentialCreationOptionsJSON['publicKey'],
   };
 }
 
