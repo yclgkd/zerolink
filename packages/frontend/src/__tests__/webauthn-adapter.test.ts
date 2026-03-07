@@ -180,6 +180,7 @@ describe('resolveWebAuthnPolicy', () => {
       residentKey: 'preferred',
       attestation: 'direct',
       authenticatorAttachment: 'cross-platform',
+      hints: ['security-key'],
     });
   });
 });
@@ -292,6 +293,7 @@ describe('registerWithWebAuthn', () => {
     expect(createCall).toMatchObject({
       publicKey: {
         attestation: 'direct',
+        hints: ['security-key'],
         authenticatorSelection: {
           userVerification: 'required',
           residentKey: 'preferred',
