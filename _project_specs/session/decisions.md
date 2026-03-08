@@ -128,3 +128,12 @@ This is append-only. Never delete entries.
 **Choice**: Keep review-driven fixes on the existing open PR branch by default, and only split them into a new PR when the user explicitly asks for stacked PRs.
 **Reasoning**: This keeps the review conversation, diff, and fixes in one place and avoids redundant PR churn.
 **Trade-offs**: Agents must do a quick branch/PR check before applying the generic "new branch for every change" rule.
+
+## [2026-03-08] Sender manage flow treats password and softkey as one password-managed path
+
+**Decision**: The sender manage page must treat `adminMode: 'password'` and legacy `adminMode: 'softkey'` as the same password-managed flow, and public-facing protocol docs must refer to the real wire field name `adminMode`.
+**Context**: Quick Share channels are created with `adminMode: 'password'`, but the sender manage UI only rendered the password input for legacy `softkey`, causing delivery and destroy actions to fail. The docs also mixed `admin_mode` with the actual API field `adminMode`.
+**Options Considered**: Keep `password` separate from `softkey` in the manage UI; rename internal frontend symbols now; treat both modes identically in the UI and fix only public-facing wording/docs.
+**Choice**: Treat `password` and `softkey` identically in the sender manage flow, keep internal symbol names unchanged for now, and standardize external docs on `adminMode`.
+**Reasoning**: This fixes the live Quick Share regression with the smallest safe diff, preserves backward compatibility for legacy channels, and removes documentation drift without widening the refactor.
+**Trade-offs**: Internal names such as `softkeyPassphrase` remain slightly legacy-biased, but they no longer leak into user-facing copy or protocol documentation.

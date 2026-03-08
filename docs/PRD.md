@@ -8,9 +8,9 @@
 
 ## 1. 产品概述
 
-GhostLink 是一款零知识秘密分享工具：无账号、服务器不持有明文与私钥。内容端到端加密，只有接收方本地私钥可解密。发送方拥有管理权，可更新/销毁密文，但无法解密内容。
+ZeroLink 是一款零知识秘密分享工具：无账号、服务器不持有明文与私钥。内容端到端加密，只有接收方本地私钥可解密。发送方拥有管理权，可更新/销毁密文，但无法解密内容。
 
-v2.5 的设计目标：
+v3.0 的产品目标：
 
 **在不牺牲"极简使用体验"的前提下，把真实世界的高概率攻击面（抢占锁定、passkey 同步、密文长度侧信道、恶意下发 JS）降到可接受甚至可审计的级别。**
 
@@ -81,7 +81,7 @@ v2.5 的设计目标：
 - **WebAuthn**：不需要
 - **接收方**：Argon2id 强制
 - **Padding**：4KB 块
-- **admin_mode**：`password`（内部协议字段）
+- **adminMode**：`password`（内部协议字段）
 - **适合**：跨设备/跨浏览器、无 passkey 支持环境，或希望使用密码管理器的用户
 
 ### 2. Secure Share（安全分享）
@@ -90,7 +90,7 @@ v2.5 的设计目标：
 - **WebAuthn**：必须，不可降级
 - **接收方**：Argon2id 强制
 - **Padding**：8KB 块（更高隐私）
-- **admin_mode**：`webauthn`（内部协议字段）
+- **adminMode**：`webauthn`（内部协议字段）
 - **适合**：最高安全需求，passkey 可用的环境
 
 ### Legacy 档位（只读，向后兼容）
@@ -108,7 +108,7 @@ v2.5 的设计目标：
 ### 5.1 创建（Sender）
 
 1. 选择模式：**Quick Share**（密码）或 **Secure Share**（Passkey）
-2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（admin_mode=password）
+2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（adminMode=password）
 3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required）→ Create Finish
 4. 页面显示两条链接：
    - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
@@ -250,7 +250,7 @@ Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用
 
 - **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹存 IndexedDB
 - **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
-- **协议字段**：`admin_mode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
+- **协议字段**：`adminMode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
 - **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
 - **UI**：不标注"较低安全"，而是作为独立的有效分享模式展示
 
@@ -258,7 +258,7 @@ Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用
 
 ---
 
-## 10. API（v2.5 完整）
+## 10. API（v3.0 当前）
 
 通用要求：
 
@@ -361,7 +361,7 @@ DO 校验：
 
 最终：写入 receiver_pub、fpr、status=Locked
 
-### 10.4 投递（compound_begin/commit，v2.5 保持一次确认）
+### 10.4 投递（compound_begin/commit，v3.0 保持一次确认）
 
 与 v2.4 相同，但 update payload 增加：
 
@@ -374,22 +374,22 @@ DO 校验：
 
 同 v2.4。
 
-### 10.6 兼容模式 API（仅 Standard 可选）
+### 10.6 Quick Share / Legacy Password API
 
 新增字段：
 
-- admin_mode="webauthn"|"softkey"
-- softkey 下 update/delete 需要 sig（回到 v2.3 ECDSA 签名）
+- adminMode="webauthn"|"password"|"softkey"
+- password / softkey 下 update/delete 需要 sig（ECDSA 签名；softkey 仅 legacy 向后兼容）
 
 ---
 
-## 11. WebAuthn 验证（v2.5，继承 v2.4 字节级规范）
+## 11. WebAuthn 验证（v3.0，继承 v2.4 字节级规范）
 
 - origin、rpIdHash、UV/UP、challenge 精确匹配、COSE ES256 验签
-- High-Security Mode 下增加：
-    - authenticatorAttachment="cross-platform"（Hardware-Only）
-    - attestation="direct"（Hardware-Only）
-    - 若无法验证 attestation：提示并降级到 Strict（由用户确认）
+- Secure Share / strict / hardware_only：
+    - userVerification="required"
+    - residentKey="required"
+    - attestation="none"
 
 ---
 
@@ -439,28 +439,28 @@ DO 校验：
 
 - 3 帧以内动画 + 1 句强提示：
     - "这是你的解密钥匙，发送方也不知道"
-- 密码强度提示（但不强迫过强，避免劝退；可在 Strict 模式强提示）
+- 密码强度提示（但不强迫过强，避免劝退；Secure Share 作为更高安全选项单独提供）
 
-### 13.3 WebAuthn 降级引导
+### 13.3 WebAuthn 不可用时的引导
 
 - 失败时给出明确原因分类（不泄露敏感信息）：
     - "浏览器不支持"
     - "当前页面不安全（非 https / 非同源）"
     - "系统未启用生物识别/安全密钥"
-- Standard：允许进兼容模式（显式确认风险）
-- Strict/Hardware-Only：阻断并给"换设备/换浏览器"建议
+- Quick Share：保持可用，并说明这是密码模式
+- Secure Share：阻断并给"换设备/换浏览器"建议
 
 ---
 
-## 14. 测试向量与验收（v2.5 新增）
+## 14. 测试向量与验收（v3.0）
 
 必须新增测试：
 
 1. **TOFU 抢占锁定**：没有 fragment 的访问无法完成 lock_commit（lock_proof 验证失败）
 2. **lock_challenge 重放**：同 challenge_id 再次 lock_commit 必失败
 3. **padding**：不同长度明文映射到相同桶长度密文（至少 4KB 桶）
-4. **Argon2id 强制**：接收方私钥包裹必须为 Argon2id（除兼容模式）
-5. **High-Security Mode**：hardware-only 不允许平台 passkey（尽力约束并提示）
+4. **Argon2id 强制**：接收方私钥包裹必须为 Argon2id；Quick Share 管理密钥也必须使用 Argon2id 包裹
+5. **Secure Share Policy**：secure/strict/hardware_only 必须要求 UV=required 与 RK=required
 
 ---
 
@@ -774,7 +774,7 @@ CipherBundle（base64url）：
 ### G1. Quick Share（quick）
 
 - 不使用 WebAuthn，完全密码模式
-- admin_mode = "password"
+- adminMode = "password"
 
 ### G2. Secure Share（secure）
 
@@ -830,8 +830,8 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
 - 前端生成 ECDSA P-256 keypair
 - Admin-Priv 用 Argon2id 包裹存 IndexedDB（密码由用户提供）
-- 服务器存 Admin-Pub（JWK）+ admin_mode="password"
-- Legacy 频道可能存 admin_mode="softkey"，后端等价处理
+- 服务器存 Admin-Pub（JWK）+ adminMode="password"
+- Legacy 频道可能存 adminMode="softkey"，后端等价处理
 
 ### I2. 写入授权
 

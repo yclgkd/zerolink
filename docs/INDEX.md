@@ -116,11 +116,11 @@ docs/
 
 ## 版本历史
 
-### v2.5（当前）
+### v3.0（当前）
 - **核心改进**：Lock Secret（URL Fragment）+ Padding + Argon2id 强制
-- **新增**：三档安全模式（Standard/Strict/Hardware-Only）
+- **新增**：Quick Share（密码）/ Secure Share（Passkey）双模式创建
 - **新增**：可验证发布链设计
-- **完善**：UX 柔化、WebAuthn 降级引导
+- **完善**：新建与发送者管理主流程统一到 Quick Share / Secure Share；legacy 档位仅用于向后兼容
 
 ### v2.4（前代）
 - WebAuthn 管理权 + DO 原子性 + Intent Binding
@@ -153,11 +153,11 @@ docs/
 ### Q: 如何验证前端代码未被篡改？
 → [PRD.md § 12. 前端完整性](./PRD.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
 
-### Q: 三档安全模式有什么区别？
+### Q: Quick Share 和 Secure Share 有什么区别？
 → [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
 
-### Q: 兼容模式安全性如何？
-→ [SECURITY.md § 恶意浏览器扩展/木马 § 降级模式风险](./SECURITY.md#5-恶意浏览器扩展木马)
+### Q: legacy 档位和旧 softkey 频道怎么处理？
+→ [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
 
 ### Q: 如何初始化 Monorepo？
 → [QUICK_START.md](./QUICK_START.md)
@@ -205,6 +205,6 @@ docs/
 
 ---
 
-**最后更新**：2026-02-23
-**当前版本**：v2.5
+**最后更新**：2026-03-08
+**当前版本**：v3.0
 **维护者**：ZeroLink Team

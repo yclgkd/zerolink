@@ -3,14 +3,29 @@
 *Last updated: 2026-03-08*
 
 ## Active Task
-Security mode restructuring: Quick Share + Secure Share (replacing Standard / Strict / Hardware-Only).
+Documentation alignment for current product state: ZeroLink branding and Quick Share + Secure Share terminology.
 
 ## Current Status
-- **Phase**: Implementation complete, ready for PR
-- **Progress**: All 6 phases complete. TypeScript clean. 325 frontend + 191 shared + 111 backend tests all pass.
+- **Phase**: Documentation alignment and Quick Share manage-flow fix complete, ready for PR
+- **Progress**: Frontend manage flow now treats `password` and legacy `softkey` as the same password-managed path; README, PRD, INDEX, SECURITY, and ARCHITECTURE are aligned to the current Quick Share / Secure Share product state.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 8: Quick Share sender manage fix
+- `packages/frontend/src/pages/ManagePage.tsx` — Show the channel password input for both `adminMode: 'password'` and legacy `adminMode: 'softkey'`; remove compatibility-mode wording from manage-page copy
+- `packages/frontend/src/__tests__/manage-page.test.tsx` — Added coverage for `adminMode: 'password'`, retained legacy `softkey` coverage, and asserted that WebAuthn-managed channels do not show the password input
+- `docs/PRD.md` — Corrected internal protocol field references from `admin_mode` to `adminMode`
+- `docs/INDEX.md` — Tightened the v3.0 summary to match the flows that are actually unified in the product
+
+### Phase 7: Documentation alignment
+- `README.md` — Replaced 3-mode messaging with Quick Share / Secure Share and updated PRD version reference to v3.0
+- `docs/PRD.md` — Replaced stale `GhostLink` brand mention with `ZeroLink`; updated current-state wording around API, WebAuthn policy, and fallback behavior
+- `docs/INDEX.md` — Updated current version to v3.0 and replaced outdated FAQ entries about 3 modes / compatibility mode
+- `docs/SECURITY.md` — Reframed security model around Quick Share / Secure Share and moved legacy behavior to explicit compatibility context
+- `docs/ARCHITECTURE.md` — Replaced Standard / Strict / Hardware-Only overview with current Quick Share / Secure Share architecture
+
+## Previous Work
 
 ### Phase 1: Shared Package
 - `packages/shared/src/constants.ts` — Added `QUICK` and `SECURE` to `SECURITY_PROFILE`; legacy values retained

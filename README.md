@@ -8,15 +8,16 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 - **零知识架构**：服务器不存明文与任何私钥
 - **端到端加密**：只有接收方可解密内容
-- **WebAuthn 管理**：发送方管理权基于系统/硬件密钥（不可导出）
+- **双模式创建**：Quick Share（密码）/ Secure Share（Passkey）
+- **WebAuthn 管理**：Secure Share 使用系统/硬件密钥管理权（不可导出）
 - **TOFU 防护**：URL Fragment + Lock Challenge 防止抢占锁定
 - **密文长度保护**：Padding 降低长度泄露精度
-- **三档安全模式**：Standard / Strict / Hardware-Only
+- **当前产品模式**：Quick Share / Secure Share，legacy 档位仅保留向后兼容
 
 ## 核心流程
 
 ```
-1. Sender → Create (WebAuthn 注册)
+1. Sender → Create (Quick Share 密码模式 / Secure Share Passkey 模式)
           → 分享链接: /s/:uuid#k=<lock_secret>
 
 2. Receiver → Lock (输入密码 → 生成 RSA keypair → 本地存储)
@@ -36,7 +37,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - [技术栈规范](./docs/TECH_STACK.md) - 完整技术栈与工具链
 
 ### 设计文档
-- [完整 PRD v2.5](./docs/PRD.md) - 产品需求文档
+- [完整 PRD v3.0](./docs/PRD.md) - 产品需求文档
 - [架构概览](./docs/ARCHITECTURE.md) - 技术架构与核心协议
 - [安全模型](./docs/SECURITY.md) - 威胁模型与安全保证
 
@@ -59,12 +60,12 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ## 安全特性
 
-### v2.5 核心改进
+### v3.0 当前重点
 
 1. **Lock Secret (URL Fragment)**: 防止预加载爬虫抢占锁定
 2. **Padding (4KB 块)**: 降低密文长度泄露精度
 3. **Argon2id 强制**: 接收方私钥包裹（250-500ms 目标耗时）
-4. **三档安全模式**: Standard / Strict / Hardware-Only
+4. **双模式创建**: Quick Share（密码）/ Secure Share（Passkey）
 5. **可验证发布链**: Signed Manifest + 可复现构建（未来）
 
 ### 安全保证

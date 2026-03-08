@@ -5,7 +5,7 @@
 ### 1. 零知识架构
 - **服务器不存明文**：所有内容在客户端加密，服务器只存储密文
 - **服务器不存私钥**：接收方私钥在客户端生成并本地存储（Argon2id 包裹）
-- **管理权不可导出**：发送方管理权使用 WebAuthn（私钥驻留系统/硬件）
+- **双路径管理权**：Secure Share 使用 WebAuthn（私钥驻留系统/硬件）；Quick Share 使用密码包裹的本地 ECDSA 密钥
 
 ### 2. 三方角色模型
 
@@ -43,7 +43,9 @@
 
 ### 1. Create（创建）
 ```
-Sender → WebAuthn 注册 → 生成 lock_secret
+Sender → 选择 Quick Share 或 Secure Share → 生成 lock_secret
+     → Quick Share：本地生成 ECDSA 管理密钥并用 Argon2id 包裹
+     → Secure Share：WebAuthn 注册管理凭据
      → 返回两条链接：
        - /s/:uuid#k=<lock_secret>  （分享链接，含 fragment）
        - /m/:uuid                   （管理链接）
@@ -71,13 +73,15 @@ Sender → 获取 receiver_pub（已上锁）
         - AES-GCM 加密 padded_plaintext
         - RSA-OAEP 封装 AES key
       → compound_begin 获取 challenge
-      → WebAuthn 签名确认
+      → Secure Share: WebAuthn 签名确认
+      → Quick Share: 本地 ECDSA 签名确认
       → compound_commit 写入密文（原子性）
 ```
 
 ### 4. Update/Delete（管理）
 ```
-Sender → WebAuthn 签名授权
+Sender → Secure Share: WebAuthn 签名授权
+      → Quick Share: 本地 ECDSA 签名授权
       → DO 验证：version 单调 + nonce 去重
       → 原子性更新/删除
 ```
@@ -127,29 +131,23 @@ expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || s
 WebAuthn challenge 必须 === expected_challenge
 ```
 
-## 安全档位（Security Profiles）
+## 产品模式（Current Profiles）
 
-### Standard（默认）
-- 允许平台 passkey（可能同步到云）
-- userVerification = "preferred"
-- 适合大多数用户
-
-### Strict（严格）
-- userVerification = "required"
-- 尽量避免可备份凭据（检测 backupEligibility）
-- 每次操作强制确认
-
-### Hardware-Only（极限）
-- authenticatorAttachment = "cross-platform"（硬件钥匙）
-- attestation = "direct"（可验证硬件属性）
-- 无法满足则阻断
-
-## 兼容模式（Fallback）
-
-当 WebAuthn 不可用时（仅 Standard 档位）：
-- 改用 ECDSA P-256 软件密钥
+### Quick Share（密码）
+- 本地生成 ECDSA P-256 管理密钥
 - Admin-Priv 用 Argon2id 包裹存 IndexedDB
-- UI 显著标注"兼容模式（较低安全）"
+- 适合无 WebAuthn 支持或跨设备/跨浏览器场景
+- 默认 4KB padding
+
+### Secure Share（Passkey）
+- 使用 WebAuthn passkey 管理权
+- userVerification = "required"
+- residentKey = "required"
+- 默认 8KB padding
+
+### Legacy（只读兼容）
+- `standard` / `strict` / `hardware_only` 仅用于已有频道渲染和操作
+- 新建频道不再提供这些档位
 
 ## 数据流图
 
@@ -157,15 +155,17 @@ WebAuthn challenge 必须 === expected_challenge
 ┌─────────────────────────────────────────────────────────────┐
 │                    Sender 视角                               │
 ├─────────────────────────────────────────────────────────────┤
-│  1. WebAuthn 注册 → 管理私钥（系统/硬件，不可导出）          │
+│  1. 选择 Quick Share 或 Secure Share                        │
+│     - Quick: 本地 ECDSA 管理密钥 + Argon2id 包裹            │
+│     - Secure: WebAuthn 管理私钥（系统/硬件，不可导出）      │
 │  2. 获取 lock_secret（仅用于分享链接 fragment）             │
 │  3. 等待 Receiver 上锁                                       │
 │  4. 获得 receiver_pub 后：                                   │
 │     - 混合加密内容（AES-GCM + RSA-OAEP）                    │
-│     - Padding 到 4KB 块                                      │
-│     - WebAuthn 签名确认                                      │
+│     - Padding 到 4KB / 8KB 块                               │
+│     - Quick: 本地 ECDSA 签名 / Secure: WebAuthn 签名        │
 │     - 投递密文到 Server                                      │
-│  5. 可随时更新/删除（WebAuthn 授权）                        │
+│  5. 可随时更新/删除（按所选模式授权）                        │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -187,7 +187,7 @@ WebAuthn challenge 必须 === expected_challenge
 │                    Server 视角                               │
 ├─────────────────────────────────────────────────────────────┤
 │  - 存储：                                                    │
-│    * admin_webauthn（发送方公钥 + credential）              │
+│    * admin_webauthn 或 admin_pub（发送方管理凭据）          │
 │    * lock_key（用于验证 lock_proof，不可逆回 lock_secret）  │
 │    * receiver_pub（接收方公钥，仅上锁后存在）               │
 │    * cipher_bundle（密文 + 元数据）                         │
