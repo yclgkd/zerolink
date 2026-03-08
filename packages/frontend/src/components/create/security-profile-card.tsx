@@ -1,5 +1,5 @@
 import type { SecurityProfile } from '@zerolink/shared';
-import { KeyRound, type LucideIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { KeyRound, Lock, type LucideIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { cn } from '../../lib/utils';
@@ -52,46 +52,66 @@ export type SecurityProfileCardConfig = {
  * Registry of configurations for all supported security profiles.
  */
 export const SecurityProfileCardConfigs: Record<SecurityProfile, SecurityProfileCardConfig> = {
+  quick: {
+    title: 'Quick Share',
+    tagline: 'Password-protected delivery — no passkey required.',
+    points: [
+      'Password-derived admin key (Argon2id)',
+      'Works in any browser',
+      '4 KB ciphertext padding',
+    ],
+    details:
+      'Choose a strong password you will remember. The password protects your channel management key and is never sent to the server.',
+    icon: Lock,
+    tone: 'purple',
+    selectedRingClass: 'ring-2 ring-neon-purple/60 shadow-[0_0_20px_rgba(168,85,247,0.3)]',
+    selectedIconClass: 'border-neon-purple/50 bg-neon-purple/10 text-neon-purple',
+  },
+  secure: {
+    title: 'Secure Share',
+    tagline: 'Passkey-protected delivery — strongest security.',
+    points: [
+      'Passkey or hardware security key required',
+      'User verification enforced',
+      '8 KB ciphertext padding',
+    ],
+    details:
+      'Uses your device passkey or external security key to manage this channel. User verification is always required.',
+    icon: ShieldCheck,
+    tone: 'magenta',
+    selectedRingClass: 'ring-2 ring-neon-magenta/60 shadow-[0_0_20px_rgba(236,72,153,0.3)]',
+    selectedIconClass: 'border-neon-magenta/50 bg-neon-magenta/10 text-neon-magenta',
+  },
+  // Legacy profiles — retained for rendering existing channels; not shown in new create UI
   standard: {
-    title: 'Standard',
-    tagline: 'Balanced security for everyday encrypted delivery.',
+    title: 'Standard (Legacy)',
+    tagline: 'Legacy profile — use Quick Share or Secure Share for new channels.',
     points: [
       'Passkeys or security keys',
       'Argon2id-protected key wrapping',
       '4 KB ciphertext padding',
     ],
-    details:
-      'Recommended for most channels. Supports platform passkeys while preserving strong cryptographic defaults.',
+    details: 'Legacy Standard profile. Existing channels with this profile continue to work.',
     icon: ShieldCheck,
     tone: 'purple',
     selectedRingClass: 'ring-2 ring-neon-purple/60 shadow-[0_0_20px_rgba(168,85,247,0.3)]',
     selectedIconClass: 'border-neon-purple/50 bg-neon-purple/10 text-neon-purple',
   },
   strict: {
-    title: 'Strict',
-    tagline: 'Stronger verification with tighter passkey policy.',
-    points: [
-      'User verification is required',
-      'Discourages synced backup passkeys',
-      '8 KB ciphertext padding',
-    ],
-    details:
-      'Use when both participants can satisfy stricter policy checks and need more explicit identity assurance.',
+    title: 'Strict (Legacy)',
+    tagline: 'Legacy profile — use Secure Share for new channels.',
+    points: ['User verification required', '8 KB ciphertext padding'],
+    details: 'Legacy Strict profile. Existing channels with this profile continue to work.',
     icon: ShieldAlert,
     tone: 'magenta',
     selectedRingClass: 'ring-2 ring-neon-magenta/60 shadow-[0_0_20px_rgba(236,72,153,0.3)]',
     selectedIconClass: 'border-neon-magenta/50 bg-neon-magenta/10 text-neon-magenta',
   },
   hardware_only: {
-    title: 'Hardware-Only',
-    tagline: 'Highest assurance with dedicated FIDO2 hardware keys.',
-    points: [
-      'Cross-platform hardware key required',
-      'Attestation validation expected',
-      '8 KB ciphertext padding',
-    ],
-    details:
-      'Best fit for high-risk handoffs where both parties can use external security keys and hardware-backed credentials.',
+    title: 'Hardware-Only (Legacy)',
+    tagline: 'Legacy profile — use Secure Share for new channels.',
+    points: ['Cross-platform hardware key', '8 KB ciphertext padding'],
+    details: 'Legacy Hardware-Only profile. Existing channels with this profile continue to work.',
     icon: KeyRound,
     tone: 'orange',
     selectedRingClass: 'ring-2 ring-neon-orange/60 shadow-[0_0_20px_rgba(249,115,22,0.3)]',

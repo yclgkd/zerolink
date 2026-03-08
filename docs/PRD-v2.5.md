@@ -1,6 +1,8 @@
-# ZeroLink 产品需求文档 (PRD) v2.5
+# ZeroLink 产品需求文档 (PRD) v3.0
 
 **Security-First / Low-Friction / DO-Atomic / WebAuthn Admin / TOFU-Safe / Padded Ciphertext**
+
+> **v3.0 变更摘要（相对 v2.5）**：将三档安全模式（Standard / Strict / Hardware-Only）统一为两个用户入口：**Quick Share**（密码模式）和 **Secure Share**（Passkey 模式）。移除 Hardware-Only 的 attestation 强制执行（技术可行性差，保留 legacy 向后兼容读取）。Legacy 档位（standard / strict / hardware_only）仅用于已有频道的向后兼容展示，不再作为新建频道的选项。
 
 ---
 
@@ -54,12 +56,12 @@ v2.5 的设计目标：
 - 默认且必须：Argon2id（参数目标耗时 250–500ms）
 - PBKDF2 只允许在"兼容模式"下启用，并在 UI 明确标注"降低安全性"
 
-### 3.4 新增：High-Security Mode（硬件密钥强制）
+### 3.4 两档用户入口（v3.0 简化）
 
-- 创建时可选三档：
-    - **Standard**：允许平台 passkey（可能同步）
-    - **Strict**：要求 UV=required，优先 resident key，尽量避免可备份 passkey（能检测则拒绝/警告）
-    - **Hardware-Only**：强制 cross-platform authenticator（硬件钥匙），并要求 attestation=direct（可验证则强信任，否则降级提示）
+创建时可选两档（Legacy 档位仅用于已有频道的向后兼容）：
+- **Quick Share**：密码模式，本地 Argon2id 派生 ECDSA 管理密钥，无需 passkey，4KB padding
+- **Secure Share**：Passkey 模式，UV=required / RK=required，8KB padding，合并原 Standard+Strict 的安全级别
+- **Legacy（只读）**：standard / strict / hardware_only 仅渲染已有频道，不作为新建选项
 
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
@@ -71,23 +73,33 @@ v2.5 的设计目标：
 
 ## 4. 产品模式与安全档位（对外清晰）
 
-创建时可选 security_profile：
+创建时可选 security_profile（v3.0 两档）：
 
-### 1. Standard（默认）
-- WebAuthn：允许 passkey（可能同步）
-- 接收方：Argon2id 强制
-- Padding：开启（默认 4KB）
-- 适合大多数场景
+### 1. Quick Share（快速分享）
 
-### 2. Strict（偏执模式）
-- WebAuthn：要求 UV；尽量避免可备份/可同步凭据（能检测则拒绝或强提示）
-- 更新/删除强制每次确认（不允许会话 token）
-- 建议配合带外核对安全码
+- **管理权**：本地生成 ECDSA P-256 keypair，由用户密码 Argon2id 包裹存 IndexedDB
+- **WebAuthn**：不需要
+- **接收方**：Argon2id 强制
+- **Padding**：4KB 块
+- **admin_mode**：`password`（内部协议字段）
+- **适合**：跨设备/跨浏览器、无 passkey 支持环境，或希望使用密码管理器的用户
 
-### 3. Hardware-Only（极限）
-- WebAuthn：authenticatorAttachment="cross-platform"，优先硬件钥匙
-- attestation="direct"（若无法验证 attestation，则提示"无法证明硬件属性，继续将降低到 Strict"）
-- 建议企业/极端安全用户
+### 2. Secure Share（安全分享）
+
+- **管理权**：WebAuthn passkey（设备或平台），UV=required，RK=required
+- **WebAuthn**：必须，不可降级
+- **接收方**：Argon2id 强制
+- **Padding**：8KB 块（更高隐私）
+- **admin_mode**：`webauthn`（内部协议字段）
+- **适合**：最高安全需求，passkey 可用的环境
+
+### Legacy 档位（只读，向后兼容）
+
+已有频道可能存储 `standard` / `strict` / `hardware_only` security_profile，系统继续正确渲染和操作。新建频道不提供这些选项。
+
+- **standard**：等价 Quick Share 安全级别（UV preferred）
+- **strict**：等价 Secure Share 安全级别（UV required），保留向后兼容
+- **hardware_only**：原 cross-platform 强制，已移除 attestation=direct 强制执行（技术原因），现行为与 strict 相同
 
 ---
 
@@ -95,10 +107,11 @@ v2.5 的设计目标：
 
 ### 5.1 创建（Sender）
 
-1. 选择安全档位（Standard/Strict/Hardware-Only）
-2. Create Begin → WebAuthn 注册 → Create Finish
-3. 页面显示两条链接：
-   - 分享链接（接收方）：/s/:uuid#k=<lock_secret_b64url>
+1. 选择模式：**Quick Share**（密码）或 **Secure Share**（Passkey）
+2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（admin_mode=password）
+3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required）→ Create Finish
+4. 页面显示两条链接：
+   - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
    - 管理链接（发送方）：/m/:uuid
 
 > **UI 强制提示**：分享链接必须完整复制（包括 # 后部分），否则接收方无法上锁
@@ -128,13 +141,10 @@ v2.5 的设计目标：
 
 当 navigator.credentials 不可用或调用失败：
 
-- Standard：显示"此环境无法使用系统安全确认"，给 3 个按钮：
-    1. "换浏览器/设备（推荐）"
-    2. "开启兼容模式（降低安全）"
-    3. "了解原因（安全说明）"
-- Strict/Hardware-Only：默认 **阻断**（不允许兼容模式），提示"环境不安全/不兼容该安全档位"
-
-兼容模式（Compatibility Mode）定义见第 9 节。
+- 页面自动检测 WebAuthn 支持状态
+- **Quick Share**：始终可用（不依赖 WebAuthn），当 WebAuthn 不可用时默认选中 Quick Share
+- **Secure Share**：显示"此环境不支持 Passkey"警告，按钮置灰不可点击
+- UI 显示提示："Secure Share 需要 WebAuthn 支持，请换浏览器/设备，或使用 Quick Share"
 
 ---
 
@@ -234,18 +244,17 @@ v2.5 给出三层应对：
 
 ---
 
-## 9. 兼容模式（Compatibility Mode）定义（WebAuthn 降级）
+## 9. Quick Share（密码模式）协议定义
 
-当 WebAuthn 不可用时，Standard 允许用户主动选择兼容模式（必须显式确认风险）：
+Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用户入口，不再是降级选项：
 
-- 管理权改为：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户设置的"管理口令"Argon2id 包裹存 IndexedDB
-- 更新/删除恢复为 v2.3 的"ECDSA 签名 payload"模式（继续用 DO 进行 version/nonce 原子性）
-- 兼容模式会：
-    - 在 UI 显著标注"兼容模式（较低安全）"
-    - 在 KV 存 admin_mode="webauthn"|"softkey"
-    - 禁止 Hardware-Only 档位下启用
+- **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹存 IndexedDB
+- **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
+- **协议字段**：`admin_mode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
+- **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
+- **UI**：不标注"较低安全"，而是作为独立的有效分享模式展示
 
-> 这解决"旧设备/webview 无法唤起 WebAuthn"的真实问题，同时不牺牲"默认最安全"。
+> 注意：Quick Share 安全性取决于用户密码强度。UI 通过密码强度指示器引导用户选择足够强度的密码。
 
 ---
 
@@ -760,30 +769,37 @@ CipherBundle（base64url）：
 
 ---
 
-## 附录 G：WebAuthn Policy（Standard / Strict / Hardware-Only）规范
+## 附录 G：WebAuthn Policy（v3.0）规范
 
-### G1. Standard
+### G1. Quick Share（quick）
 
-- userVerification = "preferred"（允许但不强制；可保持体验）
+- 不使用 WebAuthn，完全密码模式
+- admin_mode = "password"
+
+### G2. Secure Share（secure）
+
+- userVerification = "required"（强制）
+- residentKey = "required"（强制）
+- attestation = "none"
+- 适合平台 passkey 和硬件密钥
+
+### G3. Legacy 档位（向后兼容）
+
+#### standard（等价于早期 Quick Share 安全级别）
+- userVerification = "preferred"
 - residentKey = "preferred"
 - attestation = "none"
-- 允许平台 passkey（可能同步）
-- 若设备支持，UI 建议启用 UV
 
-### G2. Strict
-
+#### strict（等价于 Secure Share）
 - userVerification = "required"
-- residentKey = "required"（或 preferred 但强提示）
+- residentKey = "required"
 - attestation = "none"
-- 若浏览器暴露 backupEligibility/backupState：
-    - 若可备份：强提示风险（不强制拒绝，除非你想更硬）
 
-### G3. Hardware-Only
-
-- authenticatorAttachment = "cross-platform"（硬件钥匙）
+#### hardware_only（等价于 Secure Share，attestation 强制已移除）
 - userVerification = "required"
-- attestation = "direct"（若无法验证 direct，则提示并降级到 Strict，需用户确认）
-- 如果无法满足（例如设备无硬件钥匙）：阻断
+- residentKey = "required"
+- attestation = "none"（原 "direct" 强制执行已移除，cross-platform 限制已移除）
+- 移除原因：x5c attestation 验证技术实现复杂，且现代 passkey 生态中实际意义有限
 
 ---
 
@@ -806,25 +822,27 @@ commit（compound/delete）校验顺序必须包含：
 
 ---
 
-## 附录 I：兼容模式（softkey）协议与 UI 标注
+## 附录 I：Quick Share（password/softkey）协议规范
 
-仅 Standard 允许，Strict/Hardware-Only 禁止。
+Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
-### I1. softkey 管理权生成
+### I1. 管理密钥生成
 
 - 前端生成 ECDSA P-256 keypair
-- Admin-Priv 用 Argon2id 包裹存 IndexedDB
-- 服务器存 Admin-Pub（JWK）+ admin_mode="softkey"
+- Admin-Priv 用 Argon2id 包裹存 IndexedDB（密码由用户提供）
+- 服务器存 Admin-Pub（JWK）+ admin_mode="password"
+- Legacy 频道可能存 admin_mode="softkey"，后端等价处理
 
-### I2. softkey 写入授权
+### I2. 写入授权
 
-- update/delete 请求恢复 v2.3 的 ECDSA sig（基于 Ghost Canon v1 的 canonical payload）
+- update/delete 请求基于 ECDSA sig（Ghost Canon v1 canonical payload）
 - DO 仍负责 version/nonce/challenge 串行一致性
 
-### I3. UI 必须显著标注
+### I3. UI 标注
 
-- 页面顶部显示"兼容模式（较低安全）"
-- 在创建页面必须二次确认风险
+- 显示"Quick Share (Password)"徽章（而非"兼容模式"）
+- 不强制二次确认风险（密码强度指示器引导用户）
+- 密码强度较低时，UI 给出建议但不强制阻断
 
 ---
 

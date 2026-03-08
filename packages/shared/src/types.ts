@@ -31,10 +31,11 @@ export type UnixMs = number & { readonly _brand: 'UnixMs' };
 /**
  * How the sender authenticated when creating the channel.
  *
- *   webauthn  → standard passkey / hardware key flow (default)
- *   softkey   → PBKDF2-derived keypair fallback (Standard profile only)
+ *   webauthn  → passkey / hardware key flow (Secure profile)
+ *   password  → Argon2id-derived ECDSA keypair (Quick profile)
+ *   softkey   → legacy alias for 'password' (existing channels in storage)
  */
-export type AdminMode = 'webauthn' | 'softkey';
+export type AdminMode = 'webauthn' | 'password' | 'softkey';
 
 /**
  * Receiver identity fields set atomically during lock_commit.
@@ -291,14 +292,14 @@ export interface ECDSAPublicKeyJWK {
 }
 
 /**
- * Softkey credential stored when admin_mode is 'softkey'.
- * Replaces StoredCredential for channels created with software-key fallback.
- * Only valid under Standard security profile.
- * PRD §9 兼容模式.
+ * Password/softkey credential stored when admin_mode is 'password' or 'softkey'.
+ * Uses Argon2id-derived ECDSA P-256 keypair for channel management authentication.
+ * Valid for Quick Share (password) profile.
+ * Legacy 'softkey' admin_mode is treated identically to 'password'.
  */
 export interface SoftkeyCredential {
   readonly type: 'softkey';
-  /** ECDSA P-256 public key used to verify softkey signatures. */
+  /** ECDSA P-256 public key used to verify softkey/password signatures. */
   softkeyPubJwk: ECDSAPublicKeyJWK;
 }
 
@@ -410,6 +411,17 @@ export interface CreateFinishWebAuthnRequest {
   timestamp: UnixMs;
 }
 
+export interface CreateFinishPasswordRequest {
+  adminMode: 'password';
+  uuid: UUID;
+  /** ECDSA P-256 public key replacing attestation for password-mode channels. */
+  softkeyPubJwk: ECDSAPublicKeyJWK;
+  /** base64url of lock_key = SHA-256("GL-lockkey" || uuid || lock_secret). */
+  lockKeyB64u: Base64Url;
+  timestamp: UnixMs;
+}
+
+/** @deprecated Use CreateFinishPasswordRequest. Retained for legacy clients. */
 export interface CreateFinishSoftkeyRequest {
   adminMode: 'softkey';
   uuid: UUID;
@@ -420,7 +432,10 @@ export interface CreateFinishSoftkeyRequest {
   timestamp: UnixMs;
 }
 
-export type CreateFinishRequest = CreateFinishWebAuthnRequest | CreateFinishSoftkeyRequest;
+export type CreateFinishRequest =
+  | CreateFinishWebAuthnRequest
+  | CreateFinishPasswordRequest
+  | CreateFinishSoftkeyRequest;
 
 export interface CreateFinishResponse {
   ok: true;
@@ -506,12 +521,11 @@ export interface CompoundCommitRequest {
 }
 
 /**
- * Compound commit request using a softkey ECDSA signature instead of WebAuthn assertion.
- * Only valid when channel adminMode is 'softkey'.
- * PRD §9 兼容模式.
+ * Compound commit request using a password/softkey ECDSA signature instead of WebAuthn assertion.
+ * Valid when channel adminMode is 'password' or 'softkey' (legacy alias).
  */
 export interface SoftkeyCompoundCommitRequest {
-  adminMode: 'softkey';
+  adminMode: 'password' | 'softkey';
   uuid: UUID;
   /**
    * ECDSA-P256-SHA-256 signature over `expectedChallenge` bytes, encoded as

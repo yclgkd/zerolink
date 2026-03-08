@@ -207,7 +207,11 @@ describe('ChannelStateSchema', () => {
 });
 
 describe('SecurityProfileSchema', () => {
-  it.each(['standard', 'strict', 'hardware_only'])('accepts profile %s', (profile) => {
+  it.each(['quick', 'secure'])('accepts new profile %s', (profile) => {
+    expect(SecurityProfileSchema.parse(profile)).toBe(profile);
+  });
+
+  it.each(['standard', 'strict', 'hardware_only'])('accepts legacy profile %s', (profile) => {
     expect(SecurityProfileSchema.parse(profile)).toBe(profile);
   });
 
@@ -231,7 +235,11 @@ describe('AdminModeSchema', () => {
     expect(AdminModeSchema.parse('webauthn')).toBe('webauthn');
   });
 
-  it('accepts softkey', () => {
+  it('accepts password', () => {
+    expect(AdminModeSchema.parse('password')).toBe('password');
+  });
+
+  it('accepts softkey (legacy)', () => {
     expect(AdminModeSchema.parse('softkey')).toBe('softkey');
   });
 
@@ -721,7 +729,18 @@ describe('CreateFinishRequestSchema', () => {
     expect(result.lockKeyB64u).toBe(b64);
   });
 
-  it('accepts a valid softkey create-finish request', () => {
+  it('accepts a valid password create-finish request', () => {
+    const result = CreateFinishRequestSchema.parse({
+      adminMode: 'password',
+      uuid: uuid21(),
+      softkeyPubJwk: validEcdsaJwk,
+      lockKeyB64u: b64,
+      timestamp: 1_730_000_000_000,
+    });
+    expect(result.lockKeyB64u).toBe(b64);
+  });
+
+  it('accepts a valid softkey create-finish request (legacy)', () => {
     const result = CreateFinishRequestSchema.parse({
       adminMode: 'softkey',
       uuid: uuid21(),
@@ -828,7 +847,17 @@ describe('CompoundBeginResponseSchema', () => {
     expect(result.receiverPubFpr).toBe(hex);
   });
 
-  it('accepts response with adminMode softkey', () => {
+  it('accepts response with adminMode password', () => {
+    const result = CompoundBeginResponseSchema.parse({
+      ok: true,
+      challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
+      currentVersion: 2,
+      adminMode: 'password',
+    });
+    expect(result.adminMode).toBe('password');
+  });
+
+  it('accepts response with adminMode softkey (legacy)', () => {
     const result = CompoundBeginResponseSchema.parse({
       ok: true,
       challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
@@ -1042,7 +1071,19 @@ describe('SoftkeyCompoundCommitRequestSchema', () => {
     nonce: b64,
   };
 
-  it('accepts a valid softkey compound-commit request', () => {
+  it('accepts a valid password compound-commit request', () => {
+    const result = SoftkeyCompoundCommitRequestSchema.parse({
+      adminMode: 'password',
+      uuid: uuid21(),
+      softkeySignature: hex,
+      intentHash: hex,
+      intent: validDeleteIntent,
+    });
+    expect(result.adminMode).toBe('password');
+    expect(result.softkeySignature).toBe(hex);
+  });
+
+  it('accepts legacy softkey adminMode', () => {
     const result = SoftkeyCompoundCommitRequestSchema.parse({
       adminMode: 'softkey',
       uuid: uuid21(),
@@ -1051,7 +1092,6 @@ describe('SoftkeyCompoundCommitRequestSchema', () => {
       intent: validDeleteIntent,
     });
     expect(result.adminMode).toBe('softkey');
-    expect(result.softkeySignature).toBe(hex);
   });
 
   it('rejects wrong adminMode', () => {
@@ -1069,7 +1109,7 @@ describe('SoftkeyCompoundCommitRequestSchema', () => {
   it('rejects uppercase softkeySignature', () => {
     expect(() =>
       SoftkeyCompoundCommitRequestSchema.parse({
-        adminMode: 'softkey',
+        adminMode: 'password',
         uuid: uuid21(),
         softkeySignature: 'DEADBEEF',
         intentHash: hex,
@@ -1081,7 +1121,7 @@ describe('SoftkeyCompoundCommitRequestSchema', () => {
   it('rejects missing intent', () => {
     expect(() =>
       SoftkeyCompoundCommitRequestSchema.parse({
-        adminMode: 'softkey',
+        adminMode: 'password',
         uuid: uuid21(),
         softkeySignature: hex,
         intentHash: hex,

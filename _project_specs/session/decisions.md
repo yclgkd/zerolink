@@ -98,6 +98,28 @@ This is append-only. Never delete entries.
 **Reasoning**: This preserves the multi-agent guidance layer without pretending Claude-only commands are portable, while keeping the original Claude workflow guarantees intact.
 **Trade-offs**: The shared and Claude-local skill directories can now diverge intentionally, so future changes must update the correct layer instead of assuming one copy fits every agent.
 
+## [2026-03-08] Replace 3-mode security with Quick Share + Secure Share
+
+**Decision**: Replace Standard / Strict / Hardware-Only security profiles with two user-facing entry points: Quick Share (password) and Secure Share (passkey).
+**Context**: The 3-profile design was technically correct but UX-confusing. Hardware-Only's x5c attestation enforcement was broken in practice. The "compatibility mode" for Standard profile was a hidden degraded path that confused users.
+**Options Considered**:
+1. Keep 3 profiles, improve docs/UX
+2. Merge to 2 profiles, deprecate Hardware-Only
+3. Keep 1 WebAuthn-only profile (block non-WebAuthn users)
+**Choice**: Option 2 — two clear profiles
+**Reasoning**:
+- Quick Share is a legitimate secure option (Argon2id-derived keys), not a degraded fallback
+- Secure Share = merged Standard+Strict (UV=required, RK=required)
+- Hardware-Only attestation enforcement (x5c) was technically broken and complex to fix
+- Legacy profiles (standard/strict/hardware_only) kept for backward-compatible reads
+**Implementation**:
+- New `SECURITY_PROFILE.QUICK` and `SECURITY_PROFILE.SECURE` constants
+- `admin_mode: 'password'` replaces `'softkey'` as canonical name for Quick Share
+- Backend treats `'password' || 'softkey'` identically for compound commits
+- Hardware-only enforcement removed from backend (attestation: 'none' always)
+- All 5 profile values remain valid in schemas for backward compatibility
+**Trade-offs**: Legacy channels with hardware_only profile lose the cross-platform authenticator restriction and attestation enforcement (was already broken in practice)
+
 ## [2026-03-03] Follow-up fixes must stay on the existing open PR branch
 
 **Decision**: When the current branch already maps to an open PR and the task is addressing that PR's review, comments, or follow-up regressions, continue on that branch instead of creating a new branch and PR.

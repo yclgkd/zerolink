@@ -235,7 +235,7 @@ export class SecretVault {
 
   async commitCreate(params: {
     uuid: string;
-    adminMode: 'webauthn' | 'softkey';
+    adminMode: 'webauthn' | 'password' | 'softkey';
     attestation?: AttestationJSON;
     softkeyPubJwk?: ECDSAPublicKeyJWK;
     lockKeyB64u: Base64Url;
@@ -249,11 +249,11 @@ export class SecretVault {
 
       let adminCredential: StoredCredential | SoftkeyCredential;
 
-      if (params.adminMode === 'softkey') {
+      if (params.adminMode === 'password' || params.adminMode === 'softkey') {
         if (!params.softkeyPubJwk) {
           throw new StateTransitionError(
             'LOCK_FORBIDDEN',
-            'softkeyPubJwk required for softkey mode'
+            'softkeyPubJwk required for password mode'
           );
         }
         adminCredential = {
@@ -274,6 +274,12 @@ export class SecretVault {
         }
         await this.ctx.storage.delete(CREATION_CHALLENGE_KEY);
 
+        // Require UV for secure and all legacy strict/hardware_only profiles
+        const requireUV =
+          record.securityProfile === 'secure' ||
+          record.securityProfile === 'strict' ||
+          record.securityProfile === 'hardware_only';
+
         let verification: AttestationVerificationResult;
         try {
           verification = await verifyAttestation({
@@ -282,29 +288,13 @@ export class SecretVault {
             expectedRpId: this.env.RP_ID,
             expectedOrigin: this.env.RP_ORIGIN,
             expectedChallenge: decodeBase64Url(storedChallenge),
-            requireUserVerification: record.securityProfile !== 'standard',
+            requireUserVerification: requireUV,
           });
         } catch (err) {
           throw new StateTransitionError(
             'ATTESTATION_UNVERIFIABLE',
             err instanceof Error ? err.message : 'Attestation verification failed'
           );
-        }
-
-        if (record.securityProfile === 'hardware_only') {
-          if (!verification.verified) {
-            throw new StateTransitionError(
-              'ATTESTATION_UNVERIFIABLE',
-              'Hardware attestation could not be verified'
-            );
-          }
-          const aaguidBytes = decodeBase64Url(verification.aaguid);
-          if (aaguidBytes.every((b) => b === 0)) {
-            throw new StateTransitionError(
-              'ATTESTATION_UNVERIFIABLE',
-              'Authenticator AAGUID is all zeros; hardware key identity could not be established'
-            );
-          }
         }
 
         adminCredential = {
@@ -443,11 +433,17 @@ export class SecretVault {
 
       let verifiedWebAuthnSignCount: number | null = null;
 
-      if (record.adminMode === 'softkey') {
-        if (params.adminMode !== 'softkey' || !('softkeySignature' in params)) {
+      const isPasswordMode = record.adminMode === 'password' || record.adminMode === 'softkey';
+
+      if (isPasswordMode) {
+        if (
+          !('adminMode' in params) ||
+          (params.adminMode !== 'password' && params.adminMode !== 'softkey') ||
+          !('softkeySignature' in params)
+        ) {
           throw new StateTransitionError(
             'ASSERTION_INVALID',
-            'softkey commit payload required for softkey channel'
+            'password commit payload required for password/softkey channel'
           );
         }
 
@@ -460,7 +456,10 @@ export class SecretVault {
           throw new StateTransitionError('ASSERTION_INVALID', verifyResult.error);
         }
       } else {
-        if ('adminMode' in params && params.adminMode === 'softkey') {
+        if (
+          'adminMode' in params &&
+          (params.adminMode === 'softkey' || params.adminMode === 'password')
+        ) {
           throw new StateTransitionError(
             'ASSERTION_INVALID',
             'webauthn commit payload required for webauthn channel'
@@ -468,7 +467,8 @@ export class SecretVault {
         }
 
         const verifyResult = await verifyAssertion({
-          assertion: params.assertion,
+          // biome-ignore lint/suspicious/noExplicitAny: narrowing union after password/softkey guard
+          assertion: (params as any).assertion,
           expectedChallenge: encodeBase64Url(expectedChallengeBytes),
           storedCredential: record.adminCredential as StoredCredential,
           rpId: this.env.RP_ID,
@@ -676,16 +676,17 @@ export class SecretVault {
     }
 
     try {
+      const isPasswordMode =
+        parsed.data.adminMode === 'password' || parsed.data.adminMode === 'softkey';
       // biome-ignore lint/suspicious/noExplicitAny: complex union schema mismatch
       const commitParams: any = {
         uuid: parsed.data.uuid,
         adminMode: parsed.data.adminMode,
         attestation: parsed.data.adminMode === 'webauthn' ? parsed.data.attestation : undefined,
-        softkeyPubJwk:
-          parsed.data.adminMode === 'softkey'
-            ? // biome-ignore lint/suspicious/noExplicitAny: Discriminated union narrowing in ternary
-              (parsed.data as any).softkeyPubJwk
-            : undefined,
+        softkeyPubJwk: isPasswordMode
+          ? // biome-ignore lint/suspicious/noExplicitAny: Discriminated union narrowing in ternary
+            (parsed.data as any).softkeyPubJwk
+          : undefined,
         lockKeyB64u: parsed.data.lockKeyB64u,
       };
       await this.commitCreate(commitParams);
@@ -756,7 +757,7 @@ export class SecretVault {
     try {
       if (parsedSoftkey.success) {
         await this.commitCompound({
-          adminMode: 'softkey',
+          adminMode: parsedSoftkey.data.adminMode,
           uuid: parsedSoftkey.data.uuid,
           softkeySignature: parsedSoftkey.data.softkeySignature,
           intentHash: parsedSoftkey.data.intentHash,

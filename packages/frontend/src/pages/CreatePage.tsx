@@ -1,9 +1,8 @@
 import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
-import { ChevronRight, Zap } from 'lucide-react';
+import { Lock, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 
-import { SecurityProfileCard } from '../components/create/security-profile-card';
 import {
   PageCard,
   PageCardContent,
@@ -18,15 +17,13 @@ import { Button } from '../components/ui/button';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
 import { generateChannelUuid } from '../lib/channel-uuid';
+import { cn } from '../lib/utils';
 import { useCreateStore } from '../stores/create-store';
 
-const profileOrder: SecurityProfile[] = [
-  SECURITY_PROFILE.STANDARD,
-  SECURITY_PROFILE.STRICT,
-  SECURITY_PROFILE.HARDWARE_ONLY,
-];
-
 const profileLabelMap: Record<SecurityProfile, string> = {
+  [SECURITY_PROFILE.QUICK]: 'Quick Share',
+  [SECURITY_PROFILE.SECURE]: 'Secure Share',
+  // Legacy labels for existing channels
   [SECURITY_PROFILE.STANDARD]: 'Standard',
   [SECURITY_PROFILE.STRICT]: 'Strict',
   [SECURITY_PROFILE.HARDWARE_ONLY]: 'Hardware-Only',
@@ -35,20 +32,17 @@ const profileLabelMap: Record<SecurityProfile, string> = {
 interface CreatedLinks {
   shareUrlWithFragment: string;
   manageUrl: string;
-  isCompatibilityMode: boolean;
+  isPasswordMode: boolean;
 }
-
-const FALLBACK_UNAVAILABLE_MESSAGE =
-  'Compatibility mode fallback is not implemented yet in this build.';
 
 function mapCreateError(code: string): string {
   switch (code) {
-    case 'FALLBACK_REQUIRED':
-      return FALLBACK_UNAVAILABLE_MESSAGE;
     case 'PROFILE_BLOCKED':
-      return 'This security profile requires WebAuthn support in your environment.';
+      return 'Secure Share requires WebAuthn support in your environment.';
     case 'PASSPHRASE_REQUIRED':
-      return 'Compatibility mode passphrase is required.';
+      return 'Please enter a password for Quick Share.';
+    case 'NOT_ALLOWED':
+      return 'Passkey prompt was cancelled or denied. Please try again.';
     case 'NETWORK_ERROR':
       return 'Network error while creating channel. Please retry.';
     case 'BAD_REQUEST':
@@ -59,159 +53,129 @@ function mapCreateError(code: string): string {
   }
 }
 
-function ProfileSelectionGrid({
-  selectedProfile,
-  onSelectProfile,
+type ModeCardProps = {
+  title: string;
+  description: string;
+  icon: typeof Lock;
+  selected: boolean;
+  onClick: () => void;
+  'data-testid'?: string;
+};
+
+function ModeCard({
+  title,
+  description,
+  icon: Icon,
+  selected,
+  onClick,
+  'data-testid': testId,
+}: ModeCardProps) {
+  return (
+    <button
+      aria-pressed={selected}
+      className={cn(
+        'flex w-full flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all duration-200',
+        'hover:-translate-y-0.5 hover:border-border/60',
+        selected
+          ? 'border-primary/70 bg-primary/5 ring-2 ring-primary/40'
+          : 'border-border/50 bg-card/60'
+      )}
+      data-testid={testId}
+      onClick={onClick}
+      type="button"
+    >
+      <div
+        className={cn(
+          'rounded-md border p-2 transition-colors',
+          selected
+            ? 'border-primary/50 bg-primary/10 text-primary'
+            : 'border-border/70 bg-card/60 text-muted-foreground'
+        )}
+      >
+        <Icon aria-hidden="true" className="size-5" />
+      </div>
+      <div>
+        <p className="font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+      </div>
+    </button>
+  );
+}
+
+function ModeSelectorGrid({
+  selected,
+  webAuthnSupported,
+  onSelect,
 }: {
-  selectedProfile: SecurityProfile;
-  onSelectProfile: (profile: SecurityProfile) => void;
+  selected: SecurityProfile;
+  webAuthnSupported: boolean;
+  onSelect: (profile: SecurityProfile) => void;
 }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-base font-semibold text-foreground">Select Security Level</h3>
-      <div className="grid gap-4 md:grid-cols-3">
-        {profileOrder.map((profile) => (
-          <SecurityProfileCard
-            key={profile}
-            onSelect={onSelectProfile}
-            profile={profile}
-            selected={selectedProfile === profile}
-          />
-        ))}
+      <h3 className="text-base font-semibold text-foreground">Choose Share Mode</h3>
+      <div className="grid gap-4 md:grid-cols-2">
+        <ModeCard
+          data-testid="mode-card-quick"
+          description="Password-protected — no passkey needed. Works in any browser."
+          icon={Lock}
+          onClick={() => onSelect(SECURITY_PROFILE.QUICK)}
+          selected={selected === SECURITY_PROFILE.QUICK}
+          title="Quick Share"
+        />
+        <ModeCard
+          data-testid="mode-card-secure"
+          description={
+            webAuthnSupported
+              ? 'Passkey-protected — strongest security with user verification.'
+              : 'Requires WebAuthn support (not available in this environment).'
+          }
+          icon={Shield}
+          onClick={() => {
+            if (webAuthnSupported) onSelect(SECURITY_PROFILE.SECURE);
+          }}
+          selected={selected === SECURITY_PROFILE.SECURE}
+          title="Secure Share"
+        />
       </div>
+      {!webAuthnSupported ? (
+        <StateNotice
+          data-testid="create-webauthn-blocked-warning"
+          title="WebAuthn is not available in this environment."
+          tone="warning"
+        >
+          <p className="text-neon-orange">Secure Share is disabled. Use Quick Share instead.</p>
+        </StateNotice>
+      ) : null}
     </section>
   );
 }
 
-function WebAuthnWarning({ strictOrHardwareBlocked }: { strictOrHardwareBlocked: boolean }) {
-  if (!strictOrHardwareBlocked) return null;
-
-  return (
-    <StateNotice
-      data-testid="create-webauthn-blocked-warning"
-      title="Hardware authentication is not available in this environment."
-      tone="warning"
-    >
-      <p className="text-neon-orange">
-        Strict and Hardware-Only profiles require WebAuthn support.
-      </p>
-    </StateNotice>
-  );
-}
-
-function DowngradeDialog({
-  onConfirm,
-  onCancel,
-  loading,
+function QuickSharePasswordPanel({
+  password,
+  onPasswordChange,
 }: {
-  onConfirm: () => void;
-  onCancel: () => void;
-  loading: boolean;
+  password: string;
+  onPasswordChange: (value: string) => void;
 }) {
   return (
     <div
-      className="space-y-3 rounded-xl border border-neon-blue/35 bg-neon-blue/10 p-4 text-sm"
-      data-testid="create-downgrade-dialog"
+      className="space-y-3 rounded-xl border border-neon-purple/35 bg-neon-purple/10 p-4 text-sm"
+      data-testid="quick-share-password-panel"
     >
-      <p className="font-medium text-foreground">Hardware Attestation Unavailable</p>
-      <p>
-        Your authenticator provided a valid credential but does not support hardware attestation
-        required for the Hardware-Only profile.
-      </p>
-      <p>Would you like to continue using the Strict profile instead?</p>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          data-testid="create-downgrade-confirm"
-          disabled={loading}
-          onClick={onConfirm}
-          size="sm"
-          type="button"
-        >
-          <ChevronRight aria-hidden="true" className="size-3.5" />
-          Continue with Strict
-        </Button>
-        <Button
-          data-testid="create-downgrade-cancel"
-          disabled={loading}
-          onClick={onCancel}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function CompatibilityPanel({
-  compatibilityAccepted,
-  setCompatibilityAccepted,
-  passphrase,
-  onPassphraseChange,
-  onContinue,
-  onCancel,
-  loading,
-}: {
-  compatibilityAccepted: boolean;
-  setCompatibilityAccepted: (accepted: boolean) => void;
-  passphrase: string;
-  onPassphraseChange: (value: string) => void;
-  onContinue: () => void;
-  onCancel: () => void;
-  loading: boolean;
-}) {
-  return (
-    <div
-      className="space-y-3 rounded-xl border border-neon-orange/35 bg-neon-orange/10 p-4 text-sm"
-      data-testid="create-compatibility-panel"
-    >
-      <p className="font-medium text-foreground">Compatibility Mode (Lower Security)</p>
-      <p>
-        Hardware authentication is unavailable. Compatibility mode will generate a software key
-        stored in your browser to manage this channel.
+      <p className="font-medium text-foreground">Set a Quick Share Password</p>
+      <p className="text-muted-foreground">
+        This password protects your channel management key. Choose something strong — it cannot be
+        recovered if lost.
       </p>
       <PassphraseInput
-        inputId="create-compatibility-passphrase"
-        label="Compatibility passphrase"
-        onChange={onPassphraseChange}
-        placeholder="Set compatibility passphrase"
+        inputId="create-quick-password"
+        label="Channel password"
+        onChange={onPasswordChange}
+        placeholder="Enter a strong password"
         showStrength
-        value={passphrase}
+        value={password}
       />
-      <label className="flex items-start gap-2">
-        <input
-          checked={compatibilityAccepted}
-          data-testid="create-compatibility-checkbox"
-          onChange={(event) => setCompatibilityAccepted(event.target.checked)}
-          type="checkbox"
-        />
-        <span>
-          I understand this provides lower security than hardware authentication and wish to
-          proceed.
-        </span>
-      </label>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          data-testid="create-compatibility-continue"
-          disabled={!compatibilityAccepted || passphrase.trim().length === 0 || loading}
-          onClick={onContinue}
-          size="sm"
-          type="button"
-        >
-          Continue
-        </Button>
-        <Button
-          data-testid="create-compatibility-cancel"
-          onClick={onCancel}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          Cancel
-        </Button>
-      </div>
     </div>
   );
 }
@@ -230,7 +194,7 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
         ) : (
           <>
             <Zap aria-hidden="true" className="size-4" />
-            Create Secure Channel
+            Create Channel
           </>
         )}
       </Button>
@@ -253,16 +217,16 @@ function SuccessSummary({
       title="Secure channel created."
       tone="success"
     >
-      {links.isCompatibilityMode ? (
+      {links.isPasswordMode ? (
         <div
-          className="mb-2 inline-block rounded-md border border-neon-orange/40 bg-neon-orange/10 px-2 py-0.5 text-xs font-semibold text-neon-orange"
-          data-testid="create-compatibility-badge"
+          className="mb-2 inline-block rounded-md border border-neon-purple/40 bg-neon-purple/10 px-2 py-0.5 text-xs font-semibold text-neon-purple"
+          data-testid="create-password-mode-badge"
         >
-          Compatibility Mode (Lower Security)
+          Quick Share (Password)
         </div>
       ) : null}
       <p>
-        Selected profile: <span className="font-semibold">{profileLabelMap[createdProfile]}</span>
+        Mode: <span className="font-semibold">{profileLabelMap[createdProfile]}</span>
       </p>
       <p>
         Share link:{' '}
@@ -292,38 +256,28 @@ function useCreatePageLogic() {
   const store = useCreateStore();
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [compatibilityPassphrase, setCompatibilityPassphrase] = useState('');
-  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
+  const [quickPassword, setQuickPassword] = useState('');
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
     store.setWebAuthnSupported(support.supported);
-  }, [store.setWebAuthnSupported]);
+    // Default to Secure if WebAuthn available, otherwise Quick
+    if (support.supported) {
+      store.setSelectedProfile(SECURITY_PROFILE.SECURE);
+    } else {
+      store.setSelectedProfile(SECURITY_PROFILE.QUICK);
+    }
+  }, [store.setWebAuthnSupported, store.setSelectedProfile]);
 
-  const strictOrHardwareBlocked =
-    !store.webAuthnSupported && store.selectedProfile !== SECURITY_PROFILE.STANDARD;
-  const compatibilityAvailable =
-    !store.webAuthnSupported && store.selectedProfile === SECURITY_PROFILE.STANDARD;
+  const isQuickMode = store.selectedProfile === SECURITY_PROFILE.QUICK;
   const isSubmitting =
     store.createBegin.status === 'loading' || store.createFinish.status === 'loading';
+  const canSubmit = isQuickMode ? quickPassword.trim().length > 0 : store.webAuthnSupported;
 
   function clearLocalFeedback(): void {
     setSubmitError(null);
     setCreatedLinks(null);
     store.setCreatedProfile(null);
-    setShowDowngradeDialog(false);
-  }
-
-  function resetCompatibilityPassphrase(): void {
-    setCompatibilityPassphrase('');
-  }
-
-  function _showFallbackUnavailableError(): void {
-    setSubmitError(FALLBACK_UNAVAILABLE_MESSAGE);
-    setCreatedLinks(null);
-    store.setCreatedProfile(null);
-    store.setShowCompatibilityConfirm(false);
-    store.setCompatibilityAccepted(false);
   }
 
   function handleSelectProfile(profile: SecurityProfile): void {
@@ -341,9 +295,9 @@ function useCreatePageLogic() {
       result = await cryptoOrchestrator.createChannel({
         uuid: generateChannelUuid(),
         profile: latestState.selectedProfile,
-        useCompatibilityMode: latestState.compatibilityAccepted,
-        ...(latestState.compatibilityAccepted
-          ? { softkeyPassphrase: compatibilityPassphrase }
+        useCompatibilityMode: latestState.selectedProfile === SECURITY_PROFILE.QUICK,
+        ...(latestState.selectedProfile === SECURITY_PROFILE.QUICK
+          ? { softkeyPassphrase: quickPassword }
           : {}),
       });
     } catch {
@@ -353,12 +307,6 @@ function useCreatePageLogic() {
     }
 
     if (!result.ok) {
-      if (result.error.code === 'ATTESTATION_UNVERIFIABLE') {
-        store.failCreateBegin('ATTESTATION_UNVERIFIABLE');
-        setShowDowngradeDialog(true);
-        return;
-      }
-
       store.failCreateBegin(result.error.code);
       setSubmitError(mapCreateError(result.error.code));
       return;
@@ -369,79 +317,35 @@ function useCreatePageLogic() {
     setCreatedLinks({
       shareUrlWithFragment: result.data.shareUrlWithFragment,
       manageUrl: result.data.manageUrl,
-      isCompatibilityMode: store.compatibilityAccepted,
+      isPasswordMode: store.selectedProfile === SECURITY_PROFILE.QUICK,
     });
-    store.setShowCompatibilityConfirm(false);
-    store.setCompatibilityAccepted(false);
-    resetCompatibilityPassphrase();
-    setShowDowngradeDialog(false);
+    if (isQuickMode) setQuickPassword('');
   }
 
   function handleCreate(): void {
-    if (strictOrHardwareBlocked || isSubmitting) return;
-
-    if (compatibilityAvailable) {
-      if (!store.showCompatibilityConfirm) {
-        store.setShowCompatibilityConfirm(true);
-        return;
-      }
-      if (!store.compatibilityAccepted || compatibilityPassphrase.trim().length === 0) return;
-    }
-
+    if (isSubmitting || !canSubmit) return;
     void runCreate();
-  }
-
-  function handleCompatibilityCancel(): void {
-    store.setShowCompatibilityConfirm(false);
-    store.setCompatibilityAccepted(false);
-    resetCompatibilityPassphrase();
-    setSubmitError(null);
-  }
-
-  function handleCompatibilityContinue(): void {
-    if (!store.compatibilityAccepted || compatibilityPassphrase.trim().length === 0 || isSubmitting)
-      return;
-
-    void runCreate();
-  }
-
-  function handleDowngradeConfirm(): void {
-    store.setSelectedProfile(SECURITY_PROFILE.STRICT);
-    setShowDowngradeDialog(false);
-    void runCreate();
-  }
-
-  function handleDowngradeCancel(): void {
-    setShowDowngradeDialog(false);
-    setSubmitError('Creation cancelled due to attestation failure.');
   }
 
   return {
     state: store,
     createdLinks,
     submitError,
-    compatibilityPassphrase,
-    showDowngradeDialog,
-    strictOrHardwareBlocked,
-    compatibilityAvailable,
+    quickPassword,
+    isQuickMode,
     isSubmitting,
+    canSubmit,
     handleSelectProfile,
     handleCreate,
-    handleCompatibilityCancel,
-    handleCompatibilityContinue,
-    handleDowngradeConfirm,
-    handleDowngradeCancel,
-    handleCompatibilityPassphraseChange: (value: string) => {
-      setCompatibilityPassphrase(value);
-      if (submitError) {
-        setSubmitError(null);
-      }
+    handleQuickPasswordChange: (value: string) => {
+      setQuickPassword(value);
+      if (submitError) setSubmitError(null);
     },
   };
 }
 
 /**
- * Create page integrated with store + orchestrator create flow.
+ * Create page with Quick Share (password) and Secure Share (passkey) modes.
  */
 export function CreatePage(): ReactElement {
   const logic = useCreatePageLogic();
@@ -456,34 +360,26 @@ export function CreatePage(): ReactElement {
           <RoleBadge party="sender" />
         </div>
         <PageCardDescription>
-          Zero-knowledge channel creation with security profile gating and WebAuthn integration.
+          Zero-knowledge encrypted delivery. Choose Quick Share (password) or Secure Share
+          (passkey).
         </PageCardDescription>
       </PageCardHeader>
       <PageCardContent aria-busy={logic.isSubmitting} className="space-y-6">
-        <ProfileSelectionGrid
-          onSelectProfile={logic.handleSelectProfile}
-          selectedProfile={logic.state.selectedProfile}
+        <ModeSelectorGrid
+          onSelect={logic.handleSelectProfile}
+          selected={logic.state.selectedProfile}
+          webAuthnSupported={logic.state.webAuthnSupported}
         />
-        <WebAuthnWarning strictOrHardwareBlocked={logic.strictOrHardwareBlocked} />
-        {logic.showDowngradeDialog ? (
-          <DowngradeDialog
-            loading={logic.isSubmitting}
-            onCancel={logic.handleDowngradeCancel}
-            onConfirm={logic.handleDowngradeConfirm}
+        {logic.isQuickMode ? (
+          <QuickSharePasswordPanel
+            onPasswordChange={logic.handleQuickPasswordChange}
+            password={logic.quickPassword}
           />
         ) : null}
-        {logic.state.showCompatibilityConfirm && logic.compatibilityAvailable ? (
-          <CompatibilityPanel
-            compatibilityAccepted={logic.state.compatibilityAccepted}
-            loading={logic.isSubmitting}
-            onCancel={logic.handleCompatibilityCancel}
-            onContinue={logic.handleCompatibilityContinue}
-            onPassphraseChange={logic.handleCompatibilityPassphraseChange}
-            passphrase={logic.compatibilityPassphrase}
-            setCompatibilityAccepted={logic.state.setCompatibilityAccepted}
-          />
-        ) : null}
-        <ActionFooter disabled={logic.isSubmitting} onCreate={logic.handleCreate} />
+        <ActionFooter
+          disabled={logic.isSubmitting || !logic.canSubmit}
+          onCreate={logic.handleCreate}
+        />
         {logic.submitError ? (
           <StateNotice
             autoFocusOnMount

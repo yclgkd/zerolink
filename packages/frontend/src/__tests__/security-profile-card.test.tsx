@@ -19,7 +19,7 @@ describe('SecurityProfileCard', () => {
   it('renders standard profile copy and icon marker', () => {
     render(<SecurityProfileCard onSelect={() => {}} profile="standard" selected={false} />);
 
-    expect(screen.getByText('Standard')).toBeTruthy();
+    expect(screen.getByText('Standard (Legacy)')).toBeTruthy();
     expect(screen.getByText(SecurityProfileCardConfigs.standard.tagline)).toBeTruthy();
     expect(screen.getByText('Passkeys or security keys')).toBeTruthy();
     expect(screen.getByTestId('security-profile-icon-standard')).toBeTruthy();
@@ -37,7 +37,7 @@ describe('SecurityProfileCard', () => {
     render(<SecurityProfileCard onSelect={() => {}} profile="hardware_only" selected={false} />);
 
     const card = screen.getByTestId('security-profile-card-hardware_only');
-    expect(screen.getByText('Hardware-Only')).toBeTruthy();
+    expect(screen.getByText('Hardware-Only (Legacy)')).toBeTruthy();
     expect(card.className).toContain('border-neon-orange/30');
     expect(card.className).toContain('shadow-neon-orange/15');
   });

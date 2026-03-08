@@ -71,7 +71,11 @@ export const ChannelStateSchema = z.enum([
   CHANNEL_STATE.EXPIRED,
 ]);
 
+/** Accepts new profiles (quick/secure) and legacy values for backward compatibility. */
 export const SecurityProfileSchema = z.enum([
+  SECURITY_PROFILE.QUICK,
+  SECURITY_PROFILE.SECURE,
+  // Legacy — existing channels stored with these values must still parse
   SECURITY_PROFILE.STANDARD,
   SECURITY_PROFILE.STRICT,
   SECURITY_PROFILE.HARDWARE_ONLY,
@@ -83,7 +87,8 @@ export const ChannelTtlMsSchema = z.union([
   z.literal(604_800_000),
 ]);
 
-export const AdminModeSchema = z.enum(['webauthn', 'softkey']);
+/** 'password' is the canonical new name; 'softkey' is the legacy alias. */
+export const AdminModeSchema = z.enum(['webauthn', 'password', 'softkey']);
 
 /** WebAuthn Level 3 authenticator transport values. */
 export const AuthenticatorTransportSchema = z.enum([
@@ -302,6 +307,15 @@ const CreateFinishWebAuthnSchema = z.object({
   timestamp: UnixMsSchema,
 });
 
+const CreateFinishPasswordSchema = z.object({
+  adminMode: z.literal('password'),
+  uuid: UUIDSchema,
+  softkeyPubJwk: ECDSAPublicKeyJWKSchema,
+  lockKeyB64u: Base64UrlSchema,
+  timestamp: UnixMsSchema,
+});
+
+/** @deprecated Legacy alias for password mode. Retained for existing clients. */
 const CreateFinishSoftkeySchema = z.object({
   adminMode: z.literal('softkey'),
   uuid: UUIDSchema,
@@ -312,6 +326,7 @@ const CreateFinishSoftkeySchema = z.object({
 
 export const CreateFinishRequestSchema = z.discriminatedUnion('adminMode', [
   CreateFinishWebAuthnSchema,
+  CreateFinishPasswordSchema,
   CreateFinishSoftkeySchema,
 ]);
 
@@ -391,16 +406,16 @@ export const CompoundCommitRequestSchema = z.object({
 });
 
 /**
- * Compound commit request using a softkey ECDSA signature.
- * Used when channel adminMode is 'softkey'. PRD §9.
+ * Compound commit request using a password/softkey ECDSA signature.
+ * Used when channel adminMode is 'password' or 'softkey' (legacy alias).
  *
  * Strict: extra fields (e.g. an assertion) are rejected, making this schema
  * mutually exclusive with CompoundCommitRequestSchema and preventing a
- * type-confusion request that carries both adminMode:"softkey" and assertion.
+ * type-confusion request that carries both adminMode and assertion.
  */
 export const SoftkeyCompoundCommitRequestSchema = z
   .object({
-    adminMode: z.literal('softkey'),
+    adminMode: z.enum(['password', 'softkey']),
     uuid: UUIDSchema,
     softkeySignature: HexStringSchema,
     intentHash: HexStringSchema,

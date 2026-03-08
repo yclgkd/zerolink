@@ -38,15 +38,22 @@ const UV_FLAG_BIT = 0x04;
 
 /**
  * Generates WebAuthn PublicKeyCredentialCreationOptions.
+ * Accepts both new profiles ('secure') and legacy profiles for backward compatibility.
  */
 export function generateCreationOptions(params: {
   rpId: string;
   rpName: string;
   uuid: string;
   challenge: Uint8Array;
-  securityProfile: 'standard' | 'strict' | 'hardware_only';
+  securityProfile: string;
 }): Record<string, unknown> {
   const { rpId, rpName, uuid, challenge, securityProfile } = params;
+
+  // Require UV/RK for 'secure' and all legacy strict-tier profiles
+  const strict =
+    securityProfile === 'secure' ||
+    securityProfile === 'strict' ||
+    securityProfile === 'hardware_only';
 
   return {
     challenge: encodeBase64Url(challenge),
@@ -64,11 +71,11 @@ export function generateCreationOptions(params: {
       { type: 'public-key', alg: -257 }, // RS256
     ],
     authenticatorSelection: {
-      userVerification: securityProfile === 'standard' ? 'preferred' : 'required',
-      residentKey: 'discouraged',
-      requireResidentKey: false,
+      userVerification: strict ? 'required' : 'preferred',
+      residentKey: strict ? 'required' : 'preferred',
+      requireResidentKey: strict,
     },
-    attestation: securityProfile === 'hardware_only' ? 'direct' : 'none',
+    attestation: 'none',
     timeout: 60000,
   };
 }
