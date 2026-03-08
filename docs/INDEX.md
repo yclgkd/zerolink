@@ -120,7 +120,7 @@ docs/
 - **核心改进**：Lock Secret（URL Fragment）+ Padding + Argon2id 强制
 - **新增**：Quick Share（密码）/ Secure Share（Passkey）双模式创建
 - **新增**：可验证发布链设计
-- **完善**：legacy 档位仅用于向后兼容读取，UI/UX 统一到双模式
+- **完善**：新建与发送者管理主流程统一到 Quick Share / Secure Share；legacy 档位仅用于向后兼容
 
 ### v2.4（前代）
 - WebAuthn 管理权 + DO 原子性 + Intent Binding

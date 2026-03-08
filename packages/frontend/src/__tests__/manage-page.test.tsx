@@ -226,9 +226,96 @@ describe('ManagePage integration', () => {
     expect(deliverButton.disabled).toBe(true);
   });
 
+  it('shows the channel password input for password-managed channels', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+    );
+
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    expect(screen.getByTestId('manage-softkey-passphrase-section')).toBeTruthy();
+    expect(screen.getByLabelText('Channel password')).toBeTruthy();
+    expect(screen.getByText(/password-protected management key/i)).toBeTruthy();
+  });
+
+  it('does not show the channel password input for webauthn-managed channels', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'webauthn' })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    expect(screen.queryByTestId('manage-softkey-passphrase-section')).toBeNull();
+    expect(screen.queryByLabelText('Channel password')).toBeNull();
+  });
+
+  it('calls deliverSecret with quick profile and channel password for password adminMode', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+    );
+
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'top secret payload' },
+    });
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Quick#Manage123' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = deliverSecretMock.mock.calls[0]?.[0];
+    expect(callArg?.uuid).toBe(VALID_UUID);
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.QUICK);
+    expect(callArg?.plaintext).toBe('top secret payload');
+    expect(callArg?.softkeyPassphrase).toBe('Quick#Manage123');
+
+    expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
+  });
+
+  it('shows the channel password error when password-managed delivery omits a password', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+    );
+
+    deliverSecretMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'PASSPHRASE_REQUIRED', stage: 'deliver.softkey-passphrase' },
+    });
+
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'top secret payload' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
+      'A channel password is required for this action.'
+    );
+  });
+
   it('calls deliverSecret with uuid/profile/plaintext and transitions to delivered on success', async () => {
     const fetchSpy = getFetchSpy();
-    // Use softkey adminMode so the compatibility passphrase input is visible
+    // Use softkey adminMode to cover the legacy password-managed path.
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({ ok: true, state: 'waiting', adminMode: 'softkey' })
     );

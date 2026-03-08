@@ -33,7 +33,7 @@ import { useDeliverStore } from '../stores/deliver-store';
 function mapActionError(code: string): string {
   switch (code) {
     case 'FALLBACK_REQUIRED':
-      return 'Compatibility fallback is unavailable for this action in the current build.';
+      return 'Password-managed channels are unavailable for this action in the current build.';
     case 'PROFILE_BLOCKED':
       return 'Selected security profile requires WebAuthn support.';
     case 'MISSING_LOCK_CHALLENGE':
@@ -41,7 +41,7 @@ function mapActionError(code: string): string {
     case 'MISSING_RECEIVER_IDENTITY':
       return 'Receiver identity is unavailable. Ask receiver to lock again.';
     case 'PASSPHRASE_REQUIRED':
-      return 'Compatibility mode passphrase is required for this action.';
+      return 'A channel password is required for this action.';
     case 'NETWORK_ERROR':
       return 'Network error while performing manage action. Please retry.';
     case 'BAD_REQUEST':
@@ -736,6 +736,8 @@ function useManagePageState(uuid?: string) {
 export function ManagePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
   const state = useManagePageState(uuid);
+  const usesPasswordManagedChannel =
+    state.adminMode === 'password' || state.adminMode === 'softkey';
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
@@ -773,17 +775,17 @@ export function ManagePage(): ReactElement {
               value={state.secretInput}
             />
 
-            {state.adminMode === 'softkey' ? (
+            {usesPasswordManagedChannel ? (
               <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
                 <p className="text-xs text-muted-foreground">
-                  This channel uses compatibility mode. Enter the passphrase you set when creating
-                  this channel.
+                  This channel uses a password-protected management key. Enter the password you set
+                  when creating this channel.
                 </p>
                 <PassphraseInput
                   inputId="manage-softkey-passphrase"
-                  label="Compatibility passphrase"
+                  label="Channel password"
                   onChange={state.handleSoftkeyPassphraseChange}
-                  placeholder="Enter compatibility passphrase"
+                  placeholder="Enter channel password"
                   showStrength={false}
                   value={state.softkeyPassphrase}
                 />

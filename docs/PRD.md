@@ -81,7 +81,7 @@ v3.0 的产品目标：
 - **WebAuthn**：不需要
 - **接收方**：Argon2id 强制
 - **Padding**：4KB 块
-- **admin_mode**：`password`（内部协议字段）
+- **adminMode**：`password`（内部协议字段）
 - **适合**：跨设备/跨浏览器、无 passkey 支持环境，或希望使用密码管理器的用户
 
 ### 2. Secure Share（安全分享）
@@ -90,7 +90,7 @@ v3.0 的产品目标：
 - **WebAuthn**：必须，不可降级
 - **接收方**：Argon2id 强制
 - **Padding**：8KB 块（更高隐私）
-- **admin_mode**：`webauthn`（内部协议字段）
+- **adminMode**：`webauthn`（内部协议字段）
 - **适合**：最高安全需求，passkey 可用的环境
 
 ### Legacy 档位（只读，向后兼容）
@@ -108,7 +108,7 @@ v3.0 的产品目标：
 ### 5.1 创建（Sender）
 
 1. 选择模式：**Quick Share**（密码）或 **Secure Share**（Passkey）
-2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（admin_mode=password）
+2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（adminMode=password）
 3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required）→ Create Finish
 4. 页面显示两条链接：
    - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
@@ -250,7 +250,7 @@ Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用
 
 - **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹存 IndexedDB
 - **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
-- **协议字段**：`admin_mode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
+- **协议字段**：`adminMode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
 - **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
 - **UI**：不标注"较低安全"，而是作为独立的有效分享模式展示
 
@@ -378,7 +378,7 @@ DO 校验：
 
 新增字段：
 
-- admin_mode="webauthn"|"password"|"softkey"
+- adminMode="webauthn"|"password"|"softkey"
 - password / softkey 下 update/delete 需要 sig（ECDSA 签名；softkey 仅 legacy 向后兼容）
 
 ---
@@ -774,7 +774,7 @@ CipherBundle（base64url）：
 ### G1. Quick Share（quick）
 
 - 不使用 WebAuthn，完全密码模式
-- admin_mode = "password"
+- adminMode = "password"
 
 ### G2. Secure Share（secure）
 
@@ -830,8 +830,8 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
 - 前端生成 ECDSA P-256 keypair
 - Admin-Priv 用 Argon2id 包裹存 IndexedDB（密码由用户提供）
-- 服务器存 Admin-Pub（JWK）+ admin_mode="password"
-- Legacy 频道可能存 admin_mode="softkey"，后端等价处理
+- 服务器存 Admin-Pub（JWK）+ adminMode="password"
+- Legacy 频道可能存 adminMode="softkey"，后端等价处理
 
 ### I2. 写入授权
 
