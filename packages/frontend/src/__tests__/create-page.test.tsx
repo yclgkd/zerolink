@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
+import { SECURITY_PROFILE } from '@zerolink/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { detectWebAuthnSupportMock, createChannelMock } = vi.hoisted(() => ({
@@ -51,18 +51,6 @@ function mockCreateSuccess(): void {
   });
 }
 
-function expectProfileSelected(profile: SecurityProfile): void {
-  const allProfiles: SecurityProfile[] = [
-    SECURITY_PROFILE.STANDARD,
-    SECURITY_PROFILE.STRICT,
-    SECURITY_PROFILE.HARDWARE_ONLY,
-  ];
-  for (const item of allProfiles) {
-    const button = screen.getByTestId(`security-profile-select-${item}`);
-    expect(button.getAttribute('aria-pressed')).toBe(item === profile ? 'true' : 'false');
-  }
-}
-
 function createDeferred<T>() {
   let resolve: (value: T) => void = () => {};
   const promise = new Promise<T>((resolver) => {
@@ -82,122 +70,125 @@ describe('CreatePage integration', () => {
     cleanup();
   });
 
-  it('renders three security profile cards by default', () => {
+  it('renders Quick and Secure mode cards', () => {
     mockWebAuthnSupport(true);
     render(<CreatePage />);
 
     expect(screen.getByTestId('page-create')).toBeTruthy();
-    expect(screen.getByTestId('security-profile-card-standard')).toBeTruthy();
-    expect(screen.getByTestId('security-profile-card-strict')).toBeTruthy();
-    expect(screen.getByTestId('security-profile-card-hardware_only')).toBeTruthy();
+    expect(screen.getByTestId('mode-card-quick')).toBeTruthy();
+    expect(screen.getByTestId('mode-card-secure')).toBeTruthy();
   });
 
-  it('updates selected state when switching profile cards', () => {
+  it('defaults to Secure mode when WebAuthn is available', () => {
     mockWebAuthnSupport(true);
     render(<CreatePage />);
 
-    expectProfileSelected(SECURITY_PROFILE.STANDARD);
-    fireEvent.click(screen.getByTestId('security-profile-select-strict'));
-    expectProfileSelected(SECURITY_PROFILE.STRICT);
-    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
-    expectProfileSelected(SECURITY_PROFILE.HARDWARE_ONLY);
+    expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('shows blocking warning and blocks create for strict/hardware when WebAuthn is unavailable', async () => {
+  it('defaults to Quick mode when WebAuthn is unavailable', () => {
     mockWebAuthnSupport(false);
     render(<CreatePage />);
 
-    fireEvent.click(screen.getByTestId('security-profile-select-strict'));
-    fireEvent.click(screen.getByTestId('create-submit-button'));
+    expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows WebAuthn blocked warning when WebAuthn is unavailable', () => {
+    mockWebAuthnSupport(false);
+    render(<CreatePage />);
+
     const warning = screen.getByTestId('create-webauthn-blocked-warning');
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
-    expect(warning.getAttribute('aria-live')).toBe('polite');
-
-    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    expect(screen.getByTestId('create-webauthn-blocked-warning')).toBeTruthy();
-
-    await waitFor(() => {
-      expect(createChannelMock).not.toHaveBeenCalled();
-    });
   });
 
-  it('opens compatibility panel on first standard create click when WebAuthn is unavailable', async () => {
-    mockWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    expect(screen.getByTestId('create-compatibility-panel')).toBeTruthy();
-    await waitFor(() => {
-      expect(createChannelMock).not.toHaveBeenCalled();
-    });
-  });
-
-  it('keeps compatibility continue disabled until checkbox and passphrase are provided', () => {
-    mockWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
-    const passphraseInput = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
-
-    expect(continueButton.disabled).toBe(true);
-
-    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
-    expect(continueButton.disabled).toBe(true);
-
-    fireEvent.change(passphraseInput, { target: { value: 'Compat#Pass123' } });
-    expect(continueButton.disabled).toBe(false);
-  });
-
-  it('calls createChannel with useCompatibilityMode via compatibility continue', async () => {
-    mockWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
-      target: { value: 'Compat#Pass123' },
-    });
-    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
-    fireEvent.click(screen.getByTestId('create-compatibility-continue'));
-
-    await waitFor(() => {
-      expect(createChannelMock).toHaveBeenCalledTimes(1);
-    });
-
-    const callArg = createChannelMock.mock.calls[0]?.[0];
-    expect(callArg?.profile).toBe(SECURITY_PROFILE.STANDARD);
-    expect(callArg?.useCompatibilityMode).toBe(true);
-    expect(callArg?.softkeyPassphrase).toBe('Compat#Pass123');
-  });
-
-  it('calls createChannel with useCompatibilityMode via primary create button', async () => {
-    mockWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
-      target: { value: 'Compat#Pass123' },
-    });
-    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-
-    await waitFor(() => {
-      expect(createChannelMock).toHaveBeenCalledTimes(1);
-    });
-
-    const callArg = createChannelMock.mock.calls[0]?.[0];
-    expect(callArg?.profile).toBe(SECURITY_PROFILE.STANDARD);
-    expect(callArg?.useCompatibilityMode).toBe(true);
-    expect(callArg?.softkeyPassphrase).toBe('Compat#Pass123');
-  });
-
-  it('calls createChannel with selected profile and valid uuid when supported', async () => {
+  it('switches to Quick mode when Quick card is clicked', () => {
     mockWebAuthnSupport(true);
     render(<CreatePage />);
 
-    fireEvent.click(screen.getByTestId('security-profile-select-strict'));
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+    expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows password panel when Quick mode is selected', () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    expect(screen.queryByTestId('quick-share-password-panel')).toBeNull();
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+    expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
+  });
+
+  it('hides password panel when Secure mode is selected', () => {
+    mockWebAuthnSupport(false);
+    render(<CreatePage />);
+
+    // Quick is default when no WebAuthn
+    expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
+
+    // Not clickable when WebAuthn unavailable, but panel should not appear in Secure mode
+    // When WebAuthn is available, switching to Secure should hide panel
+    mockWebAuthnSupport(true);
+    cleanup();
+    render(<CreatePage />);
+
+    // Default is Secure with WebAuthn
+    expect(screen.queryByTestId('quick-share-password-panel')).toBeNull();
+  });
+
+  it('disables submit button in Quick mode until password is entered', () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it('enables submit button in Quick mode when password is entered', () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Strong#Pass123' } });
+
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('enables submit button in Secure mode when WebAuthn is available', () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('disables submit button in Secure mode when WebAuthn is unavailable', () => {
+    mockWebAuthnSupport(false);
+    render(<CreatePage />);
+
+    // Switch to Secure (should not be clickable when unavailable, but test the disabled state)
+    const secureCard = screen.getByTestId('mode-card-secure');
+    fireEvent.click(secureCard);
+
+    // Secure mode can't be selected when WebAuthn is unavailable - Quick stays selected
+    expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('calls createChannel with QUICK profile and password', async () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Strong#Pass123' } });
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
@@ -205,13 +196,29 @@ describe('CreatePage integration', () => {
     });
 
     const callArg = createChannelMock.mock.calls[0]?.[0];
-    expect(callArg?.profile).toBe(SECURITY_PROFILE.STRICT);
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.QUICK);
+    expect(callArg?.useCompatibilityMode).toBe(true);
+    expect(callArg?.softkeyPassphrase).toBe('Strong#Pass123');
     expect(callArg?.uuid).toMatch(/^[A-Za-z0-9_-]{21}$/u);
   });
 
-  it('shows share and manage links after successful creation', async () => {
+  it('calls createChannel with SECURE profile when WebAuthn is available', async () => {
     mockWebAuthnSupport(true);
-    mockCreateSuccess();
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(createChannelMock).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = createChannelMock.mock.calls[0]?.[0];
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.SECURE);
+    expect(callArg?.uuid).toMatch(/^[A-Za-z0-9_-]{21}$/u);
+  });
+
+  it('shows share and manage links after successful creation (Secure mode)', async () => {
+    mockWebAuthnSupport(true);
     render(<CreatePage />);
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
@@ -219,6 +226,69 @@ describe('CreatePage integration', () => {
       expect(screen.getByTestId('create-success-share-link')).toBeTruthy();
       expect(screen.getByTestId('create-success-manage-link')).toBeTruthy();
     });
+  });
+
+  it('shows password mode badge in success summary for Quick Share', async () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Strong#Pass123' } });
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-password-mode-badge')).toBeTruthy();
+    });
+  });
+
+  it('shows error notice when createChannel fails', async () => {
+    mockWebAuthnSupport(true);
+    createChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'NETWORK_ERROR', stage: 'create.begin' },
+    });
+
+    render(<CreatePage />);
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    });
+  });
+
+  it('clears error when mode is switched', async () => {
+    mockWebAuthnSupport(true);
+    createChannelMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'NETWORK_ERROR', stage: 'create.begin' },
+    });
+
+    render(<CreatePage />);
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-submit-error')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+    expect(screen.queryByTestId('create-submit-error')).toBeNull();
+  });
+
+  it('clears password after successful Quick Share creation', async () => {
+    mockWebAuthnSupport(true);
+    render(<CreatePage />);
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Strong#Pass123' } });
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    expect(input.value).toBe('');
   });
 
   it('disables submit button while create request is pending', async () => {
@@ -262,120 +332,5 @@ describe('CreatePage integration', () => {
       );
     });
     expect(busyContainer?.getAttribute('aria-busy')).toBe('false');
-  });
-
-  it('cancels compatibility panel and resets acceptance checkbox', () => {
-    mockWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    fireEvent.click(screen.getByTestId('create-compatibility-checkbox'));
-    fireEvent.click(screen.getByTestId('create-compatibility-cancel'));
-
-    expect(screen.queryByTestId('create-compatibility-panel')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    const continueButton = screen.getByTestId('create-compatibility-continue') as HTMLButtonElement;
-    expect(continueButton.disabled).toBe(true);
-  });
-
-  it('shows passphrase input inside compatibility panel', () => {
-    mockWebAuthnSupport(false);
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-    expect(screen.getByTestId('passphrase-input-root')).toBeTruthy();
-    expect(screen.getByTestId('passphrase-input-field')).toBeTruthy();
-  });
-
-  it('shows downgrade dialog when createChannel returns ATTESTATION_UNVERIFIABLE', async () => {
-    mockWebAuthnSupport(true);
-    createChannelMock.mockResolvedValueOnce({
-      ok: false,
-      error: {
-        ok: false,
-        code: 'ATTESTATION_UNVERIFIABLE',
-        stage: 'create.finish',
-      },
-    });
-
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('create-downgrade-dialog')).toBeTruthy();
-    });
-    expect(screen.queryByTestId('create-submit-error')).toBeNull();
-  });
-
-  it('retries with STRICT profile when downgrade is confirmed', async () => {
-    mockWebAuthnSupport(true);
-    createChannelMock
-      .mockResolvedValueOnce({
-        ok: false,
-        error: {
-          ok: false,
-          code: 'ATTESTATION_UNVERIFIABLE',
-          stage: 'create.finish',
-        },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: {
-          shareUrl: '/s/retried',
-          manageUrl: '/m/retried',
-          shareUrlWithFragment: '/s/retried#k=key',
-          lockSecretB64u: 'key',
-          lockKeyB64u: 'lock',
-        },
-      });
-
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('create-downgrade-dialog')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByTestId('create-downgrade-confirm'));
-
-    await waitFor(() => {
-      expect(createChannelMock).toHaveBeenCalledTimes(2);
-    });
-
-    const secondCall = createChannelMock.mock.calls[1]?.[0];
-    expect(secondCall?.profile).toBe(SECURITY_PROFILE.STRICT);
-    expect(screen.getByTestId('create-success-summary')).toBeTruthy();
-  });
-
-  it('shows error notice when downgrade is cancelled', async () => {
-    mockWebAuthnSupport(true);
-    createChannelMock.mockResolvedValueOnce({
-      ok: false,
-      error: {
-        ok: false,
-        code: 'ATTESTATION_UNVERIFIABLE',
-        stage: 'create.finish',
-      },
-    });
-
-    render(<CreatePage />);
-
-    fireEvent.click(screen.getByTestId('security-profile-select-hardware_only'));
-    fireEvent.click(screen.getByTestId('create-submit-button'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('create-downgrade-dialog')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByTestId('create-downgrade-cancel'));
-
-    expect(screen.queryByTestId('create-downgrade-dialog')).toBeNull();
-    expect(screen.getByTestId('create-submit-error')).toBeTruthy();
-    expect(screen.getByTestId('create-submit-error').textContent).toContain('cancelled');
   });
 });

@@ -10,7 +10,7 @@ docs/
 ├── QUICK_START.md    # 快速启动指南（从零到运行）
 ├── DEPLOYMENT.md     # 部署指南（Cloudflare 一键部署 + 手动部署）
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
-├── PRD-v2.5.md       # 完整产品需求文档（主文档）
+├── PRD.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
 └── SECURITY.md       # 安全模型
 ```
@@ -25,8 +25,8 @@ docs/
 - **项目是什么？** → [README.md](../README.md)
 - **如何快速开始？** → [QUICK_START.md](./QUICK_START.md)
 - **如何部署到 Cloudflare？** → [DEPLOYMENT.md](./DEPLOYMENT.md)
-- **核心价值主张** → [PRD-v2.5.md § 1. 产品概述](./PRD-v2.5.md#1-产品概述)
-- **用户流程** → [PRD-v2.5.md § 5. 用户流程](./PRD-v2.5.md#5-用户流程v25-ux-版)
+- **核心价值主张** → [PRD.md § 1. 产品概述](./PRD.md#1-产品概述)
+- **用户流程** → [PRD.md § 5. 用户流程](./PRD.md#5-用户流程v25-ux-版)
 
 #### 技术架构
 - **整体架构** → [ARCHITECTURE.md](./ARCHITECTURE.md)
@@ -37,9 +37,9 @@ docs/
 
 #### 安全设计
 - **威胁模型** → [SECURITY.md § 威胁模型](./SECURITY.md#威胁模型)
-- **安全目标** → [PRD-v2.5.md § 2.1 安全目标](./PRD-v2.5.md#21-安全目标必须满足)
+- **安全目标** → [PRD.md § 2.1 安全目标](./PRD.md#21-安全目标必须满足)
 - **攻击场景分析** → [SECURITY.md § 攻击场景分析](./SECURITY.md#攻击场景分析)
-- **安全档位** → [PRD-v2.5.md § 4. 产品模式与安全档位](./PRD-v2.5.md#4-产品模式与安全档位对外清晰)
+- **安全档位** → [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
 
 #### 核心机制
 - **Lock Secret（防 TOFU）** → [ARCHITECTURE.md § TOFU 抢占锁定防护](./ARCHITECTURE.md#1-tofu-抢占锁定防护v25-核心)
@@ -48,28 +48,28 @@ docs/
 - **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.md#4-intent-binding意图绑定)
 
 #### 密码学
-- **加密方案** → [PRD-v2.5.md § 7. 密码学与数据格式](./PRD-v2.5.md#7-密码学与数据格式v25)
+- **加密方案** → [PRD.md § 7. 密码学与数据格式](./PRD.md#7-密码学与数据格式v25)
 - **密码学规范** → [SECURITY.md § 密码学规范](./SECURITY.md#密码学规范)
-- **协议常量** → [PRD-v2.5.md § 附录 A](./PRD-v2.5.md#附录-a参数表与常量强制)
+- **协议常量** → [PRD.md § 附录 A](./PRD.md#附录-a参数表与常量强制)
 
 #### API 协议
-- **完整 API 定义** → [PRD-v2.5.md § 10. API](./PRD-v2.5.md#10-apiv25-完整)
-- **Lock API** → [PRD-v2.5.md § 附录 D](./PRD-v2.5.md#附录-dlock-api-schemav25)
-- **协议图（Mermaid）** → [PRD-v2.5.md § 15. 协议图](./PRD-v2.5.md#15-协议图mermaid)
+- **完整 API 定义** → [PRD.md § 10. API](./PRD.md#10-apiv25-完整)
+- **Lock API** → [PRD.md § 附录 D](./PRD.md#附录-dlock-api-schemav25)
+- **协议图（Mermaid）** → [PRD.md § 15. 协议图](./PRD.md#15-协议图mermaid)
 
 #### 实现细节
-- **Canonical 规范** → [PRD-v2.5.md § 附录 B](./PRD-v2.5.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
-- **Lock 精确定义** → [PRD-v2.5.md § 附录 C](./PRD-v2.5.md#附录-ctofu-抢占锁定修复lock-secret--lock-key--lock-proof精确定义)
-- **Padding 格式** → [PRD-v2.5.md § 附录 E](./PRD-v2.5.md#附录-epadding-规范精确字节格式--注意事项)
-- **WebAuthn 验证** → [PRD-v2.5.md § 附录 H](./PRD-v2.5.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点)
+- **Canonical 规范** → [PRD.md § 附录 B](./PRD.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
+- **Lock 精确定义** → [PRD.md § 附录 C](./PRD.md#附录-ctofu-抢占锁定修复lock-secret--lock-key--lock-proof精确定义)
+- **Padding 格式** → [PRD.md § 附录 E](./PRD.md#附录-epadding-规范精确字节格式--注意事项)
+- **WebAuthn 验证** → [PRD.md § 附录 H](./PRD.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点)
 
 #### UX 设计
-- **指纹核对柔化** → [PRD-v2.5.md § 13.1](./PRD-v2.5.md#131-指纹核对的柔化呈现)
-- **Safety Code 规范** → [PRD-v2.5.md § 附录 K](./PRD-v2.5.md#附录-k安全码safety-code视觉化规范emoji--color)
-- **WebAuthn 降级引导** → [PRD-v2.5.md § 13.3](./PRD-v2.5.md#133-webauthn-降级引导)
+- **指纹核对柔化** → [PRD.md § 13.1](./PRD.md#131-指纹核对的柔化呈现)
+- **Safety Code 规范** → [PRD.md § 附录 K](./PRD.md#附录-k安全码safety-code视觉化规范emoji--color)
+- **WebAuthn 降级引导** → [PRD.md § 13.3](./PRD.md#133-webauthn-降级引导)
 
 #### 测试
-- **测试向量** → [PRD-v2.5.md § 14. 测试向量与验收](./PRD-v2.5.md#14-测试向量与验收v25-新增)
+- **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.md#14-测试向量与验收v25-新增)
 - **安全检查清单** → [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation)
 
 ---
@@ -78,31 +78,31 @@ docs/
 
 ### 产品经理
 1. [README.md](../README.md) - 项目概览
-2. [PRD-v2.5.md § 1-5](./PRD-v2.5.md) - 产品定义、流程、UX
-3. [PRD-v2.5.md § 4](./PRD-v2.5.md#4-产品模式与安全档位对外清晰) - 安全档位
-4. [PRD-v2.5.md § 13](./PRD-v2.5.md#13-uiux-规范落实产品经理建议) - UI/UX 规范
+2. [PRD.md § 1-5](./PRD.md) - 产品定义、流程、UX
+3. [PRD.md § 4](./PRD.md#4-产品模式与安全档位对外清晰) - 安全档位
+4. [PRD.md § 13](./PRD.md#13-uiux-规范落实产品经理建议) - UI/UX 规范
 
 ### 前端开发
 1. [QUICK_START.md](./QUICK_START.md) - 初始化项目
 2. [TECH_STACK.md](./TECH_STACK.md) - 完整技术栈规范
 3. [ARCHITECTURE.md § 数据流图](./ARCHITECTURE.md#数据流图) - 前端职责
-4. [PRD-v2.5.md § 7](./PRD-v2.5.md#7-密码学与数据格式v25) - 密码学实现
-5. [PRD-v2.5.md § 附录 C](./PRD-v2.5.md#附录-ctofu-抢占锁定修复lock-secret--lock-key--lock-proof精确定义) - Lock Secret 实现
-6. [PRD-v2.5.md § 附录 E](./PRD-v2.5.md#附录-epadding-规范精确字节格式--注意事项) - Padding 实现
+4. [PRD.md § 7](./PRD.md#7-密码学与数据格式v25) - 密码学实现
+5. [PRD.md § 附录 C](./PRD.md#附录-ctofu-抢占锁定修复lock-secret--lock-key--lock-proof精确定义) - Lock Secret 实现
+6. [PRD.md § 附录 E](./PRD.md#附录-epadding-规范精确字节格式--注意事项) - Padding 实现
 
 ### 后端开发
 1. [QUICK_START.md](./QUICK_START.md) - 初始化项目
 2. [TECH_STACK.md § 后端部署](./TECH_STACK.md#部署与发布) - Cloudflare Workers 配置
 3. [ARCHITECTURE.md § 技术栈](./ARCHITECTURE.md#3-技术栈) - 后端架构
-4. [PRD-v2.5.md § 10](./PRD-v2.5.md#10-apiv25-完整) - 完整 API
-5. [PRD-v2.5.md § 附录 D](./PRD-v2.5.md#附录-dlock-api-schemav25) - Lock API Schema
-6. [PRD-v2.5.md § 附录 H](./PRD-v2.5.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点) - WebAuthn 验证
+4. [PRD.md § 10](./PRD.md#10-apiv25-完整) - 完整 API
+5. [PRD.md § 附录 D](./PRD.md#附录-dlock-api-schemav25) - Lock API Schema
+6. [PRD.md § 附录 H](./PRD.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点) - WebAuthn 验证
 
 ### 安全审计
 1. [SECURITY.md](./SECURITY.md) - 完整安全模型
 2. [SECURITY.md § 攻击场景分析](./SECURITY.md#攻击场景分析) - 威胁分析
 3. [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation) - 审计要点
-4. [PRD-v2.5.md § 14](./PRD-v2.5.md#14-测试向量与验收v25-新增) - 测试向量
+4. [PRD.md § 14](./PRD.md#14-测试向量与验收v25-新增) - 测试向量
 5. [SECURITY.md § 密码学规范](./SECURITY.md#密码学规范) - 加密参数
 
 ### DevOps / 部署
@@ -151,10 +151,10 @@ docs/
 → [SECURITY.md § 密码学规范 § KDF](./SECURITY.md#密码学规范)
 
 ### Q: 如何验证前端代码未被篡改？
-→ [PRD-v2.5.md § 12. 前端完整性](./PRD-v2.5.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
+→ [PRD.md § 12. 前端完整性](./PRD.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
 
 ### Q: 三档安全模式有什么区别？
-→ [PRD-v2.5.md § 4. 产品模式与安全档位](./PRD-v2.5.md#4-产品模式与安全档位对外清晰)
+→ [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
 
 ### Q: 兼容模式安全性如何？
 → [SECURITY.md § 恶意浏览器扩展/木马 § 降级模式风险](./SECURITY.md#5-恶意浏览器扩展木马)
@@ -173,18 +173,18 @@ docs/
 ## AI 助手使用指南
 
 ### 当被问到"ZeroLink 是什么"时
-→ 先读 [README.md](../README.md)，再引用 [PRD-v2.5.md § 1](./PRD-v2.5.md#1-产品概述)
+→ 先读 [README.md](../README.md)，再引用 [PRD.md § 1](./PRD.md#1-产品概述)
 
 ### 当被问到"如何防止 XXX 攻击"时
 → 先查 [SECURITY.md § 攻击场景分析](./SECURITY.md#攻击场景分析)，找对应章节
 
 ### 当需要实现某个功能时
 1. 先查 [ARCHITECTURE.md](./ARCHITECTURE.md) 了解整体架构
-2. 再查 [PRD-v2.5.md § 10. API](./PRD-v2.5.md#10-apiv25-完整) 了解接口
+2. 再查 [PRD.md § 10. API](./PRD.md#10-apiv25-完整) 了解接口
 3. 最后查对应附录了解精确字节格式
 
 ### 当需要写测试时
-→ 直接查 [PRD-v2.5.md § 14](./PRD-v2.5.md#14-测试向量与验收v25-新增) 和 [PRD-v2.5.md § 附录 B](./PRD-v2.5.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
+→ 直接查 [PRD.md § 14](./PRD.md#14-测试向量与验收v25-新增) 和 [PRD.md § 附录 B](./PRD.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
 
 ### 当需要审查安全性时
 → 按照 [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation) 逐项检查

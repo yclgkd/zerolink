@@ -276,7 +276,7 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 
 ## 参考资料
 
-- 完整 PRD：[PRD-v2.5.md](./PRD-v2.5.md)
+- 完整 PRD：[PRD.md](./PRD.md)
 - 安全模型：[SECURITY.md](./SECURITY.md)
 - API 规范：见 PRD 第 10 节
 - 协议图：见 PRD 第 15 节

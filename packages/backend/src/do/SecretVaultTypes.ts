@@ -48,7 +48,7 @@ export interface WebAuthnCompoundCommitParams {
 }
 
 export interface SoftkeyCompoundCommitParams {
-  adminMode: 'softkey';
+  adminMode: 'password' | 'softkey';
   uuid: string;
   softkeySignature: HexString;
   intentHash: HexString;

@@ -29,13 +29,19 @@ export type ChannelState = (typeof CHANNEL_STATE)[keyof typeof CHANNEL_STATE];
 
 /**
  * Security profiles selectable at channel creation.
- * PRD §4, SECURITY.md §"Security Profiles", Figma README §"Security Profiles".
  *
- *   standard      → allows platform passkeys; Argon2id enforced; 4KB padding
- *   strict        → UV=required; discourages backup passkeys; stronger warnings
- *   hardware_only → requires cross-platform hardware key; attestation verified
+ *   quick  → password-protected; no WebAuthn required; Argon2id KDF; 4KB padding
+ *   secure → passkey required; UV=required; RK=required; attestation=none; 8KB padding
+ *
+ * Legacy values (read-side only, for existing channels in storage):
+ *   standard      → UV=preferred; RK=preferred (lower assurance than 'secure')
+ *   strict        → UV=required; RK=required (equivalent to 'secure')
+ *   hardware_only → UV=required; RK=required; attestation enforcement removed
  */
 export const SECURITY_PROFILE = {
+  QUICK: 'quick',
+  SECURE: 'secure',
+  // Legacy — retained for backward-compatible reads of existing channel records
   STANDARD: 'standard',
   STRICT: 'strict',
   HARDWARE_ONLY: 'hardware_only',
@@ -211,7 +217,7 @@ export const PBKDF2_ITERATIONS = 600_000 as const;
  *   side-channel to 4 KB granularity.
  *
  * PAD_BLOCK_STRICT = 8192 bytes
- *   PRD §9: Strict/Hardware-Only profiles use 8 KB block for higher privacy.
+ *   Secure profile uses 8 KB block for higher privacy.
  *
  * PAD_BLOCK_MAX = 65536 bytes
  *   PRD Appendix A: absolute upper bound; prevents abuse via oversized requests.

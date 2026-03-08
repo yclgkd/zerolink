@@ -457,7 +457,7 @@ feat(lock): 实现 Lock Secret 防抢占锁定
 - 实现 lock_proof 计算逻辑
 - 添加 lock_begin/lock_commit 两阶段流程
 
-Refs: PRD-v2.5 § 附录 C
+Refs: PRD § 附录 C
 ```
 
 ---
@@ -1206,7 +1206,7 @@ packages/backend/
 
 ## 相关文档
 
-- [PRD v2.5](./PRD-v2.5.md) - 产品需求
+- [PRD v2.5](./PRD.md) - 产品需求
 - [架构设计](./ARCHITECTURE.md) - 系统架构
 - [安全模型](./SECURITY.md) - 威胁模型
 - [文档索引](./INDEX.md) - 快速导航

@@ -490,7 +490,7 @@ async function executeCreateChannel(
 
     state.startCreateFinish();
     const finishRes = await deps.client.createFinish({
-      adminMode: 'softkey',
+      adminMode: 'password',
       uuid: input.uuid,
       softkeyPubJwk,
       lockKeyB64u,
@@ -800,7 +800,10 @@ async function executeDeliverSecret(
   let assertion: AssertionJSON | undefined;
   let softkeySignature: HexString | undefined;
 
-  if (resolvedBeginData.adminMode === 'softkey') {
+  const deliverIsPasswordMode =
+    resolvedBeginData.adminMode === 'password' || resolvedBeginData.adminMode === 'softkey';
+
+  if (deliverIsPasswordMode) {
     if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('PASSPHRASE_REQUIRED');
@@ -838,7 +841,7 @@ async function executeDeliverSecret(
 
   const commitPayload = softkeySignature
     ? {
-        adminMode: 'softkey' as const,
+        adminMode: resolvedBeginData.adminMode as 'password' | 'softkey',
         uuid: input.uuid,
         softkeySignature,
         intentHash: intentData.intentHash,
@@ -912,7 +915,10 @@ async function executeDeleteChannel(
   let assertion: AssertionJSON | undefined;
   let softkeySignature: HexString | undefined;
 
-  if (beginData.adminMode === 'softkey') {
+  const deleteIsPasswordMode =
+    beginData.adminMode === 'password' || beginData.adminMode === 'softkey';
+
+  if (deleteIsPasswordMode) {
     if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('PASSPHRASE_REQUIRED');
@@ -948,7 +954,7 @@ async function executeDeleteChannel(
 
   const commitPayload = softkeySignature
     ? {
-        adminMode: 'softkey' as const,
+        adminMode: beginData.adminMode as 'password' | 'softkey',
         uuid: input.uuid,
         softkeySignature,
         intentHash,

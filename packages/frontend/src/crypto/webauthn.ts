@@ -267,24 +267,22 @@ export function detectWebAuthnSupport(): WebAuthnSupportInfo {
 
 /**
  * Resolves profile-specific WebAuthn policy settings.
+ * New profiles: 'secure' (strict), 'quick' (no WebAuthn).
+ * Legacy profiles: 'standard'/'strict'/'hardware_only' are handled for backward compatibility.
  */
 export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfilePolicy {
   switch (profile) {
+    case SECURITY_PROFILE.SECURE:
     case SECURITY_PROFILE.STRICT:
+    case SECURITY_PROFILE.HARDWARE_ONLY:
       return {
         userVerification: 'required',
         residentKey: 'required',
         attestation: 'none',
       };
-    case SECURITY_PROFILE.HARDWARE_ONLY:
-      return {
-        userVerification: 'required',
-        residentKey: 'preferred',
-        attestation: 'direct',
-        authenticatorAttachment: 'cross-platform',
-        hints: ['security-key'] as const,
-      };
     default:
+      // 'quick' profile never reaches here (password mode, no WebAuthn)
+      // 'standard' falls through to preferred UV
       return {
         userVerification: 'preferred',
         residentKey: 'preferred',
@@ -295,6 +293,8 @@ export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfile
 
 /**
  * Decides whether profile execution should use WebAuthn, fallback, or block.
+ * 'secure' profile requires WebAuthn; 'quick' is never routed through WebAuthn.
+ * Legacy 'standard' profile allows fallback; 'strict'/'hardware_only' require WebAuthn.
  */
 export function evaluateWebAuthnMode(
   profile: SecurityProfile,
@@ -304,7 +304,8 @@ export function evaluateWebAuthnMode(
     return { mode: 'webauthn', allowed: true };
   }
 
-  if (profile === SECURITY_PROFILE.STANDARD) {
+  // Profiles that allow password/softkey fallback
+  if (profile === SECURITY_PROFILE.STANDARD || profile === SECURITY_PROFILE.QUICK) {
     return {
       mode: 'fallback',
       allowed: false,

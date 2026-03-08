@@ -177,10 +177,8 @@ describe('resolveWebAuthnPolicy', () => {
   it('returns hardware-only profile defaults', () => {
     expect(resolveWebAuthnPolicy(SECURITY_PROFILE.HARDWARE_ONLY)).toEqual({
       userVerification: 'required',
-      residentKey: 'preferred',
-      attestation: 'direct',
-      authenticatorAttachment: 'cross-platform',
-      hints: ['security-key'],
+      residentKey: 'required',
+      attestation: 'none',
     });
   });
 });
@@ -292,12 +290,10 @@ describe('registerWithWebAuthn', () => {
     const createCall = vi.mocked(webauthnCreate).mock.calls[0]?.[0];
     expect(createCall).toMatchObject({
       publicKey: {
-        attestation: 'direct',
-        hints: ['security-key'],
+        attestation: 'none',
         authenticatorSelection: {
           userVerification: 'required',
-          residentKey: 'preferred',
-          authenticatorAttachment: 'cross-platform',
+          residentKey: 'required',
         },
       },
     });

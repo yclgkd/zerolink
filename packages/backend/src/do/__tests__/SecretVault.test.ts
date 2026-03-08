@@ -1243,7 +1243,8 @@ describe('SecretVault create flow', () => {
     expect(record.securityProfile).toBe(SECURITY_PROFILE.HARDWARE_ONLY);
     expect(options.challenge).toBeDefined();
     expect(options.user.id).toBeDefined();
-    expect(options.attestation).toBe('direct');
+    // attestation is always 'none' now; hardware_only no longer enforces direct attestation
+    expect(options.attestation).toBe('none');
   });
 
   it('commits creation successfully for HARDWARE_ONLY with valid attestation', async () => {
@@ -1276,7 +1277,7 @@ describe('SecretVault create flow', () => {
     expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
   });
 
-  it('rejects creation for HARDWARE_ONLY with unverified attestation', async () => {
+  it('allows creation for HARDWARE_ONLY with unverified attestation (enforcement removed)', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
@@ -1293,41 +1294,42 @@ describe('SecretVault create flow', () => {
       warning: 'none attestation is considered unverified',
     });
 
-    await expect(
-      vault.commitCreate({
-        uuid,
-        adminMode: 'webauthn',
-        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
-        lockKeyB64u: asBase64Url('lock-key'),
-      })
-    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+    // hardware_only no longer enforces direct attestation — creation should succeed
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+    const updated = await vault.getRecord();
+    expect(updated.adminMode).toBe('webauthn');
   });
 
-  it('rejects creation for HARDWARE_ONLY with all-zero AAGUID (software emulator)', async () => {
+  it('allows creation for HARDWARE_ONLY with all-zero AAGUID (enforcement removed)', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
     await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
-    // verified: true but AAGUID is all zeros (software authenticator)
     verifyAttestationMock.mockResolvedValueOnce({
       verified: true,
       fmt: 'packed',
       credentialId: asBase64Url('cred-id'),
       publicKey: asBase64Url('pub-key'),
-      aaguid: encodeBase64Url(new Uint8Array(16)), // all-zero AAGUID
+      aaguid: encodeBase64Url(new Uint8Array(16)), // all-zero AAGUID — no longer rejected
       signCount: 0,
     });
 
-    await expect(
-      vault.commitCreate({
-        uuid,
-        adminMode: 'webauthn',
-        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
-        lockKeyB64u: asBase64Url('lock-key'),
-      })
-    ).rejects.toMatchObject({ code: 'ATTESTATION_UNVERIFIABLE' });
+    // hardware_only no longer rejects all-zero AAGUID — creation should succeed
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+    const updated = await vault.getRecord();
+    expect(updated.adminMode).toBe('webauthn');
   });
 
   it('allows creation for STRICT with unverified attestation', async () => {
