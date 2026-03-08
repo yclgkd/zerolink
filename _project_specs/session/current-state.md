@@ -3,16 +3,16 @@
 *Last updated: 2026-03-08*
 
 ## Active Task
-Clarify sender delete, receiver-local plaintext burn, and channel expiry semantics across frontend UI and internal guidance.
+Physical delete semantics plus frontend clarification of sender delete, receiver-local plaintext burn, and channel expiry.
 
 ## Current Status
-- **Phase**: Delete vs local burn vs expiry clarification implemented, ready for validation and PR
-- **Progress**: Receiver UI now treats local plaintext burn as a delivered-substate only; sender and receiver terminal-state copy explicitly distinguishes sender deletion from TTL expiry; `.ai/` and `_project_specs/` guidance no longer describe decrypt as implicit link burn.
+- **Phase**: Conflict-resolved delete/burn/expiry clarification complete, ready for PR
+- **Progress**: Backend physically purges deleted and expired channels and returns `404 NOT_FOUND` on revisit; frontend keeps sender-side delete confirmation local to the current session, keeps receiver-side local plaintext burn strictly device-only, and no longer describes decrypt as implicit channel burn in internal guidance.
 - **Blocking Issues**: None
 
 ## What Was Done
 
-### Phase 9: Delete vs local burn vs expiry clarification
+### Phase 10: Delete vs local burn vs expiry clarification
 - `packages/frontend/src/stores/decrypt-store.ts` — Renamed the receiver-only burn flag to `localPlaintextBurned` so it cannot be confused with channel state
 - `packages/frontend/src/components/share/share-steps.tsx` — Updated delivered, deleted, expired, and local-burn copy so the receiver page clearly separates local plaintext removal from channel terminal states
 - `packages/frontend/src/pages/ManagePage.tsx` — Replaced user-facing `Destroy` language with `Delete`, and clarified deleted vs expired sender terminal copy
@@ -21,6 +21,29 @@ Clarify sender delete, receiver-local plaintext burn, and channel expiry semanti
 - `packages/frontend/e2e/happy-path.spec.ts` — Kept the local burn followed by re-decrypt flow and made the device-only semantics explicit
 - `.ai/project-context.md` / `.ai/architecture.md` — Removed decrypt-as-burn wording and narrowed backend guarantees to terminal-state enforcement
 - `_project_specs/session/decisions.md` / `_project_specs/todos/*.md` — Replaced read-implies-channel-burn terminology with explicit delete/local-burn/expiry semantics
+
+### Phase 9: Physical delete semantics
+- `packages/backend/src/do/SecretVault.ts` — Added full-storage purge helpers, lazy expiry enforcement on reads, dual-purpose alarm scheduling for TTL expiry plus nonce cleanup, and real delete/expire behavior that removes the channel record plus related challenges/nonces instead of persisting `deleted`/`expired`
+- `packages/backend/src/do/SecretVaultNonces.ts` — Exposed the next nonce-cleanup deadline so the Durable Object alarm can co-schedule nonce cleanup with channel expiry
+- `packages/backend/src/do/__tests__/SecretVault.test.ts` — Added coverage for physical purge, lazy expiry purge on read, and 404 behavior after delete/expiry
+- `packages/backend/src/__tests__/index.test.ts` — Added route-level coverage that `NOT_FOUND` propagates from public status and decrypt-fetch endpoints
+- `packages/shared/src/schemas.ts` / `packages/shared/src/__tests__/schemas.test.ts` — Narrowed `PublicStatusResponseSchema` to `waiting | locked | delivered` so `deleted`/`expired` remain local-only UI states
+- `packages/frontend/src/pages/SharePage.tsx`, `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/features/share/share-logic.ts` — Treated `404 NOT_FOUND` as channel-unavailable, mapped stale-session errors explicitly, and kept sender-side `deleted` as current-session-only confirmation UX
+- `packages/frontend/src/components/channel/channel-unavailable-state.tsx` and page tests — Added dedicated unavailable-state rendering and updated frontend tests for delete/expiry revisits
+- `packages/frontend/e2e/support/mock-api.ts` — Updated the stateful API mock so delete physically removes channels and follow-up reads return 404
+
+### Phase 8: Quick Share sender manage fix
+- `packages/frontend/src/pages/ManagePage.tsx` — Show the channel password input for both `adminMode: 'password'` and legacy `adminMode: 'softkey'`; remove compatibility-mode wording from manage-page copy
+- `packages/frontend/src/__tests__/manage-page.test.tsx` — Added coverage for `adminMode: 'password'`, retained legacy `softkey` coverage, and asserted that WebAuthn-managed channels do not show the password input
+- `docs/PRD.md` — Corrected internal protocol field references from `admin_mode` to `adminMode`
+- `docs/INDEX.md` — Tightened the v3.0 summary to match the flows that are actually unified in the product
+
+### Phase 7: Documentation alignment
+- `README.md` — Replaced 3-mode messaging with Quick Share / Secure Share and updated PRD version reference to v3.0
+- `docs/PRD.md` — Replaced stale `GhostLink` brand mention with `ZeroLink`; updated current-state wording around API, WebAuthn policy, and fallback behavior
+- `docs/INDEX.md` — Updated current version to v3.0 and replaced outdated FAQ entries about 3 modes / compatibility mode
+- `docs/SECURITY.md` — Reframed security model around Quick Share / Secure Share and moved legacy behavior to explicit compatibility context
+- `docs/ARCHITECTURE.md` — Replaced Standard / Strict / Hardware-Only overview with current Quick Share / Secure Share architecture
 
 ## Previous Work
 
@@ -76,6 +99,13 @@ Clarify sender delete, receiver-local plaintext burn, and channel expiry semanti
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Run targeted frontend validation plus terminology grep
-2. [ ] Review diff for wording regressions and stale delete-vs-local-burn copy
-3. [ ] Create PR with validation notes
+1. [ ] Run final verification: biome check + typecheck + all tests
+2. [ ] Create PR with all changes
+3. [ ] Review and merge
+
+## Latest Update (2026-03-08)
+
+- Added a private Durable Object tombstone for deleted/expired channels so UUIDs remain non-reusable after physical purge.
+- Restored `PublicStatusResponse` wire compatibility for legacy `deleted` / `expired` backend payloads while keeping current frontend UX normalized to unavailable.
+- Tightened the Playwright stateful API mock so deleted channels return `404 NOT_FOUND` on later public/lock/manage begin requests instead of silently recreating a waiting channel.
+- Added backend, frontend, shared, and E2E coverage for tombstone reservation, legacy terminal-state normalization, and post-destroy 404 behavior.

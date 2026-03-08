@@ -330,8 +330,10 @@ export function derToP1363(derSig: Uint8Array): Uint8Array {
 }
 
 function isP1363Signature(sig: Uint8Array): boolean {
-  // P1363 for P-256 is exactly 64 bytes and doesn't start with 0x30
-  return sig.byteLength === 64 && sig[0] !== 0x30;
+  // P1363 for P-256 is always exactly 64 bytes. DER-encoded P-256 signatures
+  // are longer, so a 64-byte signature must already be raw r||s even if the
+  // first byte happens to equal the DER SEQUENCE tag (0x30).
+  return sig.byteLength === 64;
 }
 
 /**

@@ -4,24 +4,6 @@ Current work in progress and remaining tasks.
 
 ---
 
-## TODO-101: Implement physical deletion for ChannelRecord
-
-**Status**: pending
-**Priority**: P0 (Security-critical)
-
-**Description**: Confirm that sender delete and TTL expiry remain explicit channel terminal paths in backend storage semantics, without treating receiver-local plaintext removal as a channel-state transition.
-
-**Files to modify**:
-- `packages/backend/src/do/SecretVault.ts` — Keep delete and expiry handling aligned with terminal channel semantics.
-- `packages/backend/src/do/SecretVaultStateMachine.ts` — Keep terminal transition rules explicit for delete and expiry.
-
-**Validation criteria**:
-- [ ] Delete and expiry remain the only backend-managed terminal channel outcomes.
-- [ ] Receiver-local plaintext removal is documented and tested as frontend-only behavior.
-- [ ] Backend tests continue to distinguish deleted vs expired terminal handling.
-
----
-
 ## TODO-102: Increase E2E coverage for expiration flow
 
 **Status**: pending

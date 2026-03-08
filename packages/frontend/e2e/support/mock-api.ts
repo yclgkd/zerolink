@@ -22,8 +22,8 @@ import type { z } from 'zod';
 
 interface ChannelRuntimeState {
   state: ChannelState;
+  adminMode: z.output<typeof CreateFinishRequestSchema>['adminMode'];
   version: number;
-  adminMode?: z.output<typeof CreateFinishRequestSchema>['adminMode'];
   lockChallenge?: {
     id: string;
     challenge: string;
@@ -79,7 +79,14 @@ async function badRequest(route: Route): Promise<void> {
   });
 }
 
-function getOrCreateChannel(
+async function notFound(route: Route): Promise<void> {
+  await fulfillJson(route, 404, {
+    ok: false,
+    code: 'NOT_FOUND',
+  });
+}
+
+function createChannel(
   channels: Map<string, ChannelRuntimeState>,
   uuid: string
 ): ChannelRuntimeState {
@@ -88,10 +95,18 @@ function getOrCreateChannel(
 
   const created: ChannelRuntimeState = {
     state: CHANNEL_STATE.WAITING,
+    adminMode: 'webauthn',
     version: 0,
   };
   channels.set(uuid, created);
   return created;
+}
+
+function requireChannel(
+  channels: Map<string, ChannelRuntimeState>,
+  uuid: string
+): ChannelRuntimeState | undefined {
+  return channels.get(uuid);
 }
 
 /**
@@ -121,7 +136,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      getOrCreateChannel(channels, parsedUuid.data);
+      createChannel(channels, parsedUuid.data);
       return fulfillJson(route, 200, {
         ok: true,
         creationOptions: {
@@ -152,7 +167,10 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
       channel.adminMode = parsedBody.data.adminMode;
       const payload = {
         ok: true,
@@ -177,7 +195,10 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
       const lockChallenge = {
         id: b64u(`lock-id-${parsedUuid.data}-${channel.version}`),
         challenge: b64u(`lock-challenge-${parsedUuid.data}-${channel.version}`),
@@ -207,7 +228,10 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
       if (!channel.lockChallenge || channel.lockChallenge.id !== parsedBody.data.lockChallengeId) {
         return badRequest(route);
       }
@@ -236,7 +260,10 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
       const challenge = {
         id: b64u(`compound-id-${parsedUuid.data}-${channel.version}`),
         seed: b64u(`compound-seed-${parsedUuid.data}-${channel.version}`),
@@ -246,7 +273,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
       const payload = {
         ok: true,
         challenge,
-        adminMode: channel.adminMode ?? 'webauthn',
+        adminMode: channel.adminMode,
         ...(channel.receiverPubFpr ? { receiverPubFpr: channel.receiverPubFpr } : {}),
         ...(channel.receiverPubJwk ? { receiverPubJwk: channel.receiverPubJwk } : {}),
         currentVersion: channel.version,
@@ -275,7 +302,10 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
       channel.delivery = {
         cipherBundle: parsedBody.data.intent.cipherBundle,
         receiverPubFpr: parsedBody.data.intent.receiverPubFpr,
@@ -309,9 +339,12 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
-      channel.version = parsedBody.data.intent.version + 1;
-      channel.state = CHANNEL_STATE.DELETED;
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
+
+      channels.delete(parsedUuid.data);
 
       return fulfillJson(route, 200, {
         ok: true,
@@ -326,11 +359,14 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = channels.get(parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
       const payload = {
         ok: true,
         state: channel.state,
-        adminMode: channel.adminMode ?? 'webauthn',
+        adminMode: channel.adminMode,
       };
       const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
       if (!parsedPayload.success) {
@@ -349,7 +385,11 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
       }
 
       const channel = channels.get(parsedUuid.data);
-      if (!channel?.delivery || channel.state !== CHANNEL_STATE.DELIVERED) {
+      if (!channel) {
+        return notFound(route);
+      }
+
+      if (!channel.delivery || channel.state !== CHANNEL_STATE.DELIVERED) {
         return badRequest(route);
       }
 

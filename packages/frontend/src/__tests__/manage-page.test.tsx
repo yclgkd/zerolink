@@ -83,6 +83,31 @@ function mockPublicState(fetchSpy: ReturnType<typeof vi.fn>, state: string) {
   );
 }
 
+function mockLegacyTerminalPublicState(
+  fetchSpy: ReturnType<typeof vi.fn>,
+  state: 'deleted' | 'expired'
+) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse({
+      ok: true,
+      state,
+      adminMode: 'webauthn',
+    })
+  );
+}
+
+function mockPublicNotFound(fetchSpy: ReturnType<typeof vi.fn>) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse(
+      {
+        ok: false,
+        code: 'NOT_FOUND',
+      },
+      404
+    )
+  );
+}
+
 function mockDeliverSuccessWithStoreSideEffects(): void {
   deliverSecretMock.mockImplementation(async () => {
     useDeliverStore.getState().markDelivered();
@@ -572,6 +597,26 @@ describe('ManagePage integration', () => {
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
   });
 
+  it('shows unavailable state after remounting a locally deleted channel', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    const firstRender = renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+    await screen.findByTestId('manage-state-deleted');
+
+    firstRender.unmount();
+    mockPublicNotFound(fetchSpy);
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('manage-state-deleted')).toBeNull();
+  });
+
   it('disables confirm panel actions while delete request is pending', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
@@ -668,19 +713,30 @@ describe('ManagePage integration', () => {
     });
   });
 
-  it('renders expired state from API and shows create new button instead of action buttons', async () => {
+  it('renders unavailable state from API 404 and shows create new button instead of action buttons', async () => {
     const fetchSpy = getFetchSpy();
-    fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'expired', adminMode: 'webauthn' })
-    );
+    mockPublicNotFound(fetchSpy);
 
     renderManagePage();
 
-    expect(await screen.findByTestId('manage-state-expired')).toBeTruthy();
-    expect(
-      screen.getByText('This channel expired. It can no longer be used for delivery or decryption.')
-    ).toBeTruthy();
+    expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
 
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
+    expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
+  });
+
+  it.each([
+    'deleted',
+    'expired',
+  ] as const)('renders unavailable state from legacy public status %s', async (state) => {
+    const fetchSpy = getFetchSpy();
+    mockLegacyTerminalPublicState(fetchSpy, state);
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('manage-state-deleted')).toBeNull();
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
@@ -745,15 +801,13 @@ describe('ManagePage integration', () => {
     );
   });
 
-  it('hides SECRET PAYLOAD input when channel is in expired state', async () => {
+  it('hides SECRET PAYLOAD input when channel is unavailable', async () => {
     const fetchSpy = getFetchSpy();
-    fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'expired', adminMode: 'webauthn' })
-    );
+    mockPublicNotFound(fetchSpy);
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-expired');
+    await screen.findByTestId('manage-state-unavailable');
     expect(screen.queryByTestId('manage-secret-input')).toBeNull();
   });
 
@@ -797,15 +851,13 @@ describe('ManagePage integration', () => {
     });
   });
 
-  it('shows create new button in terminal actions for both deleted and expired states', async () => {
+  it('shows create new button in terminal actions for unavailable state', async () => {
     const fetchSpy = getFetchSpy();
-    fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'expired', adminMode: 'webauthn' })
-    );
+    mockPublicNotFound(fetchSpy);
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-expired');
+    await screen.findByTestId('manage-state-unavailable');
     expect(screen.getByTestId('manage-terminal-actions')).toBeTruthy();
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
   });

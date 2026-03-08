@@ -61,7 +61,7 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 function mockPublicState(
   fetchSpy: ReturnType<typeof vi.fn>,
-  state: 'waiting' | 'locked' | 'delivered' | 'deleted' | 'expired'
+  state: 'waiting' | 'locked' | 'delivered'
 ) {
   fetchSpy.mockResolvedValueOnce(
     jsonResponse({
@@ -69,6 +69,31 @@ function mockPublicState(
       state,
       adminMode: 'webauthn',
     })
+  );
+}
+
+function mockLegacyTerminalPublicState(
+  fetchSpy: ReturnType<typeof vi.fn>,
+  state: 'deleted' | 'expired'
+) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse({
+      ok: true,
+      state,
+      adminMode: 'webauthn',
+    })
+  );
+}
+
+function mockPublicNotFound(fetchSpy: ReturnType<typeof vi.fn>) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse(
+      {
+        ok: false,
+        code: 'NOT_FOUND',
+      },
+      404
+    )
   );
 }
 
@@ -1241,34 +1266,33 @@ describe('SharePage', () => {
     expect(returnPassphraseInput.value).toBe('');
   });
 
-  it('renders deleted terminal state from /api/public/:uuid', async () => {
+  it('renders unavailable state when /api/public/:uuid returns 404', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'deleted');
+    mockPublicNotFound(fetchSpy);
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    expect(await screen.findByTestId('share-step-deleted')).toBeTruthy();
-    expect(screen.getByText('Channel Deleted by Sender')).toBeTruthy();
+    expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+    expect(screen.getByText('Channel Unavailable')).toBeTruthy();
     expect(
-      screen.getByText(
-        'The sender deleted this channel. This link can no longer be used to decrypt.'
-      )
+      screen.getByText('This channel was destroyed, expired, or does not exist.')
     ).toBeTruthy();
   });
 
-  it('renders expired terminal state from /api/public/:uuid', async () => {
+  it.each([
+    'deleted',
+    'expired',
+  ] as const)('renders unavailable state when /api/public/:uuid returns legacy %s', async (state) => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'expired');
+    mockLegacyTerminalPublicState(fetchSpy, state);
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    expect(await screen.findByTestId('share-step-expired')).toBeTruthy();
-    expect(screen.getByText('Channel Expired')).toBeTruthy();
-    expect(
-      screen.getByText(
-        'This channel expired. Its lifetime ended, so this link can no longer be used.'
-      )
-    ).toBeTruthy();
+    expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('share-step-onboarding')).toBeNull();
+    expect(screen.queryByTestId('share-step-delivered')).toBeNull();
+    expect(decryptDeliveredMock).not.toHaveBeenCalled();
+    expect(lockChannelMock).not.toHaveBeenCalled();
   });
 
   it('shows uuid and receiver role badge', async () => {

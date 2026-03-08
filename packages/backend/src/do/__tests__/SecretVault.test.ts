@@ -43,6 +43,8 @@ import {
   type SecretVaultEnv,
   SecretVaultStateMachine,
   StateTransitionError,
+  type StoredTerminalTombstone,
+  TERMINAL_TOMBSTONE_KEY,
 } from '../SecretVault.ts';
 
 vi.mock('../../crypto/softkey.ts', () => ({
@@ -206,6 +208,9 @@ function createDeleteIntent(
   };
 }
 
+const FIXTURE_CREATED_AT = asUnixMs(1_900_000_000_000);
+const FIXTURE_EXPIRES_AT = asUnixMs(1_900_000_000_000 + CHANNEL_TTL_MS.ONE_DAY);
+
 function createChannelRecord(
   state: ChannelState = CHANNEL_STATE.WAITING,
   adminMode: 'webauthn' | 'softkey' = 'webauthn'
@@ -213,8 +218,8 @@ function createChannelRecord(
   return {
     uuid: asUuid('abcdefghijklmnopqrstu'),
     state,
-    createdAt: asUnixMs(1_730_000_000_000),
-    expiresAt: asUnixMs(1_730_086_400_000),
+    createdAt: FIXTURE_CREATED_AT,
+    expiresAt: FIXTURE_EXPIRES_AT,
     ttl: CHANNEL_TTL_MS.ONE_DAY,
     securityProfile: SECURITY_PROFILE.STANDARD,
     adminMode,
@@ -431,6 +436,12 @@ function createAssertionFixture(credentialId: Base64Url): AssertionJSON {
 
 function createNonceIndexKey(expiresAt: UnixMs, nonce: Base64Url): string {
   return `${NONCE_INDEX_KEY_PREFIX}${String(expiresAt).padStart(16, '0')}:${nonce}`;
+}
+
+function readTerminalTombstone(
+  snapshot: Map<string, unknown>
+): StoredTerminalTombstone | undefined {
+  return snapshot.get(TERMINAL_TOMBSTONE_KEY) as StoredTerminalTombstone | undefined;
 }
 
 async function computeCompoundChallengeValue(
@@ -900,10 +911,10 @@ describe('SecretVault compound/delete flow', () => {
     expect(getAlarm()).toBe(Number(expectedNonceExpiry));
   });
 
-  it('commits delete intent and transitions to deleted', async () => {
+  it('commits delete intent and physically purges channel storage', async () => {
     const now = 1_730_001_200_000;
     const record = createChannelRecord(CHANNEL_STATE.WAITING);
-    const { state, snapshot } = createMockState(record);
+    const { state, snapshot, getAlarm } = createMockState(record);
     const vault = new SecretVault(state, env);
     const begin = await vault.beginCompoundChallenge(record.uuid, now);
     const intent = createDeleteIntent(
@@ -945,8 +956,29 @@ describe('SecretVault compound/delete flow', () => {
       now + 1_000
     );
 
-    const updated = await vault.getRecord();
-    expect(updated.state).toBe(CHANNEL_STATE.DELETED);
+    await expect(vault.getRecord()).rejects.toMatchObject({ code: 'RECORD_NOT_FOUND' });
+    await expect(vault.beginCompoundChallenge(record.uuid, now + 2_000)).rejects.toMatchObject({
+      code: 'RECORD_NOT_FOUND',
+    });
+    await expect(vault.beginLockChallenge(record.uuid, now + 2_000)).rejects.toMatchObject({
+      code: 'RECORD_NOT_FOUND',
+    });
+    const tombstone = readTerminalTombstone(snapshot);
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+    expect(snapshot.get(COMPOUND_CHALLENGE_KEY)).toBeUndefined();
+    expect(snapshot.get(`${NONCE_KEY_PREFIX}${intent.nonce}`)).toBeUndefined();
+    expect(
+      [...snapshot.keys()].find(
+        (key) => key.startsWith(NONCE_INDEX_KEY_PREFIX) && key.endsWith(`:${intent.nonce}`)
+      )
+    ).toBeUndefined();
+    expect([...snapshot.keys()]).toEqual([TERMINAL_TOMBSTONE_KEY]);
+    expect(tombstone).toEqual({
+      uuid: record.uuid,
+      reason: 'deleted',
+      finalizedAt: asUnixMs(now + 1_000),
+    });
+    expect(getAlarm()).toBeNull();
   });
 
   it('rejects compound commit with version mismatch', async () => {
@@ -1049,6 +1081,79 @@ describe('SecretVault compound/delete flow', () => {
     expect(snapshot.get(`${NONCE_KEY_PREFIX}${activeNonce}`)).toBeDefined();
     expect(snapshot.get(createNonceIndexKey(activeAt, activeNonce))).toBeDefined();
     expect(getAlarm()).toBe(Number(activeAt));
+  });
+
+  it('lazy-purges expired record on public read and returns not found', async () => {
+    const now = 1_730_001_455_000;
+    const expiredRecord = {
+      ...createChannelRecord(CHANNEL_STATE.LOCKED),
+      expiresAt: asUnixMs(now - 1),
+    };
+    const { state, snapshot, getAlarm } = createMockState(expiredRecord);
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/get_public_state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const payload = (await response.json()) as { ok: false; code: string };
+    const tombstone = readTerminalTombstone(snapshot);
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({ ok: false, code: 'NOT_FOUND' });
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+    expect([...snapshot.keys()]).toEqual([TERMINAL_TOMBSTONE_KEY]);
+    expect(tombstone?.uuid).toBe(expiredRecord.uuid);
+    expect(tombstone?.reason).toBe('expired');
+    expect(Number(tombstone?.finalizedAt)).toBeGreaterThan(Number(expiredRecord.expiresAt));
+    expect(getAlarm()).toBeNull();
+  });
+
+  it('alarm purges expired record and delete follow-up fetches return 404', async () => {
+    const now = 1_730_001_456_000;
+    const expiredRecord = {
+      ...createChannelRecord(CHANNEL_STATE.LOCKED),
+      expiresAt: asUnixMs(now - 1),
+    };
+    const { state, snapshot, getAlarm } = createMockState(expiredRecord);
+    const vault = new SecretVault(state, env);
+
+    await vault.alarm(now);
+
+    const tombstone = readTerminalTombstone(snapshot);
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+    expect([...snapshot.keys()]).toEqual([TERMINAL_TOMBSTONE_KEY]);
+    expect(tombstone).toEqual({
+      uuid: expiredRecord.uuid,
+      reason: 'expired',
+      finalizedAt: asUnixMs(now),
+    });
+    expect(getAlarm()).toBeNull();
+
+    const publicResponse = await vault.fetch(
+      new Request('https://zerolink.test/get_public_state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const publicPayload = (await publicResponse.json()) as { ok: false; code: string };
+    expect(publicResponse.status).toBe(404);
+    expect(publicPayload).toEqual({ ok: false, code: 'NOT_FOUND' });
+
+    const decryptResponse = await vault.fetch(
+      new Request('https://zerolink.test/get_decrypt_payload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const decryptPayload = (await decryptResponse.json()) as { ok: false; code: string };
+    expect(decryptResponse.status).toBe(404);
+    expect(decryptPayload).toEqual({ ok: false, code: 'NOT_FOUND' });
   });
 
   it('rejects compound commit with timestamp out of allowed skew', async () => {
@@ -1245,6 +1350,62 @@ describe('SecretVault create flow', () => {
     expect(options.user.id).toBeDefined();
     // attestation is always 'none' now; hardware_only no longer enforces direct attestation
     expect(options.attestation).toBe('none');
+  });
+
+  it('rejects beginCreate when a terminal tombstone already occupies the uuid', async () => {
+    const uuid = asUuid('new-channel-uuid-12345');
+    const { state, snapshot } = createMockState();
+    snapshot.set(TERMINAL_TOMBSTONE_KEY, {
+      uuid,
+      reason: 'deleted',
+      finalizedAt: asUnixMs(1_730_000_000_000),
+    } satisfies StoredTerminalTombstone);
+    const vault = new SecretVault(state, env);
+
+    await expect(vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY)).rejects.toMatchObject({
+      code: 'INVALID_TRANSITION',
+    });
+    expect(readTerminalTombstone(snapshot)).toEqual({
+      uuid,
+      reason: 'deleted',
+      finalizedAt: asUnixMs(1_730_000_000_000),
+    });
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+  });
+
+  it('converts expired residual records into tombstones and rejects beginCreate reuse', async () => {
+    const now = 1_730_000_999_000;
+    const uuid = asUuid('new-channel-uuid-12345');
+    const expiredRecord: ChannelRecord = {
+      ...createChannelRecord(CHANNEL_STATE.LOCKED),
+      uuid,
+      expiresAt: asUnixMs(now - 1),
+      receiver: {
+        pubJwk: createReceiverJwk(),
+        pubFpr: asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd'),
+        lockedAt: asUnixMs(now - 10_000),
+      },
+      cipherBundle: createCipherBundle(),
+      deliveredAt: asUnixMs(now - 5_000),
+    };
+    const { state, snapshot, getAlarm } = createMockState(expiredRecord);
+    const vault = new SecretVault(state, env);
+
+    await expect(
+      vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY, now)
+    ).rejects.toMatchObject({
+      code: 'INVALID_TRANSITION',
+    });
+
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+    expect(snapshot.get(CREATION_CHALLENGE_KEY)).toBeUndefined();
+    expect(readTerminalTombstone(snapshot)).toEqual({
+      uuid,
+      reason: 'expired',
+      finalizedAt: asUnixMs(now),
+    });
+    expect([...snapshot.keys()]).toEqual([TERMINAL_TOMBSTONE_KEY]);
+    expect(getAlarm()).toBeNull();
   });
 
   it('commits creation successfully for HARDWARE_ONLY with valid attestation', async () => {

@@ -41,7 +41,6 @@ import {
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { generateCreationOptions, verifyAssertion } from '../crypto/webauthn.ts';
 import {
-  assertNonTerminal,
   assertUuidMatch,
   assertWaitingState,
   jsonError,
@@ -52,7 +51,7 @@ import {
   notFound,
   readJsonBody,
 } from './SecretVaultHttp.ts';
-import { scheduleNextNonceCleanup, sweepExpiredNonces } from './SecretVaultNonces.ts';
+import { getNextNonceCleanupAt, sweepExpiredNonces } from './SecretVaultNonces.ts';
 
 // ---------------------------------------------------------------------------
 // Re-exports for backward compatibility (tests import from this module)
@@ -68,6 +67,7 @@ export type {
   SoftkeyCompoundCommitParams,
   StoredCompoundChallenge,
   StoredLockChallenge,
+  StoredTerminalTombstone,
   WebAuthnCompoundCommitParams,
 } from './SecretVaultTypes.ts';
 export {
@@ -81,6 +81,7 @@ export {
   nonceIndexStorageKey,
   nonceStorageKey,
   StateTransitionError,
+  TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
 
 import { SecretVaultStateMachine } from './SecretVaultStateMachine.ts';
@@ -92,6 +93,7 @@ import type {
   SecretVaultEnv,
   StoredCompoundChallenge,
   StoredLockChallenge,
+  StoredTerminalTombstone,
 } from './SecretVaultTypes.ts';
 import {
   CHANNEL_RECORD_KEY,
@@ -99,10 +101,14 @@ import {
   COMPOUND_CHALLENGE_KEY,
   CREATION_CHALLENGE_KEY,
   LOCK_CHALLENGE_ID_BYTES,
+  LOCK_CHALLENGE_KEY_PREFIX,
   lockChallengeStorageKey,
+  NONCE_INDEX_KEY_PREFIX,
+  NONCE_KEY_PREFIX,
   nonceIndexStorageKey,
   nonceStorageKey,
   StateTransitionError,
+  TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
 
 export class SecretVault {
@@ -157,18 +163,20 @@ export class SecretVault {
 
   async alarm(now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
+      await this.purgeExpiredRecord(now);
       await sweepExpiredNonces(this.ctx.storage, now);
-      await scheduleNextNonceCleanup(this.ctx.storage, now);
+      await this.scheduleNextAlarm(now);
     });
   }
 
   async initialize(record: ChannelRecord): Promise<ChannelRecord> {
     await this.saveRecord(record);
+    await this.scheduleNextAlarm(Number(record.createdAt));
     return record;
   }
 
   async getRecord(): Promise<ChannelRecord> {
-    return this.loadRecord();
+    return this.loadActiveRecord();
   }
 
   async commitLock(params: CommitLockParams): Promise<ChannelRecord> {
@@ -180,11 +188,21 @@ export class SecretVault {
   }
 
   async commitDelete(): Promise<ChannelRecord> {
-    return this.applyTransition((machine) => machine.commitDelete());
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const current = await this.loadActiveRecord();
+      const next = new SecretVaultStateMachine(current).commitDelete();
+      await this.finalizeTerminalState(current.uuid, 'deleted');
+      return next;
+    });
   }
 
   async expire(): Promise<ChannelRecord> {
-    return this.applyTransition((machine) => machine.expire());
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const current = await this.loadActiveRecord();
+      const next = new SecretVaultStateMachine(current).expire();
+      await this.finalizeTerminalState(current.uuid, 'expired');
+      return next;
+    });
   }
 
   async beginCreate(
@@ -193,8 +211,16 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<Record<string, unknown>> {
     return this.ctx.blockConcurrencyWhile(async () => {
+      const tombstone = await this.ctx.storage.get<StoredTerminalTombstone>(TERMINAL_TOMBSTONE_KEY);
+      if (tombstone) {
+        throw new StateTransitionError('INVALID_TRANSITION', 'channel already exists');
+      }
+
       const existing = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
       if (existing) {
+        if (this.shouldPurgeRecord(existing, now)) {
+          await this.finalizeTerminalRecord(existing, now);
+        }
         throw new StateTransitionError('INVALID_TRANSITION', 'channel already exists');
       }
 
@@ -222,6 +248,7 @@ export class SecretVault {
 
       await this.saveRecord(record);
       await this.ctx.storage.put(CREATION_CHALLENGE_KEY, encodeBase64Url(challenge));
+      await this.scheduleNextAlarm(now);
 
       return generateCreationOptions({
         rpId: this.env.RP_ID,
@@ -241,7 +268,7 @@ export class SecretVault {
     lockKeyB64u: Base64Url;
   }): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      const record = await this.loadRecord();
+      const record = await this.loadActiveRecord();
       assertUuidMatch(record.uuid, params.uuid);
       if (record.lockKey !== '') {
         throw new StateTransitionError('INVALID_TRANSITION', 'channel already finalized');
@@ -315,6 +342,7 @@ export class SecretVault {
       };
 
       await this.saveRecord(updatedRecord as ChannelRecord);
+      await this.scheduleNextAlarm();
     });
   }
 
@@ -329,8 +357,7 @@ export class SecretVault {
     adminMode: ChannelRecord['adminMode'];
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const record = await this.loadRecord();
-      assertNonTerminal(record);
+      const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, uuid);
 
       const cryptoApi = getCryptoApi();
@@ -369,8 +396,7 @@ export class SecretVault {
 
   async commitCompound(params: CompoundCommitParams, now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      const record = await this.loadRecord();
-      assertNonTerminal(record);
+      const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, params.uuid);
 
       const { intent } = params;
@@ -480,17 +506,16 @@ export class SecretVault {
         verifiedWebAuthnSignCount = verifyResult.newSignCount;
       }
 
-      const machine = new SecretVaultStateMachine(record);
-      let nextRecord: ChannelRecord;
       if (intent.op === 'delete') {
-        nextRecord = machine.commitDelete();
-      } else {
-        nextRecord = machine.commitDelivery({
-          cipherBundle: intent.cipherBundle,
-          deliveredAt: intent.timestamp,
-        });
+        new SecretVaultStateMachine(record).commitDelete();
+        await this.finalizeTerminalState(record.uuid, 'deleted', asUnixMs(now));
+        return;
       }
 
+      const nextRecord = new SecretVaultStateMachine(record).commitDelivery({
+        cipherBundle: intent.cipherBundle,
+        deliveredAt: intent.timestamp,
+      });
       const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
       const nonceRecord: NonceRecord = {
         nonce: intent.nonce,
@@ -502,7 +527,6 @@ export class SecretVault {
         nonce: intent.nonce,
         expiresAt: nonceExpiresAt,
       });
-      await this.ensureNonceCleanupAlarm(nonceExpiresAt);
 
       await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, {
         ...challenge,
@@ -521,6 +545,7 @@ export class SecretVault {
             };
 
       await this.saveRecord(updatedRecord);
+      await this.scheduleNextAlarm(now);
     });
   }
 
@@ -529,7 +554,7 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<import('@zerolink/shared').LockChallenge> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const record = await this.loadRecord();
+      const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
 
@@ -562,7 +587,7 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      const record = await this.loadRecord();
+      const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
 
@@ -599,6 +624,7 @@ export class SecretVault {
         lockedAt,
       });
       await this.saveRecord(nextRecord);
+      await this.scheduleNextAlarm(now);
     });
   }
 
@@ -606,19 +632,27 @@ export class SecretVault {
     transition: (machine: SecretVaultStateMachine) => ChannelRecord
   ): Promise<ChannelRecord> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const current = await this.loadRecord();
+      const current = await this.loadActiveRecord();
       const next = transition(new SecretVaultStateMachine(current));
       await this.saveRecord(next);
+      await this.scheduleNextAlarm();
       return next;
     });
   }
 
-  private async ensureNonceCleanupAlarm(expiresAt: UnixMs): Promise<void> {
-    const scheduledAt = await this.ctx.storage.getAlarm();
-    const targetAt = Number(expiresAt);
-    if (scheduledAt === null || scheduledAt > targetAt) {
-      await this.ctx.storage.setAlarm(targetAt);
+  private async scheduleNextAlarm(now: number = Date.now()): Promise<void> {
+    const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+    const recordAlarmAt =
+      record && !this.shouldPurgeRecord(record, now) ? Number(record.expiresAt) : null;
+    const nonceAlarmAt = await getNextNonceCleanupAt(this.ctx.storage, now);
+    const nextAlarmAt = this.getEarlierAlarm(recordAlarmAt, nonceAlarmAt);
+
+    if (nextAlarmAt === null) {
+      await this.ctx.storage.deleteAlarm();
+      return;
     }
+
+    await this.ctx.storage.setAlarm(nextAlarmAt);
   }
 
   private async loadRecord(): Promise<ChannelRecord> {
@@ -629,8 +663,94 @@ export class SecretVault {
     return record;
   }
 
+  private async loadActiveRecord(now: number = Date.now()): Promise<ChannelRecord> {
+    const record = await this.loadRecord();
+    if (!this.shouldPurgeRecord(record, now)) {
+      return record;
+    }
+
+    await this.finalizeTerminalRecord(record, now);
+    throw new StateTransitionError('RECORD_NOT_FOUND', 'channel record not initialized');
+  }
+
   private async saveRecord(record: ChannelRecord): Promise<void> {
     await this.ctx.storage.put(CHANNEL_RECORD_KEY, record);
+  }
+
+  private async purgeExpiredRecord(now: number): Promise<void> {
+    const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+    if (!record || !this.shouldPurgeRecord(record, now)) {
+      return;
+    }
+
+    await this.finalizeTerminalRecord(record, now);
+  }
+
+  private async purgeChannelStorage(): Promise<void> {
+    const keys = await this.listPurgeKeys();
+    if (keys.length > 0) {
+      await this.ctx.storage.delete(keys);
+    }
+    await this.ctx.storage.deleteAlarm();
+  }
+
+  private async finalizeTerminalRecord(record: ChannelRecord, now: number): Promise<void> {
+    const reason =
+      record.state === CHANNEL_STATE.DELETED
+        ? 'deleted'
+        : record.state === CHANNEL_STATE.EXPIRED || Number(record.expiresAt) <= now
+          ? 'expired'
+          : 'deleted';
+    await this.finalizeTerminalState(record.uuid, reason, asUnixMs(now));
+  }
+
+  private async finalizeTerminalState(
+    uuid: string,
+    reason: StoredTerminalTombstone['reason'],
+    finalizedAt: UnixMs = asUnixMs(Date.now())
+  ): Promise<void> {
+    await this.purgeChannelStorage();
+    await this.ctx.storage.put(TERMINAL_TOMBSTONE_KEY, {
+      uuid,
+      reason,
+      finalizedAt,
+    } satisfies StoredTerminalTombstone);
+  }
+
+  private async listPurgeKeys(): Promise<string[]> {
+    const [lockChallengeKeys, nonceKeys, nonceIndexKeys] = await Promise.all([
+      this.listKeysWithPrefix(LOCK_CHALLENGE_KEY_PREFIX),
+      this.listKeysWithPrefix(NONCE_KEY_PREFIX),
+      this.listKeysWithPrefix(NONCE_INDEX_KEY_PREFIX),
+    ]);
+
+    return [
+      CHANNEL_RECORD_KEY,
+      CREATION_CHALLENGE_KEY,
+      COMPOUND_CHALLENGE_KEY,
+      ...lockChallengeKeys,
+      ...nonceKeys,
+      ...nonceIndexKeys,
+    ];
+  }
+
+  private async listKeysWithPrefix(prefix: string): Promise<string[]> {
+    const entries = await this.ctx.storage.list({ prefix });
+    return [...entries.keys()];
+  }
+
+  private shouldPurgeRecord(record: ChannelRecord, now: number): boolean {
+    return (
+      record.state === CHANNEL_STATE.DELETED ||
+      record.state === CHANNEL_STATE.EXPIRED ||
+      Number(record.expiresAt) <= now
+    );
+  }
+
+  private getEarlierAlarm(left: number | null, right: number | null): number | null {
+    if (left === null) return right;
+    if (right === null) return left;
+    return Math.min(left, right);
   }
 
   private async loadLockChallenge(id: Base64Url): Promise<StoredLockChallenge | undefined> {
@@ -800,7 +920,7 @@ export class SecretVault {
 
   private async handleGetPublicState(): Promise<Response> {
     try {
-      const record = await this.loadRecord();
+      const record = await this.loadActiveRecord();
       const body: Record<string, unknown> = {
         ok: true,
         state: record.state,
@@ -818,7 +938,7 @@ export class SecretVault {
 
   private async handleGetDecryptPayload(): Promise<Response> {
     try {
-      const record = await this.loadRecord();
+      const record = await this.loadActiveRecord();
       if (
         record.state !== CHANNEL_STATE.DELIVERED ||
         !record.cipherBundle ||

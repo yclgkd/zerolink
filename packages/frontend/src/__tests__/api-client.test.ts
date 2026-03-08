@@ -198,6 +198,40 @@ describe('api client', () => {
     expect(PublicStatusResponseSchema.safeParse(result.data).success).toBe(true);
   });
 
+  it('parses legacy deleted publicStatus payloads for compatibility', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          state: 'deleted',
+          adminMode: 'webauthn',
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+    );
+    const client = createApiClient({
+      basePath: '/api',
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    const result = await client.publicStatus(VALID_UUID);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        ok: true,
+        state: 'deleted',
+        adminMode: 'webauthn',
+      },
+      status: 200,
+    });
+  });
+
   it('returns success for decryptFetch', async () => {
     const client = createClient();
     const result = await client.decryptFetch(VALID_UUID);

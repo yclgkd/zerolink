@@ -16,7 +16,7 @@ import {
   LockedStep,
   LockStep,
   OnboardingStep,
-  TerminalStep,
+  UnavailableStep,
 } from '../components/share/share-steps';
 import {
   usePublicShareState,
@@ -61,6 +61,7 @@ export function SharePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
   const location = useLocation();
   const publicState = usePublicShareState(uuid);
+  const isUnavailable = !publicState.isPublicStatusLoading && publicState.isUnavailable;
   const lockLogic = useSharePageLockLogic(uuid, location.hash);
   const isDeliveredState =
     !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
@@ -76,7 +77,10 @@ export function SharePage(): ReactElement {
 
         {publicState.isPublicStatusLoading ? <LoadingStep /> : null}
 
+        {isUnavailable ? <UnavailableStep /> : null}
+
         {!publicState.isPublicStatusLoading &&
+        !publicState.isUnavailable &&
         publicState.channelState === CHANNEL_STATE.WAITING ? (
           <>
             {lockLogic.store.step === 'onboarding' ? (
@@ -105,11 +109,13 @@ export function SharePage(): ReactElement {
           </>
         ) : null}
 
-        {!publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.LOCKED ? (
+        {!publicState.isPublicStatusLoading &&
+        !publicState.isUnavailable &&
+        publicState.channelState === CHANNEL_STATE.LOCKED ? (
           <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
         ) : null}
 
-        {isDeliveredState ? (
+        {!publicState.isUnavailable && isDeliveredState ? (
           <DeliveredStep
             canBurn={decryptLogic.canBurn}
             canDecrypt={decryptLogic.canDecrypt}
@@ -123,16 +129,6 @@ export function SharePage(): ReactElement {
             passphrase={decryptLogic.passphrase}
             plaintext={decryptLogic.store.plaintext}
           />
-        ) : null}
-
-        {!publicState.isPublicStatusLoading &&
-        publicState.channelState === CHANNEL_STATE.DELETED ? (
-          <TerminalStep state={CHANNEL_STATE.DELETED} />
-        ) : null}
-
-        {!publicState.isPublicStatusLoading &&
-        publicState.channelState === CHANNEL_STATE.EXPIRED ? (
-          <TerminalStep state={CHANNEL_STATE.EXPIRED} />
         ) : null}
       </PageCardContent>
     </PageCard>

@@ -200,7 +200,7 @@ describe('backend worker routing + lock/compound forwarding', () => {
   it('forwards GET /api/public/:uuid to SecretVault DO get_public_state', async () => {
     const publicStateResponse = {
       ok: true,
-      channelState: 'waiting',
+      state: 'waiting',
       adminMode: 'webauthn',
     };
     const { env, calls } = createMockEnv(async () => {
@@ -216,6 +216,24 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.pathname).toBe('/get_public_state');
     expect(calls[0]?.method).toBe('POST');
+  });
+
+  it('propagates not-found from public and decrypt read routes', async () => {
+    const { env } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND' }), {
+        status: 404,
+      });
+    });
+
+    const publicResponse = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+    const publicPayload = (await publicResponse.json()) as ApiErrorResponse;
+    expect(publicResponse.status).toBe(404);
+    expect(publicPayload).toEqual({ ok: false, code: 'NOT_FOUND' });
+
+    const decryptResponse = await dispatch(env, `/api/decrypt_fetch/${VALID_UUID}`, 'GET');
+    const decryptPayload = (await decryptResponse.json()) as ApiErrorResponse;
+    expect(decryptResponse.status).toBe(404);
+    expect(decryptPayload).toEqual({ ok: false, code: 'NOT_FOUND' });
   });
 
   it('forwards lock_begin request to SecretVault DO and returns challenge response', async () => {
