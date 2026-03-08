@@ -99,6 +99,17 @@ describe('collectFilePaths', () => {
     expect(paths).toHaveLength(0);
   });
 
+  it('excludes non-runtime Pages control files from the signed release manifest', async () => {
+    await fs.writeFile(path.join(tmpDir, '_redirects'), '/ /index.html 200');
+    await fs.writeFile(path.join(tmpDir, '_headers'), '/index.html\n  Cache-Control: no-store');
+    await fs.writeFile(path.join(tmpDir, 'index.html'), '<html></html>');
+
+    const paths = await collectFilePaths(tmpDir);
+    const relative = paths.map((p) => toPosixRelativePath(p, tmpDir));
+
+    expect(relative).toEqual(['index.html']);
+  });
+
   it('throws when directory does not exist', async () => {
     await expect(collectFilePaths(path.join(tmpDir, 'nonexistent'))).rejects.toThrow();
   });

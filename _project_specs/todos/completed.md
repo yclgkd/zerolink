@@ -47,3 +47,13 @@ destroyed/expired UUIDs, restoring public-status schema compatibility for legacy
 `expired` payloads, normalizing those legacy states to the same unavailable UX as `404 NOT_FOUND`,
 and tightening the Playwright stateful API mock so deleted channels no longer get recreated by
 lock/manage begin routes.
+
+## DONE-006: Verified Release bootstrap gate
+
+**Completed**: 2026-03-08
+
+Replaced the post-load `Build Manifest` card with a bootstrap-first `Verified Release` flow.
+The frontend now embeds the manifest signing public key, verifies the signed manifest plus the
+same-origin runtime asset hashes before loading React, renders a fail-closed blocking screen when
+verification is not trusted, removes third-party hosted fonts from the verified runtime path, and
+updates the trust card to expose verified build metadata only after a successful boot snapshot.
