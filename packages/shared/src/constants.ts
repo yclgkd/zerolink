@@ -34,9 +34,9 @@ export type ChannelState = (typeof CHANNEL_STATE)[keyof typeof CHANNEL_STATE];
  *   secure → passkey required; UV=required; RK=required; attestation=none; 8KB padding
  *
  * Legacy values (read-side only, for existing channels in storage):
- *   standard      → treated as 'secure' on read
- *   strict        → treated as 'secure' on read
- *   hardware_only → treated as 'secure' on read (attestation check is skipped)
+ *   standard      → UV=preferred; RK=preferred (lower assurance than 'secure')
+ *   strict        → UV=required; RK=required (equivalent to 'secure')
+ *   hardware_only → UV=required; RK=required; attestation enforcement removed
  */
 export const SECURITY_PROFILE = {
   QUICK: 'quick',

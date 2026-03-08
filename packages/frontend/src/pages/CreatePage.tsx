@@ -313,13 +313,13 @@ function useCreatePageLogic() {
     }
 
     store.completeCreateBegin({ ok: true, creationOptions: {} });
-    store.setCreatedProfile(store.selectedProfile);
+    store.setCreatedProfile(latestState.selectedProfile);
     setCreatedLinks({
       shareUrlWithFragment: result.data.shareUrlWithFragment,
       manageUrl: result.data.manageUrl,
-      isPasswordMode: store.selectedProfile === SECURITY_PROFILE.QUICK,
+      isPasswordMode: latestState.selectedProfile === SECURITY_PROFILE.QUICK,
     });
-    if (isQuickMode) setQuickPassword('');
+    if (latestState.selectedProfile === SECURITY_PROFILE.QUICK) setQuickPassword('');
   }
 
   function handleCreate(): void {
