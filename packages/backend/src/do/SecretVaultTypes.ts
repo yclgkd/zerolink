@@ -75,6 +75,12 @@ export interface StoredCompoundChallenge {
   consumedAt?: UnixMs;
 }
 
+export interface StoredTerminalTombstone {
+  uuid: string;
+  reason: 'deleted' | 'expired';
+  finalizedAt: UnixMs;
+}
+
 export interface NonceIndexRecord {
   nonce: Base64Url;
   expiresAt: UnixMs;
@@ -137,6 +143,7 @@ export const CHANNEL_RECORD_KEY = 'channel_record' as const;
 export const CREATION_CHALLENGE_KEY = 'creation_challenge' as const;
 export const LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
 export const COMPOUND_CHALLENGE_KEY = 'compound_challenge_active' as const;
+export const TERMINAL_TOMBSTONE_KEY = 'terminal_tombstone' as const;
 export const NONCE_KEY_PREFIX = 'nonce:' as const;
 export const NONCE_INDEX_KEY_PREFIX = 'nonce_index:' as const;
 

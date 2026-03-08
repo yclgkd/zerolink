@@ -137,3 +137,21 @@ This is append-only. Never delete entries.
 **Choice**: Treat `password` and `softkey` identically in the sender manage flow, keep internal symbol names unchanged for now, and standardize external docs on `adminMode`.
 **Reasoning**: This fixes the live Quick Share regression with the smallest safe diff, preserves backward compatibility for legacy channels, and removes documentation drift without widening the refactor.
 **Trade-offs**: Internal names such as `softkeyPassphrase` remain slightly legacy-biased, but they no longer leak into user-facing copy or protocol documentation.
+
+## [2026-03-08] Deleted and expired channels must be physically purged
+
+**Decision**: Sender destroy and TTL expiry remove the channel Durable Object state from storage, and public/decrypt reads must treat deleted or expired channels as missing resources (`404 NOT_FOUND`) instead of returning persisted terminal states.
+**Context**: The backend previously persisted `deleted` and `expired` `ChannelRecord` states. That leaked internal lifecycle states through public reads, weakened the "destroy" semantics, and allowed stale state to remain in Durable Object storage after sender destroy or TTL expiry.
+**Options Considered**: Keep logical terminal states and adjust frontend wording only; purge only the main record and leave auxiliary keys behind; physically purge the full channel state and collapse follow-up access to `NOT_FOUND`.
+**Choice**: Physically purge the channel record plus related challenges/nonces, enforce lazy expiry purge on read, and reserve `deleted` as a frontend local-session confirmation state only.
+**Reasoning**: This matches the intended destruction semantics, avoids exposing terminal-state internals over public APIs, ensures missed alarms still converge to 404 on the next read, and keeps sender UX intact without pretending the server still stores a deleted record.
+**Trade-offs**: Public consumers can no longer distinguish "destroyed" from "expired" after the fact, and the frontend must manage an explicit unavailable state plus a local-only deleted confirmation branch.
+
+## [2026-03-08] Physical delete keeps a private tombstone and wire-compat normalization
+
+**Decision**: Physical delete and expiry must leave a private Durable Object tombstone that reserves the UUID, while frontend public-status consumers continue accepting legacy `deleted` / `expired` wire states and normalize them into the same unavailable UX as `404 NOT_FOUND`.
+**Context**: The first physical-delete pass removed every storage key, which let known UUIDs be recreated, and it narrowed the public-status schema enough to mis-handle mixed-version backend responses during rollout or local testing.
+**Options Considered**: Delete every key and allow UUID reuse; expose tombstones publicly as new API states; keep a private tombstone for UUID reservation and treat all terminal public inputs as unavailable.
+**Choice**: Preserve only a minimal private tombstone (`uuid`, terminal reason, finalizedAt), keep public/decrypt reads on `404 NOT_FOUND`, and restore schema compatibility for legacy terminal public-status payloads without reviving old terminal UI copy.
+**Reasoning**: This preserves terminal-state integrity, avoids leaking deleted-channel internals back into the public API, keeps deploy-time compatibility, and makes E2E mocks match real-worker behavior after destroy.
+**Trade-offs**: Durable Objects now retain one tiny metadata record per terminal UUID, and frontend logic must distinguish local deleted confirmation from server-reported terminal compatibility payloads.

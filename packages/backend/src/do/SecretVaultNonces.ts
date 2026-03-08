@@ -43,17 +43,16 @@ export async function sweepExpiredNonces(
 }
 
 /**
- * Schedules the next alarm for nonce cleanup based on the earliest pending expiry.
+ * Resolves the next timestamp at which nonce cleanup should run.
  */
-export async function scheduleNextNonceCleanup(
+export async function getNextNonceCleanupAt(
   storage: DurableObjectStorage,
   now: number
-): Promise<void> {
+): Promise<number | null> {
   while (true) {
     const firstEntry = await readEarliestNonceIndexEntry(storage);
     if (!firstEntry) {
-      await storage.deleteAlarm();
-      return;
+      return null;
     }
 
     const [indexKey, indexRecord] = firstEntry;
@@ -63,10 +62,7 @@ export async function scheduleNextNonceCleanup(
       continue;
     }
 
-    const nextAlarmAt =
-      resolved.expiresAt <= now ? now + NONCE_SWEEP_RETRY_DELAY_MS : resolved.expiresAt;
-    await storage.setAlarm(nextAlarmAt);
-    return;
+    return resolved.expiresAt <= now ? now + NONCE_SWEEP_RETRY_DELAY_MS : resolved.expiresAt;
   }
 }
 

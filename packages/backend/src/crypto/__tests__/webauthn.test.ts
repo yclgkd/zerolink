@@ -5,7 +5,7 @@ import {
   createMockAssertion,
   createTamperedAssertion,
 } from '../../__tests__/helpers/webauthn-fixtures.ts';
-import { encodeBase64Url } from '../bytes.ts';
+import { decodeBase64Url, encodeBase64Url } from '../bytes.ts';
 import { derToP1363, verifyAssertion, type WebAuthnVerifyParams } from '../webauthn.ts';
 
 const RP_ID = 'zerolink.test';
@@ -208,6 +208,37 @@ describe('verifyAssertion', () => {
       ok: false,
       error: 'user verification flag not set',
     });
+  });
+
+  it('accepts a valid 64-byte P1363 signature even when it starts with 0x30', async () => {
+    let params: WebAuthnVerifyParams | null = null;
+
+    for (let attempt = 0; attempt < 2048; attempt += 1) {
+      const candidate = await buildVerifyParams();
+      const signatureBytes = decodeBase64Url(candidate.params.assertion.response.signature);
+      const p1363Signature =
+        signatureBytes.byteLength === 64 ? signatureBytes : derToP1363(signatureBytes);
+
+      if (p1363Signature[0] !== 0x30) {
+        continue;
+      }
+
+      params = {
+        ...candidate.params,
+        assertion: {
+          ...candidate.params.assertion,
+          response: {
+            ...candidate.params.assertion.response,
+            signature: encodeBase64Url(p1363Signature),
+          },
+        },
+      };
+      break;
+    }
+
+    expect(params).not.toBeNull();
+    const result = await verifyAssertion(params as WebAuthnVerifyParams);
+    expect(result.ok).toBe(true);
   });
 });
 

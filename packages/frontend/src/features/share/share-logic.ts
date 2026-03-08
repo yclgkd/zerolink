@@ -1,6 +1,7 @@
 import {
   CHANNEL_STATE,
   type ChannelState,
+  ErrorResponseSchema,
   PublicStatusResponseSchema,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -13,6 +14,8 @@ import { useLockStore } from '../../stores/lock-store';
 
 export function mapLockError(code: string): string {
   switch (code) {
+    case 'NOT_FOUND':
+      return 'This channel is no longer available.';
     case 'INVALID_LOCK_SECRET':
       return 'This share link is missing or has an invalid lock secret (#k=...).';
     case 'PASSPHRASE_REQUIRED':
@@ -35,6 +38,8 @@ export function mapLockError(code: string): string {
 
 export function mapDecryptError(code: string): string {
   switch (code) {
+    case 'NOT_FOUND':
+      return 'This channel is no longer available.';
     case 'PASSPHRASE_REQUIRED':
       return 'Passphrase is required to decrypt.';
     case 'CHANNEL_NOT_DELIVERED':
@@ -64,19 +69,26 @@ export function isDecryptPassphraseErrorCode(code: string): boolean {
   return code === 'PASSPHRASE_REQUIRED' || code === 'CRYPTO_ERROR';
 }
 
+function isTerminalPublicState(state: ChannelState): boolean {
+  return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
+}
+
 export function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
+  const [isUnavailable, setIsUnavailable] = useState(false);
   const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
 
   useEffect(() => {
     if (!uuid) {
       setChannelState(CHANNEL_STATE.WAITING);
+      setIsUnavailable(false);
       setIsPublicStatusLoading(false);
       return;
     }
 
     const currentUuid = uuid;
     setChannelState(CHANNEL_STATE.WAITING);
+    setIsUnavailable(false);
     setIsPublicStatusLoading(true);
 
     let cancelled = false;
@@ -84,20 +96,41 @@ export function usePublicShareState(uuid?: string) {
       try {
         const response = await fetch(`/api/public/${currentUuid}`);
         const payload = (await response.json()) as unknown;
+        const parsedError = ErrorResponseSchema.safeParse(payload);
         const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
         if (cancelled) return;
 
+        if (
+          response.status === 404 ||
+          (parsedError.success && parsedError.data.code === 'NOT_FOUND')
+        ) {
+          setChannelState(CHANNEL_STATE.WAITING);
+          setIsUnavailable(true);
+          setIsPublicStatusLoading(false);
+          return;
+        }
+
         if (!parsedPayload.success) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setIsUnavailable(false);
+          setIsPublicStatusLoading(false);
+          return;
+        }
+
+        if (isTerminalPublicState(parsedPayload.data.state)) {
+          setChannelState(CHANNEL_STATE.WAITING);
+          setIsUnavailable(true);
           setIsPublicStatusLoading(false);
           return;
         }
 
         setChannelState(parsedPayload.data.state);
+        setIsUnavailable(false);
         setIsPublicStatusLoading(false);
       } catch {
         if (!cancelled) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setIsUnavailable(false);
           setIsPublicStatusLoading(false);
         }
       }
@@ -111,6 +144,7 @@ export function usePublicShareState(uuid?: string) {
 
   return {
     channelState,
+    isUnavailable,
     isPublicStatusLoading,
   };
 }
