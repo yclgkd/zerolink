@@ -338,7 +338,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   function handleBurn(): void {
     if (!enabled || isDecryptSubmitting || !store.plaintext) return;
 
-    store.markBurned();
+    store.markLocalPlaintextBurned();
     setPassphrase('');
     clearDecryptError();
   }

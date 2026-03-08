@@ -203,7 +203,7 @@ function StatusContent({
       <section className="space-y-2" data-testid="manage-state-deleted">
         <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
         <p className="text-xs text-muted-foreground">
-          This channel has been destroyed and cannot be recovered.
+          You deleted this channel. It can no longer deliver or decrypt content.
         </p>
       </section>
     );
@@ -213,7 +213,7 @@ function StatusContent({
     <section className="space-y-2" data-testid="manage-state-expired">
       <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
       <p className="text-xs text-muted-foreground">
-        The channel exceeded its lifetime and is no longer valid for delivery.
+        This channel expired. It can no longer be used for delivery or decryption.
       </p>
     </section>
   );
@@ -269,7 +269,7 @@ function DestroyConfirmPanel({
       className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm"
       data-testid="manage-destroy-confirm"
     >
-      <p className="text-foreground">Destroy this channel permanently?</p>
+      <p className="text-foreground">Delete this channel permanently?</p>
       <div className="flex flex-wrap gap-2">
         <Button
           data-testid="manage-destroy-cancel"
@@ -290,11 +290,11 @@ function DestroyConfirmPanel({
           variant="danger"
         >
           {pending ? (
-            'Destroying...'
+            'Deleting...'
           ) : (
             <>
               <Trash2 aria-hidden="true" className="size-3.5" />
-              Confirm Destroy
+              Confirm Delete
             </>
           )}
         </Button>
@@ -372,7 +372,7 @@ function ActionPanel({
           variant="danger"
         >
           <Trash2 aria-hidden="true" className="size-4" />
-          Destroy
+          Delete Channel
         </Button>
       </div>
 
@@ -573,7 +573,7 @@ function useManageDestructionLogic(
     if (isActionPending) return;
     if (!store.uuid) {
       setIsSecretInputInvalid(false);
-      return setActionError('Channel UUID is missing and cannot be destroyed.');
+      return setActionError('Channel UUID is missing and cannot be deleted.');
     }
 
     setIsSecretInputInvalid(false);

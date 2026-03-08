@@ -111,12 +111,12 @@ export function SharePage(): ReactElement {
 
         {isDeliveredState ? (
           <DeliveredStep
-            burned={decryptLogic.store.burned}
             canBurn={decryptLogic.canBurn}
             canDecrypt={decryptLogic.canDecrypt}
             decryptError={decryptLogic.decryptError}
             decryptPending={decryptLogic.decryptPending}
             isDecryptPassphraseInvalid={decryptLogic.isDecryptPassphraseInvalid}
+            localPlaintextBurned={decryptLogic.store.localPlaintextBurned}
             onBurn={decryptLogic.handleBurn}
             onDecrypt={() => void decryptLogic.handleDecrypt()}
             onPassphraseChange={decryptLogic.handlePassphraseChange}

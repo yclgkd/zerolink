@@ -205,7 +205,7 @@ export function DeliveredStep({
   decryptError,
   isDecryptPassphraseInvalid,
   plaintext,
-  burned,
+  localPlaintextBurned,
   canDecrypt,
   canBurn,
   onPassphraseChange,
@@ -217,7 +217,7 @@ export function DeliveredStep({
   decryptError: string | null;
   isDecryptPassphraseInvalid: boolean;
   plaintext: string | null;
-  burned: boolean;
+  localPlaintextBurned: boolean;
   canDecrypt: boolean;
   canBurn: boolean;
   onPassphraseChange: (value: string) => void;
@@ -227,9 +227,9 @@ export function DeliveredStep({
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Content Delivered</h3>
+        <h3 className="text-base font-semibold text-foreground">Channel Delivered</h3>
         <p className="text-xs text-muted-foreground">
-          Enter your passphrase to decrypt content locally on this device.
+          The channel is delivered. Decrypt happens locally on this device.
         </p>
       </div>
 
@@ -286,14 +286,15 @@ export function DeliveredStep({
         </div>
       ) : null}
 
-      {burned ? (
+      {localPlaintextBurned ? (
         <StateNotice
           data-testid="share-decrypt-burned"
-          title="Local plaintext has been burned."
+          title="Local plaintext removed from this device."
           tone="warning"
         >
           <p className="mt-1 text-xs text-neon-orange">
-            Re-enter your passphrase to decrypt again if needed.
+            This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt
+            again.
           </p>
         </StateNotice>
       ) : null}
@@ -330,9 +331,9 @@ export function TerminalStep({
     case CHANNEL_STATE.DELETED:
       return (
         <section className="space-y-2" data-testid="share-step-deleted">
-          <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
+          <h3 className="text-base font-semibold text-foreground">Channel Deleted by Sender</h3>
           <p className="text-xs text-muted-foreground">
-            This channel has been destroyed and cannot be recovered.
+            The sender deleted this channel. This link can no longer be used to decrypt.
           </p>
         </section>
       );
@@ -341,7 +342,7 @@ export function TerminalStep({
         <section className="space-y-2" data-testid="share-step-expired">
           <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
           <p className="text-xs text-muted-foreground">
-            The channel exceeded its lifetime and is no longer valid for delivery.
+            This channel expired. Its lifetime ended, so this link can no longer be used.
           </p>
         </section>
       );

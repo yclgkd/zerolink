@@ -426,6 +426,10 @@ describe('SharePage', () => {
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
     expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
+    expect(screen.getByText('Channel Delivered')).toBeTruthy();
+    expect(
+      screen.getByText('The channel is delivered. Decrypt happens locally on this device.')
+    ).toBeTruthy();
     expect(fetchSpy).toHaveBeenCalledWith(`/api/public/${VALID_UUID}`);
     expect(fetchSpy).not.toHaveBeenCalledWith(`/api/decrypt_fetch/${VALID_UUID}`);
   });
@@ -1057,7 +1061,7 @@ describe('SharePage', () => {
     expect(screen.getByText('Ciphertext integrity verification failed.')).toBeTruthy();
   });
 
-  it('burns local plaintext, shows burned state, and clears passphrase', async () => {
+  it('burns local plaintext, shows local-only notice, and clears passphrase', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'delivered');
 
@@ -1078,6 +1082,13 @@ describe('SharePage', () => {
     expect(burned).toBeTruthy();
     expect(burned.getAttribute('role')).toBe('status');
     expect(burned.getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByText('Local plaintext removed from this device.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt again.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByText('Channel Delivered')).toBeTruthy();
     expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
   });
 
@@ -1237,9 +1248,11 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-deleted')).toBeTruthy();
-    expect(screen.getByText('Channel Deleted')).toBeTruthy();
+    expect(screen.getByText('Channel Deleted by Sender')).toBeTruthy();
     expect(
-      screen.getByText('This channel has been destroyed and cannot be recovered.')
+      screen.getByText(
+        'The sender deleted this channel. This link can no longer be used to decrypt.'
+      )
     ).toBeTruthy();
   });
 
@@ -1252,7 +1265,9 @@ describe('SharePage', () => {
     expect(await screen.findByTestId('share-step-expired')).toBeTruthy();
     expect(screen.getByText('Channel Expired')).toBeTruthy();
     expect(
-      screen.getByText('The channel exceeded its lifetime and is no longer valid for delivery.')
+      screen.getByText(
+        'This channel expired. Its lifetime ended, so this link can no longer be used.'
+      )
     ).toBeTruthy();
   });
 

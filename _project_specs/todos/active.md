@@ -9,16 +9,16 @@ Current work in progress and remaining tasks.
 **Status**: pending
 **Priority**: P0 (Security-critical)
 
-**Description**: The current `SecretVault.commitDelete()` only performs a logical delete by updating the state. To ensure true "burn-after-read" or sender-initiated destruction, we need to physically remove the `ChannelRecord` from storage.
+**Description**: Confirm that sender delete and TTL expiry remain explicit channel terminal paths in backend storage semantics, without treating receiver-local plaintext removal as a channel-state transition.
 
 **Files to modify**:
-- `packages/backend/src/do/SecretVault.ts` — Update `commitDelete` and `expire` logic.
-- `packages/backend/src/do/SecretVaultStateMachine.ts` — Potentially adjust return types.
+- `packages/backend/src/do/SecretVault.ts` — Keep delete and expiry handling aligned with terminal channel semantics.
+- `packages/backend/src/do/SecretVaultStateMachine.ts` — Keep terminal transition rules explicit for delete and expiry.
 
 **Validation criteria**:
-- [ ] `ctx.storage.get(CHANNEL_RECORD_KEY)` returns `undefined` after deletion.
-- [ ] Subsequent API calls return 404/Not Found instead of "Locked for terminal state".
-- [ ] Unit tests in `SecretVault.test.ts` verify the physical removal.
+- [ ] Delete and expiry remain the only backend-managed terminal channel outcomes.
+- [ ] Receiver-local plaintext removal is documented and tested as frontend-only behavior.
+- [ ] Backend tests continue to distinguish deleted vs expired terminal handling.
 
 ---
 

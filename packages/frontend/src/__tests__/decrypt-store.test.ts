@@ -50,7 +50,7 @@ describe('useDecryptStore', () => {
     expect(state.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(state.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(state.plaintext).toBeNull();
-    expect(state.burned).toBe(false);
+    expect(state.localPlaintextBurned).toBe(false);
   });
 
   it('tracks public status request and syncs channel state', () => {
@@ -108,14 +108,14 @@ describe('useDecryptStore', () => {
     });
   });
 
-  it('stores plaintext and marks burned state', () => {
+  it('stores plaintext and marks local plaintext burned state', () => {
     const state = useDecryptStore.getState();
     state.setPlaintext('secret payload');
     expect(useDecryptStore.getState().plaintext).toBe('secret payload');
-    expect(useDecryptStore.getState().burned).toBe(false);
+    expect(useDecryptStore.getState().localPlaintextBurned).toBe(false);
 
-    state.markBurned();
-    expect(useDecryptStore.getState().burned).toBe(true);
+    state.markLocalPlaintextBurned();
+    expect(useDecryptStore.getState().localPlaintextBurned).toBe(true);
     expect(useDecryptStore.getState().plaintext).toBeNull();
   });
 
@@ -126,7 +126,7 @@ describe('useDecryptStore', () => {
     state.completePublicStatus(buildPublicStatusResponse());
     state.completeDecryptFetch(buildDecryptFetchResponse());
     state.setPlaintext('secret payload');
-    state.markBurned();
+    state.markLocalPlaintextBurned();
 
     state.setDecryptUuid(NEXT_UUID);
 
@@ -136,7 +136,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.plaintext).toBeNull();
-    expect(nextState.burned).toBe(false);
+    expect(nextState.localPlaintextBurned).toBe(false);
   });
 
   it('does not reset when uuid is unchanged', () => {
@@ -155,7 +155,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus.status).toBe('success');
     expect(nextState.decryptFetch.status).toBe('success');
     expect(nextState.plaintext).toBe('secret payload');
-    expect(nextState.burned).toBe(false);
+    expect(nextState.localPlaintextBurned).toBe(false);
   });
 
   it('resets to initial defaults', () => {
@@ -164,7 +164,7 @@ describe('useDecryptStore', () => {
     state.completePublicStatus(buildPublicStatusResponse());
     state.completeDecryptFetch(buildDecryptFetchResponse());
     state.setPlaintext('secret payload');
-    state.markBurned();
+    state.markLocalPlaintextBurned();
 
     state.resetDecryptStore();
 
@@ -174,6 +174,6 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.plaintext).toBeNull();
-    expect(nextState.burned).toBe(false);
+    expect(nextState.localPlaintextBurned).toBe(false);
   });
 });

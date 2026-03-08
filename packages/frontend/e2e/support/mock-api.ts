@@ -23,6 +23,7 @@ import type { z } from 'zod';
 interface ChannelRuntimeState {
   state: ChannelState;
   version: number;
+  adminMode?: z.output<typeof CreateFinishRequestSchema>['adminMode'];
   lockChallenge?: {
     id: string;
     challenge: string;
@@ -151,7 +152,8 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      getOrCreateChannel(channels, parsedUuid.data);
+      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      channel.adminMode = parsedBody.data.adminMode;
       const payload = {
         ok: true,
         shareUrl: ROUTE_PATTERN.SHARE.replace(':uuid', parsedUuid.data),
@@ -244,6 +246,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
       const payload = {
         ok: true,
         challenge,
+        adminMode: channel.adminMode ?? 'webauthn',
         ...(channel.receiverPubFpr ? { receiverPubFpr: channel.receiverPubFpr } : {}),
         ...(channel.receiverPubJwk ? { receiverPubJwk: channel.receiverPubJwk } : {}),
         currentVersion: channel.version,
@@ -327,6 +330,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
       const payload = {
         ok: true,
         state: channel.state,
+        adminMode: channel.adminMode ?? 'webauthn',
       };
       const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
       if (!parsedPayload.success) {
