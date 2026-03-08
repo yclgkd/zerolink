@@ -129,13 +129,14 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 **目标**：攻击者无法长期窃取管理权
 
 **保证**：
-- WebAuthn 私钥驻留系统密钥库/硬件
+- Secure Share：WebAuthn 私钥驻留系统密钥库/硬件
 - 即使恶意扩展/木马，也只能滥用一次操作（需用户确认）
-- 无法静默导出私钥进行离线攻击
+- 无法静默导出 Secure Share 管理私钥进行离线攻击
 
-**降级**：
-- 兼容模式（softkey）：ECDSA 私钥存 IndexedDB
-- 仅 Standard 档位允许，且 UI 显著标注风险
+**Quick Share 边界**：
+- Quick Share 使用本地 ECDSA 私钥，Argon2id 包裹后存 IndexedDB
+- 它是正式产品模式，不是降级兜底
+- 安全性依赖设备安全性与用户密码强度，不提供 WebAuthn 的不可导出保证
 
 ---
 
@@ -194,39 +195,31 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 - 不引入 padding oracle（AES-GCM 自带认证）
 
 #### 策略
-- Standard：4KB 块（默认）
-- Strict/Hardware-Only：可选 8KB/16KB 块（更隐私）
+- Quick Share：4KB 块（默认）
+- Secure Share：8KB 块（更高隐私）
+- Legacy strict/hardware_only：按 Secure Share 级别处理
 - 超大文件（>1MB）：可关闭或使用更大块
 
 ---
 
-## 安全档位（Security Profiles）
+## 产品模式（Current Profiles）
 
-### Standard（默认）
-- **适用**：大多数用户
-- **WebAuthn**：
-  - userVerification = "preferred"（允许但不强制）
-  - 允许平台 passkey（可能同步到云）
-- **降级**：允许兼容模式（softkey）
-- **风险**：passkey 云同步可能引入供应商信任
+### Quick Share（密码）
+- **适用**：无 WebAuthn 支持环境、跨设备/跨浏览器场景、希望使用密码管理器的用户
+- **管理权**：本地 ECDSA P-256 管理密钥，Argon2id 包裹后存 IndexedDB
+- **Padding**：4KB
+- **风险边界**：不具备 WebAuthn 的不可导出属性，密码强度与终端安全更关键
 
-### Strict（严格）
-- **适用**：安全敏感场景
-- **WebAuthn**：
-  - userVerification = "required"（强制生物识别/PIN）
-  - 检测 backupEligibility，若可备份则强提示
-  - 每次操作强制确认（不允许会话 token）
-- **降级**：不允许兼容模式
-- **UX**：建议带外核对 Safety Code
+### Secure Share（Passkey）
+- **适用**：希望使用系统/硬件 passkey 的较高安全场景
+- **管理权**：WebAuthn，`userVerification = "required"`，`residentKey = "required"`
+- **Padding**：8KB
+- **风险边界**：依然受 Web 场景恶意 JS 边界影响，但管理私钥不可导出
 
-### Hardware-Only（极限）
-- **适用**：企业/极端安全用户
-- **WebAuthn**：
-  - authenticatorAttachment = "cross-platform"（硬件钥匙）
-  - attestation = "direct"（验证硬件属性）
-  - 若无法验证 attestation，提示并降级到 Strict
-- **降级**：无法满足则阻断创建
-- **硬件要求**：YubiKey、Titan Key 等 FIDO2 硬件钥匙
+### Legacy（只读兼容）
+- `standard`：按早期 Quick Share 安全级别理解
+- `strict` / `hardware_only`：按 Secure Share 级别理解
+- 新建频道不再提供 legacy 档位
 
 ---
 
@@ -328,9 +321,9 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
   → 但无法导出私钥进行持续控制
 ```
 
-**降级模式风险**：
-- 兼容模式（softkey）：私钥存 IndexedDB，可被导出
-- UI 必须显著标注"兼容模式（较低安全）"
+**Quick Share 风险边界**：
+- 本地 ECDSA 私钥存 IndexedDB（Argon2id 包裹），理论上比 Secure Share 更依赖终端安全
+- UI 应引导用户设置足够强的密码，而不是将其表述为“降级模式”
 
 ---
 
@@ -415,11 +408,11 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
   - 推荐：m=64MB, t=3, p=1
 - **Salt**：随机 128 bits
 - **输出**：256 bits（用于 AES-256 包裹私钥）
-- **降级**：PBKDF2-SHA256（仅兼容模式，迭代 600,000 次）
+- **降级**：PBKDF2-SHA256（仅 legacy compatibility 路径，迭代 600,000 次）
 
 ### 数字签名（管理权）
 - **WebAuthn**：ES256（ECDSA P-256 + SHA-256）
-- **Softkey**（兼容模式）：ECDSA P-256
+- **Quick Share / Legacy Softkey**：ECDSA P-256
 
 ### 哈希（完整性/指纹）
 - **算法**：SHA-256
@@ -497,7 +490,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - [ ] 分享链接提示"必须完整复制（包括 # 后）"
 - [ ] Safety Code 带外核对引导（不制造焦虑）
 - [ ] 接收方防呆动画（"密码只在你这里"）
-- [ ] 兼容模式显著标注"较低安全"
+- [ ] Quick Share 与 Secure Share 的差异说明准确，不把 Quick Share 写成“兼容模式”
 - [ ] WebAuthn 失败给明确降级引导
 - [ ] 密码强度提示（但不强迫）
 
@@ -510,7 +503,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 2. **用户行为依赖**：Safety Code 核对非强制
 3. **恶意下发 JS**：Web 架构固有问题（缓解：自托管）
 4. **弱密码风险**：无法强制用户使用强密码
-5. **Passkey 同步**：Standard 档位允许（风险转移给用户）
+5. **模式差异**：Quick Share 更依赖密码与本地终端安全；Secure Share 更依赖 WebAuthn 生态
 
 ### 未来改进
 - 🔮 **E2EE 文件分享**：大文件分片 + 流式加密

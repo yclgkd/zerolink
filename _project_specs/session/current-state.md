@@ -3,14 +3,23 @@
 *Last updated: 2026-03-08*
 
 ## Active Task
-Security mode restructuring: Quick Share + Secure Share (replacing Standard / Strict / Hardware-Only).
+Documentation alignment for current product state: ZeroLink branding and Quick Share + Secure Share terminology.
 
 ## Current Status
-- **Phase**: Implementation complete, ready for PR
-- **Progress**: All 6 phases complete. TypeScript clean. 325 frontend + 191 shared + 111 backend tests all pass.
+- **Phase**: Documentation consistency fixes complete, ready for PR
+- **Progress**: README, PRD, INDEX, SECURITY, and ARCHITECTURE updated to match current Quick Share / Secure Share product state.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 7: Documentation alignment
+- `README.md` — Replaced 3-mode messaging with Quick Share / Secure Share and updated PRD version reference to v3.0
+- `docs/PRD.md` — Replaced stale `GhostLink` brand mention with `ZeroLink`; updated current-state wording around API, WebAuthn policy, and fallback behavior
+- `docs/INDEX.md` — Updated current version to v3.0 and replaced outdated FAQ entries about 3 modes / compatibility mode
+- `docs/SECURITY.md` — Reframed security model around Quick Share / Secure Share and moved legacy behavior to explicit compatibility context
+- `docs/ARCHITECTURE.md` — Replaced Standard / Strict / Hardware-Only overview with current Quick Share / Secure Share architecture
+
+## Previous Work
 
 ### Phase 1: Shared Package
 - `packages/shared/src/constants.ts` — Added `QUICK` and `SECURE` to `SECURITY_PROFILE`; legacy values retained
