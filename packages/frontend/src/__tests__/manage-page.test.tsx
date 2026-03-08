@@ -83,6 +83,19 @@ function mockPublicState(fetchSpy: ReturnType<typeof vi.fn>, state: string) {
   );
 }
 
+function mockLegacyTerminalPublicState(
+  fetchSpy: ReturnType<typeof vi.fn>,
+  state: 'deleted' | 'expired'
+) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse({
+      ok: true,
+      state,
+      adminMode: 'webauthn',
+    })
+  );
+}
+
 function mockPublicNotFound(fetchSpy: ReturnType<typeof vi.fn>) {
   fetchSpy.mockResolvedValueOnce(
     jsonResponse(
@@ -700,6 +713,22 @@ describe('ManagePage integration', () => {
 
     expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
 
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
+    expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
+  });
+
+  it.each([
+    'deleted',
+    'expired',
+  ] as const)('renders unavailable state from legacy public status %s', async (state) => {
+    const fetchSpy = getFetchSpy();
+    mockLegacyTerminalPublicState(fetchSpy, state);
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('manage-state-deleted')).toBeNull();
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();

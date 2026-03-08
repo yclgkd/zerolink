@@ -72,6 +72,19 @@ function mockPublicState(
   );
 }
 
+function mockLegacyTerminalPublicState(
+  fetchSpy: ReturnType<typeof vi.fn>,
+  state: 'deleted' | 'expired'
+) {
+  fetchSpy.mockResolvedValueOnce(
+    jsonResponse({
+      ok: true,
+      state,
+      adminMode: 'webauthn',
+    })
+  );
+}
+
 function mockPublicNotFound(fetchSpy: ReturnType<typeof vi.fn>) {
   fetchSpy.mockResolvedValueOnce(
     jsonResponse(
@@ -1253,6 +1266,22 @@ describe('SharePage', () => {
     expect(
       screen.getByText('This channel was destroyed, expired, or does not exist.')
     ).toBeTruthy();
+  });
+
+  it.each([
+    'deleted',
+    'expired',
+  ] as const)('renders unavailable state when /api/public/:uuid returns legacy %s', async (state) => {
+    const fetchSpy = getFetchSpy();
+    mockLegacyTerminalPublicState(fetchSpy, state);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('share-step-onboarding')).toBeNull();
+    expect(screen.queryByTestId('share-step-delivered')).toBeNull();
+    expect(decryptDeliveredMock).not.toHaveBeenCalled();
+    expect(lockChannelMock).not.toHaveBeenCalled();
   });
 
   it('shows uuid and receiver role badge', async () => {

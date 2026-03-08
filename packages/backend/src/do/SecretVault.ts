@@ -24,6 +24,7 @@ import {
   type SoftkeyCredential,
   type StoredCredential,
   TIMESTAMP_SKEW_MS,
+  type UnixMs,
   type UUID,
 } from '@zerolink/shared';
 import { type AttestationVerificationResult, verifyAttestation } from '../crypto/attestation.ts';
@@ -66,6 +67,7 @@ export type {
   SoftkeyCompoundCommitParams,
   StoredCompoundChallenge,
   StoredLockChallenge,
+  StoredTerminalTombstone,
   WebAuthnCompoundCommitParams,
 } from './SecretVaultTypes.ts';
 export {
@@ -79,6 +81,7 @@ export {
   nonceIndexStorageKey,
   nonceStorageKey,
   StateTransitionError,
+  TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
 
 import { SecretVaultStateMachine } from './SecretVaultStateMachine.ts';
@@ -90,6 +93,7 @@ import type {
   SecretVaultEnv,
   StoredCompoundChallenge,
   StoredLockChallenge,
+  StoredTerminalTombstone,
 } from './SecretVaultTypes.ts';
 import {
   CHANNEL_RECORD_KEY,
@@ -104,6 +108,7 @@ import {
   nonceIndexStorageKey,
   nonceStorageKey,
   StateTransitionError,
+  TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
 
 export class SecretVault {
@@ -186,7 +191,7 @@ export class SecretVault {
     return this.ctx.blockConcurrencyWhile(async () => {
       const current = await this.loadActiveRecord();
       const next = new SecretVaultStateMachine(current).commitDelete();
-      await this.purgeAllStorage();
+      await this.finalizeTerminalState(current.uuid, 'deleted');
       return next;
     });
   }
@@ -195,7 +200,7 @@ export class SecretVault {
     return this.ctx.blockConcurrencyWhile(async () => {
       const current = await this.loadActiveRecord();
       const next = new SecretVaultStateMachine(current).expire();
-      await this.purgeAllStorage();
+      await this.finalizeTerminalState(current.uuid, 'expired');
       return next;
     });
   }
@@ -206,13 +211,17 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<Record<string, unknown>> {
     return this.ctx.blockConcurrencyWhile(async () => {
+      const tombstone = await this.ctx.storage.get<StoredTerminalTombstone>(TERMINAL_TOMBSTONE_KEY);
+      if (tombstone) {
+        throw new StateTransitionError('INVALID_TRANSITION', 'channel already exists');
+      }
+
       const existing = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
       if (existing) {
         if (this.shouldPurgeRecord(existing, now)) {
-          await this.purgeAllStorage();
-        } else {
-          throw new StateTransitionError('INVALID_TRANSITION', 'channel already exists');
+          await this.finalizeTerminalRecord(existing, now);
         }
+        throw new StateTransitionError('INVALID_TRANSITION', 'channel already exists');
       }
 
       const cryptoApi = getCryptoApi();
@@ -499,7 +508,7 @@ export class SecretVault {
 
       if (intent.op === 'delete') {
         new SecretVaultStateMachine(record).commitDelete();
-        await this.purgeAllStorage();
+        await this.finalizeTerminalState(record.uuid, 'deleted', asUnixMs(now));
         return;
       }
 
@@ -660,7 +669,7 @@ export class SecretVault {
       return record;
     }
 
-    await this.purgeAllStorage();
+    await this.finalizeTerminalRecord(record, now);
     throw new StateTransitionError('RECORD_NOT_FOUND', 'channel record not initialized');
   }
 
@@ -674,15 +683,38 @@ export class SecretVault {
       return;
     }
 
-    await this.purgeAllStorage();
+    await this.finalizeTerminalRecord(record, now);
   }
 
-  private async purgeAllStorage(): Promise<void> {
+  private async purgeChannelStorage(): Promise<void> {
     const keys = await this.listPurgeKeys();
     if (keys.length > 0) {
       await this.ctx.storage.delete(keys);
     }
     await this.ctx.storage.deleteAlarm();
+  }
+
+  private async finalizeTerminalRecord(record: ChannelRecord, now: number): Promise<void> {
+    const reason =
+      record.state === CHANNEL_STATE.DELETED
+        ? 'deleted'
+        : record.state === CHANNEL_STATE.EXPIRED || Number(record.expiresAt) <= now
+          ? 'expired'
+          : 'deleted';
+    await this.finalizeTerminalState(record.uuid, reason, asUnixMs(now));
+  }
+
+  private async finalizeTerminalState(
+    uuid: string,
+    reason: StoredTerminalTombstone['reason'],
+    finalizedAt: UnixMs = asUnixMs(Date.now())
+  ): Promise<void> {
+    await this.purgeChannelStorage();
+    await this.ctx.storage.put(TERMINAL_TOMBSTONE_KEY, {
+      uuid,
+      reason,
+      finalizedAt,
+    } satisfies StoredTerminalTombstone);
   }
 
   private async listPurgeKeys(): Promise<string[]> {

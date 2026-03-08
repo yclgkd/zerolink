@@ -71,12 +71,6 @@ export const ChannelStateSchema = z.enum([
   CHANNEL_STATE.EXPIRED,
 ]);
 
-export const PublicChannelStateSchema = z.enum([
-  CHANNEL_STATE.WAITING,
-  CHANNEL_STATE.LOCKED,
-  CHANNEL_STATE.DELIVERED,
-]);
-
 /** Accepts new profiles (quick/secure) and legacy values for backward compatibility. */
 export const SecurityProfileSchema = z.enum([
   SECURITY_PROFILE.QUICK,
@@ -435,7 +429,7 @@ export const CompoundCommitResponseSchema = z.object({
 
 export const PublicStatusResponseSchema = z.object({
   ok: z.literal(true),
-  state: PublicChannelStateSchema,
+  state: ChannelStateSchema,
   adminMode: AdminModeSchema,
   receiverPubFpr: HexStringSchema.optional(),
 });

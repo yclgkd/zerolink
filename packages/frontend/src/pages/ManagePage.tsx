@@ -61,6 +61,10 @@ function mapActionError(code: string): string {
   }
 }
 
+function isTerminalPublicState(state: ChannelState): boolean {
+  return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
+}
+
 function ManagePageHeader({ status, unavailable }: { status: ChannelState; unavailable: boolean }) {
   return (
     <PageCardHeader>
@@ -473,6 +477,16 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
         if (!parsedPayload.success) throw new Error('INVALID_RESPONSE');
 
         if (canceled || !mountedRef.current) return;
+        if (isTerminalPublicState(parsedPayload.data.state)) {
+          store.setShowDestroyConfirm(false);
+          store.setAdminMode(null);
+          store.setReceiverPubFpr(null);
+          store.setChannelState(CHANNEL_STATE.WAITING);
+          setPublicStatusError(null);
+          setIsUnavailable(true);
+          return;
+        }
+
         setPublicStatusError(null);
         setIsUnavailable(false);
         store.setShowDestroyConfirm(false);

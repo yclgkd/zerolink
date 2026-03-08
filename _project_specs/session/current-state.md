@@ -92,3 +92,10 @@ Physical delete semantics for sender destroy and TTL expiry.
 1. [ ] Run final verification: biome check + typecheck + all tests
 2. [ ] Create PR with all changes
 3. [ ] Review and merge
+
+## Latest Update (2026-03-08)
+
+- Added a private Durable Object tombstone for deleted/expired channels so UUIDs remain non-reusable after physical purge.
+- Restored `PublicStatusResponse` wire compatibility for legacy `deleted` / `expired` backend payloads while keeping current frontend UX normalized to unavailable.
+- Tightened the Playwright stateful API mock so deleted channels return `404 NOT_FOUND` on later public/lock/manage begin requests instead of silently recreating a waiting channel.
+- Added backend, frontend, shared, and E2E coverage for tombstone reservation, legacy terminal-state normalization, and post-destroy 404 behavior.

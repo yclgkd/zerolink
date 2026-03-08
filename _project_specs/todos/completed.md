@@ -37,3 +37,13 @@ purge of Durable Object channel state, including the main `ChannelRecord`, creat
 challenges, nonce records, nonce indexes, and scheduled alarms. Public status and decrypt-fetch
 now return `404 NOT_FOUND` after purge, frontend manage/share flows render an unavailable state on
 revisit, and sender-side `deleted` remains a current-session-only confirmation UI state.
+
+## DONE-005: Tombstone reservation and legacy terminal-state compatibility
+
+**Completed**: 2026-03-08
+
+Followed up the physical-delete change by retaining a private terminal tombstone to reserve
+destroyed/expired UUIDs, restoring public-status schema compatibility for legacy `deleted` and
+`expired` payloads, normalizing those legacy states to the same unavailable UX as `404 NOT_FOUND`,
+and tightening the Playwright stateful API mock so deleted channels no longer get recreated by
+lock/manage begin routes.

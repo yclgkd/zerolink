@@ -69,6 +69,10 @@ export function isDecryptPassphraseErrorCode(code: string): boolean {
   return code === 'PASSPHRASE_REQUIRED' || code === 'CRYPTO_ERROR';
 }
 
+function isTerminalPublicState(state: ChannelState): boolean {
+  return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
+}
+
 export function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
   const [isUnavailable, setIsUnavailable] = useState(false);
@@ -109,6 +113,13 @@ export function usePublicShareState(uuid?: string) {
         if (!parsedPayload.success) {
           setChannelState(CHANNEL_STATE.WAITING);
           setIsUnavailable(false);
+          setIsPublicStatusLoading(false);
+          return;
+        }
+
+        if (isTerminalPublicState(parsedPayload.data.state)) {
+          setChannelState(CHANNEL_STATE.WAITING);
+          setIsUnavailable(true);
           setIsPublicStatusLoading(false);
           return;
         }

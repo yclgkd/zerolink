@@ -1004,7 +1004,7 @@ describe('CompoundCommitResponseSchema', () => {
 // ─── Status & Error Schemas ───────────────────────────────────────────────────
 
 describe('PublicStatusResponseSchema', () => {
-  it.each(['waiting', 'locked', 'delivered'])('accepts state %s', (state) => {
+  it.each(['waiting', 'locked', 'delivered', 'deleted', 'expired'])('accepts state %s', (state) => {
     const result = PublicStatusResponseSchema.parse({ ok: true, state, adminMode: 'webauthn' });
     expect(result.state).toBe(state);
   });
@@ -1012,12 +1012,6 @@ describe('PublicStatusResponseSchema', () => {
   it('rejects unknown state', () => {
     expect(() =>
       PublicStatusResponseSchema.parse({ ok: true, state: 'open', adminMode: 'webauthn' })
-    ).toThrow();
-  });
-
-  it.each(['deleted', 'expired'])('rejects terminal public state %s', (state) => {
-    expect(() =>
-      PublicStatusResponseSchema.parse({ ok: true, state, adminMode: 'webauthn' })
     ).toThrow();
   });
 });
