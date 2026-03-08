@@ -18,7 +18,7 @@ Full create flow: user enters secret → WebAuthn optional auth → encrypt → 
 **Priority**: P2
 **Depends on**: TODO-101
 
-Recipient opens URL → parse fragment → derive key → fetch ciphertext → decrypt → display → burn.
+Recipient opens URL → parse fragment → derive key → fetch ciphertext → decrypt → display → optionally burn local plaintext.
 
 ---
 
@@ -28,15 +28,6 @@ Recipient opens URL → parse fragment → derive key → fetch ciphertext → d
 **Depends on**: TODO-002
 
 Optional passkey authentication for secret creation using `@github/webauthn-json`.
-
----
-
-## TODO-104: Durable Object atomic state for burn-after-read
-
-**Priority**: P2
-**Depends on**: TODO-003
-
-Implement single-use enforcement using Durable Object transactions. Secret deleted on first successful read.
 
 ---
 
@@ -62,7 +53,7 @@ IP-based rate limiting on secret creation. Cloudflare WAF rules.
 **Priority**: P3
 **Depends on**: TODO-101, TODO-102
 
-Full user flow E2E tests: create secret → share link → decrypt → verify burn.
+Full user flow E2E tests: create secret → share link → decrypt → verify local plaintext burn.
 
 ---
 

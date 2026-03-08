@@ -3,14 +3,24 @@
 *Last updated: 2026-03-08*
 
 ## Active Task
-Physical delete semantics for sender destroy and TTL expiry.
+Physical delete semantics plus frontend clarification of sender delete, receiver-local plaintext burn, and channel expiry.
 
 ## Current Status
-- **Phase**: Delete/destroy semantics hardening complete, ready for PR
-- **Progress**: Backend now physically purges channel Durable Object state on sender destroy and TTL expiry; public read APIs return `404 NOT_FOUND` after purge; frontend keeps `deleted` as a local manage-session confirmation state only and renders a dedicated unavailable state on revisit or refresh.
+- **Phase**: Conflict-resolved delete/burn/expiry clarification complete, ready for PR
+- **Progress**: Backend physically purges deleted and expired channels and returns `404 NOT_FOUND` on revisit; frontend keeps sender-side delete confirmation local to the current session, keeps receiver-side local plaintext burn strictly device-only, and no longer describes decrypt as implicit channel burn in internal guidance.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 10: Delete vs local burn vs expiry clarification
+- `packages/frontend/src/stores/decrypt-store.ts` — Renamed the receiver-only burn flag to `localPlaintextBurned` so it cannot be confused with channel state
+- `packages/frontend/src/components/share/share-steps.tsx` — Updated delivered, deleted, expired, and local-burn copy so the receiver page clearly separates local plaintext removal from channel terminal states
+- `packages/frontend/src/pages/ManagePage.tsx` — Replaced user-facing `Destroy` language with `Delete`, and clarified deleted vs expired sender terminal copy
+- `packages/frontend/src/__tests__/share-page.test.tsx` — Added assertions that local burn is device-only and that deleted/expired pages use distinct actor and lifetime wording
+- `packages/frontend/src/__tests__/manage-page.test.tsx` — Added assertions for `Delete Channel`, `Confirm Delete`, `Deleting...`, and updated deleted/expired copy
+- `packages/frontend/e2e/happy-path.spec.ts` — Kept the local burn followed by re-decrypt flow and made the device-only semantics explicit
+- `.ai/project-context.md` / `.ai/architecture.md` — Removed decrypt-as-burn wording and narrowed backend guarantees to terminal-state enforcement
+- `_project_specs/session/decisions.md` / `_project_specs/todos/*.md` — Replaced read-implies-channel-burn terminology with explicit delete/local-burn/expiry semantics
 
 ### Phase 9: Physical delete semantics
 - `packages/backend/src/do/SecretVault.ts` — Added full-storage purge helpers, lazy expiry enforcement on reads, dual-purpose alarm scheduling for TTL expiry plus nonce cleanup, and real delete/expire behavior that removes the channel record plus related challenges/nonces instead of persisting `deleted`/`expired`

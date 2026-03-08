@@ -204,7 +204,7 @@ export function DeliveredStep({
   decryptError,
   isDecryptPassphraseInvalid,
   plaintext,
-  burned,
+  localPlaintextBurned,
   canDecrypt,
   canBurn,
   onPassphraseChange,
@@ -216,7 +216,7 @@ export function DeliveredStep({
   decryptError: string | null;
   isDecryptPassphraseInvalid: boolean;
   plaintext: string | null;
-  burned: boolean;
+  localPlaintextBurned: boolean;
   canDecrypt: boolean;
   canBurn: boolean;
   onPassphraseChange: (value: string) => void;
@@ -226,9 +226,9 @@ export function DeliveredStep({
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Content Delivered</h3>
+        <h3 className="text-base font-semibold text-foreground">Channel Delivered</h3>
         <p className="text-xs text-muted-foreground">
-          Enter your passphrase to decrypt content locally on this device.
+          The channel is delivered. Decrypt happens locally on this device.
         </p>
       </div>
 
@@ -285,14 +285,15 @@ export function DeliveredStep({
         </div>
       ) : null}
 
-      {burned ? (
+      {localPlaintextBurned ? (
         <StateNotice
           data-testid="share-decrypt-burned"
-          title="Local plaintext has been burned."
+          title="Local plaintext removed from this device."
           tone="warning"
         >
           <p className="mt-1 text-xs text-neon-orange">
-            Re-enter your passphrase to decrypt again if needed.
+            This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt
+            again.
           </p>
         </StateNotice>
       ) : null}
