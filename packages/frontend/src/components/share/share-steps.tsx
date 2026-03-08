@@ -1,12 +1,11 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
-import { CHANNEL_STATE } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
-
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
 import { SafetyCode } from '../../components/safety/safety-code';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
+import { ChannelUnavailableState } from '../channel/channel-unavailable-state';
 
 export const onboardingItems = [
   {
@@ -317,35 +316,11 @@ export function LoadingStep() {
   );
 }
 
-function assertNever(value: never): never {
-  throw new Error(`Unhandled terminal state: ${String(value)}`);
-}
-
-export function TerminalStep({
-  state,
-}: {
-  state: typeof CHANNEL_STATE.DELETED | typeof CHANNEL_STATE.EXPIRED;
-}) {
-  switch (state) {
-    case CHANNEL_STATE.DELETED:
-      return (
-        <section className="space-y-2" data-testid="share-step-deleted">
-          <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
-          <p className="text-xs text-muted-foreground">
-            This channel has been destroyed and cannot be recovered.
-          </p>
-        </section>
-      );
-    case CHANNEL_STATE.EXPIRED:
-      return (
-        <section className="space-y-2" data-testid="share-step-expired">
-          <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
-          <p className="text-xs text-muted-foreground">
-            The channel exceeded its lifetime and is no longer valid for delivery.
-          </p>
-        </section>
-      );
-    default:
-      return assertNever(state);
-  }
+export function UnavailableStep() {
+  return (
+    <ChannelUnavailableState
+      body="This channel was destroyed, expired, or does not exist."
+      testId="share-step-unavailable"
+    />
+  );
 }

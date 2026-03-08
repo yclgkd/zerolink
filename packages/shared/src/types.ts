@@ -79,7 +79,8 @@ export interface ChannelRecord {
 
   /**
    * Receiver identity — set atomically on lock_commit, always present together.
-   * Absent while state is 'waiting'; present for 'locked', 'delivered', 'deleted', 'expired'.
+   * Absent while state is 'waiting'; present for active persisted states such as
+   * 'locked' and 'delivered'. Terminal outcomes are physically purged from storage.
    */
   receiver?: ReceiverIdentity;
 

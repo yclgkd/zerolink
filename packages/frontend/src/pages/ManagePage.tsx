@@ -1,6 +1,7 @@
 import {
   CHANNEL_STATE,
   type ChannelState,
+  ErrorResponseSchema,
   PublicStatusResponseSchema,
   ROUTE_PATTERN,
   SECURITY_PROFILE,
@@ -11,7 +12,7 @@ import { ClipboardCheck, Copy, PlusCircle, Send, Trash2 } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-
+import { ChannelUnavailableState } from '../components/channel/channel-unavailable-state';
 import {
   PageCard,
   PageCardContent,
@@ -32,6 +33,8 @@ import { useDeliverStore } from '../stores/deliver-store';
 
 function mapActionError(code: string): string {
   switch (code) {
+    case 'NOT_FOUND':
+      return 'This channel is no longer available.';
     case 'FALLBACK_REQUIRED':
       return 'Password-managed channels are unavailable for this action in the current build.';
     case 'PROFILE_BLOCKED':
@@ -58,7 +61,7 @@ function mapActionError(code: string): string {
   }
 }
 
-function ManagePageHeader({ status }: { status: ChannelState }) {
+function ManagePageHeader({ status, unavailable }: { status: ChannelState; unavailable: boolean }) {
   return (
     <PageCardHeader>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -66,7 +69,7 @@ function ManagePageHeader({ status }: { status: ChannelState }) {
           <PageCardTitle asChild className="text-primary">
             <h2>Manage / Deliver</h2>
           </PageCardTitle>
-          <StatusBadge status={status} />
+          {unavailable ? null : <StatusBadge status={status} />}
         </div>
         <RoleBadge party="sender" />
       </div>
@@ -323,6 +326,7 @@ function TerminalActions(): ReactElement {
 
 function ActionPanel({
   status,
+  unavailable,
   showDestroyConfirm,
   pending,
   canDeliver,
@@ -332,6 +336,7 @@ function ActionPanel({
   onConfirmDestroy,
 }: {
   status: ChannelState;
+  unavailable: boolean;
   showDestroyConfirm: boolean;
   pending: boolean;
   canDeliver: boolean;
@@ -340,7 +345,8 @@ function ActionPanel({
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
-  const terminal = status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
+  const terminal =
+    unavailable || status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
 
   if (terminal) {
     return <TerminalActions />;
@@ -431,25 +437,44 @@ function useShareLinkGenerator(uuid?: string) {
 function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<boolean>) {
   const store = useDeliverStore();
   const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
+  const [isUnavailable, setIsUnavailable] = useState(false);
 
   useEffect(() => {
     let canceled = false;
     if (!uuid) {
       store.setChannelState(CHANNEL_STATE.WAITING);
+      setPublicStatusError(null);
+      setIsUnavailable(false);
       return;
     }
 
+    setIsUnavailable(false);
     const loadPublicStatus = async () => {
       try {
         const response = await fetch(`/api/public/${uuid}`);
-        if (!response.ok) throw new Error(`HTTP_${response.status}`);
-
         const payload = (await response.json()) as unknown;
+        const parsedError = ErrorResponseSchema.safeParse(payload);
+        if (
+          response.status === 404 ||
+          (parsedError.success && parsedError.data.code === 'NOT_FOUND')
+        ) {
+          if (canceled || !mountedRef.current) return;
+          store.setShowDestroyConfirm(false);
+          store.setAdminMode(null);
+          store.setReceiverPubFpr(null);
+          store.setChannelState(CHANNEL_STATE.WAITING);
+          setPublicStatusError(null);
+          setIsUnavailable(true);
+          return;
+        }
+
+        if (!response.ok) throw new Error(`HTTP_${response.status}`);
         const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
         if (!parsedPayload.success) throw new Error('INVALID_RESPONSE');
 
         if (canceled || !mountedRef.current) return;
         setPublicStatusError(null);
+        setIsUnavailable(false);
         store.setShowDestroyConfirm(false);
         store.setChannelState(parsedPayload.data.state);
         store.setAdminMode(parsedPayload.data.adminMode);
@@ -458,6 +483,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
         if (canceled || !mountedRef.current) return;
         store.setShowDestroyConfirm(false);
         store.setChannelState(CHANNEL_STATE.WAITING);
+        setIsUnavailable(false);
         setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
       }
     };
@@ -475,7 +501,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
     mountedRef,
   ]);
 
-  return { publicStatusError, setPublicStatusError };
+  return { isUnavailable, publicStatusError, setPublicStatusError };
 }
 
 function useManageDeliveryLogic(
@@ -629,7 +655,10 @@ function useManagePageState(uuid?: string) {
     };
   }, []);
 
-  const { publicStatusError, setPublicStatusError } = usePublicStatusFetcher(uuid, mountedRef);
+  const { isUnavailable, publicStatusError, setPublicStatusError } = usePublicStatusFetcher(
+    uuid,
+    mountedRef
+  );
   const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
 
   useEffect(() => {
@@ -664,6 +693,7 @@ function useManagePageState(uuid?: string) {
   }, [store.receiverPubFpr]);
 
   const canDeliver =
+    !isUnavailable &&
     store.channelState !== CHANNEL_STATE.DELETED &&
     store.channelState !== CHANNEL_STATE.EXPIRED &&
     secretInput.trim().length > 0 &&
@@ -706,6 +736,7 @@ function useManagePageState(uuid?: string) {
     safetyCode,
     actionError,
     isSecretInputInvalid,
+    isUnavailable,
     publicStatusError,
     isActionPending,
     canDeliver,
@@ -738,10 +769,11 @@ export function ManagePage(): ReactElement {
   const state = useManagePageState(uuid);
   const usesPasswordManagedChannel =
     state.adminMode === 'password' || state.adminMode === 'softkey';
+  const showUnavailableState = state.isUnavailable && state.status !== CHANNEL_STATE.DELETED;
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
-      <ManagePageHeader status={state.status} />
+      <ManagePageHeader status={state.status} unavailable={showUnavailableState} />
       <PageCardContent aria-busy={state.isActionPending} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
@@ -761,9 +793,18 @@ export function ManagePage(): ReactElement {
           shareLink={state.shareLink}
         />
 
-        <StatusContent safetyCode={state.safetyCode} status={state.status} />
+        {showUnavailableState ? (
+          <ChannelUnavailableState
+            body="This channel was destroyed, expired, or does not exist."
+            testId="manage-state-unavailable"
+          />
+        ) : (
+          <StatusContent safetyCode={state.safetyCode} status={state.status} />
+        )}
 
-        {state.status !== CHANNEL_STATE.DELETED && state.status !== CHANNEL_STATE.EXPIRED ? (
+        {!showUnavailableState &&
+        state.status !== CHANNEL_STATE.DELETED &&
+        state.status !== CHANNEL_STATE.EXPIRED ? (
           <>
             <SecretInput
               ariaDescribedBy={
@@ -814,6 +855,7 @@ export function ManagePage(): ReactElement {
           pending={state.isActionPending}
           showDestroyConfirm={state.showDestroyConfirm}
           status={state.status}
+          unavailable={showUnavailableState}
         />
       </PageCardContent>
     </PageCard>

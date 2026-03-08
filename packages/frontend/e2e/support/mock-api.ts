@@ -22,6 +22,7 @@ import type { z } from 'zod';
 
 interface ChannelRuntimeState {
   state: ChannelState;
+  adminMode: 'webauthn';
   version: number;
   lockChallenge?: {
     id: string;
@@ -87,6 +88,7 @@ function getOrCreateChannel(
 
   const created: ChannelRuntimeState = {
     state: CHANNEL_STATE.WAITING,
+    adminMode: 'webauthn',
     version: 0,
   };
   channels.set(uuid, created);
@@ -247,6 +249,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         ...(channel.receiverPubFpr ? { receiverPubFpr: channel.receiverPubFpr } : {}),
         ...(channel.receiverPubJwk ? { receiverPubJwk: channel.receiverPubJwk } : {}),
         currentVersion: channel.version,
+        adminMode: channel.adminMode,
       };
       const parsedPayload = CompoundBeginResponseSchema.safeParse(payload);
       if (!parsedPayload.success) {
@@ -306,9 +309,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
-      channel.version = parsedBody.data.intent.version + 1;
-      channel.state = CHANNEL_STATE.DELETED;
+      channels.delete(parsedUuid.data);
 
       return fulfillJson(route, 200, {
         ok: true,
@@ -323,10 +324,17 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         return badRequest(route);
       }
 
-      const channel = getOrCreateChannel(channels, parsedUuid.data);
+      const channel = channels.get(parsedUuid.data);
+      if (!channel) {
+        return fulfillJson(route, 404, {
+          ok: false,
+          code: 'NOT_FOUND',
+        });
+      }
       const payload = {
         ok: true,
         state: channel.state,
+        adminMode: channel.adminMode,
       };
       const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
       if (!parsedPayload.success) {
@@ -345,7 +353,14 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
       }
 
       const channel = channels.get(parsedUuid.data);
-      if (!channel?.delivery || channel.state !== CHANNEL_STATE.DELIVERED) {
+      if (!channel) {
+        return fulfillJson(route, 404, {
+          ok: false,
+          code: 'NOT_FOUND',
+        });
+      }
+
+      if (!channel.delivery || channel.state !== CHANNEL_STATE.DELIVERED) {
         return badRequest(route);
       }
 

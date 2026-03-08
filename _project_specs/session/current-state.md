@@ -3,14 +3,24 @@
 *Last updated: 2026-03-08*
 
 ## Active Task
-Documentation alignment for current product state: ZeroLink branding and Quick Share + Secure Share terminology.
+Physical delete semantics for sender destroy and TTL expiry.
 
 ## Current Status
-- **Phase**: Documentation alignment and Quick Share manage-flow fix complete, ready for PR
-- **Progress**: Frontend manage flow now treats `password` and legacy `softkey` as the same password-managed path; README, PRD, INDEX, SECURITY, and ARCHITECTURE are aligned to the current Quick Share / Secure Share product state.
+- **Phase**: Delete/destroy semantics hardening complete, ready for PR
+- **Progress**: Backend now physically purges channel Durable Object state on sender destroy and TTL expiry; public read APIs return `404 NOT_FOUND` after purge; frontend keeps `deleted` as a local manage-session confirmation state only and renders a dedicated unavailable state on revisit or refresh.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 9: Physical delete semantics
+- `packages/backend/src/do/SecretVault.ts` — Added full-storage purge helpers, lazy expiry enforcement on reads, dual-purpose alarm scheduling for TTL expiry plus nonce cleanup, and real delete/expire behavior that removes the channel record plus related challenges/nonces instead of persisting `deleted`/`expired`
+- `packages/backend/src/do/SecretVaultNonces.ts` — Exposed the next nonce-cleanup deadline so the Durable Object alarm can co-schedule nonce cleanup with channel expiry
+- `packages/backend/src/do/__tests__/SecretVault.test.ts` — Added coverage for physical purge, lazy expiry purge on read, and 404 behavior after delete/expiry
+- `packages/backend/src/__tests__/index.test.ts` — Added route-level coverage that `NOT_FOUND` propagates from public status and decrypt-fetch endpoints
+- `packages/shared/src/schemas.ts` / `packages/shared/src/__tests__/schemas.test.ts` — Narrowed `PublicStatusResponseSchema` to `waiting | locked | delivered` so `deleted`/`expired` remain local-only UI states
+- `packages/frontend/src/pages/SharePage.tsx`, `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/features/share/share-logic.ts` — Treated `404 NOT_FOUND` as channel-unavailable, mapped stale-session errors explicitly, and kept sender-side `deleted` as current-session-only confirmation UX
+- `packages/frontend/src/components/channel/channel-unavailable-state.tsx` and page tests — Added dedicated unavailable-state rendering and updated frontend tests for delete/expiry revisits
+- `packages/frontend/e2e/support/mock-api.ts` — Updated the stateful API mock so delete physically removes channels and follow-up reads return 404
 
 ### Phase 8: Quick Share sender manage fix
 - `packages/frontend/src/pages/ManagePage.tsx` — Show the channel password input for both `adminMode: 'password'` and legacy `adminMode: 'softkey'`; remove compatibility-mode wording from manage-page copy

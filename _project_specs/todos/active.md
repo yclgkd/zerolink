@@ -4,24 +4,6 @@ Current work in progress and remaining tasks.
 
 ---
 
-## TODO-101: Implement physical deletion for ChannelRecord
-
-**Status**: pending
-**Priority**: P0 (Security-critical)
-
-**Description**: The current `SecretVault.commitDelete()` only performs a logical delete by updating the state. To ensure true "burn-after-read" or sender-initiated destruction, we need to physically remove the `ChannelRecord` from storage.
-
-**Files to modify**:
-- `packages/backend/src/do/SecretVault.ts` — Update `commitDelete` and `expire` logic.
-- `packages/backend/src/do/SecretVaultStateMachine.ts` — Potentially adjust return types.
-
-**Validation criteria**:
-- [ ] `ctx.storage.get(CHANNEL_RECORD_KEY)` returns `undefined` after deletion.
-- [ ] Subsequent API calls return 404/Not Found instead of "Locked for terminal state".
-- [ ] Unit tests in `SecretVault.test.ts` verify the physical removal.
-
----
-
 ## TODO-102: Increase E2E coverage for expiration flow
 
 **Status**: pending
