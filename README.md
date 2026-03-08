@@ -36,7 +36,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - [技术栈规范](./docs/TECH_STACK.md) - 完整技术栈与工具链
 
 ### 设计文档
-- [完整 PRD v2.5](./docs/PRD-v2.5.md) - 产品需求文档
+- [完整 PRD v2.5](./docs/PRD.md) - 产品需求文档
 - [架构概览](./docs/ARCHITECTURE.md) - 技术架构与核心协议
 - [安全模型](./docs/SECURITY.md) - 威胁模型与安全保证
 

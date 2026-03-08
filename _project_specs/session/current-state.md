@@ -38,7 +38,7 @@ Security mode restructuring: Quick Share + Secure Share (replacing Standard / St
 - `packages/frontend/src/__tests__/webauthn-adapter.test.ts` — Updated hardware_only policy expectations
 
 ### Phase 6: Documentation
-- `docs/PRD-v2.5.md` → Updated to v3.0; Section 4 replaced with Quick/Secure; Section 9 updated; Appendix G & I updated
+- `docs/PRD.md` → Updated to v3.0; Section 4 replaced with Quick/Secure; Section 9 updated; Appendix G & I updated
 - `_project_specs/session/decisions.md` → Added decision entry for security mode restructuring
 
 ## Files Modified
@@ -60,7 +60,7 @@ Security mode restructuring: Quick Share + Secure Share (replacing Standard / St
 | `packages/frontend/src/__tests__/create-page.test.tsx` | Full rewrite for new UI |
 | `packages/frontend/src/__tests__/security-profile-card.test.tsx` | Updated legacy title expectations |
 | `packages/frontend/src/__tests__/webauthn-adapter.test.ts` | Updated hardware_only expectations |
-| `docs/PRD-v2.5.md` | Updated to v3.0 |
+| `docs/PRD.md` | Updated to v3.0 |
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
