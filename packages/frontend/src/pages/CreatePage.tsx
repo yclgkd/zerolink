@@ -2,6 +2,7 @@ import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
 import { Lock, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   PageCard,
@@ -147,6 +148,26 @@ function ModeSelectorGrid({
           <p className="text-neon-orange">Secure Share is disabled. Use Quick Share instead.</p>
         </StateNotice>
       ) : null}
+    </section>
+  );
+}
+
+function TrustModelHint() {
+  return (
+    <section className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Need a plain-language summary of what stays local, what the sender can do, and when
+          channel data disappears?
+        </p>
+        <Link
+          className="text-sm font-medium text-neon-cyan underline decoration-neon-cyan/50 underline-offset-4 transition-colors hover:text-white"
+          data-testid="create-trust-link"
+          to="/trust"
+        >
+          Read the trust model
+        </Link>
+      </div>
     </section>
   );
 }
@@ -370,6 +391,7 @@ export function CreatePage(): ReactElement {
           selected={logic.state.selectedProfile}
           webAuthnSupported={logic.state.webAuthnSupported}
         />
+        <TrustModelHint />
         {logic.isQuickMode ? (
           <QuickSharePasswordPanel
             onPasswordChange={logic.handleQuickPasswordChange}

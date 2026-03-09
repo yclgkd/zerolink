@@ -3,11 +3,11 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Verified Release bootstrap verification hardening plus delete/local-burn/expiry clarification for the frontend shell.
+Add a minimal Trust Model page plus shell/create entry points for the frontend shell.
 
 ## Current Status
-- **Phase**: Verified Release hardening and delete/burn/expiry clarification complete, ready for PR
-- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, serves SPA entry HTML with `no-store` while leaving hashed assets immutable, and clarifies sender delete vs receiver-local plaintext burn vs channel expiry across the UI and internal guidance.
+- **Phase**: Trust Model page implemented, ready for PR
+- **Progress**: Added a frontend-only `/trust` route, a shell-level `Trust Model` entry, a Create-page contextual link, and static trust copy that reflects the real zero-knowledge, local-storage, local-burn, and 1-hour expiry behavior.
 - **Blocking Issues**: None
 
 ## What Was Done
@@ -108,9 +108,15 @@ Verified Release bootstrap verification hardening plus delete/local-burn/expiry 
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Review the bootstrap verifier diff and confirm the residual same-origin trust assumptions are acceptable for v1
-2. [ ] Create PR with validation notes, cache-control notes, and rollback guidance
-3. [ ] Consider a future external trust anchor for stronger release authenticity beyond self-hosted bootstrap verification
+1. [ ] Run targeted frontend validation for the trust page, route, and Create-page link
+2. [ ] Review the trust copy against current zero-knowledge and expiry behavior
+3. [ ] Create PR with validation notes and UX summary
+
+## Latest Update (2026-03-09)
+
+- Added a frontend-only Trust Model page that explains what the server cannot see, what the sender can and cannot do, what the receiver device stores locally, and why local burn is different from delete or expiry.
+- Implemented a `Create + Shell` entry strategy so the explanation is discoverable both at first use and later revisits.
+- Kept the user-facing copy in English to stay consistent with the current frontend UI.
 
 ## Latest Update (2026-03-08)
 
