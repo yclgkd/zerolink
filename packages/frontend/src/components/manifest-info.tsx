@@ -1,10 +1,9 @@
-import { Copy } from 'lucide-react';
-import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 
 import { getVerifiedReleaseSnapshot } from '../release/runtime';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 
 function formatBuildDate(value: string): string {
   const date = new Date(value);
@@ -21,63 +20,22 @@ function formatBuildDate(value: string): string {
   })} UTC`;
 }
 
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(value).then(
-      () => {
-        setCopied(true);
-        if (timerRef.current !== null) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setCopied(false), 1500);
-      },
-      () => {
-        // Clipboard write denied or unavailable — no-op
-      }
-    );
-  }, [value]);
-  return (
-    <button
-      aria-label="Copy to clipboard"
-      className="ml-1 inline-flex items-center text-muted-foreground transition-colors hover:text-foreground"
-      onClick={handleCopy}
-      type="button"
-    >
-      <Copy className="size-3" />
-      {copied ? <span className="ml-1 text-[10px] text-neon-green">Copied</span> : null}
-    </button>
-  );
-}
-
 function DetailRow({
   label,
   value,
   code = false,
-  truncate = false,
 }: {
   label: string;
   value: string;
   code?: boolean;
-  truncate?: boolean;
 }) {
-  const displayValue = truncate && value.length > 16 ? `${value.slice(0, 16)}…` : value;
   return (
     <div className="space-y-1">
       <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
       {code ? (
-        <div className="flex items-center gap-1">
-          <code className="block rounded bg-secondary/40 px-2 py-1 text-xs text-foreground">
-            {displayValue}
-          </code>
-          {truncate ? <CopyButton value={value} /> : null}
-        </div>
+        <code className="block break-all rounded bg-secondary/40 px-2 py-1 text-xs text-foreground">
+          {value}
+        </code>
       ) : (
         <p className="text-sm text-foreground">{value}</p>
       )}
@@ -97,12 +55,7 @@ export function ManifestInfo(): ReactElement | null {
     <Card className="border-neon-cyan/20 bg-card/60" data-testid="manifest-info-card">
       <CardHeader className="py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <CardTitle className="text-sm font-semibold text-neon-cyan">Verified Release</CardTitle>
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              {snapshot.manifestHash.slice(0, 8)}
-            </code>
-          </div>
+          <CardTitle className="text-sm font-semibold text-neon-cyan">Verified Release</CardTitle>
           <Badge
             className="border-neon-green/30 bg-neon-green/10 px-3 py-1 text-neon-green"
             variant="secondary"
@@ -110,9 +63,15 @@ export function ManifestInfo(): ReactElement | null {
             Verified
           </Badge>
         </div>
-        <CardDescription className="sr-only">
+        <p className="text-sm text-muted-foreground">
           This page matches an official ZeroLink release signed by our team.
-        </CardDescription>
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Release fingerprint:</span>
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            {snapshot.manifestHash.slice(0, 16)}
+          </code>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         <Button
@@ -136,9 +95,8 @@ export function ManifestInfo(): ReactElement | null {
               label="Publisher key fingerprint"
               value={snapshot.publicKeyFingerprint}
               code
-              truncate
             />
-            <DetailRow label="Signature" value={snapshot.signature} code truncate />
+            <DetailRow label="Signature" value={snapshot.signature} code />
           </div>
         ) : null}
       </CardContent>
