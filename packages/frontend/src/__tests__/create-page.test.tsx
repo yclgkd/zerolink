@@ -156,6 +156,9 @@ describe('CreatePage integration', () => {
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
+    // Button should NOT show spinner/Creating when disabled due to empty form, not submission
+    expect(submit.textContent).toContain('Create Channel');
+    expect(submit.textContent).not.toContain('Creating');
   });
 
   it('enables submit button in Quick mode when password is entered', () => {
