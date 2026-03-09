@@ -101,10 +101,11 @@ export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> 
 }
 
 function clearBootstrapBodyStyles(): void {
+  // Retain backgroundColor so the page stays dark during the async dynamic
+  // import of main.ts — CSS will apply the same colour once it loads.
   const props = [
     'margin',
     'padding',
-    'backgroundColor',
     'backgroundImage',
     'backgroundSize',
     'backgroundAttachment',
