@@ -36,7 +36,7 @@ function AppShellLayout(): ReactElement {
 
   return (
     <main
-      className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-hidden px-4 py-8 md:px-8 md:py-10"
+      className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-x-hidden px-4 py-8 md:px-8 md:py-10"
       data-testid="app-shell"
     >
       <Card className="sticky top-4 z-50 border-white/8 bg-slate-900/75 backdrop-blur-2xl">

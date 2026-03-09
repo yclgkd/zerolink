@@ -1,5 +1,5 @@
 import { Copy } from 'lucide-react';
-import { type ReactElement, useCallback, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 
 import { getVerifiedReleaseSnapshot } from '../release/runtime';
 import { Badge } from './ui/badge';
@@ -23,11 +23,25 @@ function formatBuildDate(value: string): string {
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    navigator.clipboard.writeText(value).then(
+      () => {
+        setCopied(true);
+        if (timerRef.current !== null) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setCopied(false), 1500);
+      },
+      () => {
+        // Clipboard write denied or unavailable — no-op
+      }
+    );
   }, [value]);
   return (
     <button
