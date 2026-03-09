@@ -20,8 +20,7 @@ void bootstrapApp({
     ].join(',');
     document.body.style.backgroundSize = '200px 200px, auto, 40px 40px, 40px 40px';
     document.body.style.backgroundAttachment = 'fixed';
-    document.body.style.fontFamily =
-      '"Sora", "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif';
+    document.body.style.fontFamily = 'system-ui, -apple-system, sans-serif';
     root.innerHTML = `
       <section
         data-testid="release-verification-gate"
