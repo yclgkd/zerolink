@@ -119,11 +119,16 @@ function defaultRenderVerificationGate(state: ReleaseVerificationGateState): voi
   const accentColor = state.status === 'failed' ? '#f97316' : '#06b6d4';
   const badgeText = state.status === 'verifying' ? 'Verified Release' : 'Release Guard';
 
+  // Reset body defaults before CSS is loaded (bootstrap runs before main.ts)
+  document.body.style.margin = '0';
+  document.body.style.padding = '0';
+  document.body.style.background = '#06060b';
+
   const section = document.createElement('section');
   section.setAttribute('data-testid', 'release-verification-gate');
   section.setAttribute(
     'style',
-    'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:#07070c;color:#f8fafc;font-family:Segoe UI,sans-serif;'
+    'position:fixed;inset:0;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:32px;background:#06060b;color:#f8fafc;font-family:Segoe UI,sans-serif;'
   );
 
   const card = document.createElement('div');

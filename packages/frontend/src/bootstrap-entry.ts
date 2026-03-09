@@ -9,10 +9,13 @@ void bootstrapApp({
 }).catch(() => {
   const root = document.getElementById('root');
   if (root) {
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.background = '#06060b';
     root.innerHTML = `
       <section
         data-testid="release-verification-gate"
-        style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:#07070c;color:#f8fafc;font-family:Segoe UI,sans-serif;"
+        style="position:fixed;inset:0;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:32px;background:#06060b;color:#f8fafc;font-family:Segoe UI,sans-serif;"
       >
         <div style="max-width:640px;width:100%;border:1px solid rgba(249,115,22,0.35);background:rgba(20,20,30,0.72);backdrop-filter:blur(18px);border-radius:20px;padding:32px;box-shadow:0 24px 80px rgba(0,0,0,0.45);">
           <p style="margin:0 0 12px 0;color:#f97316;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">Release Guard</p>
