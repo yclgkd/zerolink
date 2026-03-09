@@ -3,18 +3,18 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Clarify the Trust Model page so it accurately describes stored metadata, local device state, delete semantics, and release verification, while restoring explicit exit navigation.
+Add a Trust Model explainer and release-build hygiene follow-up for the frontend shell.
 
 ## Current Status
-- **Phase**: Trust Model follow-up implemented, ready for PR
-- **Progress**: Expanded the frontend-only `/trust` route into a 6-card explanation that distinguishes server-visible protocol metadata from secrets, separates sender vs receiver local storage, explains physical purge plus tombstone delete semantics, clarifies local burn vs expiry, scopes Verified Release claims to builds that actually show the verification indicator, restores explicit return paths from the page, and constrains the `Back` button to known in-app trust-link entries instead of browser-history guesses.
+- **Phase**: Trust Model page and release-build hygiene complete, ready for PR
+- **Progress**: Added a frontend-only `/trust` route with shell and Create-page entry points, preserved the zero-knowledge and local-burn trust copy, trimmed the MSW worker from production `dist`, scoped Verified Release claims to builds that actually show the verification indicator, and constrained the trust-page `Back` action to known in-app trust-link entries instead of browser-history guesses.
 - **Blocking Issues**: None
 
 ## What Was Done
 
 ### Phase 12: Trust Model page clarification and exit navigation
 - `packages/frontend/src/pages/TrustPage.tsx`, `packages/frontend/src/__tests__/trust-page.test.tsx` — Reworked the trust copy into six focused cards covering staged server-visible metadata, sender and receiver local storage, physical delete plus tombstone behavior, local burn, and conditional Verified Release semantics, and added footer actions for `Back` and `Create Secure Channel`
-- `packages/frontend/src/routes.tsx`, `packages/frontend/src/pages/CreatePage.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Added explicit in-app return markers to trust-link navigation, kept the shell CTA on `/trust` as `Back to Create`, and updated route-level coverage so trust-page `Back` returns only to known in-app entries and otherwise falls back to `/`
+- `packages/frontend/src/routes.tsx`, `packages/frontend/src/pages/CreatePage.tsx`, `packages/frontend/src/trust-route-state.ts`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Added explicit in-app return markers to trust-link navigation, kept the shell CTA on `/trust` as `Back to Create`, and updated route-level coverage so trust-page `Back` returns only to known in-app entries and otherwise falls back to `/`
 
 ### Phase 11: Verified Release bootstrap hardening
 - `packages/frontend/index.html`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/main.tsx` — Replaced the direct React entry with a dedicated bootstrap entry that verifies the signed release before dynamically loading the app, and renders fail-closed blocking screens when verification is not trusted.
@@ -22,6 +22,7 @@ Clarify the Trust Model page so it accurately describes stored metadata, local d
 - `packages/frontend/src/components/manifest-info.tsx`, `packages/frontend/src/__tests__/manifest-info.test.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Reframed the manifest card as `Verified Release`, made it render only from a verified bootstrap snapshot, and updated the shell expectations for non-verified test/dev paths.
 - `packages/frontend/public/_headers`, `packages/frontend/index.html` — Removed Google Fonts from the verified runtime path and added Pages cache directives for control files vs immutable hashed assets.
 - `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts`, `docs/VERIFY.md` — Narrowed the signed manifest to publicly fetchable runtime assets (excluding Pages control files), and updated verification docs to describe the bootstrap verifier and `Verified Release` trust surface.
+- `packages/frontend/tools/remove-dev-public-assets.ts`, `packages/frontend/vite.config.ts`, `packages/frontend/tools/remove-dev-public-assets.test.ts` — Added a build-only cleanup step that removes `mockServiceWorker.js` from production `dist` while keeping the MSW worker available from `public/` during local development.
 - `packages/frontend/src/__tests__/bootstrap.test.ts`, `packages/frontend/src/__tests__/release-public-key.test.ts`, `packages/frontend/src/__tests__/release-verification.test.ts` — Added coverage for embedded-key parity, browser-side signature/hash verification, and bootstrap gating behavior.
 - Review fix: `packages/frontend/src/bootstrap.ts`, `.github/workflows/deploy.yml`, `packages/frontend/public/_headers`, `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Switched bootstrap verification from “all PROD builds” to an explicit signed-release build flag, injected that flag only in the official Pages deploy workflow, and corrected Pages cache rules so SPA entry requests are `no-store` while hashed assets stay immutable.
 
@@ -112,19 +113,20 @@ Clarify the Trust Model page so it accurately describes stored metadata, local d
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Create PR with validation notes and UX summary
+1. [ ] Push the refreshed branch so the open PR is conflict-free
+2. [ ] Confirm PR checks after the branch update
+3. [ ] Squash merge the open PR once GitHub reports mergeable
 
 ## Latest Update (2026-03-09)
 
-- Expanded the Trust Model page from a minimal explainer into six cards that explicitly call out active server metadata, sender-side local admin storage, receiver-side IndexedDB state, physical purge plus tombstone delete behavior, and Verified Release semantics.
-- Replaced the `/trust` self-link in the shell header with `Back to Create` while on the trust route, and added explicit footer actions so the page no longer strands users without an in-app exit path.
-- Added route-level tests for trust-page back navigation with previous-history vs direct-open fallback behavior.
-
-## Latest Update (2026-03-09)
-
-- Added a frontend-only Trust Model page that explains what the server cannot see, what the sender can and cannot do, what the receiver device stores locally, and why local burn is different from delete or expiry.
+- Expanded the Trust Model page into six cards that now describe staged server metadata, sender-side local admin storage, receiver-side IndexedDB state, physical purge plus tombstone delete behavior, and conditional Verified Release semantics.
+- Replaced browser-history guessing on `/trust` with explicit in-app return markers so the page `Back` action only returns to known ZeroLink entries and otherwise falls back to Create.
+- Kept the release-build hygiene follow-up that removes the MSW worker from production `dist` while preserving verified-release bootstrap behavior and cache rules.
 - Implemented a `Create + Shell` entry strategy so the explanation is discoverable both at first use and later revisits.
 - Kept the user-facing copy in English to stay consistent with the current frontend UI.
+- Trimmed `mockServiceWorker.js` from production `dist` so the MSW worker stays development-only and no longer appears in the signed release artifact set.
+- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
+- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.
 
 ## Latest Update (2026-03-08)
 
@@ -135,6 +137,3 @@ Clarify the Trust Model page so it accurately describes stored metadata, local d
 - Added a bootstrap-first Verified Release architecture so the browser verifies the signed manifest and runtime asset hashes before loading the React app, and exposed the verified build details only after a successful boot snapshot is present.
 
 ## Latest Update (2026-03-09)
-
-- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
-- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.
