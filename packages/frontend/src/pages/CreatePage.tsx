@@ -2,6 +2,7 @@ import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
 import { ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   PageCard,
   PageCardContent,
@@ -20,6 +21,7 @@ import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
 import type { CreateStore } from '../stores/create-store';
 import { useCreateStore } from '../stores/create-store';
+import { createTrustRouteState } from '../trust-route-state';
 
 const profileLabelMap: Record<SecurityProfile, string> = {
   [SECURITY_PROFILE.QUICK]: 'Quick Share',
@@ -153,6 +155,7 @@ function ModeSelectorGrid({
 }
 
 function TrustModelHint() {
+  const location = useLocation();
   return (
     <section className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -160,15 +163,14 @@ function TrustModelHint() {
           Need a plain-language summary of what stays local, what the sender can do, and when
           channel data disappears?
         </p>
-        <a
+        <Link
           className="text-sm font-medium text-neon-cyan underline decoration-neon-cyan/50 underline-offset-4 transition-colors hover:text-white"
           data-testid="create-trust-link"
-          href="/trust"
-          rel="noopener noreferrer"
-          target="_blank"
+          state={createTrustRouteState(location)}
+          to="/trust"
         >
-          Read the trust model ↗
-        </a>
+          Read the trust model
+        </Link>
       </div>
     </section>
   );
@@ -203,7 +205,15 @@ function QuickSharePasswordPanel({
   );
 }
 
-function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: boolean }) {
+function ActionFooter({
+  onCreate,
+  disabled,
+  isLoading,
+}: {
+  onCreate: () => void;
+  disabled: boolean;
+  isLoading: boolean;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button
@@ -212,7 +222,7 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
         onClick={onCreate}
         type="button"
       >
-        {disabled ? (
+        {isLoading ? (
           <>
             <Spinner aria-hidden="true" className="size-4" />
             Creating…
@@ -512,6 +522,7 @@ export function CreatePage(): ReactElement {
             ) : null}
             <ActionFooter
               disabled={logic.isSubmitting || !logic.canSubmit}
+              isLoading={logic.isSubmitting}
               onCreate={logic.handleCreate}
             />
             {logic.submitError ? (

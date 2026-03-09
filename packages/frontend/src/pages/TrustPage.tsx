@@ -20,7 +20,7 @@ const TRUST_SECTIONS = [
   },
   {
     title: 'What the server stores at each stage',
-    body: 'At create time, the server stores channel lifecycle metadata such as state, expiry, version, and admin authentication material. After the receiver locks the channel, it also stores lock verification material plus the receiver public key and fingerprint. After the sender delivers, it stores ciphertext for the receiver to fetch.',
+    body: 'At create time: channel metadata, expiry, and admin auth material. After lock: receiver public key and fingerprint. After delivery: ciphertext for the receiver to fetch.',
     accentClass: 'text-neon-magenta',
   },
   {
@@ -39,8 +39,8 @@ const TRUST_SECTIONS = [
     accentClass: 'text-neon-cyan',
   },
   {
-    title: 'What delete, expiry, local burn, and Verified Release mean',
-    body: 'ZeroLink channels expire 1 hour after creation. Sender delete removes server-side ciphertext and active channel records, then keeps only a minimal tombstone so the channel cannot be revived. TTL expiry makes the channel unavailable through the same purge path. Local burn removes plaintext only on the current device. If this page shows a Verified Release card, that build passed signed release verification. If no Verified Release indicator is shown, do not assume that verification happened. Even when shown, it does not make the browser an absolute trust anchor.',
+    title: 'Delete, expiry, local burn, and Verified Release',
+    body: 'Channels expire after 1 hour. Sender delete purges ciphertext and leaves a tombstone to prevent revival. Local burn removes plaintext from this device only — the channel stays active. Verified Release means the build passed signed release verification; absence means it did not.',
     accentClass: 'text-neon-orange',
   },
 ] as const;
