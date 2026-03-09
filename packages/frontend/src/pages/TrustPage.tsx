@@ -66,14 +66,14 @@ export function TrustPage(): ReactElement {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {TRUST_SECTIONS.map((section, index) => (
             <article
-              className="rounded-2xl border border-border/60 bg-card/60 p-5 shadow-[0_18px_48px_rgb(0_0_0_/_0.2)]"
+              className="flex flex-col rounded-2xl border border-border/60 bg-card/60 p-5 shadow-[0_18px_48px_rgb(0_0_0_/_0.2)]"
               key={section.title}
             >
               <p className={`text-xs uppercase tracking-[0.3em] ${section.accentClass}`}>
                 {`0${index + 1}`}
               </p>
               <h3 className="mt-3 text-lg font-semibold text-foreground">{section.title}</h3>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">{section.body}</p>
+              <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">{section.body}</p>
             </article>
           ))}
         </div>

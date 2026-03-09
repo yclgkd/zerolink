@@ -36,11 +36,11 @@ function AppShellLayout(): ReactElement {
 
   return (
     <main
-      className="relative isolate mx-auto min-h-screen w-full max-w-5xl overflow-hidden px-4 py-8 md:px-6 md:py-10"
+      className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-x-hidden px-4 py-8 md:px-8 md:py-10"
       data-testid="app-shell"
     >
-      <Card className="border-border/70 bg-gradient-to-br from-secondary/60 via-card to-accent/70 backdrop-blur-xl">
-        <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between">
+      <Card className="sticky top-4 z-50 border-white/8 bg-slate-900/75 backdrop-blur-2xl">
+        <CardHeader className="gap-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[var(--neon-magenta)] shadow-[0_0_20px_rgb(168_85_247_/_0.45)]">
               <Link2 aria-hidden="true" className="size-5 text-white" />
@@ -54,7 +54,7 @@ function AppShellLayout(): ReactElement {
               <p className="text-xs text-muted-foreground">Zero-Knowledge Secure Delivery</p>
             </div>
           </div>
-          <Button asChild className="shrink-0" size="sm" variant="outline">
+          <Button asChild className="shrink-0 self-center" size="sm" variant="outline">
             {isTrustRoute ? (
               <Link data-testid="app-shell-back-link" to="/">
                 Back to Create
