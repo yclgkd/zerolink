@@ -124,9 +124,15 @@ describe('verifyRelease', () => {
 
   it('fails closed when the manifest signature is invalid', async () => {
     const fixture = createSignedManifestFixture();
+    // Corrupt the first character (full 6 data bits) to guarantee decoded bytes change.
+    // Corrupting the last character is unreliable: for a 64-byte Ed25519 sig, only the
+    // upper 2 bits of the last base64url char carry data; if those bits are already 0,
+    // replacing with 'A' (= 0) is a no-op that leaves the decoded signature unchanged.
+    const firstChar = fixture.signature[0];
+    const corruptedFirstChar = firstChar !== 'A' ? 'A' : 'B';
     const fetchImpl = createFetchStub({
       ...fixture,
-      signature: `${fixture.signature.slice(0, -1)}A`,
+      signature: `${corruptedFirstChar}${fixture.signature.slice(1)}`,
     });
 
     const result = await verifyRelease({
