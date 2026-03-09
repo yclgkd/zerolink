@@ -3,7 +3,6 @@ import { Lock, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-
 import {
   PageCard,
   PageCardContent,
@@ -19,6 +18,7 @@ import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
 import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
+import type { CreateStore } from '../stores/create-store';
 import { useCreateStore } from '../stores/create-store';
 
 const profileLabelMap: Record<SecurityProfile, string> = {
@@ -273,6 +273,55 @@ function SuccessSummary({
   );
 }
 
+interface RunCreateOptions {
+  quickPassword: string;
+  store: CreateStore;
+  onError: (message: string) => void;
+  onSuccess: (links: CreatedLinks) => void;
+  onQuickPasswordClear: () => void;
+}
+
+async function runCreate({
+  quickPassword,
+  store,
+  onError,
+  onSuccess,
+  onQuickPasswordClear,
+}: RunCreateOptions): Promise<void> {
+  // Read latest state at call time to avoid stale profile closure
+  const { selectedProfile } = useCreateStore.getState();
+  store.startCreateBegin();
+
+  let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
+  try {
+    result = await cryptoOrchestrator.createChannel({
+      uuid: generateChannelUuid(),
+      profile: selectedProfile,
+      useCompatibilityMode: selectedProfile === SECURITY_PROFILE.QUICK,
+      ...(selectedProfile === SECURITY_PROFILE.QUICK ? { softkeyPassphrase: quickPassword } : {}),
+    });
+  } catch {
+    store.failCreateBegin('INTERNAL_ERROR');
+    onError('Channel creation failed: INTERNAL_ERROR');
+    return;
+  }
+
+  if (!result.ok) {
+    store.failCreateBegin(result.error.code);
+    onError(mapCreateError(result.error.code));
+    return;
+  }
+
+  store.completeCreateBegin({ ok: true, creationOptions: {} });
+  store.setCreatedProfile(selectedProfile);
+  onSuccess({
+    shareUrlWithFragment: result.data.shareUrlWithFragment,
+    manageUrl: result.data.manageUrl,
+    isPasswordMode: selectedProfile === SECURITY_PROFILE.QUICK,
+  });
+  if (selectedProfile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();
+}
+
 function useCreatePageLogic() {
   const store = useCreateStore();
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
@@ -283,11 +332,7 @@ function useCreatePageLogic() {
     const support = detectWebAuthnSupport();
     store.setWebAuthnSupported(support.supported);
     // Default to Secure if WebAuthn available, otherwise Quick
-    if (support.supported) {
-      store.setSelectedProfile(SECURITY_PROFILE.SECURE);
-    } else {
-      store.setSelectedProfile(SECURITY_PROFILE.QUICK);
-    }
+    store.setSelectedProfile(support.supported ? SECURITY_PROFILE.SECURE : SECURITY_PROFILE.QUICK);
   }, [store.setWebAuthnSupported, store.setSelectedProfile]);
 
   const isQuickMode = store.selectedProfile === SECURITY_PROFILE.QUICK;
@@ -306,46 +351,16 @@ function useCreatePageLogic() {
     clearLocalFeedback();
   }
 
-  async function runCreate(): Promise<void> {
-    const latestState = useCreateStore.getState();
-    clearLocalFeedback();
-    store.startCreateBegin();
-
-    let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
-    try {
-      result = await cryptoOrchestrator.createChannel({
-        uuid: generateChannelUuid(),
-        profile: latestState.selectedProfile,
-        useCompatibilityMode: latestState.selectedProfile === SECURITY_PROFILE.QUICK,
-        ...(latestState.selectedProfile === SECURITY_PROFILE.QUICK
-          ? { softkeyPassphrase: quickPassword }
-          : {}),
-      });
-    } catch {
-      store.failCreateBegin('INTERNAL_ERROR');
-      setSubmitError('Channel creation failed: INTERNAL_ERROR');
-      return;
-    }
-
-    if (!result.ok) {
-      store.failCreateBegin(result.error.code);
-      setSubmitError(mapCreateError(result.error.code));
-      return;
-    }
-
-    store.completeCreateBegin({ ok: true, creationOptions: {} });
-    store.setCreatedProfile(latestState.selectedProfile);
-    setCreatedLinks({
-      shareUrlWithFragment: result.data.shareUrlWithFragment,
-      manageUrl: result.data.manageUrl,
-      isPasswordMode: latestState.selectedProfile === SECURITY_PROFILE.QUICK,
-    });
-    if (latestState.selectedProfile === SECURITY_PROFILE.QUICK) setQuickPassword('');
-  }
-
   function handleCreate(): void {
     if (isSubmitting || !canSubmit) return;
-    void runCreate();
+    clearLocalFeedback();
+    void runCreate({
+      quickPassword,
+      store,
+      onError: setSubmitError,
+      onSuccess: setCreatedLinks,
+      onQuickPasswordClear: () => setQuickPassword(''),
+    });
   }
 
   return {
