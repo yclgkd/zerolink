@@ -24,7 +24,7 @@ export interface DecryptStoreState {
   publicStatus: AsyncRequestState<PublicStatusResponse>;
   decryptFetch: AsyncRequestState<DecryptFetchResponse>;
   plaintext: string | null;
-  burned: boolean;
+  localPlaintextBurned: boolean;
 }
 
 /**
@@ -39,7 +39,7 @@ export interface DecryptStoreActions {
   completeDecryptFetch: (payload: DecryptFetchResponse) => void;
   failDecryptFetch: (errorCode: string) => void;
   setPlaintext: (plaintext: string | null) => void;
-  markBurned: () => void;
+  markLocalPlaintextBurned: () => void;
   resetDecryptStore: () => void;
 }
 
@@ -55,7 +55,7 @@ function createInitialState(): DecryptStoreState {
     publicStatus: createIdleRequestState<PublicStatusResponse>(),
     decryptFetch: createIdleRequestState<DecryptFetchResponse>(),
     plaintext: null,
-    burned: false,
+    localPlaintextBurned: false,
   };
 }
 
@@ -100,12 +100,12 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
   setPlaintext: (plaintext) =>
     set(() => ({
       plaintext,
-      burned: false,
+      localPlaintextBurned: false,
     })),
 
-  markBurned: () =>
+  markLocalPlaintextBurned: () =>
     set(() => ({
-      burned: true,
+      localPlaintextBurned: true,
       plaintext: null,
     })),
 

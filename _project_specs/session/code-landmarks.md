@@ -29,7 +29,7 @@ UPDATE WHEN:
 | Location | Purpose |
 |----------|---------|
 | `packages/shared/src/crypto/` | All encryption/decryption (to be created) |
-| `packages/backend/src/do/SecretVault.ts` | Durable Object — atomic single-use state (to be created) |
+| `packages/backend/src/do/SecretVault.ts` | Durable Object — atomic channel lifecycle state (to be created) |
 | `packages/frontend/src/stores/secretStore.ts` | Zustand store for secret flow state (to be created) |
 
 ## Configuration

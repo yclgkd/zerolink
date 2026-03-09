@@ -65,11 +65,20 @@ This is append-only. Never delete entries.
 ## [2026-02-24] Cloudflare Workers + Durable Objects for backend
 
 **Decision**: Cloudflare Workers for API, Durable Objects for atomic state
-**Context**: Need single-use (burn-after-read) guarantee with no race conditions
+**Context**: Need race-free channel lifecycle enforcement for sender deletion and TTL expiry without conflating receiver-local plaintext removal
 **Options Considered**: Vercel serverless + Redis, AWS Lambda + DynamoDB, Cloudflare Workers + DO
 **Choice**: Cloudflare Workers + Durable Objects
-**Reasoning**: DO provides strong consistency within a single location; perfect for single-use enforcement; global edge deployment; no separate database
+**Reasoning**: DO provides strong consistency within a single location; a good fit for ordered state transitions and terminal-state enforcement; global edge deployment; no separate database
 **Trade-offs**: Cloudflare vendor lock-in; DO has location constraints
+
+## [2026-03-08] Separate sender delete, receiver local burn, and channel expiry semantics
+
+**Decision**: Treat sender delete, receiver-local plaintext burn, and TTL expiry as three distinct product concepts
+**Context**: UI copy and internal guidance had drifted into read-implies-channel-burn wording even though the frontend already supported local plaintext removal without ending a delivered channel
+**Options Considered**: Collapse burn into channel terminal state; keep current behavior but retain ambiguous wording; explicitly separate all three concepts
+**Choice**: Explicitly separate all three concepts
+**Reasoning**: This matches the existing frontend behavior, preserves re-decrypt after local plaintext removal, and makes deleted vs expired terminal states understandable on both sender and receiver pages
+**Trade-offs**: Existing internal guidance and todos need terminology cleanup to avoid reintroducing the old wording
 
 ## [2026-02-24] URL fragment for key material
 

@@ -3,16 +3,16 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Verified Release bootstrap verification hardening for the frontend shell.
+Verified Release bootstrap verification hardening plus delete/local-burn/expiry clarification for the frontend shell.
 
 ## Current Status
-- **Phase**: Verified Release bootstrap verifier hardened after review, ready for PR
-- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, and serves SPA entry HTML with `no-store` while leaving hashed assets immutable.
+- **Phase**: Verified Release hardening and delete/burn/expiry clarification complete, ready for PR
+- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, serves SPA entry HTML with `no-store` while leaving hashed assets immutable, and clarifies sender delete vs receiver-local plaintext burn vs channel expiry across the UI and internal guidance.
 - **Blocking Issues**: None
 
 ## What Was Done
 
-### Phase 10: Verified Release bootstrap gating
+### Phase 11: Verified Release bootstrap hardening
 - `packages/frontend/index.html`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/main.tsx` — Replaced the direct React entry with a dedicated bootstrap entry that verifies the signed release before dynamically loading the app, and renders fail-closed blocking screens when verification is not trusted.
 - `packages/frontend/src/release/public-key.ts`, `packages/frontend/src/release/runtime.ts`, `packages/frontend/src/release/verification.ts` — Added the embedded Ed25519 signing key, the verified-release runtime snapshot, and browser-side manifest/file-hash verification over same-origin runtime assets.
 - `packages/frontend/src/components/manifest-info.tsx`, `packages/frontend/src/__tests__/manifest-info.test.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Reframed the manifest card as `Verified Release`, made it render only from a verified bootstrap snapshot, and updated the shell expectations for non-verified test/dev paths.
@@ -20,6 +20,16 @@ Verified Release bootstrap verification hardening for the frontend shell.
 - `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts`, `docs/VERIFY.md` — Narrowed the signed manifest to publicly fetchable runtime assets (excluding Pages control files), and updated verification docs to describe the bootstrap verifier and `Verified Release` trust surface.
 - `packages/frontend/src/__tests__/bootstrap.test.ts`, `packages/frontend/src/__tests__/release-public-key.test.ts`, `packages/frontend/src/__tests__/release-verification.test.ts` — Added coverage for embedded-key parity, browser-side signature/hash verification, and bootstrap gating behavior.
 - Review fix: `packages/frontend/src/bootstrap.ts`, `.github/workflows/deploy.yml`, `packages/frontend/public/_headers`, `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Switched bootstrap verification from “all PROD builds” to an explicit signed-release build flag, injected that flag only in the official Pages deploy workflow, and corrected Pages cache rules so SPA entry requests are `no-store` while hashed assets stay immutable.
+
+### Phase 10: Delete vs local burn vs expiry clarification
+- `packages/frontend/src/stores/decrypt-store.ts` — Renamed the receiver-only burn flag to `localPlaintextBurned` so it cannot be confused with channel state
+- `packages/frontend/src/components/share/share-steps.tsx` — Updated delivered, deleted, expired, and local-burn copy so the receiver page clearly separates local plaintext removal from channel terminal states
+- `packages/frontend/src/pages/ManagePage.tsx` — Replaced user-facing `Destroy` language with `Delete`, and clarified deleted vs expired sender terminal copy
+- `packages/frontend/src/__tests__/share-page.test.tsx` — Added assertions that local burn is device-only and that deleted/expired pages use distinct actor and lifetime wording
+- `packages/frontend/src/__tests__/manage-page.test.tsx` — Added assertions for `Delete Channel`, `Confirm Delete`, `Deleting...`, and updated deleted/expired copy
+- `packages/frontend/e2e/happy-path.spec.ts` — Kept the local burn followed by re-decrypt flow and made the device-only semantics explicit
+- `.ai/project-context.md` / `.ai/architecture.md` — Removed decrypt-as-burn wording and narrowed backend guarantees to terminal-state enforcement
+- `_project_specs/session/decisions.md` / `_project_specs/todos/*.md` — Replaced read-implies-channel-burn terminology with explicit delete/local-burn/expiry semantics
 
 ### Phase 9: Physical delete semantics
 - `packages/backend/src/do/SecretVault.ts` — Added full-storage purge helpers, lazy expiry enforcement on reads, dual-purpose alarm scheduling for TTL expiry plus nonce cleanup, and real delete/expire behavior that removes the channel record plus related challenges/nonces instead of persisting `deleted`/`expired`

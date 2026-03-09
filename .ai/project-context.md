@@ -7,7 +7,7 @@ ZeroLink is a zero-knowledge secret sharing tool for passwords, API keys, and sh
 1. Create: the sender creates a channel and shares a link with key material in the URL fragment.
 2. Lock: the recipient derives local key material and locks the channel.
 3. Deliver: the sender encrypts and uploads ciphertext.
-4. Decrypt: the recipient decrypts locally and the link burns after a successful read.
+4. Decrypt: the recipient decrypts locally and may optionally remove local plaintext from the current device without changing the channel state.
 
 ## Packages
 - `packages/shared`: types, schemas, crypto helpers, shared constants.
@@ -22,4 +22,4 @@ ZeroLink is a zero-knowledge secret sharing tool for passwords, API keys, and sh
 - Never log, store, or transmit plaintext secrets or private keys.
 - Keep key material in URL fragments, not query params.
 - Use browser-side crypto for encryption and decryption.
-- Preserve single-use semantics and terminal-state integrity in the backend.
+- Preserve terminal-state integrity for sender deletion and TTL expiry in the backend.

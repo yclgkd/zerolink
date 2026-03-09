@@ -4,7 +4,7 @@ import { installStatefulApiMock } from './support/mock-api';
 import { installVirtualAuthenticator } from './support/webauthn';
 
 test.describe('ZL-032 e2e happy path', () => {
-  test('Create -> Lock -> Deliver -> Decrypt -> Burn', async ({ page }) => {
+  test('Create -> Lock -> Deliver -> Decrypt -> Local Burn -> Re-decrypt', async ({ page }) => {
     await installStatefulApiMock(page);
     const authenticator = await installVirtualAuthenticator(page);
     const passphrase = 'CorrectHorseBatteryStaple!123';
@@ -68,6 +68,13 @@ test.describe('ZL-032 e2e happy path', () => {
 
       await page.getByTestId('share-decrypt-burn').click();
       await expect(page.getByTestId('share-decrypt-burned')).toBeVisible();
+      await expect(page.getByText('Local plaintext removed from this device.')).toBeVisible();
+      await expect(
+        page.getByText(
+          'This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt again.'
+        )
+      ).toBeVisible();
+      await expect(page.getByTestId('share-step-delivered')).toBeVisible();
       await expect(page.getByTestId('share-decrypt-plaintext')).toHaveCount(0);
       await expect(decryptField).toHaveValue('');
 

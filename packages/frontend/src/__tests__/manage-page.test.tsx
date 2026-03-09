@@ -182,6 +182,8 @@ describe('ManagePage integration', () => {
 
     expect(screen.getByTestId('page-manage')).toBeTruthy();
     expect(await screen.findByTestId('manage-state-waiting')).toBeTruthy();
+    expect(screen.getByText('Delete Channel')).toBeTruthy();
+    expect(screen.queryByText('Destroy')).toBeNull();
   });
 
   it('shows sender role badge and uuid value', async () => {
@@ -571,6 +573,8 @@ describe('ManagePage integration', () => {
 
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
     expect(screen.getByTestId('manage-destroy-confirm')).toBeTruthy();
+    expect(screen.getByText('Delete this channel permanently?')).toBeTruthy();
+    expect(screen.getByText('Confirm Delete')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('manage-destroy-cancel'));
     expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
@@ -585,6 +589,9 @@ describe('ManagePage integration', () => {
     expect(deleteChannelMock.mock.calls[0]?.[0]?.uuid).toBe(VALID_UUID);
     expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
     expect(await screen.findByTestId('manage-state-deleted')).toBeTruthy();
+    expect(
+      screen.getByText('You deleted this channel. It can no longer deliver or decrypt content.')
+    ).toBeTruthy();
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
@@ -634,6 +641,7 @@ describe('ManagePage integration', () => {
         (screen.getByTestId('manage-destroy-confirm-apply') as HTMLButtonElement).disabled
       ).toBe(true);
     });
+    expect(screen.getByText('Deleting...')).toBeTruthy();
 
     deferred.resolve({ ok: true, data: {} });
   });

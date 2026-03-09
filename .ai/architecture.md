@@ -13,7 +13,7 @@
 ## Backend
 - Package: `packages/backend/`
 - Stack: Cloudflare Worker, Durable Objects, KV.
-- Durable Objects enforce ordered state transitions and single-use guarantees.
+- Durable Objects enforce ordered state transitions and terminal-state guarantees.
 
 ## Shared Contracts
 - Package: `packages/shared/`
