@@ -452,6 +452,13 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(screen.getByText('Receiver channel is locked')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This channel is already locked for the receiver. If you need the Safety Code, reopen this link on the device that created the lock.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByText('Coordinate with the sender over another channel.')).toBeTruthy();
     const warning = screen.getByTestId('share-safety-unavailable');
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
@@ -466,6 +473,12 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(screen.getByText('Decrypt Delivered Secret')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'If this device created the receiver lock, enter that passphrase to decrypt the secret locally.'
+      )
+    ).toBeTruthy();
     expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
     expect(screen.getByText('Channel Delivered')).toBeTruthy();
     expect(

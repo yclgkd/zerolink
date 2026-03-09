@@ -60,8 +60,8 @@ export function StepIndicator({
 }
 
 export const nextSteps = [
-  'Tell the sender that you locked the channel.',
-  'Compare Safety Code values over another channel before delivery.',
+  'Coordinate with the sender over another channel.',
+  'Compare Safety Code values before delivery when they are available on this device.',
   'Keep this tab open until the sender confirms the encrypted delivery.',
 ] as const;
 
@@ -187,9 +187,10 @@ export function LockedStep({
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Channel locked for you</h3>
+        <h3 className="text-base font-semibold text-foreground">Receiver channel is locked</h3>
         <p className="text-xs text-muted-foreground">
-          Verify the Safety Code with the sender before they deliver the secret.
+          Verify the Safety Code with the sender before delivery when it is available on this
+          device.
         </p>
       </div>
 

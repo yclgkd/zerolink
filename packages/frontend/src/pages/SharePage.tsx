@@ -2,14 +2,8 @@ import { CHANNEL_STATE } from '@zerolink/shared';
 import type { ReactElement } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
-import {
-  PageCard,
-  PageCardContent,
-  PageCardDescription,
-  PageCardHeader,
-  PageCardTitle,
-  RoleBadge,
-} from '../components/layout';
+import { PageCard, PageCardContent } from '../components/layout';
+import { SharePageHeader } from '../components/share/share-page-header';
 import {
   DeliveredStep,
   LoadingStep,
@@ -24,23 +18,6 @@ import {
   useSharePageDecryptLogic,
   useSharePageLockLogic,
 } from '../features/share/share-logic';
-
-function SharePageHeader() {
-  return (
-    <PageCardHeader>
-      <div className="flex items-center justify-between gap-3">
-        <PageCardTitle asChild className="text-primary">
-          <h2>Receiver Setup</h2>
-        </PageCardTitle>
-        <RoleBadge party="receiver" />
-      </div>
-      <PageCardDescription>
-        The sender already created this channel. Set your own passphrase here to generate your
-        receiver key and lock the channel on this device.
-      </PageCardDescription>
-    </PageCardHeader>
-  );
-}
 
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   return (
@@ -81,7 +58,11 @@ export function SharePage(): ReactElement {
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
-      <SharePageHeader />
+      <SharePageHeader
+        channelState={publicState.channelState}
+        isPublicStatusLoading={publicState.isPublicStatusLoading}
+        isUnavailable={isUnavailable}
+      />
       <PageCardContent aria-busy={isPageBusy} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
