@@ -118,7 +118,6 @@
 
   body {
     @apply bg-background font-sans text-foreground antialiased;
-    font-family: "Sora Variable", system-ui, sans-serif;
     margin: 0;
     background-color: #06060b;
     background-image:
