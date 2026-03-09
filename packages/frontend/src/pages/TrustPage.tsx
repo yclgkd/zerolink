@@ -10,6 +10,7 @@ import {
   PageCardTitle,
 } from '../components/layout';
 import { Button } from '../components/ui/button';
+import { hasTrustRouteReturnTo } from '../trust-route-state';
 
 const TRUST_SECTIONS = [
   {
@@ -18,8 +19,8 @@ const TRUST_SECTIONS = [
     accentClass: 'text-neon-cyan',
   },
   {
-    title: 'What the server stores while a channel is active',
-    body: 'While the channel is active, the server stores ciphertext plus protocol metadata such as lifecycle state, expiry, admin authentication material, lock verification material, receiver public key and fingerprint, and the version counter needed for safe updates.',
+    title: 'What the server stores at each stage',
+    body: 'At create time, the server stores channel lifecycle metadata such as state, expiry, version, and admin authentication material. After the receiver locks the channel, it also stores lock verification material plus the receiver public key and fingerprint. After the sender delivers, it stores ciphertext for the receiver to fetch.',
     accentClass: 'text-neon-magenta',
   },
   {
@@ -39,31 +40,15 @@ const TRUST_SECTIONS = [
   },
   {
     title: 'What delete, expiry, local burn, and Verified Release mean',
-    body: 'ZeroLink channels expire 1 hour after creation. Sender delete removes server-side ciphertext and active channel records, then keeps only a minimal tombstone so the channel cannot be revived. TTL expiry makes the channel unavailable through the same purge path. Local burn removes plaintext only on the current device. Verified Release means this frontend build passed signed release verification, not that the browser becomes an absolute trust anchor.',
+    body: 'ZeroLink channels expire 1 hour after creation. Sender delete removes server-side ciphertext and active channel records, then keeps only a minimal tombstone so the channel cannot be revived. TTL expiry makes the channel unavailable through the same purge path. Local burn removes plaintext only on the current device. If this page shows a Verified Release card, that build passed signed release verification. If no Verified Release indicator is shown, do not assume that verification happened. Even when shown, it does not make the browser an absolute trust anchor.',
     accentClass: 'text-neon-orange',
   },
 ] as const;
 
-function canNavigateBack(locationKey: string): boolean {
-  if (locationKey !== 'default') {
-    return true;
-  }
-
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  const state = window.history.state as { idx?: number } | null;
-  if (typeof state?.idx === 'number') {
-    return state.idx > 0;
-  }
-
-  return window.history.length > 1;
-}
-
 export function TrustPage(): ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
+  const canReturnToPreviousRoute = hasTrustRouteReturnTo(location.state);
 
   return (
     <PageCard data-testid="page-trust" tone="cyan">
@@ -97,7 +82,7 @@ export function TrustPage(): ReactElement {
         <Button
           data-testid="trust-back-button"
           onClick={() => {
-            if (canNavigateBack(location.key)) {
+            if (canReturnToPreviousRoute) {
               navigate(-1);
               return;
             }

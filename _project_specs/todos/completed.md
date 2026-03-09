@@ -63,9 +63,10 @@ updates the trust card to expose verified build metadata only after a successful
 **Completed**: 2026-03-09
 
 Expanded the frontend Trust Model page from four generic cards into six focused cards that
-accurately describe which secrets never reach the server, which protocol metadata is stored while
-the channel is active, what remains on sender and receiver devices, how physical delete plus
-tombstone reservation differs from local burn and TTL expiry, and what `Verified Release` does and
-does not guarantee. Also replaced the trust-page shell self-link with `Back to Create` and added
-explicit `Back` / `Create Secure Channel` footer actions so users can exit the page without relying
-on browser chrome.
+accurately describe which secrets never reach the server, which protocol metadata is stored at each
+channel stage, what remains on sender and receiver devices, how physical delete plus tombstone
+reservation differs from local burn and TTL expiry, and what `Verified Release` does and does not
+guarantee when the indicator is actually present. Also replaced the trust-page shell self-link with
+`Back to Create`, carried explicit in-app return markers into trust-page links, and made the
+trust-page `Back` action return only to known in-app entries instead of guessing from browser
+history.

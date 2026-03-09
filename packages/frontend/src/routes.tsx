@@ -12,6 +12,7 @@ import { ManagePage } from './pages/ManagePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SharePage } from './pages/SharePage';
 import { TrustPage } from './pages/TrustPage';
+import { createTrustRouteState } from './trust-route-state';
 
 export const APP_ROUTE_ID = {
   SHELL: 'shell',
@@ -31,6 +32,7 @@ function toChildPath(routePattern: string): string {
 function AppShellLayout(): ReactElement {
   const location = useLocation();
   const isTrustRoute = location.pathname === `/${TRUST_PAGE_PATH}`;
+  const trustRouteState = createTrustRouteState(location);
 
   return (
     <main
@@ -58,7 +60,11 @@ function AppShellLayout(): ReactElement {
                 Back to Create
               </Link>
             ) : (
-              <Link data-testid="app-shell-trust-link" to={`/${TRUST_PAGE_PATH}`}>
+              <Link
+                data-testid="app-shell-trust-link"
+                state={trustRouteState}
+                to={`/${TRUST_PAGE_PATH}`}
+              >
                 Trust Model
               </Link>
             )}

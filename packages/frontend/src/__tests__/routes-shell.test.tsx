@@ -6,10 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { APP_ROUTES } from '../routes';
 
-function renderFrom(pathname: string | string[], initialIndex?: number) {
+function renderFrom(pathname: string) {
   const router = createMemoryRouter(APP_ROUTES, {
-    initialEntries: typeof pathname === 'string' ? [pathname] : pathname,
-    ...(initialIndex === undefined ? {} : { initialIndex }),
+    initialEntries: [pathname],
   });
 
   return { router, ...render(<RouterProvider router={router} />) };
@@ -48,9 +47,25 @@ describe('App shell routes rendering', () => {
     );
   });
 
-  it('uses trust back button to return to the previous route when history exists', async () => {
-    renderFrom(['/non-existing-path', '/trust'], 1);
+  it('returns to create when trust page is opened from the create-page trust link', async () => {
+    renderFrom('/');
 
+    expect(await screen.findByTestId('page-create')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('create-trust-link'));
+    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trust-back-button'));
+
+    expect(await screen.findByTestId('page-create')).toBeTruthy();
+  });
+
+  it('returns to the prior shell route when trust page is opened from the shell trust link', async () => {
+    renderFrom('/non-existing-path');
+
+    expect(await screen.findByTestId('page-not-found')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('app-shell-trust-link'));
     expect(await screen.findByTestId('page-trust')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('trust-back-button'));
@@ -58,7 +73,7 @@ describe('App shell routes rendering', () => {
     expect(await screen.findByTestId('page-not-found')).toBeTruthy();
   });
 
-  it('falls back to create page when trust back button has no prior history', async () => {
+  it('falls back to create page when trust page is opened directly', async () => {
     renderFrom('/trust');
 
     expect(await screen.findByTestId('page-trust')).toBeTruthy();

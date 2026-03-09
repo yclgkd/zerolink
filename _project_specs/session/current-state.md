@@ -7,14 +7,14 @@ Clarify the Trust Model page so it accurately describes stored metadata, local d
 
 ## Current Status
 - **Phase**: Trust Model follow-up implemented, ready for PR
-- **Progress**: Expanded the frontend-only `/trust` route into a 6-card explanation that distinguishes server-visible protocol metadata from secrets, separates sender vs receiver local storage, explains physical purge plus tombstone delete semantics, clarifies local burn vs expiry, adds Verified Release context, restores explicit return paths from the page, and passed targeted trust-route frontend tests plus a production build.
+- **Progress**: Expanded the frontend-only `/trust` route into a 6-card explanation that distinguishes server-visible protocol metadata from secrets, separates sender vs receiver local storage, explains physical purge plus tombstone delete semantics, clarifies local burn vs expiry, scopes Verified Release claims to builds that actually show the verification indicator, restores explicit return paths from the page, and constrains the `Back` button to known in-app trust-link entries instead of browser-history guesses.
 - **Blocking Issues**: None
 
 ## What Was Done
 
 ### Phase 12: Trust Model page clarification and exit navigation
-- `packages/frontend/src/pages/TrustPage.tsx`, `packages/frontend/src/__tests__/trust-page.test.tsx` — Reworked the trust copy into six focused cards covering server-visible metadata, sender and receiver local storage, physical delete plus tombstone behavior, local burn, and Verified Release, and added footer actions for `Back` and `Create Secure Channel`
-- `packages/frontend/src/routes.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Switched the shell CTA on `/trust` from a self-link to `Back to Create`, and added route-level coverage for trust-page exit navigation with and without prior history
+- `packages/frontend/src/pages/TrustPage.tsx`, `packages/frontend/src/__tests__/trust-page.test.tsx` — Reworked the trust copy into six focused cards covering staged server-visible metadata, sender and receiver local storage, physical delete plus tombstone behavior, local burn, and conditional Verified Release semantics, and added footer actions for `Back` and `Create Secure Channel`
+- `packages/frontend/src/routes.tsx`, `packages/frontend/src/pages/CreatePage.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Added explicit in-app return markers to trust-link navigation, kept the shell CTA on `/trust` as `Back to Create`, and updated route-level coverage so trust-page `Back` returns only to known in-app entries and otherwise falls back to `/`
 
 ### Phase 11: Verified Release bootstrap hardening
 - `packages/frontend/index.html`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/main.tsx` — Replaced the direct React entry with a dedicated bootstrap entry that verifies the signed release before dynamically loading the app, and renders fail-closed blocking screens when verification is not trusted.
