@@ -174,7 +174,8 @@ async function dispatch(
   path: string,
   method: string,
   body?: unknown,
-  rawBody: boolean = false
+  rawBody: boolean = false,
+  extraHeaders?: Record<string, string>
 ): Promise<Response> {
   const fetchHandler = worker.fetch;
   if (!fetchHandler) {
@@ -187,14 +188,17 @@ async function dispatch(
     ctx: ExecutionContext
   ) => Promise<Response>;
 
+  const headers: Record<string, string> = { ...extraHeaders };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json; charset=utf-8';
+  }
+
   const request =
     body === undefined
-      ? new Request(`https://zerolink.test${path}`, { method })
+      ? new Request(`https://zerolink.test${path}`, { method, headers })
       : new Request(`https://zerolink.test${path}`, {
           method,
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-          },
+          headers,
           body: rawBody ? String(body) : JSON.stringify(body),
         });
 
@@ -794,13 +798,23 @@ describe('backend worker routing + lock/compound forwarding', () => {
   });
 
   describe('rate limiting', () => {
-    it('returns 429 when rate limiter denies the request', async () => {
+    const CF_IP = { 'CF-Connecting-IP': '1.2.3.4' };
+
+    it('returns 429 with Retry-After when rate limiter denies the request', async () => {
       const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
       env.RATE_LIMITER = { limit: async () => ({ success: false }) };
-      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+      const response = await dispatch(
+        env,
+        `/api/public/${VALID_UUID}`,
+        'GET',
+        undefined,
+        false,
+        CF_IP
+      );
       const payload = (await response.json()) as ApiErrorResponse;
       expect(response.status).toBe(429);
       expect(payload.code).toBe('RATE_LIMITED');
+      expect(response.headers.get('Retry-After')).toBe('60');
     });
 
     it('passes the request through when rate limiter allows it', async () => {
@@ -811,6 +825,26 @@ describe('backend worker routing + lock/compound forwarding', () => {
           })
       );
       env.RATE_LIMITER = { limit: async () => ({ success: true }) };
+      const response = await dispatch(
+        env,
+        `/api/public/${VALID_UUID}`,
+        'GET',
+        undefined,
+        false,
+        CF_IP
+      );
+      expect(response.status).not.toBe(429);
+    });
+
+    it('skips rate limiting when CF-Connecting-IP header is absent', async () => {
+      const { env } = createMockEnv(
+        async () =>
+          new Response(JSON.stringify({ ok: true, state: 'waiting', adminMode: 'webauthn' }), {
+            status: 200,
+          })
+      );
+      env.RATE_LIMITER = { limit: async () => ({ success: false }) };
+      // No CF-Connecting-IP header — simulates local/direct invocation
       const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
       expect(response.status).not.toBe(429);
     });
@@ -818,7 +852,14 @@ describe('backend worker routing + lock/compound forwarding', () => {
     it('does not rate-limit OPTIONS preflight requests', async () => {
       const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
       env.RATE_LIMITER = { limit: async () => ({ success: false }) };
-      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'OPTIONS');
+      const response = await dispatch(
+        env,
+        `/api/public/${VALID_UUID}`,
+        'OPTIONS',
+        undefined,
+        false,
+        CF_IP
+      );
       expect(response.status).toBe(204);
     });
   });

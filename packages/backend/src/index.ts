@@ -307,10 +307,17 @@ async function handleCompoundCommit(
 }
 
 async function checkRateLimit(request: Request, env: Env): Promise<Response | null> {
-  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (!ip) {
+    // No CF-Connecting-IP means the request is not coming through Cloudflare
+    // (e.g., local dev or direct Worker invocation). Skip rate limiting.
+    return null;
+  }
   const { success } = await env.RATE_LIMITER.limit({ key: ip });
   if (!success) {
-    return jsonApiResponse({ ok: false, code: 'RATE_LIMITED' }, 429);
+    const headers = buildApiHeaders();
+    headers.set('Retry-After', '60');
+    return jsonApiResponse({ ok: false, code: 'RATE_LIMITED' }, 429, headers);
   }
   return null;
 }
