@@ -3,11 +3,11 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Add a minimal Trust Model page plus shell/create entry points for the frontend shell.
+Add a Trust Model explainer and release-build hygiene follow-up for the frontend shell.
 
 ## Current Status
-- **Phase**: Trust Model page implemented, ready for PR
-- **Progress**: Added a frontend-only `/trust` route, a shell-level `Trust Model` entry, a Create-page contextual link, and static trust copy that reflects the real zero-knowledge, local-storage, local-burn, and 1-hour expiry behavior.
+- **Phase**: Trust Model page and release-build hygiene complete, ready for PR
+- **Progress**: Added a frontend-only `/trust` route with shell and Create-page entry points, preserved the zero-knowledge and local-burn trust copy, and trimmed the MSW worker from production `dist` while keeping verified-release bootstrap behavior and cache rules intact.
 - **Blocking Issues**: None
 
 ## What Was Done
@@ -18,6 +18,7 @@ Add a minimal Trust Model page plus shell/create entry points for the frontend s
 - `packages/frontend/src/components/manifest-info.tsx`, `packages/frontend/src/__tests__/manifest-info.test.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Reframed the manifest card as `Verified Release`, made it render only from a verified bootstrap snapshot, and updated the shell expectations for non-verified test/dev paths.
 - `packages/frontend/public/_headers`, `packages/frontend/index.html` — Removed Google Fonts from the verified runtime path and added Pages cache directives for control files vs immutable hashed assets.
 - `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts`, `docs/VERIFY.md` — Narrowed the signed manifest to publicly fetchable runtime assets (excluding Pages control files), and updated verification docs to describe the bootstrap verifier and `Verified Release` trust surface.
+- `packages/frontend/tools/remove-dev-public-assets.ts`, `packages/frontend/vite.config.ts`, `packages/frontend/tools/remove-dev-public-assets.test.ts` — Added a build-only cleanup step that removes `mockServiceWorker.js` from production `dist` while keeping the MSW worker available from `public/` during local development.
 - `packages/frontend/src/__tests__/bootstrap.test.ts`, `packages/frontend/src/__tests__/release-public-key.test.ts`, `packages/frontend/src/__tests__/release-verification.test.ts` — Added coverage for embedded-key parity, browser-side signature/hash verification, and bootstrap gating behavior.
 - Review fix: `packages/frontend/src/bootstrap.ts`, `.github/workflows/deploy.yml`, `packages/frontend/public/_headers`, `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Switched bootstrap verification from “all PROD builds” to an explicit signed-release build flag, injected that flag only in the official Pages deploy workflow, and corrected Pages cache rules so SPA entry requests are `no-store` while hashed assets stay immutable.
 
@@ -108,15 +109,18 @@ Add a minimal Trust Model page plus shell/create entry points for the frontend s
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Run targeted frontend validation for the trust page, route, and Create-page link
-2. [ ] Review the trust copy against current zero-knowledge and expiry behavior
-3. [ ] Create PR with validation notes and UX summary
+1. [ ] Re-run targeted frontend validation after syncing the PR branch with `main`
+2. [ ] Push the refreshed branch so the open PR is conflict-free
+3. [ ] Address any follow-up review comments
 
 ## Latest Update (2026-03-09)
 
 - Added a frontend-only Trust Model page that explains what the server cannot see, what the sender can and cannot do, what the receiver device stores locally, and why local burn is different from delete or expiry.
 - Implemented a `Create + Shell` entry strategy so the explanation is discoverable both at first use and later revisits.
 - Kept the user-facing copy in English to stay consistent with the current frontend UI.
+- Trimmed `mockServiceWorker.js` from production `dist` so the MSW worker stays development-only and no longer appears in the signed release artifact set.
+- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
+- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.
 
 ## Latest Update (2026-03-08)
 
@@ -127,6 +131,3 @@ Add a minimal Trust Model page plus shell/create entry points for the frontend s
 - Added a bootstrap-first Verified Release architecture so the browser verifies the signed manifest and runtime asset hashes before loading the React app, and exposed the verified build details only after a successful boot snapshot is present.
 
 ## Latest Update (2026-03-09)
-
-- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
-- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.
