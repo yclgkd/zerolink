@@ -6,8 +6,8 @@
 Verified Release bootstrap verification hardening plus delete/local-burn/expiry clarification for the frontend shell.
 
 ## Current Status
-- **Phase**: Verified Release hardening and delete/burn/expiry clarification complete, ready for PR
-- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, serves SPA entry HTML with `no-store` while leaving hashed assets immutable, and clarifies sender delete vs receiver-local plaintext burn vs channel expiry across the UI and internal guidance.
+- **Phase**: Verified Release hardening and release-build hygiene complete, ready for PR
+- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, serves SPA entry HTML with `no-store` while leaving hashed assets immutable, trims the MSW worker from production `dist`, and clarifies sender delete vs receiver-local plaintext burn vs channel expiry across the UI and internal guidance.
 - **Blocking Issues**: None
 
 ## What Was Done
@@ -18,6 +18,7 @@ Verified Release bootstrap verification hardening plus delete/local-burn/expiry 
 - `packages/frontend/src/components/manifest-info.tsx`, `packages/frontend/src/__tests__/manifest-info.test.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Reframed the manifest card as `Verified Release`, made it render only from a verified bootstrap snapshot, and updated the shell expectations for non-verified test/dev paths.
 - `packages/frontend/public/_headers`, `packages/frontend/index.html` — Removed Google Fonts from the verified runtime path and added Pages cache directives for control files vs immutable hashed assets.
 - `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts`, `docs/VERIFY.md` — Narrowed the signed manifest to publicly fetchable runtime assets (excluding Pages control files), and updated verification docs to describe the bootstrap verifier and `Verified Release` trust surface.
+- `packages/frontend/tools/remove-dev-public-assets.ts`, `packages/frontend/vite.config.ts`, `packages/frontend/tools/remove-dev-public-assets.test.ts` — Added a build-only cleanup step that removes `mockServiceWorker.js` from production `dist` while keeping the MSW worker available from `public/` during local development.
 - `packages/frontend/src/__tests__/bootstrap.test.ts`, `packages/frontend/src/__tests__/release-public-key.test.ts`, `packages/frontend/src/__tests__/release-verification.test.ts` — Added coverage for embedded-key parity, browser-side signature/hash verification, and bootstrap gating behavior.
 - Review fix: `packages/frontend/src/bootstrap.ts`, `.github/workflows/deploy.yml`, `packages/frontend/public/_headers`, `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Switched bootstrap verification from “all PROD builds” to an explicit signed-release build flag, injected that flag only in the official Pages deploy workflow, and corrected Pages cache rules so SPA entry requests are `no-store` while hashed assets stay immutable.
 
