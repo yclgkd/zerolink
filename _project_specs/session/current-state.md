@@ -3,14 +3,18 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Add a minimal Trust Model page plus shell/create entry points for the frontend shell.
+Clarify the Trust Model page so it accurately describes stored metadata, local device state, delete semantics, and release verification, while restoring explicit exit navigation.
 
 ## Current Status
-- **Phase**: Trust Model page implemented, ready for PR
-- **Progress**: Added a frontend-only `/trust` route, a shell-level `Trust Model` entry, a Create-page contextual link, and static trust copy that reflects the real zero-knowledge, local-storage, local-burn, and 1-hour expiry behavior.
+- **Phase**: Trust Model follow-up implemented, ready for PR
+- **Progress**: Expanded the frontend-only `/trust` route into a 6-card explanation that distinguishes server-visible protocol metadata from secrets, separates sender vs receiver local storage, explains physical purge plus tombstone delete semantics, clarifies local burn vs expiry, adds Verified Release context, restores explicit return paths from the page, and passed targeted trust-route frontend tests plus a production build.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 12: Trust Model page clarification and exit navigation
+- `packages/frontend/src/pages/TrustPage.tsx`, `packages/frontend/src/__tests__/trust-page.test.tsx` — Reworked the trust copy into six focused cards covering server-visible metadata, sender and receiver local storage, physical delete plus tombstone behavior, local burn, and Verified Release, and added footer actions for `Back` and `Create Secure Channel`
+- `packages/frontend/src/routes.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Switched the shell CTA on `/trust` from a self-link to `Back to Create`, and added route-level coverage for trust-page exit navigation with and without prior history
 
 ### Phase 11: Verified Release bootstrap hardening
 - `packages/frontend/index.html`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/main.tsx` — Replaced the direct React entry with a dedicated bootstrap entry that verifies the signed release before dynamically loading the app, and renders fail-closed blocking screens when verification is not trusted.
@@ -108,9 +112,13 @@ Add a minimal Trust Model page plus shell/create entry points for the frontend s
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Run targeted frontend validation for the trust page, route, and Create-page link
-2. [ ] Review the trust copy against current zero-knowledge and expiry behavior
-3. [ ] Create PR with validation notes and UX summary
+1. [ ] Create PR with validation notes and UX summary
+
+## Latest Update (2026-03-09)
+
+- Expanded the Trust Model page from a minimal explainer into six cards that explicitly call out active server metadata, sender-side local admin storage, receiver-side IndexedDB state, physical purge plus tombstone delete behavior, and Verified Release semantics.
+- Replaced the `/trust` self-link in the shell header with `Back to Create` while on the trust route, and added explicit footer actions so the page no longer strands users without an in-app exit path.
+- Added route-level tests for trust-page back navigation with previous-history vs direct-open fallback behavior.
 
 ## Latest Update (2026-03-09)
 

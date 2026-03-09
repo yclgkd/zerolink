@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { APP_ROUTES } from '../routes';
 
-function renderFrom(pathname: string) {
+function renderFrom(pathname: string | string[], initialIndex?: number) {
   const router = createMemoryRouter(APP_ROUTES, {
-    initialEntries: [pathname],
+    initialEntries: typeof pathname === 'string' ? [pathname] : pathname,
+    ...(initialIndex === undefined ? {} : { initialIndex }),
   });
 
-  return render(<RouterProvider router={router} />);
+  return { router, ...render(<RouterProvider router={router} />) };
 }
 
 describe('App shell routes rendering', () => {
@@ -36,12 +37,35 @@ describe('App shell routes rendering', () => {
     expect(screen.queryByRole('link', { name: 'Manage' })).toBeNull();
   });
 
-  it('renders trust page inside the app shell and shows the shell trust link', async () => {
+  it('renders trust page inside the app shell and swaps the shell CTA to back-to-create', async () => {
     renderFrom('/trust');
 
     expect(await screen.findByTestId('app-shell')).toBeTruthy();
     expect(screen.getByTestId('page-trust')).toBeTruthy();
-    expect(screen.getByTestId('app-shell-trust-link').getAttribute('href')).toBe('/trust');
+    expect(screen.getByTestId('app-shell-back-link').getAttribute('href')).toBe('/');
+    expect(screen.getByTestId('trust-create-button').textContent).toContain(
+      'Create Secure Channel'
+    );
+  });
+
+  it('uses trust back button to return to the previous route when history exists', async () => {
+    renderFrom(['/non-existing-path', '/trust'], 1);
+
+    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trust-back-button'));
+
+    expect(await screen.findByTestId('page-not-found')).toBeTruthy();
+  });
+
+  it('falls back to create page when trust back button has no prior history', async () => {
+    renderFrom('/trust');
+
+    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trust-back-button'));
+
+    expect(await screen.findByTestId('page-create')).toBeTruthy();
   });
 
   it('falls back to not-found child route for unknown path', async () => {
