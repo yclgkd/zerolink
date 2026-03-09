@@ -2,7 +2,7 @@ import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
 import { Lock, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   PageCard,
   PageCardContent,
@@ -20,6 +20,7 @@ import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
 import type { CreateStore } from '../stores/create-store';
 import { useCreateStore } from '../stores/create-store';
+import { createTrustRouteState } from '../trust-route-state';
 
 const profileLabelMap: Record<SecurityProfile, string> = {
   [SECURITY_PROFILE.QUICK]: 'Quick Share',
@@ -153,6 +154,8 @@ function ModeSelectorGrid({
 }
 
 function TrustModelHint() {
+  const location = useLocation();
+
   return (
     <section className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -163,6 +166,7 @@ function TrustModelHint() {
         <Link
           className="text-sm font-medium text-neon-cyan underline decoration-neon-cyan/50 underline-offset-4 transition-colors hover:text-white"
           data-testid="create-trust-link"
+          state={createTrustRouteState(location)}
           to="/trust"
         >
           Read the trust model

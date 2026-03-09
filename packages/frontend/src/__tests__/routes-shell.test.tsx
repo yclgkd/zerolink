@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -11,7 +11,7 @@ function renderFrom(pathname: string) {
     initialEntries: [pathname],
   });
 
-  return render(<RouterProvider router={router} />);
+  return { router, ...render(<RouterProvider router={router} />) };
 }
 
 describe('App shell routes rendering', () => {
@@ -36,12 +36,51 @@ describe('App shell routes rendering', () => {
     expect(screen.queryByRole('link', { name: 'Manage' })).toBeNull();
   });
 
-  it('renders trust page inside the app shell and shows the shell trust link', async () => {
+  it('renders trust page inside the app shell and swaps the shell CTA to back-to-create', async () => {
     renderFrom('/trust');
 
     expect(await screen.findByTestId('app-shell')).toBeTruthy();
     expect(screen.getByTestId('page-trust')).toBeTruthy();
-    expect(screen.getByTestId('app-shell-trust-link').getAttribute('href')).toBe('/trust');
+    expect(screen.getByTestId('app-shell-back-link').getAttribute('href')).toBe('/');
+    expect(screen.getByTestId('trust-create-button').textContent).toContain(
+      'Create Secure Channel'
+    );
+  });
+
+  it('returns to create when trust page is opened from the create-page trust link', async () => {
+    renderFrom('/');
+
+    expect(await screen.findByTestId('page-create')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('create-trust-link'));
+    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trust-back-button'));
+
+    expect(await screen.findByTestId('page-create')).toBeTruthy();
+  });
+
+  it('returns to the prior shell route when trust page is opened from the shell trust link', async () => {
+    renderFrom('/non-existing-path');
+
+    expect(await screen.findByTestId('page-not-found')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('app-shell-trust-link'));
+    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trust-back-button'));
+
+    expect(await screen.findByTestId('page-not-found')).toBeTruthy();
+  });
+
+  it('falls back to create page when trust page is opened directly', async () => {
+    renderFrom('/trust');
+
+    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('trust-back-button'));
+
+    expect(await screen.findByTestId('page-create')).toBeTruthy();
   });
 
   it('falls back to not-found child route for unknown path', async () => {

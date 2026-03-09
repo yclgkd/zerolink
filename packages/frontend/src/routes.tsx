@@ -2,7 +2,7 @@ import { ROUTE_PATTERN } from '@zerolink/shared';
 import { Link2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import type { RouteObject } from 'react-router-dom';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 
 import { ManifestInfo } from './components/manifest-info';
 import { Button } from './components/ui/button';
@@ -12,6 +12,7 @@ import { ManagePage } from './pages/ManagePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SharePage } from './pages/SharePage';
 import { TrustPage } from './pages/TrustPage';
+import { createTrustRouteState } from './trust-route-state';
 
 export const APP_ROUTE_ID = {
   SHELL: 'shell',
@@ -29,6 +30,10 @@ function toChildPath(routePattern: string): string {
 }
 
 function AppShellLayout(): ReactElement {
+  const location = useLocation();
+  const isTrustRoute = location.pathname === `/${TRUST_PAGE_PATH}`;
+  const trustRouteState = createTrustRouteState(location);
+
   return (
     <main
       className="relative isolate mx-auto min-h-screen w-full max-w-5xl overflow-hidden px-4 py-8 md:px-6 md:py-10"
@@ -50,9 +55,19 @@ function AppShellLayout(): ReactElement {
             </div>
           </div>
           <Button asChild className="shrink-0" size="sm" variant="outline">
-            <Link data-testid="app-shell-trust-link" to={`/${TRUST_PAGE_PATH}`}>
-              Trust Model
-            </Link>
+            {isTrustRoute ? (
+              <Link data-testid="app-shell-back-link" to="/">
+                Back to Create
+              </Link>
+            ) : (
+              <Link
+                data-testid="app-shell-trust-link"
+                state={trustRouteState}
+                to={`/${TRUST_PAGE_PATH}`}
+              >
+                Trust Model
+              </Link>
+            )}
           </Button>
         </CardHeader>
       </Card>

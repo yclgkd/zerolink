@@ -7,10 +7,14 @@ Add a Trust Model explainer and release-build hygiene follow-up for the frontend
 
 ## Current Status
 - **Phase**: Trust Model page and release-build hygiene complete, ready for PR
-- **Progress**: Added a frontend-only `/trust` route with shell and Create-page entry points, preserved the zero-knowledge and local-burn trust copy, and trimmed the MSW worker from production `dist` while keeping verified-release bootstrap behavior and cache rules intact.
+- **Progress**: Added a frontend-only `/trust` route with shell and Create-page entry points, preserved the zero-knowledge and local-burn trust copy, trimmed the MSW worker from production `dist`, scoped Verified Release claims to builds that actually show the verification indicator, and constrained the trust-page `Back` action to known in-app trust-link entries instead of browser-history guesses.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 12: Trust Model page clarification and exit navigation
+- `packages/frontend/src/pages/TrustPage.tsx`, `packages/frontend/src/__tests__/trust-page.test.tsx` — Reworked the trust copy into six focused cards covering staged server-visible metadata, sender and receiver local storage, physical delete plus tombstone behavior, local burn, and conditional Verified Release semantics, and added footer actions for `Back` and `Create Secure Channel`
+- `packages/frontend/src/routes.tsx`, `packages/frontend/src/pages/CreatePage.tsx`, `packages/frontend/src/trust-route-state.ts`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Added explicit in-app return markers to trust-link navigation, kept the shell CTA on `/trust` as `Back to Create`, and updated route-level coverage so trust-page `Back` returns only to known in-app entries and otherwise falls back to `/`
 
 ### Phase 11: Verified Release bootstrap hardening
 - `packages/frontend/index.html`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/main.tsx` — Replaced the direct React entry with a dedicated bootstrap entry that verifies the signed release before dynamically loading the app, and renders fail-closed blocking screens when verification is not trusted.
@@ -109,13 +113,15 @@ Add a Trust Model explainer and release-build hygiene follow-up for the frontend
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Re-run targeted frontend validation after syncing the PR branch with `main`
-2. [ ] Push the refreshed branch so the open PR is conflict-free
-3. [ ] Address any follow-up review comments
+1. [ ] Push the refreshed branch so the open PR is conflict-free
+2. [ ] Confirm PR checks after the branch update
+3. [ ] Squash merge the open PR once GitHub reports mergeable
 
 ## Latest Update (2026-03-09)
 
-- Added a frontend-only Trust Model page that explains what the server cannot see, what the sender can and cannot do, what the receiver device stores locally, and why local burn is different from delete or expiry.
+- Expanded the Trust Model page into six cards that now describe staged server metadata, sender-side local admin storage, receiver-side IndexedDB state, physical purge plus tombstone delete behavior, and conditional Verified Release semantics.
+- Replaced browser-history guessing on `/trust` with explicit in-app return markers so the page `Back` action only returns to known ZeroLink entries and otherwise falls back to Create.
+- Kept the release-build hygiene follow-up that removes the MSW worker from production `dist` while preserving verified-release bootstrap behavior and cache rules.
 - Implemented a `Create + Shell` entry strategy so the explanation is discoverable both at first use and later revisits.
 - Kept the user-facing copy in English to stay consistent with the current frontend UI.
 - Trimmed `mockServiceWorker.js` from production `dist` so the MSW worker stays development-only and no longer appears in the signed release artifact set.

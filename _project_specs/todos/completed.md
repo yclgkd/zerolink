@@ -57,3 +57,16 @@ The frontend now embeds the manifest signing public key, verifies the signed man
 same-origin runtime asset hashes before loading React, renders a fail-closed blocking screen when
 verification is not trusted, removes third-party hosted fonts from the verified runtime path, and
 updates the trust card to expose verified build metadata only after a successful boot snapshot.
+
+## DONE-007: Trust page clarity and return-path fix
+
+**Completed**: 2026-03-09
+
+Expanded the frontend Trust Model page from four generic cards into six focused cards that
+accurately describe which secrets never reach the server, which protocol metadata is stored at each
+channel stage, what remains on sender and receiver devices, how physical delete plus tombstone
+reservation differs from local burn and TTL expiry, and what `Verified Release` does and does not
+guarantee when the indicator is actually present. Also replaced the trust-page shell self-link with
+`Back to Create`, carried explicit in-app return markers into trust-page links, and made the
+trust-page `Back` action return only to known in-app entries instead of guessing from browser
+history.
