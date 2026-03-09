@@ -11,8 +11,16 @@ import {
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
+  RATE_LIMITER: RateLimit;
   RP_ID: string;
   RP_ORIGIN: string;
+}
+
+// NanoID base64url alphabet, exactly 21 characters
+const UUID_REGEX = /^[A-Za-z0-9_-]{21}$/u;
+
+function isValidUuid(value: string): boolean {
+  return UUID_REGEX.test(value);
 }
 
 type ApiMethod = 'GET' | 'POST';
@@ -298,90 +306,95 @@ async function handleCompoundCommit(
   return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsedData);
 }
 
+async function checkRateLimit(request: Request, env: Env): Promise<Response | null> {
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const { success } = await env.RATE_LIMITER.limit({ key: ip });
+  if (!success) {
+    return jsonApiResponse({ ok: false, code: 'RATE_LIMITED' }, 429);
+  }
+  return null;
+}
+
 async function handleApiRequest(request: Request, pathname: string, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return preflight();
   }
 
+  const rateLimitResponse = await checkRateLimit(request, env);
+  if (rateLimitResponse !== null) {
+    return rateLimitResponse;
+  }
+
   const lockBeginMatch = pathname.match(LOCK_BEGIN_PATH);
   if (lockBeginMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleLockBegin(request, env, lockBeginMatch[1] ?? '');
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = lockBeginMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleLockBegin(request, env, uuid);
   }
 
   const lockCommitMatch = pathname.match(LOCK_COMMIT_PATH);
   if (lockCommitMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleLockCommit(request, env, lockCommitMatch[1] ?? '');
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = lockCommitMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleLockCommit(request, env, uuid);
   }
 
   const compoundBeginMatch = pathname.match(COMPOUND_BEGIN_PATH);
   if (compoundBeginMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleCompoundBegin(request, env, compoundBeginMatch[1] ?? '');
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = compoundBeginMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleCompoundBegin(request, env, uuid);
   }
 
   const compoundCommitMatch = pathname.match(COMPOUND_COMMIT_PATH);
   if (compoundCommitMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleCompoundCommit(request, env, compoundCommitMatch[1] ?? '', false);
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = compoundCommitMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleCompoundCommit(request, env, uuid, false);
   }
 
   const createBeginMatch = pathname.match(/^\/api\/create_begin\/([^/]+)$/u);
   if (createBeginMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleCreateBegin(request, env, createBeginMatch[1] ?? '');
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = createBeginMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleCreateBegin(request, env, uuid);
   }
 
   const createFinishMatch = pathname.match(/^\/api\/create_finish\/([^/]+)$/u);
   if (createFinishMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleCreateFinish(request, env, createFinishMatch[1] ?? '');
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = createFinishMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleCreateFinish(request, env, uuid);
   }
 
   const deleteCommitMatch = pathname.match(DELETE_COMMIT_PATH);
   if (deleteCommitMatch) {
-    if (request.method !== 'POST') {
-      return methodNotAllowed('POST');
-    }
-
-    return handleCompoundCommit(request, env, deleteCommitMatch[1] ?? '', true);
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    const uuid = deleteCommitMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleCompoundCommit(request, env, uuid, true);
   }
 
   const publicStatusMatch = pathname.match(PUBLIC_STATUS_PATH);
   if (publicStatusMatch) {
-    if (request.method !== 'GET') {
-      return methodNotAllowed('GET');
-    }
-
-    return forwardToSecretVault(env, publicStatusMatch[1] ?? '', '/get_public_state', {});
+    if (request.method !== 'GET') return methodNotAllowed('GET');
+    const uuid = publicStatusMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return forwardToSecretVault(env, uuid, '/get_public_state', {});
   }
 
   const decryptFetchMatch = pathname.match(DECRYPT_FETCH_PATH);
   if (decryptFetchMatch) {
-    if (request.method !== 'GET') {
-      return methodNotAllowed('GET');
-    }
-
-    return forwardToSecretVault(env, decryptFetchMatch[1] ?? '', '/get_decrypt_payload', {});
+    if (request.method !== 'GET') return methodNotAllowed('GET');
+    const uuid = decryptFetchMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return forwardToSecretVault(env, uuid, '/get_decrypt_payload', {});
   }
 
   const route = API_ROUTES.find((candidate) => candidate.pattern.test(pathname));

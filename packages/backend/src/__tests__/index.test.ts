@@ -153,10 +153,15 @@ function createMockEnv(responder: (request: Request) => Promise<Response> | Resp
     },
   } as unknown as DurableObjectNamespace;
 
+  const rateLimiter: RateLimit = {
+    limit: async () => ({ success: true }),
+  };
+
   return {
     env: {
       SECRET_VAULT: namespace,
       SECRETS_KV: {} as KVNamespace,
+      RATE_LIMITER: rateLimiter,
       RP_ID: 'zerolink.test',
       RP_ORIGIN: 'https://zerolink.test',
     },
@@ -749,5 +754,72 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
     expect(response.status).toBe(200);
     expect(body).toBe('ZeroLink API');
+  });
+
+  describe('UUID validation', () => {
+    it('rejects invalid UUID on GET /api/public/:uuid', async () => {
+      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
+      const response = await dispatch(env, '/api/public/not-a-valid-uuid!!', 'GET');
+      const payload = (await response.json()) as ApiErrorResponse;
+      expect(response.status).toBe(400);
+      expect(payload.code).toBe('BAD_REQUEST');
+    });
+
+    it('rejects UUID that is too short on POST /api/lock_begin/:uuid', async () => {
+      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
+      const response = await dispatch(env, '/api/lock_begin/tooshort', 'POST', {});
+      const payload = (await response.json()) as ApiErrorResponse;
+      expect(response.status).toBe(400);
+      expect(payload.code).toBe('BAD_REQUEST');
+    });
+
+    it('rejects UUID that is too long on POST /api/create_begin/:uuid', async () => {
+      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
+      const response = await dispatch(env, `/api/create_begin/${'a'.repeat(22)}`, 'POST', {});
+      const payload = (await response.json()) as ApiErrorResponse;
+      expect(response.status).toBe(400);
+      expect(payload.code).toBe('BAD_REQUEST');
+    });
+
+    it('accepts a valid UUID on GET /api/public/:uuid', async () => {
+      const { env } = createMockEnv(
+        async () =>
+          new Response(JSON.stringify({ ok: true, state: 'waiting', adminMode: 'webauthn' }), {
+            status: 200,
+          })
+      );
+      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+      expect(response.status).not.toBe(400);
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('returns 429 when rate limiter denies the request', async () => {
+      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
+      env.RATE_LIMITER = { limit: async () => ({ success: false }) };
+      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+      const payload = (await response.json()) as ApiErrorResponse;
+      expect(response.status).toBe(429);
+      expect(payload.code).toBe('RATE_LIMITED');
+    });
+
+    it('passes the request through when rate limiter allows it', async () => {
+      const { env } = createMockEnv(
+        async () =>
+          new Response(JSON.stringify({ ok: true, state: 'waiting', adminMode: 'webauthn' }), {
+            status: 200,
+          })
+      );
+      env.RATE_LIMITER = { limit: async () => ({ success: true }) };
+      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+      expect(response.status).not.toBe(429);
+    });
+
+    it('does not rate-limit OPTIONS preflight requests', async () => {
+      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
+      env.RATE_LIMITER = { limit: async () => ({ success: false }) };
+      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'OPTIONS');
+      expect(response.status).toBe(204);
+    });
   });
 });
