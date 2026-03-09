@@ -297,7 +297,13 @@ describe('CreatePage integration', () => {
       expect(screen.getByTestId('create-success-summary')).toBeTruthy();
     });
 
-    expect(input.value).toBe('');
+    // Form is hidden after success; click "Create another" to reveal form with cleared password
+    fireEvent.click(screen.getByTestId('create-another-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
+    });
+    const newInput = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    expect(newInput.value).toBe('');
   });
 
   it('disables submit button while create request is pending', async () => {
@@ -335,12 +341,11 @@ describe('CreatePage integration', () => {
       },
     });
 
+    // After success, form is replaced by success state (submit button is no longer visible)
     await waitFor(() => {
-      expect((screen.getByTestId('create-submit-button') as HTMLButtonElement).disabled).toBe(
-        false
-      );
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
     });
-    expect(busyContainer?.getAttribute('aria-busy')).toBe('false');
+    expect(screen.queryByTestId('create-submit-button')).toBeNull();
   });
 
   it('renders a trust model link that points to /trust', () => {

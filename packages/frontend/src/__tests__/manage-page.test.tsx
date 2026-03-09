@@ -196,12 +196,12 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('manage-uuid').textContent).toContain(VALID_UUID);
   });
 
-  it('falls back to missing uuid label and blocks deliver/delete when uuid is absent', async () => {
+  it('falls back to (missing) label and blocks deliver/delete when uuid is absent', async () => {
     const fetchSpy = getFetchSpy();
 
     renderManagePage('/m', '/m');
 
-    expect(screen.getByTestId('manage-uuid').textContent).toContain('(missing uuid)');
+    expect(screen.getByTestId('manage-uuid').textContent).toContain('(missing)');
     expect(fetchSpy).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
@@ -573,7 +573,7 @@ describe('ManagePage integration', () => {
 
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
     expect(screen.getByTestId('manage-destroy-confirm')).toBeTruthy();
-    expect(screen.getByText('Delete this channel permanently?')).toBeTruthy();
+    expect(screen.getByText('Permanently delete this channel?')).toBeTruthy();
     expect(screen.getByText('Confirm Delete')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('manage-destroy-cancel'));
@@ -641,7 +641,7 @@ describe('ManagePage integration', () => {
         (screen.getByTestId('manage-destroy-confirm-apply') as HTMLButtonElement).disabled
       ).toBe(true);
     });
-    expect(screen.getByText('Deleting...')).toBeTruthy();
+    expect(screen.getByText('Deleting…')).toBeTruthy();
 
     deferred.resolve({ ok: true, data: {} });
   });

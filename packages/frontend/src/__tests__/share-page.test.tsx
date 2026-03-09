@@ -570,7 +570,7 @@ describe('SharePage', () => {
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
       const burnButton = screen.getByTestId('share-decrypt-burn') as HTMLButtonElement;
       expect(decryptButton.disabled).toBe(true);
-      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(decryptButton.textContent).toBe('Decrypting…');
       expect(burnButton.disabled).toBe(true);
     });
 
@@ -645,7 +645,7 @@ describe('SharePage', () => {
     await waitFor(() => {
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
       expect(decryptButton.disabled).toBe(true);
-      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(decryptButton.textContent).toBe('Decrypting…');
     });
 
     await router.navigate('/s/uuidbbbbbbbbbbbbbbbbb');
@@ -836,7 +836,7 @@ describe('SharePage', () => {
       expect(decryptDeliveredMock).toHaveBeenCalledTimes(2);
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
       expect(decryptButton.disabled).toBe(true);
-      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(decryptButton.textContent).toBe('Decrypting…');
     });
 
     deferredA.resolve({
@@ -852,7 +852,7 @@ describe('SharePage', () => {
     await waitFor(() => {
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
       expect(decryptButton.disabled).toBe(true);
-      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(decryptButton.textContent).toBe('Decrypting…');
     });
 
     deferredB.resolve({
@@ -957,7 +957,7 @@ describe('SharePage', () => {
       expect(decryptDeliveredMock).toHaveBeenCalledTimes(2);
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
       expect(decryptButton.disabled).toBe(true);
-      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(decryptButton.textContent).toBe('Decrypting…');
     });
 
     deferredA.reject(new Error('stale decrypt failure'));
@@ -965,7 +965,7 @@ describe('SharePage', () => {
     await waitFor(() => {
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
       expect(decryptButton.disabled).toBe(true);
-      expect(decryptButton.textContent).toBe('Decrypting...');
+      expect(decryptButton.textContent).toBe('Decrypting…');
       expect(screen.queryByTestId('share-decrypt-error')).toBeNull();
     });
 
@@ -1305,11 +1305,11 @@ describe('SharePage', () => {
     expect(screen.getByText('Receiver')).toBeTruthy();
   });
 
-  it('falls back to missing uuid label and skips network/decrypt calls when uuid param is absent', () => {
+  it('falls back to (missing) label and skips network/decrypt calls when uuid param is absent', () => {
     const fetchSpy = getFetchSpy();
     renderSharePage('/s', '/s');
 
-    expect(screen.getByTestId('share-uuid').textContent).toContain('(missing uuid)');
+    expect(screen.getByTestId('share-uuid').textContent).toContain('(missing)');
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(lockChannelMock).not.toHaveBeenCalled();
     expect(decryptDeliveredMock).not.toHaveBeenCalled();

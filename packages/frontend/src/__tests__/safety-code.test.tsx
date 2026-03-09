@@ -41,11 +41,13 @@ describe('SafetyCode', () => {
     ).toBeTruthy();
   });
 
-  it('uses emoji view by default and renders exactly 8 emoji cells', () => {
+  it('uses color view by default and renders exactly 16 color cells', () => {
     render(<SafetyCode display={display} />);
 
-    expect(screen.getByRole('button', { name: 'Emoji' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getAllByTestId(/safety-code-emoji-cell-/)).toHaveLength(8);
+    expect(screen.getByRole('button', { name: 'Colors' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    );
+    expect(screen.getAllByTestId(/safety-code-color-cell-/)).toHaveLength(16);
   });
 
   it('switches to color view and renders 16 color cells', () => {
