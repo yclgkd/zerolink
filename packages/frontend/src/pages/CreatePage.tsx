@@ -1,7 +1,7 @@
 import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
 import { ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   PageCard,
   PageCardContent,
@@ -50,7 +50,7 @@ function mapCreateError(code: string): string {
     case 'INVALID_REQUEST':
       return 'Create request was rejected. Please retry.';
     default:
-      return `Channel creation failed: ${code}`;
+      return 'An unexpected error occurred. Please try again.';
   }
 }
 
@@ -230,11 +230,20 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
 
 function useCopyLink(url: string) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   const copy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(url);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
     }

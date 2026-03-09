@@ -36,10 +36,7 @@ export function StepIndicator({
   labels: readonly string[];
 }) {
   return (
-    <output
-      aria-label={`Step ${current} of ${total}: ${labels[current - 1]}`}
-      className="space-y-1.5"
-    >
+    <div aria-hidden="true" className="space-y-1.5">
       <div className="flex items-center gap-1.5">
         {Array.from({ length: total }, (_, i) => (
           <div
@@ -58,7 +55,7 @@ export function StepIndicator({
       <p className="text-xs text-muted-foreground">
         Step {current} of {total} — {labels[current - 1]}
       </p>
-    </output>
+    </div>
   );
 }
 

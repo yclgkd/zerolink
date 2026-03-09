@@ -10,7 +10,7 @@ import {
 } from '@zerolink/shared';
 import { ClipboardCheck, Copy, PlusCircle, Send, Trash2 } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChannelUnavailableState } from '../components/channel/channel-unavailable-state';
 import {
@@ -58,7 +58,7 @@ function mapActionError(code: string): string {
     case 'INTERNAL_ERROR':
       return 'Unexpected internal error. Please retry.';
     default:
-      return `Manage action failed: ${code}`;
+      return 'An unexpected error occurred. Please try again.';
   }
 }
 
@@ -417,6 +417,13 @@ function useResolvedProfile(): SecurityProfile {
 
 function useShareLinkGenerator(uuid?: string) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const shareLink = useMemo(() => {
     if (!uuid) return '(missing uuid)';
@@ -424,7 +431,7 @@ function useShareLinkGenerator(uuid?: string) {
     return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
   }, [uuid]);
 
-  const handleCopyShareLink = async () => {
+  const handleCopyShareLink = useCallback(async () => {
     if (!uuid) {
       setCopied(false);
       return;
@@ -441,11 +448,13 @@ function useShareLinkGenerator(uuid?: string) {
       }
 
       await writeText(shareLink);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
       setCopied(true);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
     }
-  };
+  }, [uuid, shareLink]);
 
   return { copied, shareLink, handleCopyShareLink };
 }

@@ -57,11 +57,11 @@ function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
 
 const LOCK_FLOW_STEPS = ['Overview', 'Set passphrase', 'Locked'] as const;
 
-function lockStepIndex(step: 'onboarding' | 'lock' | 'locked'): number {
-  if (step === 'onboarding') return 1;
-  if (step === 'lock') return 2;
-  return 3;
-}
+const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
+  onboarding: 1,
+  lock: 2,
+  locked: 3,
+};
 
 /**
  * Receiver page integrating lock flow and delivered decryption flow with orchestrator.
@@ -94,7 +94,7 @@ export function SharePage(): ReactElement {
           <>
             {lockLogic.store.step !== 'locked' ? (
               <StepIndicator
-                current={lockStepIndex(lockLogic.store.step)}
+                current={LOCK_STEP_INDEX[lockLogic.store.step]}
                 labels={LOCK_FLOW_STEPS}
                 total={3}
               />
