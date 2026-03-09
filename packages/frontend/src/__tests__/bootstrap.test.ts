@@ -4,6 +4,7 @@ import {
   bootstrapApp,
   initializeMocking,
   isMockEnabled,
+  isReleaseVerificationRequiredByDefault,
   type MockWorkerLoader,
 } from '../bootstrap';
 import type { ReleaseVerificationResult, VerifiedReleaseSnapshot } from '../release/verification';
@@ -56,6 +57,15 @@ describe('initializeMocking', () => {
 
     await initializeMocking('?mock=true', loadWorker, false);
     expect(loadWorker).not.toHaveBeenCalled();
+  });
+});
+
+describe('isReleaseVerificationRequiredByDefault', () => {
+  it('requires production mode and an explicit enable flag', () => {
+    expect(isReleaseVerificationRequiredByDefault(true, 'true')).toBe(true);
+    expect(isReleaseVerificationRequiredByDefault(true, 'false')).toBe(false);
+    expect(isReleaseVerificationRequiredByDefault(true, undefined)).toBe(false);
+    expect(isReleaseVerificationRequiredByDefault(false, 'true')).toBe(false);
   });
 });
 
@@ -131,6 +141,23 @@ describe('bootstrapApp', () => {
     await bootstrapApp({
       initializeMockingFn: async () => undefined,
       isReleaseVerificationRequired: false,
+      loadApp,
+      renderVerificationGate: vi.fn(),
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn,
+    });
+
+    expect(verifyReleaseFn).not.toHaveBeenCalled();
+    expect(loadApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults to bypassing release verification when the release flag is not enabled', async () => {
+    const verifyReleaseFn = vi.fn();
+    const loadApp = vi.fn(async () => undefined);
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
       loadApp,
       renderVerificationGate: vi.fn(),
       search: '',

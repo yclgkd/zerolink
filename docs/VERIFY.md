@@ -1,8 +1,8 @@
 # Verified Release & Build Integrity Verification
 
-ZeroLink publishes a **signed build manifest** with every release, and the production frontend now
-uses that manifest during bootstrap before the React app loads. This lets the browser detect
-tampering in the published runtime assets before the user can interact with sensitive UI.
+ZeroLink publishes a **signed build manifest** with every release, and official signed frontend
+builds now use that manifest during bootstrap before the React app loads. This lets the browser
+detect tampering in the published runtime assets before the user can interact with sensitive UI.
 
 ## What is verified
 
@@ -15,8 +15,8 @@ runtime manifest because they are deployment metadata, not browser-fetched relea
 
 ## What the browser does during bootstrap
 
-In production builds, ZeroLink starts with a small bootstrap entry instead of loading the React app
-immediately. That bootstrap entry:
+When a deployment is built with `VITE_RELEASE_VERIFICATION_REQUIRED=true`, ZeroLink starts with a
+small bootstrap entry instead of loading the React app immediately. That bootstrap entry:
 
 1. Fetches `manifest.json` and `manifest.sig`
 2. Verifies the Ed25519 signature using the embedded public key
@@ -25,6 +25,10 @@ immediately. That bootstrap entry:
 
 If verification fails or cannot be completed, ZeroLink shows a blocking verification screen and
 does not load the normal app UI.
+
+Unsigned environments such as a plain `pnpm build`, `vite preview`, or a manual static upload
+without signed release artifacts remain runnable, but they are treated as unverified boots and do
+not show the `Verified Release` card.
 
 ## Artifacts per release
 
@@ -35,7 +39,9 @@ does not load the normal app UI.
 | `dist/manifest.sig` | Ed25519 signature over `manifest.json` |
 | `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
 
-All dist artifacts are uploaded as `frontend-dist` in GitHub Actions release runs.
+All dist artifacts are uploaded as `frontend-dist` in GitHub Actions release runs. That workflow
+also enables bootstrap verification by building the frontend with
+`VITE_RELEASE_VERIFICATION_REQUIRED=true`.
 
 ## Browser trust surface
 
@@ -47,6 +53,9 @@ When bootstrap verification succeeds, the shell renders a `Verified Release` car
 - Manifest hash
 - Verified file count
 - Publisher key fingerprint
+
+Cloudflare Pages serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
+shell is never reused across deployments, while hashed `/assets/*` files remain immutable.
 
 ## Quick verification (automated)
 

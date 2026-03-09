@@ -55,11 +55,19 @@ export async function initializeMocking(
   });
 }
 
+export function isReleaseVerificationRequiredByDefault(
+  isProd: boolean = import.meta.env.PROD,
+  releaseVerificationFlag: string | undefined = import.meta.env.VITE_RELEASE_VERIFICATION_REQUIRED
+): boolean {
+  return isProd && releaseVerificationFlag === 'true';
+}
+
 export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> {
   const initialize = options.initializeMockingFn ?? initializeMocking;
   await initialize(options.search);
 
-  const shouldVerify = options.isReleaseVerificationRequired ?? import.meta.env.PROD;
+  const shouldVerify =
+    options.isReleaseVerificationRequired ?? isReleaseVerificationRequiredByDefault();
   if (!shouldVerify) {
     await options.loadApp();
     return;
