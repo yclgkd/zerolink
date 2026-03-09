@@ -20,7 +20,8 @@ UPDATE WHEN:
 ## Entry Points
 | Location | Purpose |
 |----------|---------|
-| `packages/frontend/src/main.tsx` | React app entry (to be created) |
+| `packages/frontend/src/bootstrap-entry.ts` | Frontend bootstrap verifier entry; loads the app only after release verification |
+| `packages/frontend/src/main.tsx` | React app renderer invoked by the bootstrap entry after verification |
 | `packages/backend/src/index.ts` | Cloudflare Worker entry (to be created) |
 | `packages/shared/src/index.ts` | Shared package exports (to be created) |
 
@@ -37,6 +38,7 @@ UPDATE WHEN:
 | `tsconfig.base.json` | Root TypeScript config (strict mode) |
 | `biome.json` | Lint/format config |
 | `pnpm-workspace.yaml` | Monorepo workspace definition |
+| `packages/frontend/public/_headers` | Cloudflare Pages cache policy for verified release control files vs immutable assets |
 | `packages/backend/wrangler.toml` | Cloudflare Workers config (to be created) |
 | `.changeset/config.json` | Changesets config |
 
@@ -63,3 +65,4 @@ UPDATE WHEN:
 | Durable Objects | Single-location consistency | DO must be in same region as KV for performance |
 | `@noble/hashes` | Not WebCrypto | Runs synchronously; may block UI on heavy params |
 | Biome | No ESLint plugins | Some rules need manual enforcement |
+| `packages/frontend/src/release/verification.ts` | Verified Release only covers runtime-served same-origin assets | Pages control files such as `_headers` and `_redirects` are excluded from the signed runtime manifest |

@@ -1,16 +1,25 @@
 # Current Session State
 
-*Last updated: 2026-03-08*
+*Last updated: 2026-03-09*
 
 ## Active Task
-Physical delete semantics plus frontend clarification of sender delete, receiver-local plaintext burn, and channel expiry.
+Verified Release bootstrap verification hardening plus delete/local-burn/expiry clarification for the frontend shell.
 
 ## Current Status
-- **Phase**: Conflict-resolved delete/burn/expiry clarification complete, ready for PR
-- **Progress**: Backend physically purges deleted and expired channels and returns `404 NOT_FOUND` on revisit; frontend keeps sender-side delete confirmation local to the current session, keeps receiver-side local plaintext burn strictly device-only, and no longer describes decrypt as implicit channel burn in internal guidance.
+- **Phase**: Verified Release hardening and delete/burn/expiry clarification complete, ready for PR
+- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, serves SPA entry HTML with `no-store` while leaving hashed assets immutable, and clarifies sender delete vs receiver-local plaintext burn vs channel expiry across the UI and internal guidance.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 11: Verified Release bootstrap hardening
+- `packages/frontend/index.html`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/main.tsx` — Replaced the direct React entry with a dedicated bootstrap entry that verifies the signed release before dynamically loading the app, and renders fail-closed blocking screens when verification is not trusted.
+- `packages/frontend/src/release/public-key.ts`, `packages/frontend/src/release/runtime.ts`, `packages/frontend/src/release/verification.ts` — Added the embedded Ed25519 signing key, the verified-release runtime snapshot, and browser-side manifest/file-hash verification over same-origin runtime assets.
+- `packages/frontend/src/components/manifest-info.tsx`, `packages/frontend/src/__tests__/manifest-info.test.tsx`, `packages/frontend/src/__tests__/routes-shell.test.tsx` — Reframed the manifest card as `Verified Release`, made it render only from a verified bootstrap snapshot, and updated the shell expectations for non-verified test/dev paths.
+- `packages/frontend/public/_headers`, `packages/frontend/index.html` — Removed Google Fonts from the verified runtime path and added Pages cache directives for control files vs immutable hashed assets.
+- `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts`, `docs/VERIFY.md` — Narrowed the signed manifest to publicly fetchable runtime assets (excluding Pages control files), and updated verification docs to describe the bootstrap verifier and `Verified Release` trust surface.
+- `packages/frontend/src/__tests__/bootstrap.test.ts`, `packages/frontend/src/__tests__/release-public-key.test.ts`, `packages/frontend/src/__tests__/release-verification.test.ts` — Added coverage for embedded-key parity, browser-side signature/hash verification, and bootstrap gating behavior.
+- Review fix: `packages/frontend/src/bootstrap.ts`, `.github/workflows/deploy.yml`, `packages/frontend/public/_headers`, `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Switched bootstrap verification from “all PROD builds” to an explicit signed-release build flag, injected that flag only in the official Pages deploy workflow, and corrected Pages cache rules so SPA entry requests are `no-store` while hashed assets stay immutable.
 
 ### Phase 10: Delete vs local burn vs expiry clarification
 - `packages/frontend/src/stores/decrypt-store.ts` — Renamed the receiver-only burn flag to `localPlaintextBurned` so it cannot be confused with channel state
@@ -99,9 +108,9 @@ Physical delete semantics plus frontend clarification of sender delete, receiver
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Run final verification: biome check + typecheck + all tests
-2. [ ] Create PR with all changes
-3. [ ] Review and merge
+1. [ ] Review the bootstrap verifier diff and confirm the residual same-origin trust assumptions are acceptable for v1
+2. [ ] Create PR with validation notes, cache-control notes, and rollback guidance
+3. [ ] Consider a future external trust anchor for stronger release authenticity beyond self-hosted bootstrap verification
 
 ## Latest Update (2026-03-08)
 
@@ -109,3 +118,9 @@ Physical delete semantics plus frontend clarification of sender delete, receiver
 - Restored `PublicStatusResponse` wire compatibility for legacy `deleted` / `expired` backend payloads while keeping current frontend UX normalized to unavailable.
 - Tightened the Playwright stateful API mock so deleted channels return `404 NOT_FOUND` on later public/lock/manage begin requests instead of silently recreating a waiting channel.
 - Added backend, frontend, shared, and E2E coverage for tombstone reservation, legacy terminal-state normalization, and post-destroy 404 behavior.
+- Added a bootstrap-first Verified Release architecture so the browser verifies the signed manifest and runtime asset hashes before loading the React app, and exposed the verified build details only after a successful boot snapshot is present.
+
+## Latest Update (2026-03-09)
+
+- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
+- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.

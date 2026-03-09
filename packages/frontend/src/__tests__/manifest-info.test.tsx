@@ -1,161 +1,93 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ManifestInfo, normalizeManifestHash } from '../components/manifest-info';
+import { ManifestInfo } from '../components/manifest-info';
+import type { VerifiedReleaseSnapshot } from '../release/verification';
 
-const VALID_HASH = 'a3f1e2d4b5c60789a3f1e2d4b5c60789a3f1e2d4b5c60789a3f1e2d4b5c60789';
+function setVerifiedReleaseSnapshot(value: VerifiedReleaseSnapshot | null): void {
+  if (value === null) {
+    delete (window as Window & { __ZEROLINK_RELEASE_VERIFICATION__?: unknown })
+      .__ZEROLINK_RELEASE_VERIFICATION__;
+    return;
+  }
 
-function mockFetchWith(response: Response): void {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+  (
+    window as Window & { __ZEROLINK_RELEASE_VERIFICATION__?: unknown }
+  ).__ZEROLINK_RELEASE_VERIFICATION__ = value;
 }
 
-function mockFetchRejected(): void {
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
-}
+beforeEach(() => {
+  cleanup();
+  setVerifiedReleaseSnapshot(null);
+});
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
-});
-
-describe('normalizeManifestHash', () => {
-  it('returns fallback for empty string', () => {
-    expect(normalizeManifestHash('')).toBe('manifest-hash-unavailable');
-  });
-
-  it('returns fallback for whitespace-only string', () => {
-    expect(normalizeManifestHash('   ')).toBe('manifest-hash-unavailable');
-  });
-
-  it('returns fallback for the fallback literal', () => {
-    expect(normalizeManifestHash('manifest-hash-unavailable')).toBe('manifest-hash-unavailable');
-  });
-
-  it('returns fallback for non-hex string', () => {
-    expect(normalizeManifestHash('not-a-hex-value')).toBe('manifest-hash-unavailable');
-  });
-
-  it('returns fallback for hex string shorter than 64 chars', () => {
-    expect(normalizeManifestHash('deadbeef')).toBe('manifest-hash-unavailable');
-  });
-
-  it('returns fallback for hex string longer than 64 chars', () => {
-    expect(normalizeManifestHash(`${VALID_HASH}00`)).toBe('manifest-hash-unavailable');
-  });
-
-  it('returns normalised lowercase hex for valid hash', () => {
-    expect(normalizeManifestHash(VALID_HASH)).toBe(VALID_HASH);
-  });
-
-  it('normalises uppercase hex to lowercase', () => {
-    expect(normalizeManifestHash(VALID_HASH.toUpperCase())).toBe(VALID_HASH);
-  });
-
-  it('trims surrounding whitespace before validating', () => {
-    expect(normalizeManifestHash(`  ${VALID_HASH}\n`)).toBe(VALID_HASH);
-  });
+  setVerifiedReleaseSnapshot(null);
 });
 
 describe('ManifestInfo', () => {
-  beforeEach(() => {
-    cleanup();
-  });
-
-  it('shows loading state before fetch resolves', () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockReturnValue(new Promise(() => {})) // never resolves
-    );
+  it('renders nothing when no verified release snapshot is present', () => {
     render(<ManifestInfo />);
 
-    expect(screen.getByTestId('manifest-hash-short').textContent).toBe('loading…');
+    expect(screen.queryByTestId('manifest-info-card')).toBeNull();
+    expect(screen.queryByText('Verified Release')).toBeNull();
   });
 
-  it('shows valid hash after successful fetch', async () => {
-    mockFetchWith(new Response(`${VALID_HASH}\n`, { status: 200 }));
-    render(<ManifestInfo />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(VALID_HASH.slice(0, 16));
-    });
-  });
-
-  it('shows fallback when fetch returns 4xx (r.ok is false)', async () => {
-    mockFetchWith(new Response('Not Found', { status: 404 }));
-    render(<ManifestInfo />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(
-        'manifest-hash-unavailable'
-      );
-    });
-  });
-
-  it('shows fallback when fetch returns non-hex content', async () => {
-    mockFetchWith(new Response('not-a-hash\n', { status: 200 }));
-    render(<ManifestInfo />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(
-        'manifest-hash-unavailable'
-      );
-    });
-  });
-
-  it('shows fallback when fetch rejects (network error)', async () => {
-    mockFetchRejected();
-    render(<ManifestInfo />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(
-        'manifest-hash-unavailable'
-      );
-    });
-  });
-
-  it('renders fallback and toggles full hash (legacy fallback path)', async () => {
-    mockFetchWith(new Response('manifest-hash-unavailable\n', { status: 200 }));
-    render(<ManifestInfo />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(
-        'manifest-hash-unavailable'
-      );
+  it('renders the verified release card from the bootstrap snapshot', () => {
+    setVerifiedReleaseSnapshot({
+      buildTime: '2026-03-08T12:34:56.000Z',
+      commitHash: 'abc1234',
+      manifestHash: 'f'.repeat(64),
+      publicKeyFingerprint: 'a'.repeat(64),
+      signature: 'signed-release',
+      status: 'verified',
+      verifiedFileCount: 4,
+      version: '1.2.3',
     });
 
-    expect(screen.queryByTestId('manifest-hash-full')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('manifest-hash-toggle'));
-
-    expect(screen.getByTestId('manifest-hash-full').textContent).toBe('manifest-hash-unavailable');
-
-    fireEvent.click(screen.getByTestId('manifest-hash-toggle'));
-    expect(screen.queryByTestId('manifest-hash-full')).toBeNull();
-  });
-
-  it('toggles full hash display after successful fetch', async () => {
-    mockFetchWith(new Response(`${VALID_HASH}\n`, { status: 200 }));
-    render(<ManifestInfo />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('manifest-hash-short').textContent).toBe(VALID_HASH.slice(0, 16));
-    });
-
-    expect(screen.queryByTestId('manifest-hash-full')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('manifest-hash-toggle'));
-    expect(screen.getByTestId('manifest-hash-full').textContent).toBe(VALID_HASH);
-
-    fireEvent.click(screen.getByTestId('manifest-hash-toggle'));
-    expect(screen.queryByTestId('manifest-hash-full')).toBeNull();
-  });
-
-  it('renders the manifest-info-card container', async () => {
-    mockFetchWith(new Response(`${VALID_HASH}\n`, { status: 200 }));
     render(<ManifestInfo />);
 
     expect(screen.getByTestId('manifest-info-card')).toBeTruthy();
+    expect(screen.getByText('Verified Release')).toBeTruthy();
+    expect(
+      screen.getByText('This page matches an official ZeroLink release signed by our team.')
+    ).toBeTruthy();
+    expect(screen.getByText('Verified')).toBeTruthy();
+  });
+
+  it('toggles verification details and shows release metadata', () => {
+    setVerifiedReleaseSnapshot({
+      buildTime: '2026-03-08T12:34:56.000Z',
+      commitHash: 'abc1234',
+      manifestHash: 'f'.repeat(64),
+      publicKeyFingerprint: 'a'.repeat(64),
+      signature: 'signed-release',
+      status: 'verified',
+      verifiedFileCount: 4,
+      version: '1.2.3',
+    });
+
+    render(<ManifestInfo />);
+
+    expect(screen.queryByText('App version')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'View verification details' }));
+
+    expect(screen.getByText('App version')).toBeTruthy();
+    expect(screen.getByText('1.2.3')).toBeTruthy();
+    expect(screen.getByText('Commit')).toBeTruthy();
+    expect(screen.getByText('abc1234')).toBeTruthy();
+    expect(screen.getByText('Manifest hash')).toBeTruthy();
+    expect(screen.getByText('Publisher key fingerprint')).toBeTruthy();
+    expect(screen.getByText('Verified files')).toBeTruthy();
+    expect(screen.getByText('4')).toBeTruthy();
+    expect(screen.getByText('Signature')).toBeTruthy();
+    expect(screen.getByText('signed-release')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide verification details' }));
+    expect(screen.queryByText('App version')).toBeNull();
   });
 });

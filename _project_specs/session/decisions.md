@@ -164,3 +164,21 @@ This is append-only. Never delete entries.
 **Choice**: Preserve only a minimal private tombstone (`uuid`, terminal reason, finalizedAt), keep public/decrypt reads on `404 NOT_FOUND`, and restore schema compatibility for legacy terminal public-status payloads without reviving old terminal UI copy.
 **Reasoning**: This preserves terminal-state integrity, avoids leaking deleted-channel internals back into the public API, keeps deploy-time compatibility, and makes E2E mocks match real-worker behavior after destroy.
 **Trade-offs**: Durable Objects now retain one tiny metadata record per terminal UUID, and frontend logic must distinguish local deleted confirmation from server-reported terminal compatibility payloads.
+
+## [2026-03-08] Frontend release trust moves to a bootstrap verifier
+
+**Decision**: Promote the frontend trust surface from a post-load manifest card to a bootstrap-first `Verified Release` flow that verifies the signed manifest and runtime asset hashes before the React app loads.
+**Context**: The original `Build Manifest` card exposed a hash after the app was already running, which was developer-centric and weak against CDN/static-asset tampering. The stronger product requirement was to fail closed before sensitive UI loads and only claim `Verified Release` after a real browser-side verification pass.
+**Options Considered**: Keep the existing post-load hash card; verify only the manifest signature and trust metadata; move verification into a dedicated bootstrap gate and verify the signed manifest plus same-origin runtime assets before loading the app.
+**Choice**: Use a dedicated bootstrap entry, embed the Ed25519 public key in frontend code, verify `manifest.json` + `manifest.sig`, hash-check the signed runtime assets, and block app startup on failure or unavailability.
+**Reasoning**: This gives the browser an actual release-verification checkpoint before the React UI is usable, makes the `Verified Release` label truthful within the Web threat model, and materially improves detection of CDN/edge/static-asset tampering. The signed manifest was also narrowed to fetchable runtime assets only, excluding Pages control files such as `_headers` and `_redirects`.
+**Trade-offs**: A pure Web bootstrap verifier still cannot fully protect against an origin that can rewrite both `index.html` and the bootstrap bundle; stronger guarantees would require an external trust anchor. The verified boot path also adds startup latency and removes third-party hosted fonts from the runtime path.
+
+## [2026-03-09] Verified Release bootstrap is explicit opt-in for signed deployments
+
+**Decision**: The frontend must only fail closed on bootstrap when the build is explicitly marked as an official signed release, and Cloudflare Pages must serve SPA entry requests with `Cache-Control: no-store` while keeping hashed assets immutable.
+**Context**: The first bootstrap verifier pass ran for every `PROD` build, which broke unsigned `pnpm build` / `vite preview` / manual static deployments because they do not ship `manifest.json` and `manifest.sig`. The first Pages `_headers` pass also only marked `/index.html` as `no-store`, leaving `/` and SPA route entries cacheable.
+**Options Considered**: Keep verification on for all `PROD` builds; silently bypass verification when release artifacts are missing; require an explicit build-time flag for official signed releases and fix Pages cache rules around SPA entry HTML versus hashed assets.
+**Choice**: Gate bootstrap verification behind `VITE_RELEASE_VERIFICATION_REQUIRED=true`, inject that flag only in the official Pages deploy workflow, keep unsigned environments runnable but unverified, and set Pages headers so `/*` is `no-store` while `/assets/*` first clears inherited cache headers and then sets immutable caching.
+**Reasoning**: This preserves the fail-closed guarantee where it is trustworthy and intentional, restores local preview/manual deploy usability, and prevents stale HTML/bootstrap shells from surviving across deployments while still allowing aggressive caching for hashed assets.
+**Trade-offs**: Manual deploys only get the `Verified Release` UX if they explicitly replicate the signed-release build flow, and the trust model remains tied to deployment discipline rather than a universal browser-side guarantee.

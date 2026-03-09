@@ -4,8 +4,10 @@ import {
   bootstrapApp,
   initializeMocking,
   isMockEnabled,
+  isReleaseVerificationRequiredByDefault,
   type MockWorkerLoader,
 } from '../bootstrap';
+import type { ReleaseVerificationResult, VerifiedReleaseSnapshot } from '../release/verification';
 
 describe('isMockEnabled', () => {
   it('enables only when mock=true is present', () => {
@@ -58,21 +60,112 @@ describe('initializeMocking', () => {
   });
 });
 
+describe('isReleaseVerificationRequiredByDefault', () => {
+  it('requires production mode and an explicit enable flag', () => {
+    expect(isReleaseVerificationRequiredByDefault(true, 'true')).toBe(true);
+    expect(isReleaseVerificationRequiredByDefault(true, 'false')).toBe(false);
+    expect(isReleaseVerificationRequiredByDefault(true, undefined)).toBe(false);
+    expect(isReleaseVerificationRequiredByDefault(false, 'true')).toBe(false);
+  });
+});
+
+function createVerifiedSnapshot(): VerifiedReleaseSnapshot {
+  return {
+    buildTime: '2026-03-08T12:34:56.000Z',
+    commitHash: 'abc1234',
+    manifestHash: 'f'.repeat(64),
+    publicKeyFingerprint: 'a'.repeat(64),
+    signature: 'signed-release',
+    status: 'verified',
+    verifiedFileCount: 4,
+    version: '1.2.3',
+  };
+}
+
 describe('bootstrapApp', () => {
-  it('runs mock initialization before render', async () => {
+  it('loads the app only after release verification succeeds in production mode', async () => {
     const sequence: string[] = [];
 
     await bootstrapApp({
+      initializeMockingFn: async () => {
+        sequence.push('mocking');
+      },
+      isReleaseVerificationRequired: true,
+      loadApp: async () => {
+        sequence.push('load-app');
+      },
+      renderVerificationGate: (state) => {
+        sequence.push(`gate:${state.status}`);
+      },
       search: '?mock=true',
-      initializeMockingFn: async (search) => {
-        expect(search).toBe('?mock=true');
-        sequence.push('initialize');
+      setVerifiedReleaseSnapshot: (snapshot) => {
+        sequence.push(snapshot?.status ?? 'no-snapshot');
       },
-      render: () => {
-        sequence.push('render');
-      },
+      verifyReleaseFn: async (): Promise<ReleaseVerificationResult> => createVerifiedSnapshot(),
     });
 
-    expect(sequence).toEqual(['initialize', 'render']);
+    expect(sequence).toEqual(['mocking', 'gate:verifying', 'verified', 'load-app']);
+  });
+
+  it('renders a blocking failure state and never loads the app when verification fails', async () => {
+    const loadApp = vi.fn(async () => undefined);
+    const renderVerificationGate = vi.fn();
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
+      isReleaseVerificationRequired: true,
+      loadApp,
+      renderVerificationGate,
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn: async (): Promise<ReleaseVerificationResult> => ({
+        detail: 'Main asset hash mismatch.',
+        reason: 'asset_hash_mismatch',
+        status: 'failed',
+      }),
+    });
+
+    expect(loadApp).not.toHaveBeenCalled();
+    expect(renderVerificationGate).toHaveBeenNthCalledWith(1, { status: 'verifying' });
+    expect(renderVerificationGate).toHaveBeenNthCalledWith(2, {
+      detail: 'Main asset hash mismatch.',
+      reason: 'asset_hash_mismatch',
+      status: 'failed',
+    });
+  });
+
+  it('bypasses release verification entirely outside production mode', async () => {
+    const verifyReleaseFn = vi.fn();
+    const loadApp = vi.fn(async () => undefined);
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
+      isReleaseVerificationRequired: false,
+      loadApp,
+      renderVerificationGate: vi.fn(),
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn,
+    });
+
+    expect(verifyReleaseFn).not.toHaveBeenCalled();
+    expect(loadApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults to bypassing release verification when the release flag is not enabled', async () => {
+    const verifyReleaseFn = vi.fn();
+    const loadApp = vi.fn(async () => undefined);
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
+      loadApp,
+      renderVerificationGate: vi.fn(),
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn,
+    });
+
+    expect(verifyReleaseFn).not.toHaveBeenCalled();
+    expect(loadApp).toHaveBeenCalledTimes(1);
   });
 });

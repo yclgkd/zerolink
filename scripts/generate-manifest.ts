@@ -22,6 +22,7 @@ const DIST_DIR = path.resolve(FRONTEND_DIR, 'dist');
 const MANIFEST_PATH = path.resolve(DIST_DIR, 'manifest.json');
 const MANIFEST_HASH_PATH = path.resolve(DIST_DIR, 'manifest-hash.txt');
 const SIGNATURE_PATH = path.resolve(DIST_DIR, 'manifest.sig');
+const NON_RUNTIME_CONTROL_FILES = new Set(['_headers', '_redirects']);
 
 export async function collectFilePaths(rootDir: string): Promise<string[]> {
   const result: string[] = [];
@@ -44,6 +45,9 @@ export async function collectFilePaths(rootDir: string): Promise<string[]> {
           absolutePath === MANIFEST_HASH_PATH ||
           absolutePath === SIGNATURE_PATH
         ) {
+          return;
+        }
+        if (NON_RUNTIME_CONTROL_FILES.has(entry.name)) {
           return;
         }
         result.push(absolutePath);

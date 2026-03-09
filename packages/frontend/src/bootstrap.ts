@@ -1,3 +1,12 @@
+import { MANIFEST_SIGNING_PUBLIC_KEY_PEM } from './release/public-key';
+import { setVerifiedReleaseSnapshot } from './release/runtime';
+import {
+  type ReleaseVerificationFailure,
+  type ReleaseVerificationResult,
+  type ReleaseVerificationUnavailable,
+  verifyRelease,
+} from './release/verification';
+
 export interface MockWorker {
   start: (options?: Record<string, unknown>) => Promise<unknown>;
 }
@@ -10,9 +19,18 @@ export type MockWorkerLoader = () => Promise<MockWorkerModule>;
 
 export interface BootstrapAppOptions {
   search: string;
-  render: () => void;
+  loadApp: () => Promise<void> | void;
   initializeMockingFn?: (search: string) => Promise<void>;
+  isReleaseVerificationRequired?: boolean;
+  renderVerificationGate?: (state: ReleaseVerificationGateState) => void;
+  setVerifiedReleaseSnapshot?: typeof setVerifiedReleaseSnapshot;
+  verifyReleaseFn?: () => Promise<ReleaseVerificationResult>;
 }
+
+export type ReleaseVerificationGateState =
+  | { status: 'verifying' }
+  | ReleaseVerificationFailure
+  | ReleaseVerificationUnavailable;
 
 const defaultWorkerLoader: MockWorkerLoader = async () => import('./mocks/browser');
 
@@ -37,8 +55,103 @@ export async function initializeMocking(
   });
 }
 
+export function isReleaseVerificationRequiredByDefault(
+  isProd: boolean = import.meta.env.PROD,
+  releaseVerificationFlag: string | undefined = import.meta.env.VITE_RELEASE_VERIFICATION_REQUIRED
+): boolean {
+  return isProd && releaseVerificationFlag === 'true';
+}
+
 export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> {
   const initialize = options.initializeMockingFn ?? initializeMocking;
   await initialize(options.search);
-  options.render();
+
+  const shouldVerify =
+    options.isReleaseVerificationRequired ?? isReleaseVerificationRequiredByDefault();
+  if (!shouldVerify) {
+    await options.loadApp();
+    return;
+  }
+
+  const renderVerificationGate = options.renderVerificationGate ?? defaultRenderVerificationGate;
+  const applyVerifiedReleaseSnapshot =
+    options.setVerifiedReleaseSnapshot ?? setVerifiedReleaseSnapshot;
+  const verifyReleaseImpl =
+    options.verifyReleaseFn ??
+    (() =>
+      verifyRelease({
+        baseUrl: window.location.href,
+        publicKeyPem: MANIFEST_SIGNING_PUBLIC_KEY_PEM,
+      }));
+
+  renderVerificationGate({ status: 'verifying' });
+  const verificationResult = await verifyReleaseImpl();
+  if (verificationResult.status === 'verified') {
+    applyVerifiedReleaseSnapshot(verificationResult);
+    await options.loadApp();
+    return;
+  }
+
+  applyVerifiedReleaseSnapshot(null);
+  renderVerificationGate(verificationResult);
+}
+
+function defaultRenderVerificationGate(state: ReleaseVerificationGateState): void {
+  const root = document.getElementById('root');
+  if (!root) {
+    throw new Error('Root element not found');
+  }
+
+  const title =
+    state.status === 'verifying'
+      ? 'Verifying ZeroLink release'
+      : state.status === 'failed'
+        ? 'Release Verification Failed'
+        : 'Verification Unavailable';
+  const body =
+    state.status === 'verifying'
+      ? 'Checking the signed release manifest and build assets before loading ZeroLink.'
+      : state.detail;
+  const dangerNote =
+    state.status === 'verifying'
+      ? 'Please wait before entering any sensitive content.'
+      : 'Do not enter passwords, API keys, or private messages on this page.';
+  const accentColor = state.status === 'failed' ? '#f97316' : '#06b6d4';
+  const badgeText = state.status === 'verifying' ? 'Verified Release' : 'Release Guard';
+
+  const section = document.createElement('section');
+  section.setAttribute('data-testid', 'release-verification-gate');
+  section.setAttribute(
+    'style',
+    'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:#07070c;color:#f8fafc;font-family:Segoe UI,sans-serif;'
+  );
+
+  const card = document.createElement('div');
+  card.setAttribute(
+    'style',
+    'max-width:640px;width:100%;border:1px solid rgba(6,182,212,0.25);background:rgba(20,20,30,0.72);backdrop-filter:blur(18px);border-radius:20px;padding:32px;box-shadow:0 24px 80px rgba(0,0,0,0.45);'
+  );
+
+  const badge = document.createElement('p');
+  badge.setAttribute(
+    'style',
+    `margin:0 0 12px 0;color:${accentColor};font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;`
+  );
+  badge.textContent = badgeText;
+
+  const heading = document.createElement('h1');
+  heading.setAttribute('style', 'margin:0 0 12px 0;font-size:32px;line-height:1.2;');
+  heading.textContent = title;
+
+  const bodyEl = document.createElement('p');
+  bodyEl.setAttribute('style', 'margin:0 0 14px 0;color:#cbd5e1;font-size:15px;line-height:1.6;');
+  bodyEl.textContent = body;
+
+  const noteEl = document.createElement('p');
+  noteEl.setAttribute('style', 'margin:0;color:#94a3b8;font-size:14px;line-height:1.6;');
+  noteEl.textContent = dangerNote;
+
+  card.append(badge, heading, bodyEl, noteEl);
+  section.append(card);
+  root.replaceChildren(section);
 }

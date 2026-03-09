@@ -1,12 +1,34 @@
-# Build Integrity Verification
+# Verified Release & Build Integrity Verification
 
-ZeroLink publishes a **signed build manifest** with every release. This lets you independently verify that the frontend code running in your browser has not been tampered with since it was built.
+ZeroLink publishes a **signed build manifest** with every release, and official signed frontend
+builds now use that manifest during bootstrap before the React app loads. This lets the browser
+detect tampering in the published runtime assets before the user can interact with sensitive UI.
 
 ## What is verified
 
 - **Ed25519 signature** — `manifest.sig` is a cryptographic signature over `manifest.json` using the ZeroLink signing key.
-- **File hashes** — `manifest.json` lists SHA-256 hashes for every file in the release build.
-- **Manifest hash** — `manifest-hash.txt` contains the SHA-256 of `manifest.json` itself; this is also displayed in the app's **Build Manifest** card.
+- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the publicly fetchable runtime files in the release build, including `index.html` and hashed assets.
+- **Manifest hash** — `manifest-hash.txt` contains the SHA-256 of `manifest.json` itself; this is displayed in the app's **Verified Release** card as a public fingerprint, not as the trust anchor.
+
+Pages control files such as `_headers` and `_redirects` are intentionally excluded from the signed
+runtime manifest because they are deployment metadata, not browser-fetched release assets.
+
+## What the browser does during bootstrap
+
+When a deployment is built with `VITE_RELEASE_VERIFICATION_REQUIRED=true`, ZeroLink starts with a
+small bootstrap entry instead of loading the React app immediately. That bootstrap entry:
+
+1. Fetches `manifest.json` and `manifest.sig`
+2. Verifies the Ed25519 signature using the embedded public key
+3. Re-hashes the signed same-origin runtime assets
+4. Loads the React app only if every check passes
+
+If verification fails or cannot be completed, ZeroLink shows a blocking verification screen and
+does not load the normal app UI.
+
+Unsigned environments such as a plain `pnpm build`, `vite preview`, or a manual static upload
+without signed release artifacts remain runnable, but they are treated as unverified boots and do
+not show the `Verified Release` card.
 
 ## Artifacts per release
 
@@ -17,7 +39,23 @@ ZeroLink publishes a **signed build manifest** with every release. This lets you
 | `dist/manifest.sig` | Ed25519 signature over `manifest.json` |
 | `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
 
-All dist artifacts are uploaded as `frontend-dist` in GitHub Actions release runs.
+All dist artifacts are uploaded as `frontend-dist` in GitHub Actions release runs. That workflow
+also enables bootstrap verification by building the frontend with
+`VITE_RELEASE_VERIFICATION_REQUIRED=true`.
+
+## Browser trust surface
+
+When bootstrap verification succeeds, the shell renders a `Verified Release` card with:
+
+- App version
+- Build date
+- Commit
+- Manifest hash
+- Verified file count
+- Publisher key fingerprint
+
+Cloudflare Pages serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
+shell is never reused across deployments, while hashed `/assets/*` files remain immutable.
 
 ## Quick verification (automated)
 
@@ -30,7 +68,7 @@ pnpm manifest:verify
 This will:
 1. Read `manifest.json`, `manifest.sig`, and `keys/manifest-signing.pub`
 2. Verify the Ed25519 signature
-3. Re-hash every file and compare against `manifest.json`
+3. Re-hash every signed runtime file and compare against `manifest.json`
 4. Print a pass/fail result for each file
 
 ## Manual verification
@@ -78,7 +116,8 @@ To confirm you are using the correct public key, compute its fingerprint:
 openssl pkey -in keys/manifest-signing.pub -pubin -outform DER | sha256sum
 ```
 
-Compare the output against the fingerprint listed in `keys/manifest-signing.pub`.
+Compare the output against the fingerprint shown in the app's `Verified Release` card or the
+fingerprint listed in `keys/manifest-signing.pub`.
 
 ## Key rotation
 
