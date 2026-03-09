@@ -16,6 +16,7 @@ import {
   LockedStep,
   LockStep,
   OnboardingStep,
+  StepIndicator,
   UnavailableStep,
 } from '../components/share/share-steps';
 import {
@@ -42,17 +43,25 @@ function SharePageHeader() {
 
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   return (
-    <p>
-      UUID:{' '}
+    <p className="text-xs text-muted-foreground">
+      Channel ID:{' '}
       <code
-        className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground"
+        className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
         data-testid="share-uuid"
       >
-        {uuid ?? '(missing uuid)'}
+        {uuid ?? '(missing)'}
       </code>
     </p>
   );
 }
+
+const LOCK_FLOW_STEPS = ['Overview', 'Set passphrase', 'Locked'] as const;
+
+const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
+  onboarding: 1,
+  lock: 2,
+  locked: 3,
+};
 
 /**
  * Receiver page integrating lock flow and delivered decryption flow with orchestrator.
@@ -83,6 +92,13 @@ export function SharePage(): ReactElement {
         !publicState.isUnavailable &&
         publicState.channelState === CHANNEL_STATE.WAITING ? (
           <>
+            {lockLogic.store.step !== 'locked' ? (
+              <StepIndicator
+                current={LOCK_STEP_INDEX[lockLogic.store.step]}
+                labels={LOCK_FLOW_STEPS}
+                total={3}
+              />
+            ) : null}
             {lockLogic.store.step === 'onboarding' ? (
               <OnboardingStep onContinue={() => lockLogic.store.setStep('lock')} />
             ) : null}

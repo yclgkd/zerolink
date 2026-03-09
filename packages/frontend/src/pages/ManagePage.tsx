@@ -10,7 +10,7 @@ import {
 } from '@zerolink/shared';
 import { ClipboardCheck, Copy, PlusCircle, Send, Trash2 } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChannelUnavailableState } from '../components/channel/channel-unavailable-state';
 import {
@@ -26,6 +26,7 @@ import {
 import { PassphraseInput } from '../components/lock/passphrase-input';
 import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
+import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
 import { useCreateStore } from '../stores/create-store';
@@ -57,7 +58,7 @@ function mapActionError(code: string): string {
     case 'INTERNAL_ERROR':
       return 'Unexpected internal error. Please retry.';
     default:
-      return `Manage action failed: ${code}`;
+      return 'An unexpected error occurred. Please try again.';
   }
 }
 
@@ -86,13 +87,13 @@ function ManagePageHeader({ status, unavailable }: { status: ChannelState; unava
 
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   return (
-    <p>
-      UUID:{' '}
+    <p className="text-xs text-muted-foreground">
+      Channel ID:{' '}
       <code
-        className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-foreground"
+        className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
         data-testid="manage-uuid"
       >
-        {uuid ?? '(missing uuid)'}
+        {uuid ?? '(missing)'}
       </code>
     </p>
   );
@@ -273,10 +274,15 @@ function DestroyConfirmPanel({
 }) {
   return (
     <div
-      className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm"
+      className="space-y-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm ring-1 ring-destructive/20"
       data-testid="manage-destroy-confirm"
     >
-      <p className="text-foreground">Delete this channel permanently?</p>
+      <div className="space-y-1">
+        <p className="font-semibold text-destructive">Permanently delete this channel?</p>
+        <p className="text-xs text-muted-foreground">
+          This cannot be undone. All channel data will be removed from the server.
+        </p>
+      </div>
       <div className="flex flex-wrap gap-2">
         <Button
           data-testid="manage-destroy-cancel"
@@ -297,7 +303,10 @@ function DestroyConfirmPanel({
           variant="danger"
         >
           {pending ? (
-            'Deleting...'
+            <>
+              <Spinner aria-hidden="true" className="size-3.5" />
+              Deleting…
+            </>
           ) : (
             <>
               <Trash2 aria-hidden="true" className="size-3.5" />
@@ -366,7 +375,10 @@ function ActionPanel({
           type="button"
         >
           {pending ? (
-            'Delivering...'
+            <>
+              <Spinner aria-hidden="true" className="size-4" />
+              Delivering…
+            </>
           ) : (
             <>
               <Send aria-hidden="true" className="size-4" />
@@ -405,6 +417,13 @@ function useResolvedProfile(): SecurityProfile {
 
 function useShareLinkGenerator(uuid?: string) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const shareLink = useMemo(() => {
     if (!uuid) return '(missing uuid)';
@@ -412,7 +431,7 @@ function useShareLinkGenerator(uuid?: string) {
     return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
   }, [uuid]);
 
-  const handleCopyShareLink = async () => {
+  const handleCopyShareLink = useCallback(async () => {
     if (!uuid) {
       setCopied(false);
       return;
@@ -429,11 +448,13 @@ function useShareLinkGenerator(uuid?: string) {
       }
 
       await writeText(shareLink);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
       setCopied(true);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
     }
-  };
+  }, [uuid, shareLink]);
 
   return { copied, shareLink, handleCopyShareLink };
 }

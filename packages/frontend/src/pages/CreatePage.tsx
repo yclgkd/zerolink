@@ -1,8 +1,7 @@
 import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
-import { Lock, Shield, Zap } from 'lucide-react';
+import { ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   PageCard,
   PageCardContent,
@@ -14,13 +13,13 @@ import {
 } from '../components/layout';
 import { PassphraseInput } from '../components/lock/passphrase-input';
 import { Button } from '../components/ui/button';
+import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
 import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
 import type { CreateStore } from '../stores/create-store';
 import { useCreateStore } from '../stores/create-store';
-import { createTrustRouteState } from '../trust-route-state';
 
 const profileLabelMap: Record<SecurityProfile, string> = {
   [SECURITY_PROFILE.QUICK]: 'Quick Share',
@@ -51,7 +50,7 @@ function mapCreateError(code: string): string {
     case 'INVALID_REQUEST':
       return 'Create request was rejected. Please retry.';
     default:
-      return `Channel creation failed: ${code}`;
+      return 'An unexpected error occurred. Please try again.';
   }
 }
 
@@ -154,8 +153,6 @@ function ModeSelectorGrid({
 }
 
 function TrustModelHint() {
-  const location = useLocation();
-
   return (
     <section className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -163,14 +160,15 @@ function TrustModelHint() {
           Need a plain-language summary of what stays local, what the sender can do, and when
           channel data disappears?
         </p>
-        <Link
+        <a
           className="text-sm font-medium text-neon-cyan underline decoration-neon-cyan/50 underline-offset-4 transition-colors hover:text-white"
           data-testid="create-trust-link"
-          state={createTrustRouteState(location)}
-          to="/trust"
+          href="/trust"
+          rel="noopener noreferrer"
+          target="_blank"
         >
-          Read the trust model
-        </Link>
+          Read the trust model ↗
+        </a>
       </div>
     </section>
   );
@@ -215,7 +213,10 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
         type="button"
       >
         {disabled ? (
-          'Creating...'
+          <>
+            <Spinner aria-hidden="true" className="size-4" />
+            Creating…
+          </>
         ) : (
           <>
             <Zap aria-hidden="true" className="size-4" />
@@ -227,53 +228,132 @@ function ActionFooter({ onCreate, disabled }: { onCreate: () => void; disabled: 
   );
 }
 
+function useCopyLink(url: string) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      setCopied(true);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [url]);
+  return { copied, copy };
+}
+
+function CopyableLinkRow({
+  label,
+  url,
+  testId,
+  copyTestId,
+}: {
+  label: string;
+  url: string;
+  testId: string;
+  copyTestId: string;
+}) {
+  const { copied, copy } = useCopyLink(url);
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <code
+          className="flex-1 break-all rounded bg-muted/60 px-2 py-1.5 text-xs text-neon-cyan"
+          data-testid={testId}
+        >
+          {url}
+        </code>
+        <button
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/70 bg-card/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          data-testid={copyTestId}
+          onClick={() => void copy()}
+          type="button"
+        >
+          {copied ? (
+            <>
+              <ClipboardCheck aria-hidden="true" className="size-3.5 text-neon-green" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy aria-hidden="true" className="size-3.5" />
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SuccessSummary({
   createdProfile,
   links,
+  onCreateAnother,
 }: {
   createdProfile: SecurityProfile | null;
   links: CreatedLinks | null;
+  onCreateAnother: () => void;
 }) {
   if (!createdProfile || !links) return null;
 
   return (
-    <StateNotice
+    <div
+      className="space-y-5 rounded-xl border border-neon-green/30 bg-neon-green/5 p-5"
       data-testid="create-success-summary"
-      title="Secure channel created."
-      tone="success"
     >
-      {links.isPasswordMode ? (
-        <div
-          className="mb-2 inline-block rounded-md border border-neon-purple/40 bg-neon-purple/10 px-2 py-0.5 text-xs font-semibold text-neon-purple"
-          data-testid="create-password-mode-badge"
-        >
-          Quick Share (Password)
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-0.5">
+          <p className="font-semibold text-neon-green">Channel created successfully</p>
+          <p className="text-xs text-muted-foreground">
+            Mode:{' '}
+            <span className="font-medium text-foreground">{profileLabelMap[createdProfile]}</span>
+            {links.isPasswordMode ? (
+              <span
+                className="ml-2 inline-block rounded border border-neon-purple/40 bg-neon-purple/10 px-1.5 py-px text-xs font-semibold text-neon-purple"
+                data-testid="create-password-mode-badge"
+              >
+                Password-protected
+              </span>
+            ) : null}
+          </p>
         </div>
-      ) : null}
-      <p>
-        Mode: <span className="font-semibold">{profileLabelMap[createdProfile]}</span>
-      </p>
-      <p>
-        Share link:{' '}
-        <a
-          className="text-primary underline"
-          data-testid="create-success-share-link"
-          href={links.shareUrlWithFragment}
+        <button
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          data-testid="create-another-button"
+          onClick={onCreateAnother}
+          type="button"
         >
-          {links.shareUrlWithFragment}
-        </a>
-      </p>
-      <p>
-        Manage link:{' '}
-        <a
-          className="text-primary underline"
-          data-testid="create-success-manage-link"
-          href={links.manageUrl}
-        >
-          {links.manageUrl}
-        </a>
-      </p>
-    </StateNotice>
+          <PlusCircle aria-hidden="true" className="size-3.5" />
+          Create another
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <CopyableLinkRow
+          copyTestId="create-success-share-link-copy"
+          label="Share link — send to receiver"
+          testId="create-success-share-link"
+          url={links.shareUrlWithFragment}
+        />
+        <CopyableLinkRow
+          copyTestId="create-success-manage-link-copy"
+          label="Manage link — keep this private"
+          testId="create-success-manage-link"
+          url={links.manageUrl}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -367,6 +447,10 @@ function useCreatePageLogic() {
     });
   }
 
+  function handleCreateAnother(): void {
+    clearLocalFeedback();
+  }
+
   return {
     state: store,
     createdLinks,
@@ -377,6 +461,7 @@ function useCreatePageLogic() {
     canSubmit,
     handleSelectProfile,
     handleCreate,
+    handleCreateAnother,
     handleQuickPasswordChange: (value: string) => {
       setQuickPassword(value);
       if (submitError) setSubmitError(null);
@@ -405,33 +490,42 @@ export function CreatePage(): ReactElement {
         </PageCardDescription>
       </PageCardHeader>
       <PageCardContent aria-busy={logic.isSubmitting} className="space-y-6">
-        <ModeSelectorGrid
-          onSelect={logic.handleSelectProfile}
-          selected={logic.state.selectedProfile}
-          webAuthnSupported={logic.state.webAuthnSupported}
-        />
-        <TrustModelHint />
-        {logic.isQuickMode ? (
-          <QuickSharePasswordPanel
-            onPasswordChange={logic.handleQuickPasswordChange}
-            password={logic.quickPassword}
+        {logic.createdLinks ? (
+          <SuccessSummary
+            createdProfile={logic.state.createdProfile}
+            links={logic.createdLinks}
+            onCreateAnother={logic.handleCreateAnother}
           />
-        ) : null}
-        <ActionFooter
-          disabled={logic.isSubmitting || !logic.canSubmit}
-          onCreate={logic.handleCreate}
-        />
-        {logic.submitError ? (
-          <StateNotice
-            autoFocusOnMount
-            data-testid="create-submit-error"
-            id="create-submit-error"
-            tone="error"
-          >
-            {logic.submitError}
-          </StateNotice>
-        ) : null}
-        <SuccessSummary createdProfile={logic.state.createdProfile} links={logic.createdLinks} />
+        ) : (
+          <>
+            <ModeSelectorGrid
+              onSelect={logic.handleSelectProfile}
+              selected={logic.state.selectedProfile}
+              webAuthnSupported={logic.state.webAuthnSupported}
+            />
+            <TrustModelHint />
+            {logic.isQuickMode ? (
+              <QuickSharePasswordPanel
+                onPasswordChange={logic.handleQuickPasswordChange}
+                password={logic.quickPassword}
+              />
+            ) : null}
+            <ActionFooter
+              disabled={logic.isSubmitting || !logic.canSubmit}
+              onCreate={logic.handleCreate}
+            />
+            {logic.submitError ? (
+              <StateNotice
+                autoFocusOnMount
+                data-testid="create-submit-error"
+                id="create-submit-error"
+                tone="error"
+              >
+                {logic.submitError}
+              </StateNotice>
+            ) : null}
+          </>
+        )}
       </PageCardContent>
     </PageCard>
   );

@@ -5,6 +5,7 @@ import { PassphraseInput } from '../../components/lock/passphrase-input';
 import { SafetyCode } from '../../components/safety/safety-code';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
+import { cn } from '../../lib/utils';
 import { ChannelUnavailableState } from '../channel/channel-unavailable-state';
 
 export const onboardingItems = [
@@ -24,6 +25,39 @@ export const onboardingItems = [
     description: 'Delivery stays encrypted for your receiver identity only.',
   },
 ] as const;
+
+export function StepIndicator({
+  current,
+  total,
+  labels,
+}: {
+  current: number;
+  total: number;
+  labels: readonly string[];
+}) {
+  return (
+    <div aria-hidden="true" className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        {Array.from({ length: total }, (_, i) => (
+          <div
+            className={cn(
+              'h-1 flex-1 rounded-full transition-colors duration-300',
+              i + 1 < current
+                ? 'bg-neon-cyan/60'
+                : i + 1 === current
+                  ? 'bg-neon-cyan'
+                  : 'bg-border/50'
+            )}
+            key={labels[i]}
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Step {current} of {total} — {labels[current - 1]}
+      </p>
+    </div>
+  );
+}
 
 export const nextSteps = [
   'Contact the sender through another channel.',
@@ -129,7 +163,10 @@ export function LockStep({
           type="button"
         >
           {lockPending ? (
-            'Locking...'
+            <>
+              <Spinner aria-hidden="true" className="size-4" />
+              Locking…
+            </>
           ) : (
             <>
               <KeyRound aria-hidden="true" className="size-4" />
@@ -253,7 +290,10 @@ export function DeliveredStep({
             type="button"
           >
             {decryptPending ? (
-              'Decrypting...'
+              <>
+                <Spinner aria-hidden="true" className="size-4" />
+                Decrypting…
+              </>
             ) : (
               <>
                 <Unlock aria-hidden="true" className="size-4" />

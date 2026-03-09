@@ -47,17 +47,18 @@ describe('App shell routes rendering', () => {
     );
   });
 
-  it('returns to create when trust page is opened from the create-page trust link', async () => {
+  it('create-page trust link opens in a new tab without navigating away', async () => {
     renderFrom('/');
 
     expect(await screen.findByTestId('page-create')).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('create-trust-link'));
-    expect(await screen.findByTestId('page-trust')).toBeTruthy();
+    const trustLink = screen.getByTestId('create-trust-link');
+    expect(trustLink.getAttribute('target')).toBe('_blank');
+    expect(trustLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(trustLink.getAttribute('href')).toBe('/trust');
 
-    fireEvent.click(screen.getByTestId('trust-back-button'));
-
-    expect(await screen.findByTestId('page-create')).toBeTruthy();
+    // Create page remains visible (no SPA navigation)
+    expect(screen.getByTestId('page-create')).toBeTruthy();
   });
 
   it('returns to the prior shell route when trust page is opened from the shell trust link', async () => {

@@ -152,7 +152,7 @@ function AdvancedFingerprintSection({
 export function SafetyCode({
   display,
   className,
-  defaultView = 'emoji',
+  defaultView = 'color',
   palette,
   verifyHint = DEFAULT_VERIFY_HINT,
 }: SafetyCodeProps) {
