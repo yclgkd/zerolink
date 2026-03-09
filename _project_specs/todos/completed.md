@@ -70,3 +70,12 @@ guarantee when the indicator is actually present. Also replaced the trust-page s
 `Back to Create`, carried explicit in-app return markers into trust-page links, and made the
 trust-page `Back` action return only to known in-app entries instead of guessing from browser
 history.
+
+## DONE-008: Receiver lock-flow wording clarification
+
+**Completed**: 2026-03-09
+
+Clarified the receiver-side share flow so the page now explicitly says the sender created the
+channel first, the receiver is setting their own passphrase on the shared-link page, and the lock
+actions/next steps are receiver-specific. Added `SharePage` tests to prevent the sender/receiver
+responsibility wording from drifting back into an ambiguous flow.

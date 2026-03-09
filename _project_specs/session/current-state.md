@@ -3,14 +3,19 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Add a Trust Model explainer and release-build hygiene follow-up for the frontend shell.
+Clarify the receiver-side lock flow copy on the share page.
 
 ## Current Status
-- **Phase**: Trust Model page and release-build hygiene complete, ready for PR
-- **Progress**: Added a frontend-only `/trust` route with shell and Create-page entry points, preserved the zero-knowledge and local-burn trust copy, trimmed the MSW worker from production `dist`, scoped Verified Release claims to builds that actually show the verification indicator, and constrained the trust-page `Back` action to known in-app trust-link entries instead of browser-history guesses.
+- **Phase**: Receiver share-flow wording follow-up complete, ready to push
+- **Progress**: Updated the receiver share page so waiting, locked, delivered, and unavailable states each show accurate header copy, and the locked-state follow-up instructions no longer imply the current device just completed the lock.
 - **Blocking Issues**: None
 
 ## What Was Done
+
+### Phase 13: Receiver lock-flow wording clarification
+- `packages/frontend/src/pages/SharePage.tsx`, `packages/frontend/src/components/share/share-steps.tsx` — Reframed the receiver page as an explicit receiver-only flow, renamed the step labels and headings, clarified that the sender created the channel first, and updated the lock/next-step copy so sender and receiver responsibilities are unambiguous.
+- Follow-up: `packages/frontend/src/pages/SharePage.tsx`, `packages/frontend/src/components/share/share-page-header.tsx`, `packages/frontend/src/components/share/share-steps.tsx` — Made the page header state-aware so delivered and reopened locked links no longer show waiting-only instructions, and made locked-state next steps generic enough for reload and device-switch scenarios.
+- `packages/frontend/src/__tests__/share-page.test.tsx` — Added waiting, locked, and delivered assertions that guard the receiver-specific wording and state-specific follow-up copy.
 
 ### Phase 12: Trust Model page clarification and exit navigation
 - `packages/frontend/src/pages/TrustPage.tsx`, `packages/frontend/src/__tests__/trust-page.test.tsx` — Reworked the trust copy into six focused cards covering staged server-visible metadata, sender and receiver local storage, physical delete plus tombstone behavior, local burn, and conditional Verified Release semantics, and added footer actions for `Back` and `Create Secure Channel`
@@ -119,6 +124,8 @@ Add a Trust Model explainer and release-build hygiene follow-up for the frontend
 
 ## Latest Update (2026-03-09)
 
+- Clarified the receiver-side step flow so the UI now says the sender created the channel first and the receiver is setting their own local passphrase and lock.
+- Fixed the receiver share-page follow-up copy so locked and delivered revisits no longer show waiting-only instructions or imply the current device just completed the lock.
 - Expanded the Trust Model page into six cards that now describe staged server metadata, sender-side local admin storage, receiver-side IndexedDB state, physical purge plus tombstone delete behavior, and conditional Verified Release semantics.
 - Replaced browser-history guessing on `/trust` with explicit in-app return markers so the page `Back` action only returns to known ZeroLink entries and otherwise falls back to Create.
 - Kept the release-build hygiene follow-up that removes the MSW worker from production `dist` while preserving verified-release bootstrap behavior and cache rules.

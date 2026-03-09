@@ -197,7 +197,18 @@ describe('SharePage', () => {
 
     expect(screen.getByTestId('page-share')).toBeTruthy();
     expect(screen.getByTestId('share-step-onboarding')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'The sender already created this channel. Set your own passphrase here to generate your receiver key and lock the channel on this device.'
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText('This page is only for the receiver using the shared link.')
+    ).toBeTruthy();
     expect(screen.getByText('Your passphrase stays on this device')).toBeTruthy();
+    expect(screen.getByTestId('share-continue-button').textContent).toContain(
+      'Continue as receiver'
+    );
     const content = screen.getByTestId('page-share').querySelector('[aria-busy]');
     expect(content?.getAttribute('aria-busy')).toBe('false');
   });
@@ -211,6 +222,11 @@ describe('SharePage', () => {
     fireEvent.click(screen.getByTestId('share-continue-button'));
 
     expect(screen.getByTestId('share-step-lock')).toBeTruthy();
+    expect(screen.getByText('Choose your passphrase')).toBeTruthy();
+    expect(screen.getByLabelText('Your passphrase')).toBeTruthy();
+    expect(screen.getByTestId('share-generate-button').textContent).toContain(
+      'Generate My Key & Lock'
+    );
   });
 
   it('keeps generate button disabled when passphrase is empty', async () => {
@@ -436,6 +452,13 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(screen.getByText('Receiver channel is locked')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This channel is already locked for the receiver. If you need the Safety Code, reopen this link on the device that created the lock.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByText('Coordinate with the sender over another channel.')).toBeTruthy();
     const warning = screen.getByTestId('share-safety-unavailable');
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
@@ -450,6 +473,12 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(screen.getByText('Decrypt Delivered Secret')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'If this device created the receiver lock, enter that passphrase to decrypt the secret locally.'
+      )
+    ).toBeTruthy();
     expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
     expect(screen.getByText('Channel Delivered')).toBeTruthy();
     expect(

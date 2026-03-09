@@ -11,18 +11,18 @@ import { ChannelUnavailableState } from '../channel/channel-unavailable-state';
 export const onboardingItems = [
   {
     emoji: '🔐',
+    title: 'This page is only for the receiver using the shared link.',
+    description: 'The sender already created the channel and sent you this link.',
+  },
+  {
+    emoji: '🗝️',
     title: 'Your passphrase stays on this device',
     description: 'It never gets sent to the server or shared with the sender.',
   },
   {
-    emoji: '🔑',
-    title: 'It generates your key locally',
-    description: "The sender can't see your passphrase or private key material.",
-  },
-  {
     emoji: '🔒',
-    title: 'After locking, only you can unlock',
-    description: 'Delivery stays encrypted for your receiver identity only.',
+    title: 'Locking creates your receiver key locally',
+    description: 'After you lock, the sender can deliver only to your receiver identity.',
   },
 ] as const;
 
@@ -60,15 +60,15 @@ export function StepIndicator({
 }
 
 export const nextSteps = [
-  'Contact the sender through another channel.',
-  'Compare Safety Code values before delivery.',
-  'Keep this tab open until the sender confirms delivery.',
+  'Coordinate with the sender over another channel.',
+  'Compare Safety Code values before delivery when they are available on this device.',
+  'Keep this tab open until the sender confirms the encrypted delivery.',
 ] as const;
 
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   return (
     <section className="space-y-4" data-testid="share-step-onboarding">
-      <h3 className="text-base font-semibold text-foreground">Lock This Channel</h3>
+      <h3 className="text-base font-semibold text-foreground">Receiver Lock Setup</h3>
       <div className="space-y-3">
         {onboardingItems.map((item, index) => (
           <div
@@ -85,7 +85,7 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
         ))}
       </div>
       <Button data-testid="share-continue-button" onClick={onContinue} type="button">
-        Continue to Lock
+        Continue as receiver
       </Button>
     </section>
   );
@@ -114,14 +114,14 @@ export function LockStep({
 }) {
   return (
     <section className="space-y-4" data-testid="share-step-lock">
-      <h3 className="text-base font-semibold text-foreground">Generate Key & Lock</h3>
+      <h3 className="text-base font-semibold text-foreground">Choose your passphrase</h3>
       <PassphraseInput
         ariaDescribedBy={lockError && isLockPassphraseInvalid ? 'share-lock-error' : undefined}
         ariaInvalid={isLockPassphraseInvalid ? true : undefined}
         inputId="share-lock-passphrase"
-        label="Lock passphrase"
+        label="Your passphrase"
         onChange={onPassphraseChange}
-        placeholder="Enter a strong passphrase"
+        placeholder="Enter your passphrase"
         value={passphrase}
       />
 
@@ -170,7 +170,7 @@ export function LockStep({
           ) : (
             <>
               <KeyRound aria-hidden="true" className="size-4" />
-              Generate Key & Lock
+              Generate My Key & Lock
             </>
           )}
         </Button>
@@ -187,9 +187,10 @@ export function LockedStep({
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Channel Locked Successfully</h3>
+        <h3 className="text-base font-semibold text-foreground">Receiver channel is locked</h3>
         <p className="text-xs text-muted-foreground">
-          Verify the Safety Code with the sender before delivery.
+          Verify the Safety Code with the sender before delivery when it is available on this
+          device.
         </p>
       </div>
 

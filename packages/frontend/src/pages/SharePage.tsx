@@ -2,14 +2,8 @@ import { CHANNEL_STATE } from '@zerolink/shared';
 import type { ReactElement } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
-import {
-  PageCard,
-  PageCardContent,
-  PageCardDescription,
-  PageCardHeader,
-  PageCardTitle,
-  RoleBadge,
-} from '../components/layout';
+import { PageCard, PageCardContent } from '../components/layout';
+import { SharePageHeader } from '../components/share/share-page-header';
 import {
   DeliveredStep,
   LoadingStep,
@@ -25,22 +19,6 @@ import {
   useSharePageLockLogic,
 } from '../features/share/share-logic';
 
-function SharePageHeader() {
-  return (
-    <PageCardHeader>
-      <div className="flex items-center justify-between gap-3">
-        <PageCardTitle asChild className="text-primary">
-          <h2>Secure Channel</h2>
-        </PageCardTitle>
-        <RoleBadge party="receiver" />
-      </div>
-      <PageCardDescription>
-        Generate your encryption key to secure this channel.
-      </PageCardDescription>
-    </PageCardHeader>
-  );
-}
-
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   return (
     <p className="text-xs text-muted-foreground">
@@ -55,7 +33,7 @@ function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   );
 }
 
-const LOCK_FLOW_STEPS = ['Overview', 'Set passphrase', 'Locked'] as const;
+const LOCK_FLOW_STEPS = ['Receiver intro', 'Your passphrase', 'Ready for delivery'] as const;
 
 const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
   onboarding: 1,
@@ -80,7 +58,11 @@ export function SharePage(): ReactElement {
 
   return (
     <PageCard data-testid="page-share" tone="cyan">
-      <SharePageHeader />
+      <SharePageHeader
+        channelState={publicState.channelState}
+        isPublicStatusLoading={publicState.isPublicStatusLoading}
+        isUnavailable={isUnavailable}
+      />
       <PageCardContent aria-busy={isPageBusy} className="space-y-6">
         <UuidDisplay uuid={uuid} />
 
