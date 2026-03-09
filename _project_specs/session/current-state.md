@@ -3,11 +3,11 @@
 *Last updated: 2026-03-09*
 
 ## Active Task
-Verified Release bootstrap verification hardening plus delete/local-burn/expiry clarification for the frontend shell.
+Add a Trust Model explainer and release-build hygiene follow-up for the frontend shell.
 
 ## Current Status
-- **Phase**: Verified Release hardening and release-build hygiene complete, ready for PR
-- **Progress**: Frontend startup now enables fail-closed release verification only for explicitly marked signed-release builds, keeps preview/manual unsigned builds runnable without a trust card, serves SPA entry HTML with `no-store` while leaving hashed assets immutable, trims the MSW worker from production `dist`, and clarifies sender delete vs receiver-local plaintext burn vs channel expiry across the UI and internal guidance.
+- **Phase**: Trust Model page and release-build hygiene complete, ready for PR
+- **Progress**: Added a frontend-only `/trust` route with shell and Create-page entry points, preserved the zero-knowledge and local-burn trust copy, and trimmed the MSW worker from production `dist` while keeping verified-release bootstrap behavior and cache rules intact.
 - **Blocking Issues**: None
 
 ## What Was Done
@@ -109,9 +109,18 @@ Verified Release bootstrap verification hardening plus delete/local-burn/expiry 
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Review the bootstrap verifier diff and confirm the residual same-origin trust assumptions are acceptable for v1
-2. [ ] Create PR with validation notes, cache-control notes, and rollback guidance
-3. [ ] Consider a future external trust anchor for stronger release authenticity beyond self-hosted bootstrap verification
+1. [ ] Re-run targeted frontend validation after syncing the PR branch with `main`
+2. [ ] Push the refreshed branch so the open PR is conflict-free
+3. [ ] Address any follow-up review comments
+
+## Latest Update (2026-03-09)
+
+- Added a frontend-only Trust Model page that explains what the server cannot see, what the sender can and cannot do, what the receiver device stores locally, and why local burn is different from delete or expiry.
+- Implemented a `Create + Shell` entry strategy so the explanation is discoverable both at first use and later revisits.
+- Kept the user-facing copy in English to stay consistent with the current frontend UI.
+- Trimmed `mockServiceWorker.js` from production `dist` so the MSW worker stays development-only and no longer appears in the signed release artifact set.
+- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
+- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.
 
 ## Latest Update (2026-03-08)
 
@@ -122,6 +131,3 @@ Verified Release bootstrap verification hardening plus delete/local-burn/expiry 
 - Added a bootstrap-first Verified Release architecture so the browser verifies the signed manifest and runtime asset hashes before loading the React app, and exposed the verified build details only after a successful boot snapshot is present.
 
 ## Latest Update (2026-03-09)
-
-- Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
-- Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.

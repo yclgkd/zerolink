@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SECURITY_PROFILE } from '@zerolink/shared';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { detectWebAuthnSupportMock, createChannelMock } = vi.hoisted(() => ({
@@ -59,6 +60,14 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+function renderCreatePage() {
+  return render(
+    <MemoryRouter>
+      <CreatePage />
+    </MemoryRouter>
+  );
+}
+
 describe('CreatePage integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -72,7 +81,7 @@ describe('CreatePage integration', () => {
 
   it('renders Quick and Secure mode cards', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     expect(screen.getByTestId('page-create')).toBeTruthy();
     expect(screen.getByTestId('mode-card-quick')).toBeTruthy();
@@ -81,7 +90,7 @@ describe('CreatePage integration', () => {
 
   it('defaults to Secure mode when WebAuthn is available', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('false');
@@ -89,7 +98,7 @@ describe('CreatePage integration', () => {
 
   it('defaults to Quick mode when WebAuthn is unavailable', () => {
     mockWebAuthnSupport(false);
-    render(<CreatePage />);
+    renderCreatePage();
 
     expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('false');
@@ -97,7 +106,7 @@ describe('CreatePage integration', () => {
 
   it('shows WebAuthn blocked warning when WebAuthn is unavailable', () => {
     mockWebAuthnSupport(false);
-    render(<CreatePage />);
+    renderCreatePage();
 
     const warning = screen.getByTestId('create-webauthn-blocked-warning');
     expect(warning).toBeTruthy();
@@ -106,7 +115,7 @@ describe('CreatePage integration', () => {
 
   it('switches to Quick mode when Quick card is clicked', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('mode-card-quick'));
     expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('true');
@@ -115,7 +124,7 @@ describe('CreatePage integration', () => {
 
   it('shows password panel when Quick mode is selected', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     expect(screen.queryByTestId('quick-share-password-panel')).toBeNull();
     fireEvent.click(screen.getByTestId('mode-card-quick'));
@@ -124,7 +133,7 @@ describe('CreatePage integration', () => {
 
   it('hides password panel when Secure mode is selected', () => {
     mockWebAuthnSupport(false);
-    render(<CreatePage />);
+    renderCreatePage();
 
     // Quick is default when no WebAuthn
     expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
@@ -133,7 +142,7 @@ describe('CreatePage integration', () => {
     // When WebAuthn is available, switching to Secure should hide panel
     mockWebAuthnSupport(true);
     cleanup();
-    render(<CreatePage />);
+    renderCreatePage();
 
     // Default is Secure with WebAuthn
     expect(screen.queryByTestId('quick-share-password-panel')).toBeNull();
@@ -141,7 +150,7 @@ describe('CreatePage integration', () => {
 
   it('disables submit button in Quick mode until password is entered', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('mode-card-quick'));
 
@@ -151,7 +160,7 @@ describe('CreatePage integration', () => {
 
   it('enables submit button in Quick mode when password is entered', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('mode-card-quick'));
 
@@ -164,7 +173,7 @@ describe('CreatePage integration', () => {
 
   it('enables submit button in Secure mode when WebAuthn is available', () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
@@ -172,7 +181,7 @@ describe('CreatePage integration', () => {
 
   it('disables submit button in Secure mode when WebAuthn is unavailable', () => {
     mockWebAuthnSupport(false);
-    render(<CreatePage />);
+    renderCreatePage();
 
     // Switch to Secure (should not be clickable when unavailable, but test the disabled state)
     const secureCard = screen.getByTestId('mode-card-secure');
@@ -184,7 +193,7 @@ describe('CreatePage integration', () => {
 
   it('calls createChannel with QUICK profile and password', async () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('mode-card-quick'));
     const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
@@ -204,7 +213,7 @@ describe('CreatePage integration', () => {
 
   it('calls createChannel with SECURE profile when WebAuthn is available', async () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
@@ -219,7 +228,7 @@ describe('CreatePage integration', () => {
 
   it('shows share and manage links after successful creation (Secure mode)', async () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('create-submit-button'));
     await waitFor(() => {
@@ -230,7 +239,7 @@ describe('CreatePage integration', () => {
 
   it('shows password mode badge in success summary for Quick Share', async () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('mode-card-quick'));
     const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
@@ -249,7 +258,7 @@ describe('CreatePage integration', () => {
       error: { ok: false, code: 'NETWORK_ERROR', stage: 'create.begin' },
     });
 
-    render(<CreatePage />);
+    renderCreatePage();
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
@@ -264,7 +273,7 @@ describe('CreatePage integration', () => {
       error: { ok: false, code: 'NETWORK_ERROR', stage: 'create.begin' },
     });
 
-    render(<CreatePage />);
+    renderCreatePage();
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
@@ -277,7 +286,7 @@ describe('CreatePage integration', () => {
 
   it('clears password after successful Quick Share creation', async () => {
     mockWebAuthnSupport(true);
-    render(<CreatePage />);
+    renderCreatePage();
 
     fireEvent.click(screen.getByTestId('mode-card-quick'));
     const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
@@ -304,7 +313,7 @@ describe('CreatePage integration', () => {
       };
     }>();
     createChannelMock.mockReturnValueOnce(deferred.promise);
-    render(<CreatePage />);
+    renderCreatePage();
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     fireEvent.click(submit);
@@ -332,5 +341,14 @@ describe('CreatePage integration', () => {
       );
     });
     expect(busyContainer?.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('renders a trust model link that points to /trust', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    const trustLink = screen.getByTestId('create-trust-link');
+    expect(trustLink.getAttribute('href')).toBe('/trust');
+    expect(trustLink.textContent?.toLowerCase()).toContain('trust model');
   });
 });

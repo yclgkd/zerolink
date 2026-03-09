@@ -26,6 +26,10 @@ describe('frontend app shell routes', () => {
     expect(resolveLeafRouteId('/m/test-channel')).toBe(APP_ROUTE_ID.MANAGE);
   });
 
+  it('matches /trust to trust route', () => {
+    expect(resolveLeafRouteId('/trust')).toBe(APP_ROUTE_ID.TRUST);
+  });
+
   it('matches unknown paths to not-found route', () => {
     expect(resolveLeafRouteId('/not-a-real-route')).toBe(APP_ROUTE_ID.NOT_FOUND);
   });

@@ -36,6 +36,14 @@ describe('App shell routes rendering', () => {
     expect(screen.queryByRole('link', { name: 'Manage' })).toBeNull();
   });
 
+  it('renders trust page inside the app shell and shows the shell trust link', async () => {
+    renderFrom('/trust');
+
+    expect(await screen.findByTestId('app-shell')).toBeTruthy();
+    expect(screen.getByTestId('page-trust')).toBeTruthy();
+    expect(screen.getByTestId('app-shell-trust-link').getAttribute('href')).toBe('/trust');
+  });
+
   it('falls back to not-found child route for unknown path', async () => {
     renderFrom('/non-existing-path');
 
