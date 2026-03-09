@@ -197,7 +197,18 @@ describe('SharePage', () => {
 
     expect(screen.getByTestId('page-share')).toBeTruthy();
     expect(screen.getByTestId('share-step-onboarding')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'The sender already created this channel. Set your own passphrase here to generate your receiver key and lock the channel on this device.'
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText('This page is only for the receiver using the shared link.')
+    ).toBeTruthy();
     expect(screen.getByText('Your passphrase stays on this device')).toBeTruthy();
+    expect(screen.getByTestId('share-continue-button').textContent).toContain(
+      'Continue as receiver'
+    );
     const content = screen.getByTestId('page-share').querySelector('[aria-busy]');
     expect(content?.getAttribute('aria-busy')).toBe('false');
   });
@@ -211,6 +222,11 @@ describe('SharePage', () => {
     fireEvent.click(screen.getByTestId('share-continue-button'));
 
     expect(screen.getByTestId('share-step-lock')).toBeTruthy();
+    expect(screen.getByText('Choose your passphrase')).toBeTruthy();
+    expect(screen.getByLabelText('Your passphrase')).toBeTruthy();
+    expect(screen.getByTestId('share-generate-button').textContent).toContain(
+      'Generate My Key & Lock'
+    );
   });
 
   it('keeps generate button disabled when passphrase is empty', async () => {

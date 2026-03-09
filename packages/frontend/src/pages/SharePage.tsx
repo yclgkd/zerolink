@@ -30,12 +30,13 @@ function SharePageHeader() {
     <PageCardHeader>
       <div className="flex items-center justify-between gap-3">
         <PageCardTitle asChild className="text-primary">
-          <h2>Secure Channel</h2>
+          <h2>Receiver Setup</h2>
         </PageCardTitle>
         <RoleBadge party="receiver" />
       </div>
       <PageCardDescription>
-        Generate your encryption key to secure this channel.
+        The sender already created this channel. Set your own passphrase here to generate your
+        receiver key and lock the channel on this device.
       </PageCardDescription>
     </PageCardHeader>
   );
@@ -55,7 +56,7 @@ function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   );
 }
 
-const LOCK_FLOW_STEPS = ['Overview', 'Set passphrase', 'Locked'] as const;
+const LOCK_FLOW_STEPS = ['Receiver intro', 'Your passphrase', 'Ready for delivery'] as const;
 
 const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
   onboarding: 1,
