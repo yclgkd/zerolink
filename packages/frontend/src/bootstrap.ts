@@ -73,6 +73,7 @@ export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> 
     return;
   }
 
+  const usingDefaultGate = options.renderVerificationGate === undefined;
   const renderVerificationGate = options.renderVerificationGate ?? defaultRenderVerificationGate;
   const applyVerifiedReleaseSnapshot =
     options.setVerifiedReleaseSnapshot ?? setVerifiedReleaseSnapshot;
@@ -88,12 +89,30 @@ export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> 
   const verificationResult = await verifyReleaseImpl();
   if (verificationResult.status === 'verified') {
     applyVerifiedReleaseSnapshot(verificationResult);
+    if (usingDefaultGate) {
+      clearBootstrapBodyStyles();
+    }
     await options.loadApp();
     return;
   }
 
   applyVerifiedReleaseSnapshot(null);
   renderVerificationGate(verificationResult);
+}
+
+function clearBootstrapBodyStyles(): void {
+  const props = [
+    'margin',
+    'padding',
+    'backgroundColor',
+    'backgroundImage',
+    'backgroundSize',
+    'backgroundAttachment',
+    'fontFamily',
+  ] as const;
+  for (const prop of props) {
+    document.body.style[prop] = '';
+  }
 }
 
 function defaultRenderVerificationGate(state: ReleaseVerificationGateState): void {
