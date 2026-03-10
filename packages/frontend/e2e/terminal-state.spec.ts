@@ -11,7 +11,11 @@ test.describe('terminal state semantics', () => {
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('page-create')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('mode-card-quick')).toHaveAttribute('aria-pressed', 'true', {
+        timeout: 15_000,
+      });
       await page.getByTestId('mode-card-secure').click();
+      await expect(page.getByTestId('mode-card-secure')).toHaveAttribute('aria-pressed', 'true');
       await expect(page.getByTestId('create-submit-button')).toBeEnabled();
       await page.getByTestId('create-submit-button').click();
 
