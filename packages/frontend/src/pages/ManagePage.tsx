@@ -1,4 +1,5 @@
 import {
+  type AdminMode,
   CHANNEL_STATE,
   type ChannelState,
   ErrorResponseSchema,
@@ -29,7 +30,6 @@ import { Button } from '../components/ui/button';
 import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
-import { useCreateStore } from '../stores/create-store';
 import { useDeliverStore } from '../stores/deliver-store';
 
 function mapActionError(code: string): string {
@@ -64,6 +64,12 @@ function mapActionError(code: string): string {
 
 function isTerminalPublicState(state: ChannelState): boolean {
   return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
+}
+
+function resolveManageProfile(adminMode: AdminMode | null): SecurityProfile | null {
+  if (adminMode === 'webauthn') return SECURITY_PROFILE.SECURE;
+  if (adminMode === 'password' || adminMode === 'softkey') return SECURITY_PROFILE.QUICK;
+  return null;
 }
 
 function ManagePageHeader({ status, unavailable }: { status: ChannelState; unavailable: boolean }) {
@@ -342,6 +348,7 @@ function ActionPanel({
   unavailable,
   showDestroyConfirm,
   pending,
+  canManageActions,
   canDeliver,
   onDeliver,
   onOpenDestroyConfirm,
@@ -352,6 +359,7 @@ function ActionPanel({
   unavailable: boolean;
   showDestroyConfirm: boolean;
   pending: boolean;
+  canManageActions: boolean;
   canDeliver: boolean;
   onDeliver: () => void;
   onOpenDestroyConfirm: () => void;
@@ -388,7 +396,7 @@ function ActionPanel({
         </Button>
         <Button
           data-testid="manage-destroy-button"
-          disabled={pending}
+          disabled={pending || !canManageActions}
           onClick={onOpenDestroyConfirm}
           type="button"
           variant="danger"
@@ -407,12 +415,6 @@ function ActionPanel({
       ) : null}
     </section>
   );
-}
-
-function useResolvedProfile(): SecurityProfile {
-  const createdProfile = useCreateStore((state) => state.createdProfile);
-  const selectedProfile = useCreateStore((state) => state.selectedProfile);
-  return createdProfile ?? selectedProfile ?? SECURITY_PROFILE.STANDARD;
 }
 
 function useShareLinkGenerator(uuid?: string) {
@@ -517,6 +519,8 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
       } catch {
         if (canceled || !mountedRef.current) return;
         store.setShowDestroyConfirm(false);
+        store.setAdminMode(null);
+        store.setReceiverPubFpr(null);
         store.setChannelState(CHANNEL_STATE.WAITING);
         setIsUnavailable(false);
         setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
@@ -548,7 +552,7 @@ function useManageDeliveryLogic(
   setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
   softkeyPassphrase: string,
-  profile: SecurityProfile
+  profile: SecurityProfile | null
 ) {
   const store = useDeliverStore();
 
@@ -563,6 +567,10 @@ function useManageDeliveryLogic(
     if (!store.uuid) {
       setIsSecretInputInvalid(false);
       return setActionError('Channel UUID is missing and cannot be delivered.');
+    }
+    if (profile === null) {
+      setIsSecretInputInvalid(false);
+      return setActionError('Channel authentication mode is still loading. Please retry.');
     }
     if (secretInput.trim().length === 0) {
       setIsSecretInputInvalid(true);
@@ -615,13 +623,14 @@ function useManageDestructionLogic(
   setSecretInput: (value: string) => void,
   setSoftkeyPassphrase: (value: string) => void,
   softkeyPassphrase: string,
-  profile: SecurityProfile,
+  profile: SecurityProfile | null,
   isActiveActionContext: (scope: number, actionUuid: string) => boolean
 ) {
   const store = useDeliverStore();
 
   const handleDestroyConfirm = () => {
     if (isActionPending) return;
+    if (profile === null) return;
     if (
       store.channelState === CHANNEL_STATE.DELETED ||
       store.channelState === CHANNEL_STATE.EXPIRED
@@ -635,6 +644,10 @@ function useManageDestructionLogic(
     if (!store.uuid) {
       setIsSecretInputInvalid(false);
       return setActionError('Channel UUID is missing and cannot be deleted.');
+    }
+    if (profile === null) {
+      setIsSecretInputInvalid(false);
+      return setActionError('Channel authentication mode is still loading. Please retry.');
     }
 
     setIsSecretInputInvalid(false);
@@ -674,7 +687,6 @@ function useManageDestructionLogic(
 
 function useManagePageState(uuid?: string) {
   const store = useDeliverStore();
-  const profile = useResolvedProfile();
   const mountedRef = useRef(true);
   const actionScopeRef = useRef(0);
 
@@ -727,12 +739,14 @@ function useManagePageState(uuid?: string) {
     }
   }, [store.receiverPubFpr]);
 
-  const canDeliver =
+  const profile = resolveManageProfile(store.adminMode);
+  const canManageActions =
     !isUnavailable &&
     store.channelState !== CHANNEL_STATE.DELETED &&
     store.channelState !== CHANNEL_STATE.EXPIRED &&
-    secretInput.trim().length > 0 &&
+    profile !== null &&
     Boolean(store.uuid);
+  const canDeliver = canManageActions && secretInput.trim().length > 0;
 
   const { handleDeliver, isActiveActionContext } = useManageDeliveryLogic(
     mountedRef,
@@ -774,6 +788,7 @@ function useManagePageState(uuid?: string) {
     isUnavailable,
     publicStatusError,
     isActionPending,
+    canManageActions,
     canDeliver,
     handleSecretChange: (value: string) => {
       setSecretInput(value);
@@ -882,6 +897,7 @@ export function ManagePage(): ReactElement {
         ) : null}
 
         <ActionPanel
+          canManageActions={state.canManageActions}
           canDeliver={state.canDeliver}
           onCancelDestroy={state.handleCancelDestroy}
           onConfirmDestroy={state.handleApplyDestroy}

@@ -9,7 +9,7 @@ Implement non-discoverable WebAuthn for Secure Share while preserving sender man
 ## Current Status
 
 - **Phase**: In progress on `security/non-discoverable-passkeys`
-- **Progress**: Secure Share registration now targets non-discoverable credentials, `compound_begin` can return `allowCredentials` for WebAuthn-managed channels, and Create defaults to Quick Share instead of auto-selecting Secure Share.
+- **Progress**: Secure Share registration now targets non-discoverable credentials, `compound_begin` can return `allowCredentials` for WebAuthn-managed channels, Create defaults to Quick Share, and Manage now derives sender auth policy from the channel's resolved `adminMode` instead of create-page state.
 - **Known Constraint**: `pnpm manifest:verify` stops locally at `manifest.sig` because `MANIFEST_SIGNING_KEY` is a CI-only secret. This is expected and not a blocker for local development.
 
 ## Latest Update (2026-03-10)
@@ -18,7 +18,8 @@ Implement non-discoverable WebAuthn for Secure Share while preserving sender man
 - `packages/backend/src/do/SecretVault.ts`, `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts` — Extended `compound_begin` so WebAuthn-managed channels can return `allowCredentials` derived from the stored `credentialId`, removing the sender manage/update flow's dependence on browser-side credential discovery.
 - `packages/frontend/src/crypto/orchestrator.ts`, `packages/frontend/src/mocks/handlers.ts`, `packages/frontend/e2e/support/mock-api.ts` — Threaded `allowCredentials` through deliver/delete assertion requests and updated local mocks to reflect the new contract.
 - `packages/frontend/src/pages/CreatePage.tsx` — Defaulted the Create page to Quick Share and added the Secure Share passkey lifecycle hint shown when the Secure mode is selected.
-- Validation: `pnpm --filter @zerolink/shared typecheck`, `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/shared exec vitest run src/__tests__/schemas.test.ts`, `pnpm --filter @zerolink/backend exec vitest run src/crypto/__tests__/webauthn.test.ts src/do/__tests__/SecretVault.test.ts src/__tests__/index.test.ts`, `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/webauthn-adapter.test.ts src/__tests__/create-page.test.tsx src/__tests__/crypto-orchestrator.test.ts src/__tests__/api-client.test.ts`
+- `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Stopped deriving sender manage/delete WebAuthn policy from create-page state, resolved it from `/api/public/:uuid` `adminMode`, and disabled action buttons until the channel auth mode is known.
+- Validation: `pnpm --filter @zerolink/shared typecheck`, `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/shared exec vitest run src/__tests__/schemas.test.ts`, `pnpm --filter @zerolink/backend exec vitest run src/crypto/__tests__/webauthn.test.ts src/do/__tests__/SecretVault.test.ts src/__tests__/index.test.ts`, `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/webauthn-adapter.test.ts src/__tests__/create-page.test.tsx src/__tests__/crypto-orchestrator.test.ts src/__tests__/api-client.test.ts`, `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/manage-page.test.tsx`
 
 ## What Was Done
 
