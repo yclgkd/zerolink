@@ -1324,6 +1324,21 @@ describe('SharePage', () => {
     expect(lockChannelMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    429, 500, 503,
+  ] as const)('shows public-status error notice when /api/public/:uuid returns HTTP %i', async (status) => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ ok: false, code: 'ERROR' }, status));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-public-status-error')).toBeTruthy();
+    expect(
+      screen.getByText('Unable to load channel state right now. Showing safe default state.')
+    ).toBeTruthy();
+    expect(screen.queryByTestId('share-step-unavailable')).toBeNull();
+  });
+
   it('shows uuid and receiver role badge', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');

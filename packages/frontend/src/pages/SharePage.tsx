@@ -2,7 +2,7 @@ import { CHANNEL_STATE } from '@zerolink/shared';
 import type { ReactElement } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
-import { PageCard, PageCardContent } from '../components/layout';
+import { PageCard, PageCardContent, StateNotice } from '../components/layout';
 import { SharePageHeader } from '../components/share/share-page-header';
 import {
   DeliveredStep,
@@ -65,6 +65,16 @@ export function SharePage(): ReactElement {
       />
       <PageCardContent aria-busy={isPageBusy} className="space-y-6">
         <UuidDisplay uuid={uuid} />
+
+        {publicState.publicStatusError ? (
+          <StateNotice
+            data-testid="share-public-status-error"
+            id="share-public-status-error"
+            tone="warning"
+          >
+            {publicState.publicStatusError}
+          </StateNotice>
+        ) : null}
 
         {publicState.isPublicStatusLoading ? <LoadingStep /> : null}
 
