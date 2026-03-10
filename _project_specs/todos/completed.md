@@ -4,6 +4,27 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-018: Remove broken rate-limiter binding and add worker.fetch top-level catch
+
+**Completed**: 2026-03-10
+
+The `[[rate_limiting]]` binding in `wrangler.toml` required a paid Cloudflare Workers plan
+and was never actually provisioned (namespace_id values were placeholders). The backend was also
+never successfully deployed via CI until PR #126 fixed the dead `pnpm --filter backend build` step,
+so the misconfiguration was hidden. On first real deploy, `env.RATE_LIMITER.limit()` threw an
+unhandled exception that propagated to `worker.fetch` with no top-level catch, causing Cloudflare
+error 1101 "Worker threw exception" on every API request.
+
+Fixed by:
+- Removing `checkRateLimit` function and all rate-limiting code from `index.ts`
+- Removing `RATE_LIMITER` from the `Env` interface
+- Removing `[[rate_limiting]]` and `[[env.staging.rate_limiting]]` from `wrangler.toml`
+- Adding top-level try/catch to `worker.fetch` as defense-in-depth against future unhandled throws
+- Deleting the now-obsolete rate-limit unit tests from `index.test.ts`
+
+Rate limiting at the network layer continues to be handled by Cloudflare's built-in DDoS
+protection. The free WAF rate-limiting rule slot is already in use for image endpoints.
+
 ## DONE-015: Whitelist `dist/assets/` for signed manifest generation
 
 **Completed**: 2026-03-10

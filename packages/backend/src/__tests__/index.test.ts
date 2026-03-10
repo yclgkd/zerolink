@@ -153,15 +153,10 @@ function createMockEnv(responder: (request: Request) => Promise<Response> | Resp
     },
   } as unknown as DurableObjectNamespace;
 
-  const rateLimiter: RateLimit = {
-    limit: async () => ({ success: true }),
-  };
-
   return {
     env: {
       SECRET_VAULT: namespace,
       SECRETS_KV: {} as KVNamespace,
-      RATE_LIMITER: rateLimiter,
       RP_ID: 'zerolink.test',
       RP_ORIGIN: 'https://zerolink.test',
     },
@@ -797,70 +792,14 @@ describe('backend worker routing + lock/compound forwarding', () => {
     });
   });
 
-  describe('rate limiting', () => {
-    const CF_IP = { 'CF-Connecting-IP': '1.2.3.4' };
-
-    it('returns 429 with Retry-After when rate limiter denies the request', async () => {
-      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
-      env.RATE_LIMITER = { limit: async () => ({ success: false }) };
-      const response = await dispatch(
-        env,
-        `/api/public/${VALID_UUID}`,
-        'GET',
-        undefined,
-        false,
-        CF_IP
-      );
-      const payload = (await response.json()) as ApiErrorResponse;
-      expect(response.status).toBe(429);
-      expect(payload.code).toBe('RATE_LIMITED');
-      expect(response.headers.get('Retry-After')).toBe('60');
+  it('returns 500 INTERNAL_ERROR when worker.fetch throws unexpectedly', async () => {
+    const { env } = createMockEnv(async () => {
+      throw new Error('unexpected runtime failure');
     });
-
-    it('passes the request through when rate limiter allows it', async () => {
-      const { env } = createMockEnv(
-        async () =>
-          new Response(JSON.stringify({ ok: true, state: 'waiting', adminMode: 'webauthn' }), {
-            status: 200,
-          })
-      );
-      env.RATE_LIMITER = { limit: async () => ({ success: true }) };
-      const response = await dispatch(
-        env,
-        `/api/public/${VALID_UUID}`,
-        'GET',
-        undefined,
-        false,
-        CF_IP
-      );
-      expect(response.status).not.toBe(429);
-    });
-
-    it('skips rate limiting when CF-Connecting-IP header is absent', async () => {
-      const { env } = createMockEnv(
-        async () =>
-          new Response(JSON.stringify({ ok: true, state: 'waiting', adminMode: 'webauthn' }), {
-            status: 200,
-          })
-      );
-      env.RATE_LIMITER = { limit: async () => ({ success: false }) };
-      // No CF-Connecting-IP header — simulates local/direct invocation
-      const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
-      expect(response.status).not.toBe(429);
-    });
-
-    it('does not rate-limit OPTIONS preflight requests', async () => {
-      const { env } = createMockEnv(async () => new Response('{}', { status: 200 }));
-      env.RATE_LIMITER = { limit: async () => ({ success: false }) };
-      const response = await dispatch(
-        env,
-        `/api/public/${VALID_UUID}`,
-        'OPTIONS',
-        undefined,
-        false,
-        CF_IP
-      );
-      expect(response.status).toBe(204);
-    });
+    // Trigger a route that reaches the DO stub (which will throw)
+    const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
+    const payload = (await response.json()) as ApiErrorResponse;
+    expect(response.status).toBe(500);
+    expect(payload.code).toBe('INTERNAL_ERROR');
   });
 });

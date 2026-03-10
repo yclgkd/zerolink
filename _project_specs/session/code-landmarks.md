@@ -45,7 +45,7 @@ UPDATE WHEN:
 | `pnpm-workspace.yaml` | Monorepo workspace definition |
 | `packages/frontend/public/_headers` | Cloudflare Pages cache and security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
 | `packages/frontend/public/_redirects` | SPA catch-all redirect (`/* /index.html 200`) |
-| `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config |
+| `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config (no `[[rate_limiting]]` — requires paid plan, removed in favour of Cloudflare WAF DDoS protection) |
 | `.github/workflows/deploy.yml` | CI/CD: test → deploy Worker → build → generate/sign/verify manifest → deploy Pages |
 | `.changeset/config.json` | Changesets config |
 
