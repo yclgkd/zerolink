@@ -80,9 +80,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build backend
-        run: pnpm --filter backend build
-
       - name: Deploy Worker (production)
         if: startsWith(github.ref, 'refs/tags/')
         working-directory: packages/backend
