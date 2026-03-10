@@ -4,6 +4,31 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-009: E2E coverage for expiration, rate-limit, and manifest verification
+
+**Completed**: 2026-03-10
+
+Added `expiration.spec.ts`, `rate-limit.spec.ts`, and `manifest-verification.spec.ts` to cover
+the three previously untested failure paths: 404/NOT_FOUND channel state (expiration), 429
+rate-limit responses on both share and manage pages, and the verification-gate failure modes
+(manifest unavailable, signature unavailable, signature invalid). Updated `playwright.config.ts`
+with a `verification-gate` project that builds with `VITE_RELEASE_VERIFICATION_REQUIRED=true`
+and serves on port 4174. Also fixed the share-page 429 silent-fail bug: non-ok, non-404 responses
+now surface a `share-public-status-error` notice instead of silently falling back to WAITING state.
+
+---
+
+## DONE-010: Automated signed manifest in CI
+
+**Completed**: 2026-03-08
+
+Added manifest generation and Ed25519 signing steps to `.github/workflows/deploy.yml`. Every
+official Pages deploy now runs: `pnpm build` → `pnpm manifest:generate` → `pnpm manifest:sign`
+(using `MANIFEST_SIGNING_KEY` secret) → `pnpm manifest:verify`, and uploads `manifest.json` and
+`manifest.sig` alongside the built assets.
+
+---
+
 ## DONE-001: Monorepo initialization
 
 **Completed**: 2026-02-24
