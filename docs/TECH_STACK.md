@@ -1,8 +1,8 @@
 # ZeroLink 技术栈规范
 
-> **版本**: v1.0
-> **最后更新**: 2026-02-25
-> **状态**: 规范确定，准备初始化项目
+> **版本**: v1.1
+> **最后更新**: 2026-03-10
+> **状态**: 已落地，与 main 分支保持同步
 
 ---
 
@@ -57,7 +57,7 @@
   "devDependencies": {
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^5.6.0"
+    "typescript": "^5.9.3"
   }
 }
 ```
@@ -240,9 +240,9 @@ export const handlers = [
 ```json
 {
   "devDependencies": {
-    "vitest": "^2.1.0",
-    "@vitest/ui": "^2.1.0",
-    "@vitest/coverage-v8": "^2.1.0"
+    "vitest": "^4.0.18",
+    "@vitest/ui": "^4.0.18",
+    "@vitest/coverage-v8": "^4.0.18"
   }
 }
 ```
@@ -307,7 +307,7 @@ test('显示 Safety Code 并允许复制', async () => {
 ```json
 {
   "devDependencies": {
-    "@playwright/test": "^1.48.0"
+    "@playwright/test": "^1.58.2"
   }
 }
 ```
@@ -1119,7 +1119,7 @@ packages/backend/
     "@commitlint/config-conventional": "^19.5.0",
     "husky": "^9.1.0",
     "lint-staged": "^15.2.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.9.3"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md}": [
@@ -1150,7 +1150,7 @@ packages/backend/
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.0.18"
   }
 }
 ```
