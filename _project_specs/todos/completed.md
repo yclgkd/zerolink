@@ -4,6 +4,18 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-012: Exclude mutable SPA entry HTML from the signed manifest
+
+**Completed**: 2026-03-10
+
+Followed up the `no-store` cache-header rollback after staging still showed `Release Verification
+Failed`. Browser inspection revealed Cloudflare was mutating the HTML bootstrap shell per request,
+so `index.html` was not a stable signing target. Updated `scripts/generate-manifest.ts` to exclude
+`index.html`, tightened the manifest-generation regression tests, aligned the browser-side
+release-verification fixture with the new manifest shape, and updated the verification/deployment
+docs plus `_project_specs` to reflect that only stable runtime assets remain inside the signed
+manifest boundary.
+
 ## DONE-011: Restore no-store on signed SPA entry HTML
 
 **Completed**: 2026-03-10

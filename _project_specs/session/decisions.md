@@ -191,3 +191,12 @@ This is append-only. Never delete entries.
 **Choice**: Restore `/*` to `Cache-Control: no-store`, keep `/assets/*` immutable, and lock the invariant in a regression test.
 **Reasoning**: The verified-release flow assumes the bootstrap HTML and the signed manifest advance atomically from the browser's point of view. `no-store` is the simplest reliable way to prevent stale HTML replay across deploys without weakening the trust model.
 **Trade-offs**: SPA entry HTML loses cache re-use and BFCache-related optimizations that depend on cacheable document responses, but release-integrity guarantees take precedence on signed builds.
+
+## [2026-03-10] Signed manifest excludes mutable SPA entry HTML
+
+**Decision**: Exclude `index.html` from the signed release manifest and keep browser-side verification focused on stable runtime assets.
+**Context**: After the `no-store` rollback was deployed, staging still failed release verification. Browser inspection showed that Cloudflare was injecting request-specific challenge markup into the HTML response, so the bytes fetched from `/` and `/index.html` did not match the published `manifest.json` hash for `index.html` even though the hashed JS/CSS assets were healthy.
+**Options Considered**: Keep signing `index.html` and continue tuning cache/platform behavior; try to normalize or ignore injected HTML before hashing; stop signing mutable HTML entry docs and verify only stable runtime assets.
+**Choice**: Remove `index.html` from `manifest:generate`, update the generator tests and release-verification fixtures accordingly, and document that HTML entry docs stay outside the signed manifest boundary.
+**Reasoning**: In a pure web deployment, the SPA bootstrap HTML is not a reliable byte-stable trust anchor once the edge layer can mutate responses. Signing the immutable runtime bundles still provides meaningful tamper detection for CDN/static-asset drift without blocking healthy deploys on platform-injected HTML noise.
+**Trade-offs**: The manifest no longer detects bootstrap-HTML tampering directly, so trust in the entry document still depends on HTTPS/origin/deployment discipline. That limitation already existed in the web threat model; this change makes the signed boundary match reality.

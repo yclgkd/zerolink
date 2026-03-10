@@ -3,14 +3,20 @@
 *Last updated: 2026-03-10*
 
 ## Active Task
-Hotfix the deployed Verified Release cache regression so signed `index.html` cannot drift from the published manifest after a Pages deploy.
+Follow up the staging Verified Release regression by excluding mutable SPA entry HTML from the signed manifest and keeping verification focused on stable runtime assets.
 
 ## Current Status
-- **Phase**: Release guard cache hotfix complete, ready to push
-- **Progress**: Restored the Cloudflare Pages SPA entry cache policy to `no-store`, added a regression test that locks this requirement in, and verified the frontend build plus release-verification tests locally.
+- **Phase**: Release guard staging follow-up complete, ready to push
+- **Progress**: Confirmed the no-store cache rollback was not sufficient because Cloudflare is still mutating the HTML response bytes on staging, updated manifest generation to exclude `index.html`, aligned release-verification fixtures and docs with the new trust boundary, and verified the focused test suite locally.
 - **Blocking Issues**: Official `manifest:sign` / `manifest:verify` validation still requires the deployment-only `MANIFEST_SIGNING_KEY`, which is not available in this local environment.
 
 ## What Was Done
+
+### Phase 15: Exclude mutable SPA entry HTML from the signed manifest
+- `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts` — Excluded `index.html` from the signed manifest so the release verifier only hashes stable runtime assets, and added regression coverage that locks out SPA entry HTML alongside Pages control files.
+- `packages/frontend/src/__tests__/release-verification.test.ts` — Updated the browser-side verification fixture to mirror the real manifest shape by signing immutable assets only, not the mutable SPA entry HTML.
+- `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Updated the verification and deployment docs to describe the new trust boundary: stable runtime assets remain signed, while `index.html` stays outside the manifest because edge platforms can inject request-specific HTML.
+- Validation: `pnpm exec vitest run scripts/__tests__/generate-manifest.test.ts`, `pnpm --filter @zerolink/frontend test -- --run src/__tests__/release-verification.test.ts`.
 
 ### Phase 14: Release guard cache hotfix
 - `packages/frontend/public/_headers`, `packages/frontend/src/__tests__/pages-headers.test.ts` — Restored the SPA entry cache policy from `no-cache` to `no-store` so Cloudflare Pages cannot replay stale HTML across signed deployments, and updated the regression test to enforce the `no-store` invariant while keeping hashed assets immutable.
@@ -123,16 +129,16 @@ Hotfix the deployed Verified Release cache regression so signed `index.html` can
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Push the hotfix branch and open a PR for the cache-header rollback
+1. [ ] Push the follow-up branch and open a PR for the manifest-boundary change
 2. [ ] Re-run deploy checks with the real `MANIFEST_SIGNING_KEY` in GitHub Actions
-3. [ ] Redeploy Pages so the SPA entry HTML returns to `Cache-Control: no-store`
+3. [ ] Redeploy Pages and confirm staging no longer blocks on `index.html` hash mismatches
 
 ## Latest Update (2026-03-10)
 
-- Root-caused the production `Release Verification Failed` screen to the SPA entry cache policy change from `no-store` to `no-cache`, which allowed stale `index.html` responses to drift from the freshly published signed manifest after deploy.
-- Restored `packages/frontend/public/_headers` so all SPA entry requests are `Cache-Control: no-store` again, while keeping hashed `/assets/*` responses immutable.
-- Added a regression test that fails if the SPA entry cache policy ever drifts away from `no-store`, and re-ran the release-verification unit coverage plus a production frontend build.
-- Regenerated `packages/frontend/dist/manifest.json` and `manifest-hash.txt` locally, but could not complete `manifest:sign` / `manifest:verify` without the deployment-only `MANIFEST_SIGNING_KEY`.
+- Reproduced the post-merge staging failure in a real browser and confirmed the signed `manifest.json` still listed `index.html`, but Cloudflare was serving request-mutated HTML for both `/` and `/index.html`.
+- Verified that the staging HTML bytes differ from the manifest because the edge layer injects request-specific challenge markup into the bootstrap shell, which makes `index.html` an unstable signing target even after restoring `Cache-Control: no-store`.
+- Updated manifest generation and tests so signed releases now cover stable runtime assets only, excluding `index.html` alongside Pages control files.
+- Aligned the verification/deployment docs and `_project_specs` notes with the narrower trust boundary, and re-ran the focused manifest-generation and browser verification unit tests locally.
 
 ## Latest Update (2026-03-09)
 

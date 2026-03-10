@@ -65,4 +65,4 @@ UPDATE WHEN:
 | Durable Objects | Single-location consistency | DO must be in same region as KV for performance |
 | `@noble/hashes` | Not WebCrypto | Runs synchronously; may block UI on heavy params |
 | Biome | No ESLint plugins | Some rules need manual enforcement |
-| `packages/frontend/src/release/verification.ts` | Verified Release only covers runtime-served same-origin assets | Pages control files such as `_headers` and `_redirects` are excluded from the signed runtime manifest |
+| `packages/frontend/src/release/verification.ts` | Verified Release only covers stable runtime-served same-origin assets | Pages control files and mutable HTML entry docs such as `index.html` are excluded from the signed runtime manifest |

@@ -81,7 +81,7 @@ describe('collectFilePaths', () => {
     const paths = await collectFilePaths(tmpDir);
     const relative = paths.map((p) => toPosixRelativePath(p, tmpDir));
 
-    expect(relative).toEqual(['assets/app.css', 'assets/app.js', 'index.html']);
+    expect(relative).toEqual(['assets/app.css', 'assets/app.js']);
   });
 
   it('excludes manifest.json when it exists inside the directory', async () => {
@@ -99,7 +99,7 @@ describe('collectFilePaths', () => {
     expect(paths).toHaveLength(0);
   });
 
-  it('excludes non-runtime Pages control files from the signed release manifest', async () => {
+  it('excludes HTML entry documents and Pages control files from the signed release manifest', async () => {
     await fs.writeFile(path.join(tmpDir, '_redirects'), '/ /index.html 200');
     await fs.writeFile(path.join(tmpDir, '_headers'), '/index.html\n  Cache-Control: no-store');
     await fs.writeFile(path.join(tmpDir, 'index.html'), '<html></html>');
@@ -107,7 +107,7 @@ describe('collectFilePaths', () => {
     const paths = await collectFilePaths(tmpDir);
     const relative = paths.map((p) => toPosixRelativePath(p, tmpDir));
 
-    expect(relative).toEqual(['index.html']);
+    expect(relative).toEqual([]);
   });
 
   it('throws when directory does not exist', async () => {

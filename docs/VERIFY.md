@@ -7,11 +7,14 @@ detect tampering in the published runtime assets before the user can interact wi
 ## What is verified
 
 - **Ed25519 signature** — `manifest.sig` is a cryptographic signature over `manifest.json` using the ZeroLink signing key.
-- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the publicly fetchable runtime files in the release build, including `index.html` and hashed assets.
+- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the stable, publicly fetchable runtime files in the release build, such as hashed JS, CSS, fonts, and other immutable assets.
 - **Manifest hash** — `manifest-hash.txt` contains the SHA-256 of `manifest.json` itself; this is displayed in the app's **Verified Release** card as a public fingerprint, not as the trust anchor.
 
 Pages control files such as `_headers` and `_redirects` are intentionally excluded from the signed
 runtime manifest because they are deployment metadata, not browser-fetched release assets.
+The SPA entry document `index.html` is also excluded because edge platforms can inject request-
+specific HTML into the bootstrap shell, which makes byte-for-byte signing of that document unstable
+even when the underlying deployment is healthy.
 
 ## What the browser does during bootstrap
 
@@ -94,10 +97,10 @@ openssl pkeyutl \
 ### 2. Verify a specific file hash
 
 ```bash
-# Check index.html
-sha256sum packages/frontend/dist/index.html
+# Check a signed runtime asset
+sha256sum packages/frontend/dist/assets/index.js
 # Compare with the value in manifest.json:
-jq '.files["index.html"]' packages/frontend/dist/manifest.json
+jq '.files["assets/index.js"]' packages/frontend/dist/manifest.json
 ```
 
 ### 3. Verify the manifest hash

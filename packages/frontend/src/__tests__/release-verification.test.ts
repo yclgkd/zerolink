@@ -18,9 +18,8 @@ function createSignedManifestFixture() {
   const files = {
     'assets/index.css': '.app { color: white; }',
     'assets/index.js': 'console.log("verified");',
-    'index.html':
-      '<!doctype html><html><head></head><body><div id="root"></div><script type="module" src="/assets/index.js"></script></body></html>',
-    'mockServiceWorker.js': 'self.addEventListener("install", () => {});',
+    'assets/chunk-vendor.js': 'export const vendor = "stable-runtime";',
+    'assets/sora-latin.woff2': 'fake-font-binary',
   } as const;
 
   const manifest = {
@@ -102,7 +101,7 @@ describe('computePublicKeyFingerprint', () => {
 });
 
 describe('verifyRelease', () => {
-  it('returns verified details when signature and all release file hashes match', async () => {
+  it('returns verified details when signature and all signed runtime asset hashes match', async () => {
     const fixture = createSignedManifestFixture();
     const result = await verifyRelease({
       baseUrl: 'https://zerolink.test/',
