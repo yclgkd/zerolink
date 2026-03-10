@@ -135,7 +135,7 @@ function CardHeaderContent({
         <PageCardTitle className="text-lg text-foreground">{config.title}</PageCardTitle>
         <span
           className={cn(
-            'rounded-md border p-2 transition-colors',
+            'rounded-md border p-2',
             selected
               ? config.selectedIconClass
               : 'border-border/70 bg-card/60 text-muted-foreground'
@@ -220,7 +220,7 @@ export function SecurityProfileCard({
   return (
     <PageCard
       className={cn(
-        'group h-full cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-border/60',
+        'group h-full cursor-pointer transition-transform duration-200 hover:-translate-y-0.5 hover:border-border/60',
         selected ? config.selectedRingClass : 'ring-1 ring-transparent',
         className
       )}
