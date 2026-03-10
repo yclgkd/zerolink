@@ -105,6 +105,8 @@ const VALID_ASSERTION: AssertionJSON = {
   },
 };
 
+const VALID_ALLOW_CREDENTIALS = [{ id: VALID_B64U, type: 'public-key' as const }];
+
 function buildSoftkeyAdminEnvelope(createdAt: number): SoftkeyAdminEnvelope {
   return {
     uuid: VALID_UUID,
@@ -1034,6 +1036,7 @@ describe('crypto orchestrator', () => {
           seed: VALID_B64U,
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
+        allowCredentials: VALID_ALLOW_CREDENTIALS,
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
@@ -1061,6 +1064,14 @@ describe('crypto orchestrator', () => {
     expect(result.data.intent.op).toBe('update');
     expect(result.data.intentHash).toMatch(/^[0-9a-f]{64}$/u);
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELIVERED);
+    expect(vi.mocked(assertWithWebAuthn)).toHaveBeenCalledWith({
+      profile: SECURITY_PROFILE.STANDARD,
+      requestOptions: {
+        publicKey: expect.objectContaining({
+          allowCredentials: VALID_ALLOW_CREDENTIALS,
+        }),
+      },
+    });
   });
 
   it('does not apply deliver store updates when uuid changes mid-flow', async () => {
@@ -1205,6 +1216,7 @@ describe('crypto orchestrator', () => {
           seed: VALID_B64U,
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
+        allowCredentials: VALID_ALLOW_CREDENTIALS,
         currentVersion: 3,
         adminMode: 'webauthn',
       },
@@ -1226,6 +1238,14 @@ describe('crypto orchestrator', () => {
 
     expect(result.ok).toBe(true);
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELETED);
+    expect(vi.mocked(assertWithWebAuthn)).toHaveBeenCalledWith({
+      profile: SECURITY_PROFILE.STANDARD,
+      requestOptions: {
+        publicKey: expect.objectContaining({
+          allowCredentials: VALID_ALLOW_CREDENTIALS,
+        }),
+      },
+    });
   });
 
   it('does not apply delete store updates when uuid changes mid-flow', async () => {

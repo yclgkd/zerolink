@@ -835,6 +835,17 @@ describe('CompoundBeginResponseSchema', () => {
     expect(result.receiverPubFpr).toBeUndefined();
   });
 
+  it('accepts response with allowCredentials', () => {
+    const result = CompoundBeginResponseSchema.parse({
+      ok: true,
+      challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
+      allowCredentials: [{ id: b64, type: 'public-key' }],
+      currentVersion: 0,
+      adminMode: 'webauthn',
+    });
+    expect(result.allowCredentials).toEqual([{ id: b64, type: 'public-key' }]);
+  });
+
   it('accepts response with optional receiverPubFpr and receiverPubJwk', () => {
     const result = CompoundBeginResponseSchema.parse({
       ok: true,

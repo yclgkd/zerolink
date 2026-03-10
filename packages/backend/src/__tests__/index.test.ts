@@ -343,6 +343,7 @@ describe('backend worker routing + lock/compound forwarding', () => {
         seed: 'compound-seed',
         expiresAt: 1_730_000_123_000,
       },
+      allowCredentials: [{ id: 'credential-id', type: 'public-key' }],
       currentVersion: 2,
       adminMode: 'webauthn',
       receiverPubFpr: 'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',

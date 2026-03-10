@@ -131,6 +131,12 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+async function waitForManageActionsEnabled(): Promise<void> {
+  await waitFor(() => {
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(false);
+  });
+}
+
 beforeEach(() => {
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
@@ -259,8 +265,6 @@ describe('ManagePage integration', () => {
       jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
     );
 
-    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
-
     renderManagePage();
 
     await screen.findByTestId('manage-state-waiting');
@@ -325,8 +329,6 @@ describe('ManagePage integration', () => {
       error: { ok: false, code: 'PASSPHRASE_REQUIRED', stage: 'deliver.softkey-passphrase' },
     });
 
-    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
-
     renderManagePage();
 
     await screen.findByTestId('manage-state-waiting');
@@ -340,14 +342,11 @@ describe('ManagePage integration', () => {
     );
   });
 
-  it('calls deliverSecret with uuid/profile/plaintext and transitions to delivered on success', async () => {
+  it('calls deliverSecret with quick profile for softkey-managed channels', async () => {
     const fetchSpy = getFetchSpy();
-    // Use softkey adminMode to cover the legacy password-managed path.
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({ ok: true, state: 'waiting', adminMode: 'softkey' })
     );
-
-    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
 
     renderManagePage();
 
@@ -366,18 +365,18 @@ describe('ManagePage integration', () => {
 
     const callArg = deliverSecretMock.mock.calls[0]?.[0];
     expect(callArg?.uuid).toBe(VALID_UUID);
-    expect(callArg?.profile).toBe(SECURITY_PROFILE.STRICT);
+    expect(callArg?.profile).toBe(SECURITY_PROFILE.QUICK);
     expect(callArg?.plaintext).toBe('top secret payload');
     expect(callArg?.softkeyPassphrase).toBe('Compat#Manage123');
 
     expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
   });
 
-  it('prefers createdProfile over selectedProfile when delivering', async () => {
+  it('uses secure profile for webauthn-managed delivery even when create state conflicts', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
-    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
     useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
 
     renderManagePage();
@@ -391,7 +390,7 @@ describe('ManagePage integration', () => {
     await waitFor(() => {
       expect(deliverSecretMock).toHaveBeenCalledTimes(1);
     });
-    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.HARDWARE_ONLY);
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.SECURE);
   });
 
   it('disables deliver/destroy while deliver request is pending and re-enables after completion', async () => {
@@ -430,6 +429,33 @@ describe('ManagePage integration', () => {
     });
   });
 
+  it('keeps manage actions disabled until public status resolves', async () => {
+    const fetchSpy = getFetchSpy();
+    const publicStatus = createDeferred<Response>();
+    fetchSpy.mockReturnValueOnce(publicStatus.promise);
+
+    renderManagePage();
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload' },
+    });
+
+    expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
+
+    publicStatus.resolve(jsonResponse({ ok: true, state: 'waiting', adminMode: 'webauthn' }));
+
+    await screen.findByTestId('manage-state-waiting');
+    await waitFor(() => {
+      expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(
+        false
+      );
+      expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(
+        false
+      );
+    });
+  });
+
   it('resets pending actions when navigating to another uuid while deliver is in-flight', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
@@ -439,6 +465,7 @@ describe('ManagePage integration', () => {
           jsonResponse({
             ok: true,
             state: 'waiting',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -458,6 +485,7 @@ describe('ManagePage integration', () => {
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
+    await waitForManageActionsEnabled();
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
     await waitFor(() => {
@@ -490,6 +518,7 @@ describe('ManagePage integration', () => {
           jsonResponse({
             ok: true,
             state: 'waiting',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -544,6 +573,7 @@ describe('ManagePage integration', () => {
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
+    await waitForManageActionsEnabled();
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
     const error = await screen.findByTestId('manage-action-error');
@@ -587,7 +617,7 @@ describe('ManagePage integration', () => {
     });
 
     expect(deleteChannelMock.mock.calls[0]?.[0]?.uuid).toBe(VALID_UUID);
-    expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.SECURE);
     expect(await screen.findByTestId('manage-state-deleted')).toBeTruthy();
     expect(
       screen.getByText('You deleted this channel. It can no longer deliver or decrypt content.')
@@ -595,6 +625,28 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
+  });
+
+  it('uses quick profile for password-managed delete even when create state conflicts', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+    );
+
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
+    useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    await waitFor(() => {
+      expect(deleteChannelMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.QUICK);
   });
 
   it('shows unavailable state after remounting a locally deleted channel', async () => {
@@ -674,6 +726,7 @@ describe('ManagePage integration', () => {
           jsonResponse({
             ok: true,
             state: 'waiting',
+            adminMode: 'webauthn',
           })
         );
       }
@@ -690,6 +743,7 @@ describe('ManagePage integration', () => {
     const { router } = renderManagePageWithRouter();
 
     await screen.findByTestId('manage-state-waiting');
+    await waitForManageActionsEnabled();
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
     fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
@@ -742,7 +796,7 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
   });
 
-  it('shows public status error when /api/public fails but keeps page interactive', async () => {
+  it('shows public status error when /api/public fails and keeps actions disabled', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockRejectedValueOnce(new Error('network down'));
 
@@ -753,6 +807,8 @@ describe('ManagePage integration', () => {
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.getAttribute('aria-live')).toBe('polite');
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+    expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('hides SECRET PAYLOAD input after successful destroy', async () => {
@@ -761,6 +817,7 @@ describe('ManagePage integration', () => {
 
     renderManagePage();
     await screen.findByTestId('manage-state-waiting');
+    await waitForManageActionsEnabled();
 
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'my secret text' },

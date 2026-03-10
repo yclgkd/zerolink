@@ -161,7 +161,7 @@ describe('resolveWebAuthnPolicy', () => {
   it('returns standard profile defaults', () => {
     expect(resolveWebAuthnPolicy(SECURITY_PROFILE.STANDARD)).toEqual({
       userVerification: 'preferred',
-      residentKey: 'preferred',
+      residentKey: 'discouraged',
       attestation: 'none',
     });
   });
@@ -169,7 +169,7 @@ describe('resolveWebAuthnPolicy', () => {
   it('returns strict profile defaults', () => {
     expect(resolveWebAuthnPolicy(SECURITY_PROFILE.STRICT)).toEqual({
       userVerification: 'required',
-      residentKey: 'required',
+      residentKey: 'discouraged',
       attestation: 'none',
     });
   });
@@ -177,7 +177,7 @@ describe('resolveWebAuthnPolicy', () => {
   it('returns hardware-only profile defaults', () => {
     expect(resolveWebAuthnPolicy(SECURITY_PROFILE.HARDWARE_ONLY)).toEqual({
       userVerification: 'required',
-      residentKey: 'required',
+      residentKey: 'discouraged',
       attestation: 'none',
     });
   });
@@ -293,7 +293,7 @@ describe('registerWithWebAuthn', () => {
         attestation: 'none',
         authenticatorSelection: {
           userVerification: 'required',
-          residentKey: 'required',
+          residentKey: 'discouraged',
         },
       },
     });
@@ -475,6 +475,7 @@ describe('assertWithWebAuthn', () => {
     const getCall = vi.mocked(webauthnGet).mock.calls[0]?.[0];
     expect(getCall).toMatchObject({
       publicKey: {
+        allowCredentials: [{ type: 'public-key', id: VALID_B64U }],
         userVerification: 'required',
       },
     });

@@ -827,7 +827,12 @@ async function executeDeliverSecret(
     const assertRes = await assertWithWebAuthn({
       profile: input.profile,
       requestOptions: {
-        publicKey: { challenge: intentData.expectedChallenge },
+        publicKey: {
+          challenge: intentData.expectedChallenge,
+          ...(resolvedBeginData.allowCredentials
+            ? { allowCredentials: resolvedBeginData.allowCredentials }
+            : {}),
+        },
       },
     });
     if (!assertRes.ok) {
@@ -941,7 +946,12 @@ async function executeDeleteChannel(
   } else {
     const assertRes = await assertWithWebAuthn({
       profile: input.profile,
-      requestOptions: { publicKey: { challenge: expectedChallenge } },
+      requestOptions: {
+        publicKey: {
+          challenge: expectedChallenge,
+          ...(beginData.allowCredentials ? { allowCredentials: beginData.allowCredentials } : {}),
+        },
+      },
     });
     if (!assertRes.ok) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {

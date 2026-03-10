@@ -219,6 +219,24 @@ This is append-only. Never delete entries.
 **Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
 **Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.
 
+## [2026-03-10] Secure Share WebAuthn must use stored credential IDs for sender assertions
+
+**Decision**: Secure Share sender manage/update flows must request WebAuthn assertions with `allowCredentials` derived from the channel's stored `credentialId`, and new registrations should prefer non-discoverable credentials.
+**Context**: Secure Share originally created resident/discoverable credentials and sender deliver/delete flows called `navigator.credentials.get()` with only a challenge. Switching registration to non-discoverable credentials without changing the assertion path would break sender management for newly created secure channels.
+**Options Considered**: Keep resident credentials; switch registration only and accept manage-flow breakage; switch registration and extend `compound_begin` to return `allowCredentials` for WebAuthn-managed channels.
+**Choice**: Return `allowCredentials` from `compound_begin` when a channel is WebAuthn-managed, thread that list through frontend assertion requests, and set registration `residentKey` to `'discouraged'`.
+**Reasoning**: This keeps the change minimal, preserves compatibility for existing channels with stored credential IDs, and removes the sender manage flow's reliance on browser-side credential discovery.
+**Trade-offs**: The shared API contract and local mocks/tests must carry the extra optional field, and the Create page now defaults to Quick Share to avoid surprising users with a passkey-first flow.
+
+## [2026-03-10] Manage auth policy must resolve from channel adminMode, not create-page state
+
+**Decision**: Sender manage/deliver/delete actions must derive their auth policy from the channel's resolved `adminMode` returned by `/api/public/:uuid`, not from `create-store` `selectedProfile` or `createdProfile`.
+**Context**: After Create started defaulting to Quick Share, `ManagePage` could still reuse the last create-page profile from the same SPA session. That allowed an unrelated visit to `/create` to downgrade a Secure Share management flow from `secure` to `quick`, producing weaker WebAuthn requests and possible assertion rejection on the backend.
+**Options Considered**: Keep reusing create-page state; reset the create store more aggressively on navigation; derive the manage policy from the fetched channel `adminMode` and block actions until it is known.
+**Choice**: Map `adminMode: 'webauthn'` to `SECURITY_PROFILE.SECURE`, map password/softkey modes to `SECURITY_PROFILE.QUICK`, and disable manage actions until `adminMode` is resolved.
+**Reasoning**: The channel's persisted admin mode is the only trustworthy source for sender auth behavior on manage links. Using it removes cross-page state leakage without expanding the patch into a broader create-store refactor.
+**Trade-offs**: Manage buttons stay disabled during the initial public-status fetch or after public-status failures, but that fail-closed behavior is preferable to sending the wrong auth policy.
+
 ## [2026-03-10] Signed manifest should whitelist `dist/assets/` runtime outputs
 
 **Decision**: Generate the signed manifest from `dist/assets/` only, instead of signing arbitrary root-level files and excluding them via a blacklist.

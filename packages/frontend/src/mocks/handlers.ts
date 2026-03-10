@@ -281,6 +281,7 @@ export const handlers = [
         seed: MOCK_SEED,
         expiresAt: MOCK_TIMESTAMP + 60_000,
       },
+      allowCredentials: [{ id: MOCK_B64U, type: 'public-key' as const }],
       receiverPubFpr: MOCK_HEX,
       receiverPubJwk: {
         kty: 'RSA',

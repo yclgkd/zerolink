@@ -88,12 +88,12 @@ describe('CreatePage integration', () => {
     expect(screen.getByTestId('mode-card-secure')).toBeTruthy();
   });
 
-  it('defaults to Secure mode when WebAuthn is available', () => {
+  it('defaults to Quick mode when WebAuthn is available', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
-    expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('mode-card-quick').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('mode-card-secure').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('defaults to Quick mode when WebAuthn is unavailable', () => {
@@ -126,26 +126,28 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
-    expect(screen.queryByTestId('quick-share-password-panel')).toBeNull();
-    fireEvent.click(screen.getByTestId('mode-card-quick'));
     expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
   });
 
   it('hides password panel when Secure mode is selected', () => {
-    mockWebAuthnSupport(false);
-    renderCreatePage();
-
-    // Quick is default when no WebAuthn
-    expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
-
-    // Not clickable when WebAuthn unavailable, but panel should not appear in Secure mode
-    // When WebAuthn is available, switching to Secure should hide panel
     mockWebAuthnSupport(true);
-    cleanup();
     renderCreatePage();
 
-    // Default is Secure with WebAuthn
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     expect(screen.queryByTestId('quick-share-password-panel')).toBeNull();
+  });
+
+  it('shows Secure Share passkey hint when Secure mode is selected', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    expect(screen.queryByTestId('create-secure-share-hint')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+
+    expect(screen.getByTestId('create-secure-share-hint').textContent).toContain(
+      'This passkey is used only for this channel. If it appears in your passkey manager, it can be safely deleted after the channel expires.'
+    );
   });
 
   it('disables submit button in Quick mode until password is entered', () => {
@@ -178,6 +180,7 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
   });
@@ -218,6 +221,7 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
@@ -233,6 +237,7 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
     await waitFor(() => {
       expect(screen.getByTestId('create-success-share-link')).toBeTruthy();
@@ -262,6 +267,7 @@ describe('CreatePage integration', () => {
     });
 
     renderCreatePage();
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
@@ -277,6 +283,7 @@ describe('CreatePage integration', () => {
     });
 
     renderCreatePage();
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     await waitFor(() => {
@@ -325,6 +332,7 @@ describe('CreatePage integration', () => {
     renderCreatePage();
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
     fireEvent.click(submit);
 
     await waitFor(() => {

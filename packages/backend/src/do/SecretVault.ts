@@ -351,6 +351,10 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<{
     challenge: CompoundChallenge;
+    allowCredentials?: Array<{
+      id: Base64Url;
+      type: 'public-key';
+    }>;
     receiverPubFpr?: HexString;
     receiverPubJwk?: RSAPublicKeyJWK;
     currentVersion: number;
@@ -372,6 +376,10 @@ export class SecretVault {
 
       const response: {
         challenge: CompoundChallenge;
+        allowCredentials?: Array<{
+          id: Base64Url;
+          type: 'public-key';
+        }>;
         currentVersion: number;
         receiverPubFpr?: HexString;
         receiverPubJwk?: RSAPublicKeyJWK;
@@ -385,6 +393,17 @@ export class SecretVault {
         currentVersion: record.version,
         adminMode: record.adminMode,
       };
+      if (record.adminMode === 'webauthn') {
+        const storedCredential = record.adminCredential as StoredCredential;
+        if (storedCredential.credentialId) {
+          response.allowCredentials = [
+            {
+              id: storedCredential.credentialId,
+              type: 'public-key',
+            },
+          ];
+        }
+      }
       if (record.receiver) {
         response.receiverPubFpr = record.receiver.pubFpr;
         response.receiverPubJwk = record.receiver.pubJwk;

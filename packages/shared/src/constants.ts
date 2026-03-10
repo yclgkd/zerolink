@@ -31,12 +31,12 @@ export type ChannelState = (typeof CHANNEL_STATE)[keyof typeof CHANNEL_STATE];
  * Security profiles selectable at channel creation.
  *
  *   quick  → password-protected; no WebAuthn required; Argon2id KDF; 4KB padding
- *   secure → passkey required; UV=required; RK=required; attestation=none; 8KB padding
+ *   secure → passkey required; UV=required; RK=discouraged; attestation=none; 8KB padding
  *
  * Legacy values (read-side only, for existing channels in storage):
- *   standard      → UV=preferred; RK=preferred (lower assurance than 'secure')
- *   strict        → UV=required; RK=required (equivalent to 'secure')
- *   hardware_only → UV=required; RK=required; attestation enforcement removed
+ *   standard      → UV=preferred; RK=discouraged (lower assurance than 'secure')
+ *   strict        → UV=required; RK=discouraged (equivalent to 'secure')
+ *   hardware_only → UV=required; RK=discouraged; attestation enforcement removed
  */
 export const SECURITY_PROFILE = {
   QUICK: 'quick',

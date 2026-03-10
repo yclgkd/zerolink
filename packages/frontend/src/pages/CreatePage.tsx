@@ -141,6 +141,15 @@ function ModeSelectorGrid({
           title="Secure Share"
         />
       </div>
+      {selected === SECURITY_PROFILE.SECURE ? (
+        <div
+          className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4 text-sm text-muted-foreground"
+          data-testid="create-secure-share-hint"
+        >
+          This passkey is used only for this channel. If it appears in your passkey manager, it can
+          be safely deleted after the channel expires.
+        </div>
+      ) : null}
       {!webAuthnSupported ? (
         <StateNotice
           data-testid="create-webauthn-blocked-warning"
@@ -426,8 +435,7 @@ function useCreatePageLogic() {
   useEffect(() => {
     const support = detectWebAuthnSupport();
     store.setWebAuthnSupported(support.supported);
-    // Default to Secure if WebAuthn available, otherwise Quick
-    store.setSelectedProfile(support.supported ? SECURITY_PROFILE.SECURE : SECURITY_PROFILE.QUICK);
+    store.setSelectedProfile(SECURITY_PROFILE.QUICK);
   }, [store.setWebAuthnSupported, store.setSelectedProfile]);
 
   const isQuickMode = store.selectedProfile === SECURITY_PROFILE.QUICK;
