@@ -4,7 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { collectFilePaths, hashFileHex, toPosixRelativePath } from '../generate-manifest';
+import {
+  buildManifest,
+  collectFilePaths,
+  extractEntryAssetPath,
+  hashFileHex,
+  toPosixRelativePath,
+} from '../generate-manifest';
 
 let tmpDir: string;
 
@@ -112,5 +118,63 @@ describe('collectFilePaths', () => {
 
   it('throws when directory does not exist', async () => {
     await expect(collectFilePaths(path.join(tmpDir, 'nonexistent'))).rejects.toThrow();
+  });
+});
+
+describe('extractEntryAssetPath', () => {
+  it('returns the normalized module entry asset path from index.html', () => {
+    const html = '<script type="module" crossorigin src="/assets/index-abc123.js"></script>';
+
+    expect(extractEntryAssetPath(html)).toBe('assets/index-abc123.js');
+  });
+
+  it('throws when the module entry asset path is missing', () => {
+    const html = '<script src="/assets/index-abc123.js"></script>';
+
+    expect(() => extractEntryAssetPath(html)).toThrow('module entry script');
+  });
+
+  it('throws when the module entry asset points to another origin', () => {
+    const html = '<script type="module" src="https://cdn.example.com/app.js"></script>';
+
+    expect(() => extractEntryAssetPath(html)).toThrow('same-origin');
+  });
+});
+
+describe('buildManifest', () => {
+  it('adds entryAssetPath while keeping index.html out of signed files', async () => {
+    await fs.mkdir(path.join(tmpDir, 'assets'), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, 'index.html'),
+      '<script type="module" crossorigin src="/assets/index-abc123.js"></script>'
+    );
+    await fs.writeFile(path.join(tmpDir, 'assets', 'index-abc123.js'), 'console.log("entry");');
+
+    const manifest = await buildManifest({
+      buildTime: '2026-03-10T00:00:00.000Z',
+      commitHash: 'abc1234',
+      distDir: tmpDir,
+      version: '1.2.3',
+    });
+
+    expect(manifest.entryAssetPath).toBe('assets/index-abc123.js');
+    expect(manifest.files).toHaveProperty('assets/index-abc123.js');
+    expect(manifest.files).not.toHaveProperty('index.html');
+  });
+
+  it('throws when index.html points to an entry asset outside the signed manifest files', async () => {
+    await fs.writeFile(
+      path.join(tmpDir, 'index.html'),
+      '<script type="module" crossorigin src="/assets/index-missing.js"></script>'
+    );
+
+    await expect(
+      buildManifest({
+        buildTime: '2026-03-10T00:00:00.000Z',
+        commitHash: 'abc1234',
+        distDir: tmpDir,
+        version: '1.2.3',
+      })
+    ).rejects.toThrow('entry asset');
   });
 });

@@ -4,6 +4,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { verifyFileHashes } from './verify-manifest-files';
+import { checkEntryAssetBinding, parseSignedManifest } from './verify-manifest-metadata';
+
+export { verifyFileHashes } from './verify-manifest-files';
+
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_FILE);
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -12,15 +17,6 @@ const MANIFEST_PATH = path.resolve(DIST_DIR, 'manifest.json');
 const MANIFEST_HASH_PATH = path.resolve(DIST_DIR, 'manifest-hash.txt');
 const SIGNATURE_PATH = path.resolve(DIST_DIR, 'manifest.sig');
 const PUBLIC_KEY_PATH = path.resolve(REPO_ROOT, 'keys', 'manifest-signing.pub');
-
-type ManifestFiles = Record<string, string>;
-
-interface Manifest {
-  version: string;
-  commitHash: string;
-  buildTime: string;
-  files: ManifestFiles;
-}
 
 export function fromBase64Url(encoded: string): Buffer {
   const padded =
@@ -49,46 +45,6 @@ export function checkManifestHash(
 ): { ok: boolean; actual: string } {
   const actual = hashBufferHex(manifestBytes);
   return { ok: expectedHash.length === 0 || actual === expectedHash, actual };
-}
-
-export async function verifyFileHashes(
-  manifest: Manifest,
-  distDir: string
-): Promise<{ path: string; expected: string; actual: string; ok: boolean }[]> {
-  const distDirBoundary = distDir.endsWith(path.sep) ? distDir : distDir + path.sep;
-
-  return Promise.all(
-    Object.entries(manifest.files).map(async ([relativePath, expected]) => {
-      // Reject absolute paths, traversal segments, and empty segments before resolving.
-      const segments = relativePath.split('/');
-      if (path.isAbsolute(relativePath) || segments.includes('..') || segments.includes('')) {
-        return {
-          path: relativePath,
-          expected,
-          actual: 'PATH_TRAVERSAL',
-          ok: false,
-        };
-      }
-
-      const absolutePath = path.resolve(distDir, ...segments);
-      if (!absolutePath.startsWith(distDirBoundary)) {
-        return {
-          path: relativePath,
-          expected,
-          actual: 'PATH_TRAVERSAL',
-          ok: false,
-        };
-      }
-      let actual: string;
-      try {
-        const content = await fs.readFile(absolutePath);
-        actual = hashBufferHex(content);
-      } catch {
-        actual = 'FILE_NOT_FOUND';
-      }
-      return { path: relativePath, expected, actual, ok: actual === expected };
-    })
-  );
 }
 
 async function run(): Promise<void> {
@@ -126,10 +82,15 @@ async function run(): Promise<void> {
     return;
   }
 
-  const manifest = JSON.parse(manifestBytes.toString('utf8')) as Manifest;
+  const manifest = parseSignedManifest(manifestBytes.toString('utf8'));
+  if (!manifest) {
+    process.stderr.write('FAIL  manifest.json is not a valid signed release manifest.\n');
+    process.exitCode = 1;
+    return;
+  }
 
   // 2. Verify signature
-  process.stdout.write('[1/2] Verifying Ed25519 signature...\n');
+  process.stdout.write('[1/3] Verifying Ed25519 signature...\n');
   const signatureValid = await verifyManifestSignature({
     manifestBytes,
     signatureBase64Url: signatureLine,
@@ -144,8 +105,20 @@ async function run(): Promise<void> {
   }
   process.stdout.write('PASS  Signature is valid.\n\n');
 
-  // 3. Verify file hashes
-  process.stdout.write('[2/2] Verifying file hashes...\n');
+  // 3. Verify entry asset binding
+  process.stdout.write('[2/3] Verifying entry asset binding...\n');
+  const entryBinding = await checkEntryAssetBinding(manifest, DIST_DIR);
+  if (!entryBinding.ok) {
+    process.stderr.write(
+      `FAIL  index.html boots "${entryBinding.actual}" but manifest expects "${entryBinding.expected}".\n`
+    );
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(`PASS  Entry asset matches (${entryBinding.expected}).\n\n`);
+
+  // 4. Verify file hashes
+  process.stdout.write('[3/3] Verifying file hashes...\n');
   const results = await verifyFileHashes(manifest, DIST_DIR);
   const failures = results.filter((r) => !r.ok);
 
@@ -164,7 +137,7 @@ async function run(): Promise<void> {
     return;
   }
 
-  // 4. Confirm manifest hash
+  // 5. Confirm manifest hash
   const manifestHashExpected = (
     await fs.readFile(MANIFEST_HASH_PATH, 'utf8').catch(() => '')
   ).trim();

@@ -4,6 +4,29 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-014: Align CLI manifest verification with signed entry binding
+
+**Completed**: 2026-03-10
+
+Followed up the browser-side `entryAssetPath` trust-boundary change by teaching
+`pnpm manifest:verify` to enforce the same manifest shape and entry-bundle binding. The CLI
+verifier now rejects manifests with missing or unsafe `entryAssetPath` metadata, checks that
+`dist/index.html` launches the exact signed entry asset before hashing files, and includes focused
+regression coverage for metadata validation and stale-entry mismatches so local and CI release
+checks cannot go green for a build the browser would fail closed.
+
+## DONE-013: Bind the running bootstrap entry bundle to the signed manifest
+
+**Completed**: 2026-03-10
+
+Followed up the mutable-HTML manifest change by restoring an explicit trust anchor between the
+browser's running bootstrap code and the signed release metadata. Added `entryAssetPath` to
+`manifest.json`, made browser verification require that the currently executing entry bundle matches
+that signed path, and introduced a one-time session-scoped reload to recover from stale HTML or
+stale entry-bundle caches before showing the blocking verification gate. Also split the release
+verification/bootstrap helpers into smaller modules and updated the unit tests, docs, and
+`_project_specs` notes to describe the narrower but better-bound trust boundary.
+
 ## DONE-012: Exclude mutable SPA entry HTML from the signed manifest
 
 **Completed**: 2026-03-10

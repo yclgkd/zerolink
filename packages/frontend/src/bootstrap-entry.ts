@@ -1,6 +1,7 @@
 import { bootstrapApp } from './bootstrap';
 
 void bootstrapApp({
+  currentEntryUrl: import.meta.url,
   loadApp: async () => {
     const { renderApp } = await import('./main');
     renderApp();
