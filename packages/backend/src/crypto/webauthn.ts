@@ -49,8 +49,8 @@ export function generateCreationOptions(params: {
 }): Record<string, unknown> {
   const { rpId, rpName, uuid, challenge, securityProfile } = params;
 
-  // Require UV/RK for 'secure' and all legacy strict-tier profiles
-  const strict =
+  // Require UV for 'secure' and all legacy strict-tier profiles.
+  const requireUserVerification =
     securityProfile === 'secure' ||
     securityProfile === 'strict' ||
     securityProfile === 'hardware_only';
@@ -71,9 +71,9 @@ export function generateCreationOptions(params: {
       { type: 'public-key', alg: -257 }, // RS256
     ],
     authenticatorSelection: {
-      userVerification: strict ? 'required' : 'preferred',
-      residentKey: strict ? 'required' : 'preferred',
-      requireResidentKey: strict,
+      userVerification: requireUserVerification ? 'required' : 'preferred',
+      residentKey: 'discouraged',
+      requireResidentKey: false,
     },
     attestation: 'none',
     timeout: 60000,

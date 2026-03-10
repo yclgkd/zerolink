@@ -143,6 +143,7 @@ describe('api client', () => {
 
     expect(CompoundBeginResponseSchema.safeParse(result.data).success).toBe(true);
     expect(result.data.adminMode).toBe('webauthn');
+    expect(result.data.allowCredentials).toEqual([{ id: VALID_B64U, type: 'public-key' }]);
   });
 
   it('returns success for compoundCommit', async () => {

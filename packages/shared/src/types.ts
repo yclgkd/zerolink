@@ -386,6 +386,14 @@ export interface AssertionJSON {
   };
 }
 
+/**
+ * JSON-serializable credential descriptor used in WebAuthn allowCredentials.
+ */
+export interface PublicKeyCredentialDescriptorJSON {
+  id: Base64Url;
+  type: 'public-key';
+}
+
 // ─── API Request / Response Types ────────────────────────────────────────────
 //
 // Pure TypeScript shapes for all HTTP endpoints.
@@ -480,6 +488,8 @@ export interface CompoundBeginRequest {
 export interface CompoundBeginResponse {
   ok: true;
   challenge: CompoundChallenge;
+  /** Present for WebAuthn-managed channels to avoid discoverable credential lookup. */
+  allowCredentials?: PublicKeyCredentialDescriptorJSON[];
   /** Present when state is 'locked' or 'delivered'. */
   receiverPubFpr?: HexString;
   /** Present when state is 'locked' or 'delivered'. */

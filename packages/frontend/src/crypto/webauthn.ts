@@ -267,6 +267,7 @@ export function detectWebAuthnSupport(): WebAuthnSupportInfo {
 
 /**
  * Resolves profile-specific WebAuthn policy settings.
+ * All passkey registration flows use non-discoverable credentials.
  * New profiles: 'secure' (strict), 'quick' (no WebAuthn).
  * Legacy profiles: 'standard'/'strict'/'hardware_only' are handled for backward compatibility.
  */
@@ -277,7 +278,7 @@ export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfile
     case SECURITY_PROFILE.HARDWARE_ONLY:
       return {
         userVerification: 'required',
-        residentKey: 'required',
+        residentKey: 'discouraged',
         attestation: 'none',
       };
     default:
@@ -285,7 +286,7 @@ export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfile
       // 'standard' falls through to preferred UV
       return {
         userVerification: 'preferred',
-        residentKey: 'preferred',
+        residentKey: 'discouraged',
         attestation: 'none',
       };
   }

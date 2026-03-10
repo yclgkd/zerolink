@@ -6,7 +6,12 @@ import {
   createTamperedAssertion,
 } from '../../__tests__/helpers/webauthn-fixtures.ts';
 import { decodeBase64Url, encodeBase64Url } from '../bytes.ts';
-import { derToP1363, verifyAssertion, type WebAuthnVerifyParams } from '../webauthn.ts';
+import {
+  derToP1363,
+  generateCreationOptions,
+  verifyAssertion,
+  type WebAuthnVerifyParams,
+} from '../webauthn.ts';
 
 const RP_ID = 'zerolink.test';
 const RP_ORIGIN = 'https://zerolink.test';
@@ -239,6 +244,52 @@ describe('verifyAssertion', () => {
     expect(params).not.toBeNull();
     const result = await verifyAssertion(params as WebAuthnVerifyParams);
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('generateCreationOptions', () => {
+  it('uses non-discoverable credential settings for secure profile', () => {
+    const options = generateCreationOptions({
+      rpId: RP_ID,
+      rpName: 'ZeroLink',
+      uuid: 'new-channel-uuid-12345',
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      securityProfile: 'secure',
+    }) as {
+      authenticatorSelection: {
+        userVerification: string;
+        residentKey: string;
+        requireResidentKey: boolean;
+      };
+    };
+
+    expect(options.authenticatorSelection).toEqual({
+      userVerification: 'required',
+      residentKey: 'discouraged',
+      requireResidentKey: false,
+    });
+  });
+
+  it('uses non-discoverable credential settings for standard profile', () => {
+    const options = generateCreationOptions({
+      rpId: RP_ID,
+      rpName: 'ZeroLink',
+      uuid: 'new-channel-uuid-12345',
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      securityProfile: 'standard',
+    }) as {
+      authenticatorSelection: {
+        userVerification: string;
+        residentKey: string;
+        requireResidentKey: boolean;
+      };
+    };
+
+    expect(options.authenticatorSelection).toEqual({
+      userVerification: 'preferred',
+      residentKey: 'discouraged',
+      requireResidentKey: false,
+    });
   });
 });
 

@@ -219,6 +219,15 @@ This is append-only. Never delete entries.
 **Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
 **Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.
 
+## [2026-03-10] Secure Share WebAuthn must use stored credential IDs for sender assertions
+
+**Decision**: Secure Share sender manage/update flows must request WebAuthn assertions with `allowCredentials` derived from the channel's stored `credentialId`, and new registrations should prefer non-discoverable credentials.
+**Context**: Secure Share originally created resident/discoverable credentials and sender deliver/delete flows called `navigator.credentials.get()` with only a challenge. Switching registration to non-discoverable credentials without changing the assertion path would break sender management for newly created secure channels.
+**Options Considered**: Keep resident credentials; switch registration only and accept manage-flow breakage; switch registration and extend `compound_begin` to return `allowCredentials` for WebAuthn-managed channels.
+**Choice**: Return `allowCredentials` from `compound_begin` when a channel is WebAuthn-managed, thread that list through frontend assertion requests, and set registration `residentKey` to `'discouraged'`.
+**Reasoning**: This keeps the change minimal, preserves compatibility for existing channels with stored credential IDs, and removes the sender manage flow's reliance on browser-side credential discovery.
+**Trade-offs**: The shared API contract and local mocks/tests must carry the extra optional field, and the Create page now defaults to Quick Share to avoid surprising users with a passkey-first flow.
+
 ## [2026-03-10] Signed manifest should whitelist `dist/assets/` runtime outputs
 
 **Decision**: Generate the signed manifest from `dist/assets/` only, instead of signing arbitrary root-level files and excluding them via a blacklist.

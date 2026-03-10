@@ -4,13 +4,21 @@
 
 ## Active Task
 
-None. Release integrity chain and Lighthouse fixes are fully merged and deployed.
+Implement non-discoverable WebAuthn for Secure Share while preserving sender manage/update compatibility.
 
 ## Current Status
 
-- **Phase**: Stable — all planned release-guard phases (11–18) and Lighthouse follow-ups are merged to main
-- **Progress**: Signed manifest covers `dist/assets/` only (PR #124). `index.html` and root documents are excluded. `entryAssetPath` binding enforced in both browser and CLI verifiers. Staging custom-domain failure is resolved.
+- **Phase**: In progress on `security/non-discoverable-passkeys`
+- **Progress**: Secure Share registration now targets non-discoverable credentials, `compound_begin` can return `allowCredentials` for WebAuthn-managed channels, and Create defaults to Quick Share instead of auto-selecting Secure Share.
 - **Known Constraint**: `pnpm manifest:verify` stops locally at `manifest.sig` because `MANIFEST_SIGNING_KEY` is a CI-only secret. This is expected and not a blocker for local development.
+
+## Latest Update (2026-03-10)
+
+- `packages/backend/src/crypto/webauthn.ts`, `packages/frontend/src/crypto/webauthn.ts` — Switched passkey registration overlays from resident/discoverable credentials to `residentKey: 'discouraged'`, while keeping profile-specific user verification requirements.
+- `packages/backend/src/do/SecretVault.ts`, `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts` — Extended `compound_begin` so WebAuthn-managed channels can return `allowCredentials` derived from the stored `credentialId`, removing the sender manage/update flow's dependence on browser-side credential discovery.
+- `packages/frontend/src/crypto/orchestrator.ts`, `packages/frontend/src/mocks/handlers.ts`, `packages/frontend/e2e/support/mock-api.ts` — Threaded `allowCredentials` through deliver/delete assertion requests and updated local mocks to reflect the new contract.
+- `packages/frontend/src/pages/CreatePage.tsx` — Defaulted the Create page to Quick Share and added the Secure Share passkey lifecycle hint shown when the Secure mode is selected.
+- Validation: `pnpm --filter @zerolink/shared typecheck`, `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/shared exec vitest run src/__tests__/schemas.test.ts`, `pnpm --filter @zerolink/backend exec vitest run src/crypto/__tests__/webauthn.test.ts src/do/__tests__/SecretVault.test.ts src/__tests__/index.test.ts`, `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/webauthn-adapter.test.ts src/__tests__/create-page.test.tsx src/__tests__/crypto-orchestrator.test.ts src/__tests__/api-client.test.ts`
 
 ## What Was Done
 

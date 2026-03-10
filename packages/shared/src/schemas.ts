@@ -277,6 +277,11 @@ export const AssertionJSONSchema = z.object({
   }),
 });
 
+export const PublicKeyCredentialDescriptorJSONSchema = z.object({
+  id: Base64UrlSchema,
+  type: z.literal('public-key'),
+});
+
 // ─── ReceiverIdentity Schema ──────────────────────────────────────────────────
 
 export const ReceiverIdentitySchema = z.object({
@@ -365,6 +370,7 @@ export const CompoundBeginRequestSchema = z.object({
 export const CompoundBeginResponseSchema = z.object({
   ok: z.literal(true),
   challenge: CompoundChallengeSchema,
+  allowCredentials: z.array(PublicKeyCredentialDescriptorJSONSchema).optional(),
   receiverPubFpr: HexStringSchema.optional(),
   receiverPubJwk: RSAPublicKeyJWKSchema.optional(),
   currentVersion: z.number().int().nonnegative(),

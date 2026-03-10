@@ -829,11 +829,32 @@ describe('SecretVault compound/delete flow', () => {
 
     expect(result.currentVersion).toBe(lockedRecord.version);
     expect(result.adminMode).toBe(lockedRecord.adminMode);
+    expect(result.allowCredentials).toEqual([
+      {
+        id: (lockedRecord.adminCredential as StoredCredential).credentialId,
+        type: 'public-key',
+      },
+    ]);
     expect(result.receiverPubFpr).toBe(lockParams.receiverPubFpr);
     expect(result.receiverPubJwk).toEqual(lockParams.receiverPubJwk);
     expect(result.challenge.id).toBe(storedChallenge.id);
     expect(result.challenge.seed).toBe(storedChallenge.seed);
     expect(result.challenge.expiresAt).toBe(asUnixMs(now + CHALLENGE_TTL_MS));
+  });
+
+  it('omits allowCredentials for softkey-managed channels', async () => {
+    const now = 1_730_001_050_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING, 'softkey')
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    const result = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+
+    expect(result.adminMode).toBe('softkey');
+    expect(result.allowCredentials).toBeUndefined();
   });
 
   it('commits update intent and transitions locked to delivered', async () => {
