@@ -1,13 +1,9 @@
 /**
  * Rate-limit (429) behaviour.
  *
- * Known behaviour at time of writing:
- *   - ManagePage treats any non-ok, non-404 response as an error and surfaces
- *     a warning via `manage-public-status-error`.
- *   - SharePage silently falls back to the WAITING channel state when the
- *     response body fails schema validation.  A 429 response body is not a
- *     valid PublicStatusResponse, so the page renders the normal onboarding
- *     step rather than an explicit error — this is a known limitation.
+ * Both ManagePage and SharePage treat any non-ok, non-404 response as a
+ * transient error and surface a warning notice to the user rather than
+ * silently falling back to the WAITING channel state.
  */
 import { expect, test } from '@playwright/test';
 
@@ -31,15 +27,9 @@ test.describe('rate limit (429) handling', () => {
     await expect(page.getByTestId('manage-public-status-error')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('share page silently falls back to waiting state on 429 — does not crash', async ({
-    page,
-  }) => {
-    // Known limitation: the share page has no dedicated 429 handler.  When the
-    // API returns 429 the response body fails PublicStatusResponseSchema, so
-    // the page falls back to the WAITING/onboarding step instead of showing an
-    // explicit error.  This test documents and pins that behaviour.
+  test('share page surfaces a public-status error on 429', async ({ page }) => {
     await page.goto(`/s/${TEST_UUID}#k=${TEST_LOCK_KEY}`);
     await expect(page.getByTestId('page-share')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('share-step-unavailable')).not.toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('share-public-status-error')).toBeVisible({ timeout: 15_000 });
   });
 });

@@ -77,12 +77,14 @@ export function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
+  const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uuid) {
       setChannelState(CHANNEL_STATE.WAITING);
       setIsUnavailable(false);
       setIsPublicStatusLoading(false);
+      setPublicStatusError(null);
       return;
     }
 
@@ -90,6 +92,7 @@ export function usePublicShareState(uuid?: string) {
     setChannelState(CHANNEL_STATE.WAITING);
     setIsUnavailable(false);
     setIsPublicStatusLoading(true);
+    setPublicStatusError(null);
 
     let cancelled = false;
     async function loadChannelState(): Promise<void> {
@@ -107,6 +110,17 @@ export function usePublicShareState(uuid?: string) {
           setChannelState(CHANNEL_STATE.WAITING);
           setIsUnavailable(true);
           setIsPublicStatusLoading(false);
+          setPublicStatusError(null);
+          return;
+        }
+
+        if (!response.ok) {
+          setChannelState(CHANNEL_STATE.WAITING);
+          setIsUnavailable(false);
+          setIsPublicStatusLoading(false);
+          setPublicStatusError(
+            'Unable to load channel state right now. Showing safe default state.'
+          );
           return;
         }
 
@@ -114,6 +128,9 @@ export function usePublicShareState(uuid?: string) {
           setChannelState(CHANNEL_STATE.WAITING);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
+          setPublicStatusError(
+            'Unable to load channel state right now. Showing safe default state.'
+          );
           return;
         }
 
@@ -121,17 +138,22 @@ export function usePublicShareState(uuid?: string) {
           setChannelState(CHANNEL_STATE.WAITING);
           setIsUnavailable(true);
           setIsPublicStatusLoading(false);
+          setPublicStatusError(null);
           return;
         }
 
         setChannelState(parsedPayload.data.state);
         setIsUnavailable(false);
         setIsPublicStatusLoading(false);
+        setPublicStatusError(null);
       } catch {
         if (!cancelled) {
           setChannelState(CHANNEL_STATE.WAITING);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
+          setPublicStatusError(
+            'Unable to load channel state right now. Showing safe default state.'
+          );
         }
       }
     }
@@ -146,6 +168,7 @@ export function usePublicShareState(uuid?: string) {
     channelState,
     isUnavailable,
     isPublicStatusLoading,
+    publicStatusError,
   };
 }
 
