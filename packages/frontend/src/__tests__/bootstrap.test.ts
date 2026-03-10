@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+// @vitest-environment jsdom
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   bootstrapApp,
@@ -8,6 +10,10 @@ import {
   type MockWorkerLoader,
 } from '../bootstrap';
 import type { ReleaseVerificationResult, VerifiedReleaseSnapshot } from '../release/verification';
+
+afterEach(() => {
+  window.sessionStorage.clear();
+});
 
 describe('isMockEnabled', () => {
   it('enables only when mock=true is present', () => {
@@ -167,5 +173,76 @@ describe('bootstrapApp', () => {
 
     expect(verifyReleaseFn).not.toHaveBeenCalled();
     expect(loadApp).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads once instead of rendering a failure gate on entry asset mismatch', async () => {
+    const loadApp = vi.fn(async () => undefined);
+    const renderVerificationGate = vi.fn();
+    const recoverEntryMismatchFn = vi.fn(() => true);
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
+      isReleaseVerificationRequired: true,
+      loadApp,
+      recoverEntryMismatchFn,
+      renderVerificationGate,
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn: async (): Promise<ReleaseVerificationResult> => ({
+        detail: 'Entry mismatch.',
+        reason: 'entry_asset_mismatch',
+        status: 'failed',
+      }),
+    });
+
+    expect(loadApp).not.toHaveBeenCalled();
+    expect(renderVerificationGate).toHaveBeenCalledTimes(1);
+    expect(renderVerificationGate).toHaveBeenCalledWith({ status: 'verifying' });
+    expect(recoverEntryMismatchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the blocking failure after a single recovery reload has already been attempted', async () => {
+    const loadApp = vi.fn(async () => undefined);
+    const renderVerificationGate = vi.fn();
+
+    window.sessionStorage.setItem('zerolink-release-entry-reload-attempted', 'true');
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
+      isReleaseVerificationRequired: true,
+      loadApp,
+      recoverEntryMismatchFn: () => false,
+      renderVerificationGate,
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn: async (): Promise<ReleaseVerificationResult> => ({
+        detail: 'Entry mismatch.',
+        reason: 'entry_asset_mismatch',
+        status: 'failed',
+      }),
+    });
+
+    expect(loadApp).not.toHaveBeenCalled();
+    expect(renderVerificationGate).toHaveBeenNthCalledWith(2, {
+      detail: 'Entry mismatch.',
+      reason: 'entry_asset_mismatch',
+      status: 'failed',
+    });
+  });
+
+  it('clears the recovery reload marker after a verified boot', async () => {
+    window.sessionStorage.setItem('zerolink-release-entry-reload-attempted', 'true');
+
+    await bootstrapApp({
+      initializeMockingFn: async () => undefined,
+      isReleaseVerificationRequired: true,
+      loadApp: async () => undefined,
+      renderVerificationGate: vi.fn(),
+      search: '',
+      setVerifiedReleaseSnapshot: vi.fn(),
+      verifyReleaseFn: async (): Promise<ReleaseVerificationResult> => createVerifiedSnapshot(),
+    });
+
+    expect(window.sessionStorage.getItem('zerolink-release-entry-reload-attempted')).toBeNull();
   });
 });

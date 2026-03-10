@@ -5,13 +5,25 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { extractEntryAssetPath } from './manifest-entry';
+
+export { extractEntryAssetPath } from './manifest-entry';
+
 type ManifestFiles = Record<string, string>;
 
-interface SignedManifest {
+export interface SignedManifest {
   version: string;
   commitHash: string;
   buildTime: string;
+  entryAssetPath: string;
   files: ManifestFiles;
+}
+
+interface ManifestBuildOptions {
+  distDir: string;
+  version: string;
+  commitHash: string;
+  buildTime: string;
 }
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
@@ -23,6 +35,7 @@ const MANIFEST_PATH = path.resolve(DIST_DIR, 'manifest.json');
 const MANIFEST_HASH_PATH = path.resolve(DIST_DIR, 'manifest-hash.txt');
 const SIGNATURE_PATH = path.resolve(DIST_DIR, 'manifest.sig');
 const NON_RUNTIME_CONTROL_FILES = new Set(['_headers', '_redirects']);
+const NON_RUNTIME_ENTRY_FILES = new Set(['index.html']);
 
 export async function collectFilePaths(rootDir: string): Promise<string[]> {
   const result: string[] = [];
@@ -50,6 +63,9 @@ export async function collectFilePaths(rootDir: string): Promise<string[]> {
         if (NON_RUNTIME_CONTROL_FILES.has(entry.name)) {
           return;
         }
+        if (NON_RUNTIME_ENTRY_FILES.has(entry.name)) {
+          return;
+        }
         result.push(absolutePath);
       })
     );
@@ -67,6 +83,12 @@ export async function hashFileHex(filePath: string): Promise<string> {
 
 export function toPosixRelativePath(absolutePath: string, rootDir: string): string {
   return path.relative(rootDir, absolutePath).split(path.sep).join('/');
+}
+
+async function readEntryAssetPath(distDir: string): Promise<string> {
+  const indexHtmlPath = path.resolve(distDir, 'index.html');
+  const indexHtml = await fs.readFile(indexHtmlPath, 'utf8');
+  return extractEntryAssetPath(indexHtml);
 }
 
 function readFrontendVersion(): string {
@@ -93,20 +115,36 @@ function readCommitHash(): string {
 }
 
 async function generateManifest(): Promise<SignedManifest> {
-  const filePaths = await collectFilePaths(DIST_DIR);
+  return buildManifest({
+    buildTime: new Date().toISOString(),
+    commitHash: readCommitHash(),
+    distDir: DIST_DIR,
+    version: readFrontendVersion(),
+  });
+}
+
+export async function buildManifest(options: ManifestBuildOptions): Promise<SignedManifest> {
+  const filePaths = await collectFilePaths(options.distDir);
   const entries = await Promise.all(
     filePaths.map(async (filePath) => {
-      const relativePath = toPosixRelativePath(filePath, DIST_DIR);
+      const relativePath = toPosixRelativePath(filePath, options.distDir);
       const hash = await hashFileHex(filePath);
       return [relativePath, hash] as const;
     })
   );
   const files: ManifestFiles = Object.fromEntries(entries);
+  const entryAssetPath = await readEntryAssetPath(options.distDir);
+  if (!Object.hasOwn(files, entryAssetPath)) {
+    throw new Error(
+      `manifest entry asset "${entryAssetPath}" is not present in signed runtime files`
+    );
+  }
 
   return {
-    version: readFrontendVersion(),
-    commitHash: readCommitHash(),
-    buildTime: new Date().toISOString(),
+    version: options.version,
+    commitHash: options.commitHash,
+    buildTime: options.buildTime,
+    entryAssetPath,
     files,
   };
 }

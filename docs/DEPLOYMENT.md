@@ -279,7 +279,7 @@ cat keys/manifest-signing.pem
 # 构建
 VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm build
 
-# 生成 manifest（哈希所有文件）
+# 生成 manifest（记录 `entryAssetPath`，并仅哈希稳定运行时资源；排除 `index.html`、`_headers`、`_redirects`）
 pnpm manifest:generate
 
 # 签名 manifest
@@ -292,7 +292,11 @@ pnpm manifest:verify
 
 Cloudflare Pages 的缓存策略应保持为：SPA 入口请求 `Cache-Control: no-store`，哈希
 后的 `/assets/*` 继续使用长期 immutable 缓存。仓库内的 `packages/frontend/public/_headers`
-已按该策略配置。
+已按该策略配置。这样可以避免浏览器或边缘层复用旧的 HTML 壳；而 `index.html` 本身不再
+进入签名 manifest，因为 Cloudflare 等平台可能为 HTML 响应追加请求相关脚本，导致字节
+级哈希不稳定。作为补偿，生成出来的 `manifest.json` 会记录当前应执行的入口 bundle
+(`entryAssetPath`)，浏览器端 bootstrap 会先确认自己正在运行的入口资源与 manifest
+一致；若不一致，会先触发一次受控刷新，仍无法恢复时再 fail-closed 阻断。
 
 ---
 

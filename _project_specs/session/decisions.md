@@ -191,3 +191,30 @@ This is append-only. Never delete entries.
 **Choice**: Restore `/*` to `Cache-Control: no-store`, keep `/assets/*` immutable, and lock the invariant in a regression test.
 **Reasoning**: The verified-release flow assumes the bootstrap HTML and the signed manifest advance atomically from the browser's point of view. `no-store` is the simplest reliable way to prevent stale HTML replay across deploys without weakening the trust model.
 **Trade-offs**: SPA entry HTML loses cache re-use and BFCache-related optimizations that depend on cacheable document responses, but release-integrity guarantees take precedence on signed builds.
+
+## [2026-03-10] Signed manifest excludes mutable SPA entry HTML
+
+**Decision**: Exclude `index.html` from the signed release manifest and keep browser-side verification focused on stable runtime assets.
+**Context**: After the `no-store` rollback was deployed, staging still failed release verification. Browser inspection showed that Cloudflare was injecting request-specific challenge markup into the HTML response, so the bytes fetched from `/` and `/index.html` did not match the published `manifest.json` hash for `index.html` even though the hashed JS/CSS assets were healthy.
+**Options Considered**: Keep signing `index.html` and continue tuning cache/platform behavior; try to normalize or ignore injected HTML before hashing; stop signing mutable HTML entry docs and verify only stable runtime assets.
+**Choice**: Remove `index.html` from `manifest:generate`, update the generator tests and release-verification fixtures accordingly, and document that HTML entry docs stay outside the signed manifest boundary.
+**Reasoning**: In a pure web deployment, the SPA bootstrap HTML is not a reliable byte-stable trust anchor once the edge layer can mutate responses. Signing the immutable runtime bundles still provides meaningful tamper detection for CDN/static-asset drift without blocking healthy deploys on platform-injected HTML noise.
+**Trade-offs**: The manifest no longer detects bootstrap-HTML tampering directly, so trust in the entry document still depends on HTTPS/origin/deployment discipline. That limitation already existed in the web threat model; this change makes the signed boundary match reality.
+
+## [2026-03-10] Signed release must bind the running bootstrap entry bundle
+
+**Decision**: Keep `index.html` outside the signed hash set, but require the currently executing bootstrap entry bundle to match a signed `entryAssetPath` recorded in `manifest.json`, with one controlled reload attempt on mismatch.
+**Context**: Excluding mutable HTML fixed the staging false positive, but it also removed the only binding between the signed release metadata and the bootstrap JavaScript that was already running in the browser. A stale HTML shell or stale cached entry bundle could otherwise report `Verified Release` while executing code from a different deploy.
+**Options Considered**: Re-sign `index.html`; accept the weaker trust boundary and rely only on asset hashes; sign a stable entry-bundle path instead of the mutable HTML shell, then allow one recovery reload before failing closed.
+**Choice**: Add `entryAssetPath` to the signed manifest, pass `import.meta.url` into browser verification, block when the running entry bundle does not match the signed manifest entry, and perform at most one session-scoped reload before rendering the blocking gate.
+**Reasoning**: The entry bundle is byte-stable and already part of the hashed runtime asset set, so it is a better trust anchor than mutable edge HTML. Binding the executing bundle back to the signed manifest restores cross-release integrity without reintroducing the Cloudflare HTML mutation false positive.
+**Trade-offs**: This still does not make a compromised origin trustworthy, and a first mismatch may trigger one extra page reload before the blocking screen appears. That cost is acceptable to recover stale entry shells without masking persistent integrity failures.
+
+## [2026-03-10] CLI release verification must enforce the same entry binding
+
+**Decision**: `pnpm manifest:verify` must reject manifests whose `entryAssetPath` metadata is missing, unsafe, or disagrees with the module entry actually referenced by `dist/index.html`.
+**Context**: After browser verification started enforcing `entryAssetPath`, the CLI verifier still validated only the signature and file hashes. That allowed local and CI release checks to report success for artifacts that the browser would still fail closed at boot.
+**Options Considered**: Leave the CLI looser than the browser; only validate that `entryAssetPath` exists in `manifest.files`; validate both manifest metadata and the actual `index.html` entry binding before file hashes.
+**Choice**: Parse the signed manifest with `entryAssetPath` validation, then compare it to the module entry extracted from `dist/index.html` as part of `pnpm manifest:verify`.
+**Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
+**Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.

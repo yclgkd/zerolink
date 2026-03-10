@@ -7,11 +7,15 @@ detect tampering in the published runtime assets before the user can interact wi
 ## What is verified
 
 - **Ed25519 signature** — `manifest.sig` is a cryptographic signature over `manifest.json` using the ZeroLink signing key.
-- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the publicly fetchable runtime files in the release build, including `index.html` and hashed assets.
+- **Signed entry binding** — `manifest.json` records the expected bootstrap entry bundle path in `entryAssetPath`, and the browser refuses to trust a release if the currently executing entry asset does not match it.
+- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the stable, publicly fetchable runtime files in the release build, such as hashed JS, CSS, fonts, and other immutable assets.
 - **Manifest hash** — `manifest-hash.txt` contains the SHA-256 of `manifest.json` itself; this is displayed in the app's **Verified Release** card as a public fingerprint, not as the trust anchor.
 
 Pages control files such as `_headers` and `_redirects` are intentionally excluded from the signed
 runtime manifest because they are deployment metadata, not browser-fetched release assets.
+The SPA entry document `index.html` is also excluded because edge platforms can inject request-
+specific HTML into the bootstrap shell, which makes byte-for-byte signing of that document unstable
+even when the underlying deployment is healthy.
 
 ## What the browser does during bootstrap
 
@@ -20,11 +24,14 @@ small bootstrap entry instead of loading the React app immediately. That bootstr
 
 1. Fetches `manifest.json` and `manifest.sig`
 2. Verifies the Ed25519 signature using the embedded public key
-3. Re-hashes the signed same-origin runtime assets
-4. Loads the React app only if every check passes
+3. Confirms the currently executing bootstrap entry bundle matches `manifest.entryAssetPath`
+4. Re-hashes the signed same-origin runtime assets
+5. Loads the React app only if every check passes
 
 If verification fails or cannot be completed, ZeroLink shows a blocking verification screen and
-does not load the normal app UI.
+does not load the normal app UI. If the entry bundle does not match the signed manifest, ZeroLink
+will attempt one controlled page reload before failing closed, which helps recover from stale entry
+HTML or stale entry-bundle caches without looping forever.
 
 Unsigned environments such as a plain `pnpm build`, `vite preview`, or a manual static upload
 without signed release artifacts remain runnable, but they are treated as unverified boots and do
@@ -34,7 +41,7 @@ not show the `Verified Release` card.
 
 | File | Description |
 |------|-------------|
-| `dist/manifest.json` | Signed build manifest with file hashes |
+| `dist/manifest.json` | Signed build manifest with `entryAssetPath` plus file hashes |
 | `dist/manifest-hash.txt` | SHA-256 of `manifest.json` |
 | `dist/manifest.sig` | Ed25519 signature over `manifest.json` |
 | `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
@@ -55,7 +62,9 @@ When bootstrap verification succeeds, the shell renders a `Verified Release` car
 - Publisher key fingerprint
 
 Cloudflare Pages serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
-shell is never reused across deployments, while hashed `/assets/*` files remain immutable.
+shell is never reused across deployments, while hashed `/assets/*` files remain immutable. The HTML
+document itself is not hashed, but the bootstrap entry asset it launches must still match the
+signed manifest.
 
 ## Quick verification (automated)
 
@@ -68,8 +77,9 @@ pnpm manifest:verify
 This will:
 1. Read `manifest.json`, `manifest.sig`, and `keys/manifest-signing.pub`
 2. Verify the Ed25519 signature
-3. Re-hash every signed runtime file and compare against `manifest.json`
-4. Print a pass/fail result for each file
+3. Confirm `index.html` boots the same entry asset recorded in `manifest.entryAssetPath`
+4. Re-hash every signed runtime file and compare against `manifest.json`
+5. Print a pass/fail result for each file
 
 ## Manual verification
 
@@ -94,10 +104,10 @@ openssl pkeyutl \
 ### 2. Verify a specific file hash
 
 ```bash
-# Check index.html
-sha256sum packages/frontend/dist/index.html
+# Check a signed runtime asset
+sha256sum packages/frontend/dist/assets/index.js
 # Compare with the value in manifest.json:
-jq '.files["index.html"]' packages/frontend/dist/manifest.json
+jq '.files["assets/index.js"]' packages/frontend/dist/manifest.json
 ```
 
 ### 3. Verify the manifest hash

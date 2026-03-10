@@ -3,14 +3,33 @@
 *Last updated: 2026-03-10*
 
 ## Active Task
-Hotfix the deployed Verified Release cache regression so signed `index.html` cannot drift from the published manifest after a Pages deploy.
+Follow up the staging Verified Release regression by binding the running bootstrap entry bundle to the signed manifest while still excluding mutable SPA entry HTML from signed hashes.
 
 ## Current Status
-- **Phase**: Release guard cache hotfix complete, ready to push
-- **Progress**: Restored the Cloudflare Pages SPA entry cache policy to `no-store`, added a regression test that locks this requirement in, and verified the frontend build plus release-verification tests locally.
+- **Phase**: Release guard entry-binding follow-up complete, ready to push
+- **Progress**: Kept `index.html` outside the signed hash set, added `entryAssetPath` to the manifest so the running bootstrap bundle must match the signed release, implemented a one-time recovery reload for stale entry shells, aligned the verification fixtures/docs, and verified the focused test suite locally.
 - **Blocking Issues**: Official `manifest:sign` / `manifest:verify` validation still requires the deployment-only `MANIFEST_SIGNING_KEY`, which is not available in this local environment.
 
 ## What Was Done
+
+### Phase 17: Align CLI manifest verification with browser entry binding
+- `scripts/verify-manifest.ts`, `scripts/verify-manifest-metadata.ts`, `scripts/verify-manifest-files.ts` — Made `pnpm manifest:verify` parse the new `entryAssetPath` shape, fail when the manifest metadata is invalid, and compare the signed entry asset against the actual module entry launched by `dist/index.html`.
+- `scripts/__tests__/verify-manifest-entry.test.ts`, `scripts/__tests__/verify-manifest.test.ts` — Added regression coverage for missing/unsafe `entryAssetPath` metadata and for mismatches between `manifest.entryAssetPath` and the entry bundle referenced by `index.html`.
+- `docs/VERIFY.md` — Updated the CLI verification docs to state that `pnpm manifest:verify` now checks the signed entry binding before file hashes.
+- Validation: `pnpm exec vitest run scripts/__tests__/verify-manifest-entry.test.ts scripts/__tests__/verify-manifest.test.ts`, `pnpm manifest:generate`.
+
+### Phase 16: Bind the running bootstrap entry to the signed manifest
+- `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts` — Added `entryAssetPath` extraction from built `index.html`, kept HTML itself out of signed hashes, and enforced that the declared entry bundle is present inside the signed runtime file set.
+- `packages/frontend/src/release/manifest.ts`, `packages/frontend/src/release/crypto.ts`, `packages/frontend/src/release/verification.ts` — Split the release verifier into smaller helpers, required `currentEntryUrl` in browser verification, and fail closed when the currently executing bootstrap entry does not match the signed manifest entry.
+- `packages/frontend/src/bootstrap.ts`, `packages/frontend/src/bootstrap-entry.ts`, `packages/frontend/src/bootstrap-recovery.ts`, `packages/frontend/src/bootstrap-gate.ts` — Passed `import.meta.url` from the bootstrap entry, added a one-time session-scoped recovery reload for entry mismatches, and kept the blocking gate for repeated or non-recoverable verification failures.
+- `packages/frontend/src/__tests__/bootstrap.test.ts`, `packages/frontend/src/__tests__/release-verification.test.ts`, `packages/frontend/src/__tests__/release-verification-entry.test.ts` — Added regression coverage for entry mismatch detection, manifest invalidation when `entryAssetPath` is unsafe, and one-time recovery behavior.
+- Validation: `pnpm exec vitest run scripts/__tests__/generate-manifest.test.ts`, `pnpm --filter @zerolink/frontend test -- --run src/__tests__/release-verification.test.ts src/__tests__/release-verification-entry.test.ts src/__tests__/bootstrap.test.ts`.
+
+### Phase 15: Exclude mutable SPA entry HTML from the signed manifest
+- `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts` — Excluded `index.html` from the signed manifest so the release verifier only hashes stable runtime assets, and added regression coverage that locks out SPA entry HTML alongside Pages control files.
+- `packages/frontend/src/__tests__/release-verification.test.ts` — Updated the browser-side verification fixture to mirror the real manifest shape by signing immutable assets only, not the mutable SPA entry HTML.
+- `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Updated the verification and deployment docs to describe the new trust boundary: stable runtime assets remain signed, while `index.html` stays outside the manifest because edge platforms can inject request-specific HTML.
+- Validation: `pnpm exec vitest run scripts/__tests__/generate-manifest.test.ts`, `pnpm --filter @zerolink/frontend test -- --run src/__tests__/release-verification.test.ts`.
 
 ### Phase 14: Release guard cache hotfix
 - `packages/frontend/public/_headers`, `packages/frontend/src/__tests__/pages-headers.test.ts` — Restored the SPA entry cache policy from `no-cache` to `no-store` so Cloudflare Pages cannot replay stale HTML across signed deployments, and updated the regression test to enforce the `no-store` invariant while keeping hashed assets immutable.
@@ -123,16 +142,24 @@ Hotfix the deployed Verified Release cache regression so signed `index.html` can
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Push the hotfix branch and open a PR for the cache-header rollback
+1. [ ] Push the follow-up branch and update the open PR with the entry-binding fix
 2. [ ] Re-run deploy checks with the real `MANIFEST_SIGNING_KEY` in GitHub Actions
-3. [ ] Redeploy Pages so the SPA entry HTML returns to `Cache-Control: no-store`
+3. [ ] Redeploy Pages and confirm staging no longer blocks on mutated HTML or stale entry-bundle mismatches
+
+## Earlier Update (2026-03-10)
+
+- Aligned `pnpm manifest:verify` with the browser trust model so release validation now fails if `entryAssetPath` is missing, unsafe, or disagrees with the entry bundle referenced by `dist/index.html`.
+- Added `entryAssetPath` to the signed manifest so the browser can prove the currently executing bootstrap entry bundle belongs to the same signed release as the hashed runtime assets.
+- Kept `index.html` outside the signed hash list to tolerate Cloudflare-injected HTML mutations, but added a one-time session reload when the running entry bundle does not match the signed manifest entry.
+- Split the browser verifier/bootstrap helpers to keep the implementation readable while preserving fail-closed behavior after a single unsuccessful recovery attempt.
+- Re-ran the focused manifest-generation and bootstrap/release-verification unit tests locally after the entry-binding follow-up.
 
 ## Latest Update (2026-03-10)
 
-- Root-caused the production `Release Verification Failed` screen to the SPA entry cache policy change from `no-store` to `no-cache`, which allowed stale `index.html` responses to drift from the freshly published signed manifest after deploy.
-- Restored `packages/frontend/public/_headers` so all SPA entry requests are `Cache-Control: no-store` again, while keeping hashed `/assets/*` responses immutable.
-- Added a regression test that fails if the SPA entry cache policy ever drifts away from `no-store`, and re-ran the release-verification unit coverage plus a production frontend build.
-- Regenerated `packages/frontend/dist/manifest.json` and `manifest-hash.txt` locally, but could not complete `manifest:sign` / `manifest:verify` without the deployment-only `MANIFEST_SIGNING_KEY`.
+- Reproduced the post-merge staging failure in a real browser and confirmed the signed `manifest.json` still listed `index.html`, but Cloudflare was serving request-mutated HTML for both `/` and `/index.html`.
+- Verified that the staging HTML bytes differ from the manifest because the edge layer injects request-specific challenge markup into the bootstrap shell, which makes `index.html` an unstable signing target even after restoring `Cache-Control: no-store`.
+- Updated manifest generation and tests so signed releases now cover stable runtime assets only, excluding `index.html` alongside Pages control files.
+- Aligned the verification/deployment docs and `_project_specs` notes with the narrower trust boundary, and re-ran the focused manifest-generation and browser verification unit tests locally.
 
 ## Latest Update (2026-03-09)
 

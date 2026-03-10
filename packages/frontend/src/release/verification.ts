@@ -1,9 +1,7 @@
-export interface ReleaseManifest {
-  version: string;
-  commitHash: string;
-  buildTime: string;
-  files: Record<string, string>;
-}
+import { computePublicKeyFingerprint, sha256Hex, verifyManifestSignature } from './crypto';
+import { isSafeManifestPath, normalizeBaseUrl, parseManifest, toReleasePath } from './manifest';
+
+export { computePublicKeyFingerprint, pemToSpkiBytes } from './crypto';
 
 export interface VerifiedReleaseSnapshot {
   status: 'verified';
@@ -18,7 +16,12 @@ export interface VerifiedReleaseSnapshot {
 
 export interface ReleaseVerificationFailure {
   status: 'failed';
-  reason: 'signature_invalid' | 'asset_missing' | 'asset_hash_mismatch' | 'invalid_manifest_path';
+  reason:
+    | 'signature_invalid'
+    | 'asset_missing'
+    | 'asset_hash_mismatch'
+    | 'invalid_manifest_path'
+    | 'entry_asset_mismatch';
   detail: string;
 }
 
@@ -39,106 +42,9 @@ export type ReleaseVerificationResult =
 
 export interface VerifyReleaseOptions {
   baseUrl: string;
+  currentEntryUrl: string;
   fetchImpl?: typeof fetch;
   publicKeyPem: string;
-}
-
-function decodeBase64(base64: string): Uint8Array {
-  const normalized = atob(base64);
-  return Uint8Array.from(normalized, (char) => char.charCodeAt(0));
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
-function base64UrlToBytes(value: string): Uint8Array {
-  const normalized =
-    value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (value.length % 4)) % 4);
-  return decodeBase64(normalized);
-}
-
-export function pemToSpkiBytes(publicKeyPem: string): Uint8Array {
-  const base64 = publicKeyPem
-    .replace(/-----(BEGIN|END) PUBLIC KEY-----/gu, '')
-    .replace(/\s+/gu, '');
-  return decodeBase64(base64);
-}
-
-async function sha256Hex(input: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', toArrayBuffer(input));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function verifyManifestSignature(opts: {
-  manifestBytes: Uint8Array;
-  publicKeyPem: string;
-  signatureBase64Url: string;
-}): Promise<boolean> {
-  const { manifestBytes, publicKeyPem, signatureBase64Url } = opts;
-  const publicKey = await crypto.subtle.importKey(
-    'spki',
-    toArrayBuffer(pemToSpkiBytes(publicKeyPem)),
-    { name: 'Ed25519' },
-    false,
-    ['verify']
-  );
-
-  return crypto.subtle.verify(
-    { name: 'Ed25519' },
-    publicKey,
-    toArrayBuffer(base64UrlToBytes(signatureBase64Url)),
-    toArrayBuffer(manifestBytes)
-  );
-}
-
-export async function computePublicKeyFingerprint(publicKeyPem: string): Promise<string> {
-  return sha256Hex(pemToSpkiBytes(publicKeyPem));
-}
-
-function isSafeManifestPath(relativePath: string): boolean {
-  if (!/^[A-Za-z0-9._/-]+$/u.test(relativePath)) {
-    return false;
-  }
-  if (
-    relativePath.startsWith('/') ||
-    relativePath.startsWith('./') ||
-    relativePath.includes('//')
-  ) {
-    return false;
-  }
-  const segments = relativePath.split('/');
-  return segments.every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return new URL('/', baseUrl).href;
-}
-
-function parseManifest(rawManifest: string): ReleaseManifest | null {
-  const parsed = JSON.parse(rawManifest) as Partial<ReleaseManifest>;
-  if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
-    return null;
-  }
-  if (typeof parsed.commitHash !== 'string' || parsed.commitHash.length === 0) {
-    return null;
-  }
-  if (typeof parsed.buildTime !== 'string' || Number.isNaN(Date.parse(parsed.buildTime))) {
-    return null;
-  }
-  if (!parsed.files || typeof parsed.files !== 'object' || Array.isArray(parsed.files)) {
-    return null;
-  }
-
-  const files = Object.entries(parsed.files).every(
-    ([relativePath, hash]) =>
-      typeof relativePath === 'string' && /^[0-9a-f]{64}$/u.test(String(hash))
-  );
-  if (!files) {
-    return null;
-  }
-
-  return parsed as ReleaseManifest;
 }
 
 async function fetchText(fetchImpl: typeof fetch, url: string): Promise<string | null> {
@@ -210,6 +116,15 @@ export async function verifyRelease(
       detail: 'This browser cannot import the embedded publisher key for Ed25519 verification.',
       reason: 'crypto_unavailable',
       status: 'unavailable',
+    };
+  }
+
+  const currentEntryPath = toReleasePath(options.currentEntryUrl, baseUrl);
+  if (currentEntryPath === null || currentEntryPath !== manifest.entryAssetPath) {
+    return {
+      detail: 'The running bootstrap entry asset does not match the signed release manifest entry.',
+      reason: 'entry_asset_mismatch',
+      status: 'failed',
     };
   }
 
