@@ -245,3 +245,12 @@ This is append-only. Never delete entries.
 **Choice**: Change `manifest:generate` so it walks `dist/assets/` only, leaves root documents such as `index.html`, `robots.txt`, icons, and sitemap-style files outside the signed hash set, and still requires `entryAssetPath` to point to one of the signed asset files.
 **Reasoning**: The runtime assets under `/assets/` are the stable, hashed build outputs that actually execute in the browser and are least likely to be rewritten by the edge. Signing only that subtree gives the release guard a cleaner and more durable trust boundary while preserving protection against bundle drift or tampering.
 **Trade-offs**: Root-level executable files would now be unsigned by default, so any future service worker or other high-privilege script shipped outside `/assets/` must either move under `/assets/` or be added explicitly to the signing policy.
+
+## [2026-03-10] Pull requests must pass CI before merge
+
+**Decision**: Add a dedicated `pr-validate.yml` workflow with independent `PR Quality`, `PR Build`, and `PR E2E` jobs on `pull_request` and `merge_group`, while keeping signing and deployment in `deploy.yml` after merge.
+**Context**: The repository previously ran checklist validation on pull requests, but typecheck, unit tests, Playwright E2E, and frontend build only ran from `deploy.yml` after a `push` to `main`. That allowed squash merges to land broken code before CI failed.
+**Options Considered**: Keep post-merge-only validation; move every deploy step into PR CI; add a PR-only validation workflow for secret-free quality gates and leave deploy/signing post-merge.
+**Choice**: Create a PR validation workflow that installs dependencies, runs root typecheck/tests, builds the frontend with release verification enabled, and runs Playwright Chromium E2E before merge. Keep `manifest:sign`, manifest verification with signing artifacts, and Cloudflare deploy steps in the post-merge deploy workflow. Also let the existing checklist workflow report a success result on `merge_group` so required checks remain merge-queue compatible.
+**Reasoning**: This makes failing tests and builds block squash merge, gives branch protection stable required check names, and avoids exposing trusted deployment secrets to untrusted PR contexts.
+**Trade-offs**: Dependency installation now happens in three PR jobs, so PR CI will use more minutes than the old checklist-only flow. Branch protection still requires a one-time repository settings update after the workflow merges.

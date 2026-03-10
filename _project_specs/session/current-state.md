@@ -4,15 +4,20 @@
 
 ## Active Task
 
-Fix post-merge Playwright regressions caused by Create defaulting to Quick Share.
+Add PR-side validation gates so tests and builds fail before squash merge.
 
 ## Current Status
 
-- **Phase**: In progress on `fix/e2e-passkey-regressions`
-- **Progress**: Main is merged with non-discoverable passkeys, and the remaining follow-up is stabilizing passkey-backed E2E coverage against the new Quick Share default by waiting for Create-page initialization before switching to Secure Share.
-- **Known Constraint**: `pnpm manifest:verify` stops locally at `manifest.sig` because `MANIFEST_SIGNING_KEY` is a CI-only secret. This is expected and not a blocker for local development.
+- **Phase**: Ready for PR on `ci/pr-validation-gates`
+- **Progress**: Implemented a dedicated `pr-validate.yml` workflow so `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, frontend build, and Playwright E2E run on `pull_request` / `merge_group` before merge, while manifest signing and deployment stay post-merge in `deploy.yml`.
+- **Known Constraint**: Branch protection and required-check selection for `main` still need the one-time GitHub repository settings change after this PR merges.
 
 ## Latest Update (2026-03-10)
+
+- `.github/workflows/pr-validate.yml`, `.github/workflows/pr-checklist.yml` — Added PR-only validation jobs (`PR Quality`, `PR Build`, `PR E2E`) on `pull_request` and `merge_group`, and taught the checklist-only workflow to report cleanly for merge groups so required checks stay compatible with merge queue.
+- `.github/workflows/deploy.yml` — Kept signed-manifest and deploy steps on `push main`, and excluded `pr-validate.yml`-only changes from triggering the post-merge deploy pipeline.
+- `_project_specs/session/decisions.md`, `_project_specs/session/code-landmarks.md`, `_project_specs/todos/completed.md` — Recorded the new “tests/build before merge” policy and the new CI entrypoint for future sessions.
+- Validation: `pnpm typecheck`, `pnpm test`, `VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm --filter @zerolink/frontend test:e2e`
 
 - `packages/backend/src/crypto/webauthn.ts`, `packages/frontend/src/crypto/webauthn.ts` — Switched passkey registration overlays from resident/discoverable credentials to `residentKey: 'discouraged'`, while keeping profile-specific user verification requirements.
 - `packages/backend/src/do/SecretVault.ts`, `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts` — Extended `compound_begin` so WebAuthn-managed channels can return `allowCredentials` derived from the stored `credentialId`, removing the sender manage/update flow's dependence on browser-side credential discovery.

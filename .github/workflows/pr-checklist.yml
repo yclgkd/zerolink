@@ -2,14 +2,23 @@ name: PR Checklist
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    branches:
+      - main
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   checklist:
     name: All tasks completed
     runs-on: ubuntu-latest
     steps:
+      - name: Reuse checklist result for merge groups
+        if: github.event_name == 'merge_group'
+        run: echo "Merge groups rely on the validated source pull request checklist."
+
       - name: Check for unchecked tasks
+        if: github.event_name == 'pull_request'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
