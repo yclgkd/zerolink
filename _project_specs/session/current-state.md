@@ -3,12 +3,14 @@
 *Last updated: 2026-03-10*
 
 ## Active Task
-Tighten the signed manifest boundary so it only covers `dist/assets/` runtime outputs, avoiding Cloudflare-managed root-document mutations such as `robots.txt`.
+
+None. Release integrity chain and Lighthouse fixes are fully merged and deployed.
 
 ## Current Status
-- **Phase**: Runtime-asset whitelist follow-up complete, ready to push
-- **Progress**: Confirmed custom-domain staging differs from `pages.dev` because Cloudflare mutates root documents, even when the signed `/assets/*` runtime files remain identical. Manifest generation now signs `dist/assets/` only, leaving `robots.txt` and other mutable root files outside the trust boundary while keeping `entryAssetPath` bound to a signed asset bundle.
-- **Blocking Issues**: Official `manifest:sign` / `manifest:verify` validation still requires the deployment-only `MANIFEST_SIGNING_KEY`, which is not available in this local environment.
+
+- **Phase**: Stable — all planned release-guard phases (11–18) and Lighthouse follow-ups are merged to main
+- **Progress**: Signed manifest covers `dist/assets/` only (PR #124). `index.html` and root documents are excluded. `entryAssetPath` binding enforced in both browser and CLI verifiers. Staging custom-domain failure is resolved.
+- **Known Constraint**: `pnpm manifest:verify` stops locally at `manifest.sig` because `MANIFEST_SIGNING_KEY` is a CI-only secret. This is expected and not a blocker for local development.
 
 ## What Was Done
 
@@ -147,9 +149,11 @@ Tighten the signed manifest boundary so it only covers `dist/assets/` runtime ou
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Validate the `dist/assets/` whitelist locally and in CI with the real signing key
-2. [ ] Redeploy staging and confirm the custom domain no longer fails on Cloudflare-mutated `robots.txt`
-3. [ ] Re-check custom-domain responses for any remaining mutable files outside the signed asset set
+
+All prior next steps are complete:
+- [x] `dist/assets/` whitelist shipped in PR #124 and validated in CI
+- [x] Staging redeployed; custom domain no longer fails on Cloudflare-mutated root documents
+- [x] No remaining mutable files inside the signed asset boundary
 
 ## Earlier Update (2026-03-10)
 

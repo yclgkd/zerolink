@@ -88,6 +88,34 @@ official Pages deploy now runs: `pnpm build` → `pnpm manifest:generate` → `p
 
 ---
 
+## DONE-017: Original backlog items 101–107, 110
+
+**Completed**: across 2026-02-24 – 2026-03-10
+
+Tracks closure of the original project backlog that predates the DONE-XXX numbering scheme:
+- **TODO-101** (full create flow) — implemented in Phase 4; Quick Share + Secure Share UI/API
+- **TODO-102** (secret decryption flow) — implemented in Phase 4; decrypt store + orchestrator
+- **TODO-103** (WebAuthn passkey integration) — implemented in Phase 2/3; `@github/webauthn-json`
+- **TODO-105** (TTL and expiry) — see DONE-004; Durable Object alarm + lazy expiry
+- **TODO-106** (rate limiting) — backend route-level rate limiting; E2E coverage in DONE-009
+- **TODO-107** (E2E Playwright tests) — see DONE-009; full happy-path + failure-mode specs
+- **TODO-110** (production deployment) — see DONE-010; CI/CD pipeline + `deploy.yml`
+
+---
+
+## DONE-016: Lighthouse accessibility, SEO, and performance fixes
+
+**Completed**: 2026-03-10
+
+Added `robots.txt`, `<meta name="description">`, fixed primary button color contrast
+(`#a855f7` → `#9333ea`, WCAG AA), corrected heading order in manifest-info card (h3 → h2),
+added security response headers (CSP, HSTS 2y+preload, COOP, X-Frame-Options, Referrer-Policy),
+replaced non-composited `transition-all` with `transition-[opacity,transform]` on buttons and
+profile cards, and added test assertions for all new security headers.
+Closes original TODO-108 (accessibility audit) and TODO-109 (performance optimization).
+
+---
+
 ## DONE-001: Monorepo initialization
 
 **Completed**: 2026-02-24
