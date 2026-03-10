@@ -182,3 +182,12 @@ This is append-only. Never delete entries.
 **Choice**: Gate bootstrap verification behind `VITE_RELEASE_VERIFICATION_REQUIRED=true`, inject that flag only in the official Pages deploy workflow, keep unsigned environments runnable but unverified, and set Pages headers so `/*` is `no-store` while `/assets/*` first clears inherited cache headers and then sets immutable caching.
 **Reasoning**: This preserves the fail-closed guarantee where it is trustworthy and intentional, restores local preview/manual deploy usability, and prevents stale HTML/bootstrap shells from surviving across deployments while still allowing aggressive caching for hashed assets.
 **Trade-offs**: Manual deploys only get the `Verified Release` UX if they explicitly replicate the signed-release build flow, and the trust model remains tied to deployment discipline rather than a universal browser-side guarantee.
+
+## [2026-03-10] Signed-release SPA entry HTML must remain no-store
+
+**Decision**: Cloudflare Pages must serve the signed SPA entry HTML with `Cache-Control: no-store`; `no-cache` is not acceptable for the ZeroLink verified-release path.
+**Context**: A Lighthouse follow-up changed the global Pages header from `no-store` to `no-cache`. After deploy, the browser-side release verifier started failing on `index.html` hash mismatches because stale HTML could be replayed briefly while `manifest.json` and hashed assets had already advanced to the new signed release.
+**Options Considered**: Keep `no-cache` and weaken `index.html` verification; keep `no-cache` and tolerate transient release-guard failures; restore `no-store` for SPA entry HTML and preserve immutable caching only for hashed assets.
+**Choice**: Restore `/*` to `Cache-Control: no-store`, keep `/assets/*` immutable, and lock the invariant in a regression test.
+**Reasoning**: The verified-release flow assumes the bootstrap HTML and the signed manifest advance atomically from the browser's point of view. `no-store` is the simplest reliable way to prevent stale HTML replay across deploys without weakening the trust model.
+**Trade-offs**: SPA entry HTML loses cache re-use and BFCache-related optimizations that depend on cacheable document responses, but release-integrity guarantees take precedence on signed builds.

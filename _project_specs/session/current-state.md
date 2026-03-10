@@ -1,16 +1,21 @@
 # Current Session State
 
-*Last updated: 2026-03-09*
+*Last updated: 2026-03-10*
 
 ## Active Task
-Clarify the receiver-side lock flow copy on the share page.
+Hotfix the deployed Verified Release cache regression so signed `index.html` cannot drift from the published manifest after a Pages deploy.
 
 ## Current Status
-- **Phase**: Receiver share-flow wording follow-up complete, ready to push
-- **Progress**: Updated the receiver share page so waiting, locked, delivered, and unavailable states each show accurate header copy, and the locked-state follow-up instructions no longer imply the current device just completed the lock.
-- **Blocking Issues**: None
+- **Phase**: Release guard cache hotfix complete, ready to push
+- **Progress**: Restored the Cloudflare Pages SPA entry cache policy to `no-store`, added a regression test that locks this requirement in, and verified the frontend build plus release-verification tests locally.
+- **Blocking Issues**: Official `manifest:sign` / `manifest:verify` validation still requires the deployment-only `MANIFEST_SIGNING_KEY`, which is not available in this local environment.
 
 ## What Was Done
+
+### Phase 14: Release guard cache hotfix
+- `packages/frontend/public/_headers`, `packages/frontend/src/__tests__/pages-headers.test.ts` — Restored the SPA entry cache policy from `no-cache` to `no-store` so Cloudflare Pages cannot replay stale HTML across signed deployments, and updated the regression test to enforce the `no-store` invariant while keeping hashed assets immutable.
+- Validation: `pnpm --filter @zerolink/frontend test -- --run src/__tests__/pages-headers.test.ts`, `pnpm --filter @zerolink/frontend test -- --run src/__tests__/release-verification.test.ts`, `pnpm --filter @zerolink/frontend build`, `pnpm manifest:generate`.
+- Constraint: `pnpm manifest:verify` stops locally at missing `packages/frontend/dist/manifest.sig` because the official signing step depends on the unavailable `MANIFEST_SIGNING_KEY`.
 
 ### Phase 13: Receiver lock-flow wording clarification
 - `packages/frontend/src/pages/SharePage.tsx`, `packages/frontend/src/components/share/share-steps.tsx` — Reframed the receiver page as an explicit receiver-only flow, renamed the step labels and headings, clarified that the sender created the channel first, and updated the lock/next-step copy so sender and receiver responsibilities are unambiguous.
@@ -118,9 +123,16 @@ Clarify the receiver-side lock flow copy on the share page.
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Push the refreshed branch so the open PR is conflict-free
-2. [ ] Confirm PR checks after the branch update
-3. [ ] Squash merge the open PR once GitHub reports mergeable
+1. [ ] Push the hotfix branch and open a PR for the cache-header rollback
+2. [ ] Re-run deploy checks with the real `MANIFEST_SIGNING_KEY` in GitHub Actions
+3. [ ] Redeploy Pages so the SPA entry HTML returns to `Cache-Control: no-store`
+
+## Latest Update (2026-03-10)
+
+- Root-caused the production `Release Verification Failed` screen to the SPA entry cache policy change from `no-store` to `no-cache`, which allowed stale `index.html` responses to drift from the freshly published signed manifest after deploy.
+- Restored `packages/frontend/public/_headers` so all SPA entry requests are `Cache-Control: no-store` again, while keeping hashed `/assets/*` responses immutable.
+- Added a regression test that fails if the SPA entry cache policy ever drifts away from `no-store`, and re-ran the release-verification unit coverage plus a production frontend build.
+- Regenerated `packages/frontend/dist/manifest.json` and `manifest-hash.txt` locally, but could not complete `manifest:sign` / `manifest:verify` without the deployment-only `MANIFEST_SIGNING_KEY`.
 
 ## Latest Update (2026-03-09)
 
