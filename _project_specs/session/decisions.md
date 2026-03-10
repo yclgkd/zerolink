@@ -218,3 +218,12 @@ This is append-only. Never delete entries.
 **Choice**: Parse the signed manifest with `entryAssetPath` validation, then compare it to the module entry extracted from `dist/index.html` as part of `pnpm manifest:verify`.
 **Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
 **Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.
+
+## [2026-03-10] Signed manifest should whitelist `dist/assets/` runtime outputs
+
+**Decision**: Generate the signed manifest from `dist/assets/` only, instead of signing arbitrary root-level files and excluding them via a blacklist.
+**Context**: After `index.html` was removed from the manifest, the custom staging domain still failed release verification because Cloudflare was mutating `robots.txt` by injecting managed content directives. The actual runtime bundles under `/assets/` remained byte-identical across `pages.dev` and the custom domain, so root-document mutation had become the remaining false-positive source.
+**Options Considered**: Keep adding root-document exclusions one by one; disable Cloudflare-managed mutations everywhere; whitelist only `dist/assets/` runtime outputs and keep the separate `entryAssetPath` binding to the bootstrap bundle.
+**Choice**: Change `manifest:generate` so it walks `dist/assets/` only, leaves root documents such as `index.html`, `robots.txt`, icons, and sitemap-style files outside the signed hash set, and still requires `entryAssetPath` to point to one of the signed asset files.
+**Reasoning**: The runtime assets under `/assets/` are the stable, hashed build outputs that actually execute in the browser and are least likely to be rewritten by the edge. Signing only that subtree gives the release guard a cleaner and more durable trust boundary while preserving protection against bundle drift or tampering.
+**Trade-offs**: Root-level executable files would now be unsigned by default, so any future service worker or other high-privilege script shipped outside `/assets/` must either move under `/assets/` or be added explicitly to the signing policy.

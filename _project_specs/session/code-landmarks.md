@@ -65,4 +65,4 @@ UPDATE WHEN:
 | Durable Objects | Single-location consistency | DO must be in same region as KV for performance |
 | `@noble/hashes` | Not WebCrypto | Runs synchronously; may block UI on heavy params |
 | Biome | No ESLint plugins | Some rules need manual enforcement |
-| `packages/frontend/src/release/verification.ts` | Verified Release only covers stable runtime-served same-origin assets | Pages control files and mutable HTML entry docs such as `index.html` are excluded from the signed runtime manifest, but the executing bootstrap entry bundle must still match `manifest.entryAssetPath` |
+| `packages/frontend/src/release/verification.ts` | Verified Release only covers stable runtime-served same-origin assets | The signed runtime manifest is intentionally limited to `dist/assets/*`; root documents such as `index.html` and `robots.txt` are excluded, but the executing bootstrap entry bundle must still match `manifest.entryAssetPath` |
