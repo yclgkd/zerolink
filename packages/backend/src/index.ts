@@ -11,7 +11,6 @@ import {
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
-  RATE_LIMITER: RateLimit;
   RP_ID: string;
   RP_ORIGIN: string;
 }
@@ -306,30 +305,9 @@ async function handleCompoundCommit(
   return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsedData);
 }
 
-async function checkRateLimit(request: Request, env: Env): Promise<Response | null> {
-  const ip = request.headers.get('CF-Connecting-IP');
-  if (!ip) {
-    // No CF-Connecting-IP means the request is not coming through Cloudflare
-    // (e.g., local dev or direct Worker invocation). Skip rate limiting.
-    return null;
-  }
-  const { success } = await env.RATE_LIMITER.limit({ key: ip });
-  if (!success) {
-    const headers = buildApiHeaders();
-    headers.set('Retry-After', '60');
-    return jsonApiResponse({ ok: false, code: 'RATE_LIMITED' }, 429, headers);
-  }
-  return null;
-}
-
 async function handleApiRequest(request: Request, pathname: string, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return preflight();
-  }
-
-  const rateLimitResponse = await checkRateLimit(request, env);
-  if (rateLimitResponse !== null) {
-    return rateLimitResponse;
   }
 
   const lockBeginMatch = pathname.match(LOCK_BEGIN_PATH);
@@ -418,13 +396,17 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
 
 const worker: ExportedHandler<Env> = {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
-    if (!isApiPath(url.pathname)) {
-      return new Response('ZeroLink API', { status: 200 });
+      if (!isApiPath(url.pathname)) {
+        return new Response('ZeroLink API', { status: 200 });
+      }
+
+      return await handleApiRequest(request, url.pathname, env);
+    } catch {
+      return errorResponse('INTERNAL_ERROR', 500);
     }
-
-    return handleApiRequest(request, url.pathname, env);
   },
 };
 
