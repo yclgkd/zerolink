@@ -277,12 +277,13 @@ function CopyableLinkRow({
     <div className="space-y-1.5">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <code
-          className="flex-1 break-all rounded bg-muted/60 px-2 py-1.5 text-xs text-neon-cyan"
+        <a
+          className="flex-1 break-all rounded bg-muted/60 px-2 py-1.5 font-mono text-xs text-neon-cyan hover:underline"
           data-testid={testId}
+          href={url}
         >
           {url}
-        </code>
+        </a>
         <button
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/70 bg-card/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           data-testid={copyTestId}

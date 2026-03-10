@@ -15,7 +15,10 @@ const VALID_MANIFEST_JSON = JSON.stringify({
   version: '0.0.0-test',
   commitHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   buildTime: '2026-01-01T00:00:00.000Z',
-  files: {},
+  entryAssetPath: 'assets/index-test.js',
+  files: {
+    'assets/index-test.js': 'a'.repeat(64),
+  },
 });
 
 // Valid base64url characters but cryptographically wrong — will fail Ed25519.

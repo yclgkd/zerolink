@@ -54,6 +54,13 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run E2E tests
+        run: pnpm --filter frontend test:e2e
+
   deploy-backend:
     name: Deploy Worker (${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }})
     needs: test
