@@ -55,7 +55,9 @@ export function ManifestInfo(): ReactElement | null {
     <Card className="border-neon-cyan/20 bg-card/60" data-testid="manifest-info-card">
       <CardHeader className="py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-sm font-semibold text-neon-cyan">Verified Release</CardTitle>
+          <CardTitle asChild className="text-sm font-semibold text-neon-cyan">
+            <h2>Verified Release</h2>
+          </CardTitle>
           <Badge
             className="border-neon-green/30 bg-neon-green/10 px-3 py-1 text-neon-green"
             variant="secondary"
