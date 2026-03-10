@@ -8,14 +8,15 @@ detect tampering in the published runtime assets before the user can interact wi
 
 - **Ed25519 signature** — `manifest.sig` is a cryptographic signature over `manifest.json` using the ZeroLink signing key.
 - **Signed entry binding** — `manifest.json` records the expected bootstrap entry bundle path in `entryAssetPath`, and the browser refuses to trust a release if the currently executing entry asset does not match it.
-- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the stable, publicly fetchable runtime files in the release build, such as hashed JS, CSS, fonts, and other immutable assets.
+- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the stable runtime build outputs under `dist/assets/`, such as hashed JS, CSS, fonts, and other immutable asset files.
 - **Manifest hash** — `manifest-hash.txt` contains the SHA-256 of `manifest.json` itself; this is displayed in the app's **Verified Release** card as a public fingerprint, not as the trust anchor.
 
 Pages control files such as `_headers` and `_redirects` are intentionally excluded from the signed
-runtime manifest because they are deployment metadata, not browser-fetched release assets.
-The SPA entry document `index.html` is also excluded because edge platforms can inject request-
-specific HTML into the bootstrap shell, which makes byte-for-byte signing of that document unstable
-even when the underlying deployment is healthy.
+runtime manifest because they are deployment metadata, not browser-fetched release assets. Root
+documents such as `index.html`, `robots.txt`, icons, and other non-asset files are also excluded.
+The SPA entry document `index.html` in particular is left unsigned because edge platforms can
+inject request-specific HTML into the bootstrap shell, which makes byte-for-byte signing of that
+document unstable even when the underlying deployment is healthy.
 
 ## What the browser does during bootstrap
 
@@ -62,7 +63,8 @@ When bootstrap verification succeeds, the shell renders a `Verified Release` car
 - Publisher key fingerprint
 
 Cloudflare Pages serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
-shell is never reused across deployments, while hashed `/assets/*` files remain immutable. The HTML
+shell is never reused across deployments, while hashed `/assets/*` files remain immutable. The
+signed manifest is intentionally limited to `dist/assets/*` runtime build outputs; the HTML
 document itself is not hashed, but the bootstrap entry asset it launches must still match the
 signed manifest.
 

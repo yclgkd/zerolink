@@ -4,6 +4,18 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-015: Whitelist `dist/assets/` for signed manifest generation
+
+**Completed**: 2026-03-10
+
+Followed up the custom-domain staging failure after confirming Cloudflare was mutating
+root-level documents such as `robots.txt` while leaving the hashed runtime bundles unchanged.
+Changed `manifest:generate` from a root-level blacklist to an `assets/` whitelist so the signed
+manifest now covers only stable runtime build outputs under `dist/assets/`, while `entryAssetPath`
+must still point at one of those signed asset files. Updated the generator tests, verification and
+deployment docs, and `_project_specs` notes to reflect the narrower and more durable trust
+boundary.
+
 ## DONE-014: Align CLI manifest verification with signed entry binding
 
 **Completed**: 2026-03-10

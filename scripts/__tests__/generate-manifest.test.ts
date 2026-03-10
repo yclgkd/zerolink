@@ -90,14 +90,16 @@ describe('collectFilePaths', () => {
     expect(relative).toEqual(['assets/app.css', 'assets/app.js']);
   });
 
-  it('excludes manifest.json when it exists inside the directory', async () => {
-    // The function excludes MANIFEST_PATH (dist/manifest.json from the constants).
-    // For this test we verify non-manifest files are all included.
+  it('ignores root-level files outside the signed assets directory', async () => {
+    await fs.mkdir(path.join(tmpDir, 'assets'), { recursive: true });
     await fs.writeFile(path.join(tmpDir, 'app.js'), 'var x = 1;');
-    await fs.writeFile(path.join(tmpDir, 'style.css'), 'body {}');
+    await fs.writeFile(path.join(tmpDir, 'robots.txt'), 'User-agent: *');
+    await fs.writeFile(path.join(tmpDir, 'assets', 'style.css'), 'body {}');
 
     const paths = await collectFilePaths(tmpDir);
-    expect(paths).toHaveLength(2);
+    expect(paths.map((filePath) => toPosixRelativePath(filePath, tmpDir))).toEqual([
+      'assets/style.css',
+    ]);
   });
 
   it('returns empty array for an empty directory', async () => {
@@ -105,19 +107,18 @@ describe('collectFilePaths', () => {
     expect(paths).toHaveLength(0);
   });
 
-  it('excludes HTML entry documents and Pages control files from the signed release manifest', async () => {
+  it('returns empty when dist only contains root documents outside the whitelist', async () => {
     await fs.writeFile(path.join(tmpDir, '_redirects'), '/ /index.html 200');
     await fs.writeFile(path.join(tmpDir, '_headers'), '/index.html\n  Cache-Control: no-store');
     await fs.writeFile(path.join(tmpDir, 'index.html'), '<html></html>');
+    await fs.writeFile(path.join(tmpDir, 'robots.txt'), 'User-agent: *\nAllow: /\n');
 
     const paths = await collectFilePaths(tmpDir);
-    const relative = paths.map((p) => toPosixRelativePath(p, tmpDir));
-
-    expect(relative).toEqual([]);
+    expect(paths).toEqual([]);
   });
 
-  it('throws when directory does not exist', async () => {
-    await expect(collectFilePaths(path.join(tmpDir, 'nonexistent'))).rejects.toThrow();
+  it('returns empty when the signed assets directory does not exist', async () => {
+    await expect(collectFilePaths(path.join(tmpDir, 'nonexistent'))).resolves.toEqual([]);
   });
 });
 
@@ -142,12 +143,13 @@ describe('extractEntryAssetPath', () => {
 });
 
 describe('buildManifest', () => {
-  it('adds entryAssetPath while keeping index.html out of signed files', async () => {
+  it('adds entryAssetPath while keeping root documents out of signed files', async () => {
     await fs.mkdir(path.join(tmpDir, 'assets'), { recursive: true });
     await fs.writeFile(
       path.join(tmpDir, 'index.html'),
       '<script type="module" crossorigin src="/assets/index-abc123.js"></script>'
     );
+    await fs.writeFile(path.join(tmpDir, 'robots.txt'), 'User-agent: *\nAllow: /\n');
     await fs.writeFile(path.join(tmpDir, 'assets', 'index-abc123.js'), 'console.log("entry");');
 
     const manifest = await buildManifest({
@@ -160,13 +162,15 @@ describe('buildManifest', () => {
     expect(manifest.entryAssetPath).toBe('assets/index-abc123.js');
     expect(manifest.files).toHaveProperty('assets/index-abc123.js');
     expect(manifest.files).not.toHaveProperty('index.html');
+    expect(manifest.files).not.toHaveProperty('robots.txt');
   });
 
   it('throws when index.html points to an entry asset outside the signed manifest files', async () => {
     await fs.writeFile(
       path.join(tmpDir, 'index.html'),
-      '<script type="module" crossorigin src="/assets/index-missing.js"></script>'
+      '<script type="module" crossorigin src="/bootstrap.js"></script>'
     );
+    await fs.writeFile(path.join(tmpDir, 'bootstrap.js'), 'console.log("root entry");');
 
     await expect(
       buildManifest({

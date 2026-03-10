@@ -3,14 +3,19 @@
 *Last updated: 2026-03-10*
 
 ## Active Task
-Follow up the staging Verified Release regression by binding the running bootstrap entry bundle to the signed manifest while still excluding mutable SPA entry HTML from signed hashes.
+Tighten the signed manifest boundary so it only covers `dist/assets/` runtime outputs, avoiding Cloudflare-managed root-document mutations such as `robots.txt`.
 
 ## Current Status
-- **Phase**: Release guard entry-binding follow-up complete, ready to push
-- **Progress**: Kept `index.html` outside the signed hash set, added `entryAssetPath` to the manifest so the running bootstrap bundle must match the signed release, implemented a one-time recovery reload for stale entry shells, aligned the verification fixtures/docs, and verified the focused test suite locally.
+- **Phase**: Runtime-asset whitelist follow-up complete, ready to push
+- **Progress**: Confirmed custom-domain staging differs from `pages.dev` because Cloudflare mutates root documents, even when the signed `/assets/*` runtime files remain identical. Manifest generation now signs `dist/assets/` only, leaving `robots.txt` and other mutable root files outside the trust boundary while keeping `entryAssetPath` bound to a signed asset bundle.
 - **Blocking Issues**: Official `manifest:sign` / `manifest:verify` validation still requires the deployment-only `MANIFEST_SIGNING_KEY`, which is not available in this local environment.
 
 ## What Was Done
+
+### Phase 18: Restrict the signed manifest to `dist/assets/` runtime outputs
+- `scripts/generate-manifest.ts`, `scripts/__tests__/generate-manifest.test.ts` — Switched manifest generation from a root-directory blacklist to an `assets/` whitelist so root documents like `robots.txt` are excluded by construction, while `entryAssetPath` must still resolve to a signed asset bundle.
+- `docs/VERIFY.md`, `docs/DEPLOYMENT.md` — Updated the trust-boundary docs to say the signed manifest now covers only `dist/assets/*` runtime build outputs plus the signed bootstrap entry binding.
+- Validation: `pnpm exec vitest run scripts/__tests__/generate-manifest.test.ts`, `pnpm manifest:generate`.
 
 ### Phase 17: Align CLI manifest verification with browser entry binding
 - `scripts/verify-manifest.ts`, `scripts/verify-manifest-metadata.ts`, `scripts/verify-manifest-files.ts` — Made `pnpm manifest:verify` parse the new `entryAssetPath` shape, fail when the manifest metadata is invalid, and compare the signed entry asset against the actual module entry launched by `dist/index.html`.
@@ -142,12 +147,14 @@ Follow up the staging Verified Release regression by binding the running bootstr
 | `_project_specs/session/decisions.md` | Added decision entry |
 
 ## Next Steps
-1. [ ] Push the follow-up branch and update the open PR with the entry-binding fix
-2. [ ] Re-run deploy checks with the real `MANIFEST_SIGNING_KEY` in GitHub Actions
-3. [ ] Redeploy Pages and confirm staging no longer blocks on mutated HTML or stale entry-bundle mismatches
+1. [ ] Validate the `dist/assets/` whitelist locally and in CI with the real signing key
+2. [ ] Redeploy staging and confirm the custom domain no longer fails on Cloudflare-mutated `robots.txt`
+3. [ ] Re-check custom-domain responses for any remaining mutable files outside the signed asset set
 
 ## Earlier Update (2026-03-10)
 
+- Confirmed the custom staging domain was still failing because Cloudflare mutates `robots.txt` while leaving the signed `/assets/*` runtime files unchanged.
+- Narrowed the planned trust boundary again so the signed manifest will whitelist `dist/assets/*` runtime outputs instead of signing mutable root documents.
 - Aligned `pnpm manifest:verify` with the browser trust model so release validation now fails if `entryAssetPath` is missing, unsafe, or disagrees with the entry bundle referenced by `dist/index.html`.
 - Added `entryAssetPath` to the signed manifest so the browser can prove the currently executing bootstrap entry bundle belongs to the same signed release as the hashed runtime assets.
 - Kept `index.html` outside the signed hash list to tolerate Cloudflare-injected HTML mutations, but added a one-time session reload when the running entry bundle does not match the signed manifest entry.
