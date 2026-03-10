@@ -4,6 +4,18 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-011: Restore no-store on signed SPA entry HTML
+
+**Completed**: 2026-03-10
+
+Rolled back the Cloudflare Pages SPA entry cache policy from `no-cache` to `no-store` after the
+deployed Verified Release gate started failing on `index.html` hash mismatches. Added a regression
+test in `packages/frontend/src/__tests__/pages-headers.test.ts` so signed deployments keep
+`/*` as `no-store` while `/assets/*` remains immutable. Verified the hotfix with the targeted
+Pages-header test, release-verification unit tests, a production frontend build, and local
+manifest generation. Full `manifest:verify` remains dependent on the deployment-only
+`MANIFEST_SIGNING_KEY`.
+
 ## DONE-009: E2E coverage for expiration, rate-limit, and manifest verification
 
 **Completed**: 2026-03-10

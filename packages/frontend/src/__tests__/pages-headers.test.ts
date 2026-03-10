@@ -13,8 +13,8 @@ describe('Cloudflare Pages headers', () => {
     headers = readFileSync(path.join(frontendDir, 'public', '_headers'), 'utf8');
   });
 
-  it('marks SPA entry requests as no-cache and hashed assets as immutable', () => {
-    expect(headers).toContain('/*\n  Cache-Control: no-cache');
+  it('marks SPA entry requests as no-store and hashed assets as immutable', () => {
+    expect(headers).toContain('/*\n  Cache-Control: no-store');
     expect(headers).toContain(
       '/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable'
     );
