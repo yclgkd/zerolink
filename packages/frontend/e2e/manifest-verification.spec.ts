@@ -82,9 +82,15 @@ test.describe('release verification gate', () => {
       resolveManifest = resolve;
     });
 
+    let routeDone!: () => void;
+    const routeSettled = new Promise<void>((resolve) => {
+      routeDone = resolve;
+    });
+
     await page.route('**/manifest.json', async (route) => {
       await manifestBlocked;
       await route.fulfill({ status: 404 });
+      routeDone();
     });
 
     await page.goto('/');
@@ -95,5 +101,6 @@ test.describe('release verification gate', () => {
 
     // Unblock so the page can settle (avoids dangling route handlers).
     resolveManifest();
+    await routeSettled;
   });
 });

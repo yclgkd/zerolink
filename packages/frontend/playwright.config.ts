@@ -38,7 +38,7 @@ export default defineConfig({
     },
     {
       command:
-        'pnpm --filter @zerolink/frontend build --outDir dist-verification && pnpm --filter @zerolink/frontend exec vite preview --outDir dist-verification --host 127.0.0.1 --port 4174',
+        'pnpm --filter @zerolink/frontend build -- --outDir dist-verification && pnpm --filter @zerolink/frontend exec vite preview --outDir dist-verification --host 127.0.0.1 --port 4174',
       url: 'http://127.0.0.1:4174',
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,

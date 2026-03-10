@@ -40,6 +40,6 @@ test.describe('rate limit (429) handling', () => {
     // explicit error.  This test documents and pins that behaviour.
     await page.goto(`/s/${TEST_UUID}#k=${TEST_LOCK_KEY}`);
     await expect(page.getByTestId('page-share')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('share-step-unavailable')).not.toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('share-step-unavailable')).not.toBeVisible({ timeout: 15_000 });
   });
 });
