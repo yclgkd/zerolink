@@ -5,11 +5,13 @@ node_modules/
 
 # Build outputs
 dist/
+dist-verification/
 build/
 out/
 .next/
 .turbo/
 packages/frontend/dist/
+packages/frontend/dist-verification/
 
 # Testing
 coverage/
