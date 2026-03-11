@@ -401,6 +401,7 @@ const RP_ORIGIN = 'https://zerolink.test';
 const env: SecretVaultEnv = {
   SECRET_VAULT: {} as DurableObjectNamespace,
   SECRETS_KV: {} as KVNamespace,
+  APP_ENV: 'test',
   RP_ID,
   RP_ORIGIN,
 };

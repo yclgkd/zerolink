@@ -8,6 +8,69 @@ import type {
 } from './SecretVaultTypes.ts';
 import { StateTransitionError } from './SecretVaultTypes.ts';
 
+interface ErrorLogContext {
+  appEnv: string;
+  handler: string;
+}
+
+interface StructuredUnexpectedErrorLog {
+  event: 'secret_vault.unexpected_error';
+  app_env: string;
+  handler: string;
+  error_name: string;
+  stack_fingerprint: string;
+  error_message?: string;
+  error_stack?: string;
+  thrown_value?: string;
+}
+
+function isProductionAppEnv(appEnv: string): boolean {
+  return appEnv === 'production';
+}
+
+function fingerprintText(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function buildUnexpectedErrorLog(
+  error: unknown,
+  context: ErrorLogContext
+): StructuredUnexpectedErrorLog {
+  const baseLog: StructuredUnexpectedErrorLog = {
+    event: 'secret_vault.unexpected_error',
+    app_env: context.appEnv,
+    handler: context.handler,
+    error_name: error instanceof Error ? error.name : 'NonErrorThrow',
+    stack_fingerprint: fingerprintText(
+      error instanceof Error ? (error.stack ?? `${error.name}:${error.message}`) : String(error)
+    ),
+  };
+
+  if (isProductionAppEnv(context.appEnv)) {
+    return baseLog;
+  }
+
+  if (error instanceof Error) {
+    return {
+      ...baseLog,
+      error_message: error.message,
+      ...(error.stack ? { error_stack: error.stack } : {}),
+    };
+  }
+
+  return {
+    ...baseLog,
+    thrown_value: String(error),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // JSON response helpers
 // ---------------------------------------------------------------------------
@@ -75,17 +138,14 @@ export function normalizeAssertion(assertion: LooseAssertionJson): AssertionJSON
 // Error mappers
 // ---------------------------------------------------------------------------
 
-export function mapError(error: unknown): Response {
+export function mapError(error: unknown, context: ErrorLogContext): Response {
   if (error instanceof StateTransitionError) {
     return mapStateTransitionError(error);
   }
 
-  // Log unexpected errors so they appear in wrangler tail / Cloudflare dashboard
+  // Production logs keep only whitelisted metadata; staging retains raw details for debugging.
   // biome-ignore lint/suspicious/noConsole: intentional error logging for production observability
-  console.error(
-    '[SecretVault] unexpected error:',
-    error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error)
-  );
+  console.error(buildUnexpectedErrorLog(error, context));
 
   return jsonError('INTERNAL_ERROR', 500);
 }

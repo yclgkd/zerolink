@@ -11,6 +11,7 @@ import {
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
+  APP_ENV: string;
   RP_ID: string;
   RP_ORIGIN: string;
 }

@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-11] Worker observability stays environment-explicit and production logs are redacted
+
+**Decision**: Add a committed `APP_ENV` Worker variable, enable full Workers Logs only in staging, and keep production observability limited to custom logs with structured redaction.
+**Context**: ZeroLink needs enough runtime visibility to debug Durable Object failures, but the backend handles high-sensitivity flows where raw exception messages or stacks could accidentally preserve user-derived values in provider logs.
+**Options Considered**: Leave observability disabled everywhere; enable full invocation logs and detailed exceptions in every environment; split behavior by environment and log only a whitelisted production payload.
+**Choice**: Stage with invocation logs enabled and detailed exception text, production with `invocation_logs = false`, no tracing, and structured error records that keep only handler, environment, error name, and a stable stack fingerprint.
+**Reasoning**: This preserves fast debugging in staging while making the production logging surface intentionally small and reproducible in code review. An explicit `APP_ENV` binding is more reliable than inferring environment from hostnames or dashboard-only state.
+**Trade-offs**: Production incidents now require correlating stack fingerprints with staging or local reproductions instead of reading raw stack text directly from Cloudflare logs.
+
 ## [2026-03-11] Workflow and security docs must describe the shipped path precisely
 
 **Decision**: Keep runnable workflow examples complete, describe `/api/public/:uuid` as a minimal public snapshot rather than a non-disclosing endpoint, and scope Signed Manifest guarantees to signed-release builds that actually enable runtime verification.

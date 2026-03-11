@@ -960,7 +960,7 @@ export class SecretVault {
       const creationOptions = await this.beginCreate(parsed.data.uuid, parsed.data.securityProfile);
       return jsonResponse({ ok: true, creationOptions }, 200);
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'create_begin' });
     }
   }
 
@@ -1000,7 +1000,7 @@ export class SecretVault {
         200
       );
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'create_finish' });
     }
   }
 
@@ -1019,7 +1019,7 @@ export class SecretVault {
       const lockChallenge = await this.beginLockChallenge(parsed.data.uuid);
       return jsonResponse({ ok: true, lockChallenge }, 200);
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'lock_begin' });
     }
   }
 
@@ -1038,7 +1038,7 @@ export class SecretVault {
       const result = await this.beginCompoundChallenge(parsed.data.uuid);
       return jsonResponse({ ok: true, ...result }, 200);
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'compound_begin' });
     }
   }
 
@@ -1074,7 +1074,7 @@ export class SecretVault {
 
       return jsonResponse({ ok: true }, 200);
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'compound_commit' });
     }
   }
 
@@ -1094,7 +1094,7 @@ export class SecretVault {
       await this.commitLockChallenge(parsed.data as unknown as CommitLockChallengeParams);
       return jsonResponse({ ok: true }, 200);
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'lock_commit' });
     }
   }
 
@@ -1113,7 +1113,7 @@ export class SecretVault {
       }
       return jsonResponse(body, 200);
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'get_public_state' });
     }
   }
 
@@ -1138,7 +1138,7 @@ export class SecretVault {
         200
       );
     } catch (error) {
-      return mapError(error);
+      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'get_decrypt_payload' });
     }
   }
 }

@@ -2,6 +2,16 @@ name = "zerolink-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
+[vars]
+APP_ENV = "production"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+invocation_logs = false
+
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
 class_name = "SecretVault"
@@ -19,6 +29,16 @@ id = "b8313bed33c9492885c12c9d26034420"
 
 [env.staging]
 name = "zerolink-api-staging"
+
+[env.staging.vars]
+APP_ENV = "staging"
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+[env.staging.observability.logs]
+invocation_logs = true
 
 [[env.staging.durable_objects.bindings]]
 name = "SECRET_VAULT"
