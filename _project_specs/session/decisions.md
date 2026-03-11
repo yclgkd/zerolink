@@ -281,3 +281,12 @@ This is append-only. Never delete entries.
 **Choice**: Create a PR validation workflow that installs dependencies, runs root typecheck/tests, builds the frontend with release verification enabled, and runs Playwright Chromium E2E before merge. Keep `manifest:sign`, manifest verification with signing artifacts, and Cloudflare deploy steps in the post-merge deploy workflow. Also let the existing checklist workflow report a success result on `merge_group` so required checks remain merge-queue compatible.
 **Reasoning**: This makes failing tests and builds block squash merge, gives branch protection stable required check names, and avoids exposing trusted deployment secrets to untrusted PR contexts.
 **Trade-offs**: Dependency installation now happens in three PR jobs, so PR CI will use more minutes than the old checklist-only flow. Branch protection still requires a one-time repository settings update after the workflow merges. The workflow must also listen to `pull_request.edited` so retargeting an existing PR to `main` still produces the required checks without needing another push.
+
+## [2026-03-11] ManagePage should only ask for a channel password when an action needs it
+
+**Decision**: Hide the password-managed channel password input on the sender Manage page while the channel is still idly `waiting`, and only reveal it when the sender is in a state that can act on it (`locked` delivery or delete confirmation).
+**Context**: The Manage page previously rendered the password field immediately for password-managed channels even before the receiver had locked the channel. That suggested the sender needed to do something before lock, which conflicted with the status copy and confused the flow.
+**Options Considered**: Keep the password field always visible for password-managed channels; hide it until backend errors require it; show it only alongside delivery or delete-confirm actions that actually consume the password.
+**Choice**: Render the password input only when the delivery composer is available or when the sender opens delete confirmation.
+**Reasoning**: This keeps the idle waiting state aligned with the real protocol, removes a misleading prompt, and still preserves the ability to delete a password-managed channel before lock.
+**Trade-offs**: Password-managed delete now reveals the credential field one interaction later, after the sender opens the confirm step.

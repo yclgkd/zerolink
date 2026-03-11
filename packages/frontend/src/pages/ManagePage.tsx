@@ -879,7 +879,10 @@ export function ManagePage(): ReactElement {
   const isTerminalState = isTerminalManageState(state.status, showUnavailableState);
   const showShareLink = !isTerminalState;
   const showDeliveryComposer = !isTerminalState && canComposeDelivery(state.status);
-  const showPasswordSection = !isTerminalState && usesPasswordManagedChannel;
+  const showPasswordSection =
+    !isTerminalState &&
+    usesPasswordManagedChannel &&
+    (showDeliveryComposer || state.showDestroyConfirm);
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
