@@ -10,6 +10,8 @@ This is append-only. Never delete entries.
 
 # Decision Log
 
+Entries are append-only. Follow-up backfills may make the bracketed dates non-monotonic in file order, so treat the date in each heading as canonical.
+
 ## [2026-03-11] Durable Object alarm scheduling must fail closed on corrupt timing state, and staging may reset its namespace independently
 
 **Decision**: Reconcile nonce cleanup inside the alarm scheduler, delete alarms when the next candidate is not a finite future timestamp, treat malformed `expiresAt` values as expired terminal state, and move staging onto a fresh `SecretVaultStaging` SQLite class while leaving production on `SecretVault`.

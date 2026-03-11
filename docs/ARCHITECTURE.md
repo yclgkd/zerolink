@@ -142,7 +142,7 @@ WebAuthn challenge 必须 === expected_challenge
 ### Secure Share（Passkey）
 - 使用 WebAuthn passkey 管理权
 - userVerification = "required"
-- residentKey = "required"
+- residentKey = "discouraged"
 - 默认 8KB padding
 
 ### Legacy（只读兼容）
@@ -258,7 +258,7 @@ MAX_PLAINTEXT_BYTES = 2MB   // 建议上限
 WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 ```
 
-## 可验证发布链（未来）
+## 可验证发布链（当前方案）
 
 ### Signed Manifest
 - 每次发布生成 manifest.json（文件 hash + 版本 + commit）

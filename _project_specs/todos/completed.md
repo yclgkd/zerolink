@@ -1,8 +1,24 @@
 # Completed
 
-Done items for reference. Move here from active.md when complete.
+Done items for reference. Move here from active.md when complete. Entries may be grouped by workstream, so rely on each `Completed` date instead of assuming strict file-order chronology.
 
 ---
+
+## DONE-030: Align documentation with current protocol, release flow, and spec timelines
+
+**Completed**: 2026-03-11
+
+Updated the core repo docs so they describe the code that actually ships on `main`. This cleanup
+aligned `docs/PRD.md`, `docs/SECURITY.md`, and `docs/ARCHITECTURE.md` with the real
+`residentKey: 'discouraged'` WebAuthn policy and the current public/create API shapes, corrected
+Cloudflare deployment and release-flow guidance in `docs/DEPLOYMENT.md`, repaired stale navigation
+links in `docs/INDEX.md`, and replaced outdated Changesets-centric guidance in `docs/TECH_STACK.md`
+with the current PR-validate plus tag-driven deploy flow. Also clarified `_project_specs`
+append-only chronology expectations, fixed `current-state.md` section ordering, and removed the
+stale `.changeset/config.json` landmark.
+
+Validated with `pnpm lint`, a local Markdown file-link audit over `docs/*.md` plus `README.md`,
+and `git diff --check`.
 
 ## DONE-029: Stop Durable Object alarm loops and reset staging namespace
 

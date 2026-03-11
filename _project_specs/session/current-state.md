@@ -4,16 +4,20 @@
 
 ## Active Task
 
-Stop the staging Durable Object `alarm` loop, harden backend alarm scheduling against corrupt state, and reset the staging namespace so bad objects cannot keep exhausting the free tier.
+Fix documentation drift across protocol, security, deployment, and navigation docs, and clean up `_project_specs` timeline readability.
 
 ## Current Status
 
-- **Phase**: Incident fix implemented on `fix/do-alarm-loop`; PR #139 is open and backend safeguards are deployed to staging + production
-- **Progress**: Root cause was isolated to staging Durable Object `alarm` invocations, not end-user traffic. The backend now reconciles nonce alarm state in one pass, rejects invalid or non-future alarm candidates by deleting the alarm instead of rearming, and treats malformed `expiresAt` channel records as terminal state that must be purged. Staging now runs on a fresh `SecretVaultStaging` namespace, and Cloudflare metrics after deploy show no new staging DO invocations since `2026-03-11T10:05:00Z`.
-- **Known Constraint**: Staging data before the reset is intentionally abandoned; production kept the original `SecretVault` namespace and only received the scheduler hardening code.
+- **Phase**: Docs cleanup in progress on a dedicated documentation branch
+- **Progress**: Aligning `docs/PRD.md`, `docs/SECURITY.md`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`, `docs/INDEX.md`, and `docs/TECH_STACK.md` to the current `main` branch implementation, while also making `_project_specs` timeline files easier to read.
+- **Known Constraint**: Historical session snapshots remain intentionally preserved below, so chronology fixes focus on readability and labeling rather than rewriting historical content.
 
 ## Latest Update (2026-03-11)
 
+- `docs/PRD.md`, `docs/SECURITY.md`, `docs/ARCHITECTURE.md` — Aligned the protocol and security docs to the current `main` implementation: `Secure Share` now documents non-discoverable WebAuthn credentials (`residentKey: 'discouraged'`), `/api/public/:uuid` now documents the real `state` / `adminMode` / `securityProfile` contract, and the create-flow docs describe both Quick Share and Secure Share instead of the old WebAuthn-only path.
+- `docs/DEPLOYMENT.md`, `docs/INDEX.md`, `docs/TECH_STACK.md` — Corrected Cloudflare Pages project naming, Worker RP variable guidance, release/CI workflow descriptions, broken or stale index links, and removed the stale Changesets-based release guidance that no longer matches the repo.
+- `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md`, `_project_specs/session/code-landmarks.md` — Clarified append-only timeline expectations, fixed `current-state.md` section ordering, and removed the stale `.changeset/config.json` landmark.
+- Validation: `pnpm lint`, custom Markdown file-link audit (`python3` local check over `docs/*.md` + `README.md`), `git diff --check`
 - `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultNonces.ts`, `packages/backend/src/do/__tests__/SecretVault.test.ts` — Reworked Durable Object alarm scheduling so nonce cleanup deletes expired and malformed index entries before choosing the next alarm, invalid `expiresAt` records are purged as expired terminal state, and non-future/invalid alarm candidates now clear the alarm instead of rearming into a loop.
 - `packages/backend/src/index.ts`, `packages/backend/wrangler.toml` — Added a staging-only Durable Object export alias plus a new `env.staging` migration so staging deploys switch to a fresh SQLite namespace (`SecretVaultStaging`) without touching production data.
 - Validation: `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/backend test`, `pnpm --filter @zerolink/shared typecheck`, `pnpm --filter @zerolink/shared test`
@@ -211,6 +215,13 @@ All prior next steps are complete:
 - [x] Staging redeployed; custom domain no longer fails on Cloudflare-mutated root documents
 - [x] No remaining mutable files inside the signed asset boundary
 
+## Latest Update (2026-03-10)
+
+- Reproduced the post-merge staging failure in a real browser and confirmed the signed `manifest.json` still listed `index.html`, but Cloudflare was serving request-mutated HTML for both `/` and `/index.html`.
+- Verified that the staging HTML bytes differ from the manifest because the edge layer injects request-specific challenge markup into the bootstrap shell, which makes `index.html` an unstable signing target even after restoring `Cache-Control: no-store`.
+- Updated manifest generation and tests so signed releases now cover stable runtime assets only, excluding `index.html` alongside Pages control files.
+- Aligned the verification/deployment docs and `_project_specs` notes with the narrower trust boundary, and re-ran the focused manifest-generation and browser verification unit tests locally.
+
 ## Earlier Update (2026-03-10)
 
 - Confirmed the custom staging domain was still failing because Cloudflare mutates `robots.txt` while leaving the signed `/assets/*` runtime files unchanged.
@@ -220,13 +231,6 @@ All prior next steps are complete:
 - Kept `index.html` outside the signed hash list to tolerate Cloudflare-injected HTML mutations, but added a one-time session reload when the running entry bundle does not match the signed manifest entry.
 - Split the browser verifier/bootstrap helpers to keep the implementation readable while preserving fail-closed behavior after a single unsuccessful recovery attempt.
 - Re-ran the focused manifest-generation and bootstrap/release-verification unit tests locally after the entry-binding follow-up.
-
-## Latest Update (2026-03-10)
-
-- Reproduced the post-merge staging failure in a real browser and confirmed the signed `manifest.json` still listed `index.html`, but Cloudflare was serving request-mutated HTML for both `/` and `/index.html`.
-- Verified that the staging HTML bytes differ from the manifest because the edge layer injects request-specific challenge markup into the bootstrap shell, which makes `index.html` an unstable signing target even after restoring `Cache-Control: no-store`.
-- Updated manifest generation and tests so signed releases now cover stable runtime assets only, excluding `index.html` alongside Pages control files.
-- Aligned the verification/deployment docs and `_project_specs` notes with the narrower trust boundary, and re-ran the focused manifest-generation and browser verification unit tests locally.
 
 ## Latest Update (2026-03-09)
 
@@ -241,12 +245,10 @@ All prior next steps are complete:
 - Tightened Verified Release after review so fail-closed bootstrap verification now only runs for explicitly flagged signed-release builds, preventing unsigned `build` / `preview` environments from self-blocking.
 - Corrected Cloudflare Pages cache headers so SPA entry HTML is always `no-store`, while hashed asset URLs keep immutable caching without conflicting `Cache-Control` values.
 
-## Latest Update (2026-03-08)
+## Earlier Update (2026-03-08)
 
 - Added a private Durable Object tombstone for deleted/expired channels so UUIDs remain non-reusable after physical purge.
 - Restored `PublicStatusResponse` wire compatibility for legacy `deleted` / `expired` backend payloads while keeping current frontend UX normalized to unavailable.
 - Tightened the Playwright stateful API mock so deleted channels return `404 NOT_FOUND` on later public/lock/manage begin requests instead of silently recreating a waiting channel.
 - Added backend, frontend, shared, and E2E coverage for tombstone reservation, legacy terminal-state normalization, and post-destroy 404 behavior.
 - Added a bootstrap-first Verified Release architecture so the browser verifies the signed manifest and runtime asset hashes before loading the React app, and exposed the verified build details only after a successful boot snapshot is present.
-
-## Latest Update (2026-03-09)

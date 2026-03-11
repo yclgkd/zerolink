@@ -52,7 +52,6 @@ UPDATE WHEN:
 | `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, and Playwright E2E on `pull_request` / `merge_group` |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; staging binds to `SecretVaultStaging` so broken staging namespaces can be reset without touching production |
 | `.github/workflows/deploy.yml` | Post-merge CI/CD: test → deploy Worker → build → generate/sign/verify manifest → deploy Pages |
-| `.changeset/config.json` | Changesets config |
 
 ## Key Patterns
 | Pattern | Example Location | Notes |
