@@ -132,7 +132,7 @@ export class SecretVault {
   // ─── Hibernation API WebSocket handlers ───────────────────────────────────
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const record = await this.tryLoadRecord();
+    const record = await this.tryLoadActiveRecord();
     handleWebSocketMessage(ws, message, record);
   }
 
@@ -154,6 +154,10 @@ export class SecretVault {
 
     // Handle WebSocket upgrade before method check
     if (url.pathname === '/ws' && request.headers.get('Upgrade') === 'websocket') {
+      const record = await this.tryLoadActiveRecord();
+      if (!record) {
+        return notFound();
+      }
       return acceptWebSocket(this.ctx);
     }
 
@@ -727,11 +731,21 @@ export class SecretVault {
   }
 
   /**
-   * Load the channel record without throwing. Returns undefined if not found.
-   * Used by WebSocket message handler to send current state snapshots.
+   * Load the channel record without throwing. Returns undefined if not found
+   * or if the record has already reached a terminal state and must be purged.
    */
-  private async tryLoadRecord(): Promise<ChannelRecord | undefined> {
-    return this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+  private async tryLoadActiveRecord(now: number = Date.now()): Promise<ChannelRecord | undefined> {
+    const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+    if (!record) {
+      return undefined;
+    }
+
+    if (!this.shouldPurgeRecord(record, now)) {
+      return record;
+    }
+
+    await this.finalizeTerminalRecord(record, now);
+    return undefined;
   }
 
   private async loadActiveRecord(now: number = Date.now()): Promise<ChannelRecord> {

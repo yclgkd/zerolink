@@ -240,6 +240,26 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(decryptPayload).toEqual({ ok: false, code: 'NOT_FOUND' });
   });
 
+  it('forwards websocket upgrade requests to SecretVault DO', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND' }), {
+        status: 404,
+      });
+    });
+
+    const response = await dispatch(env, `/api/ws/${VALID_UUID}`, 'GET', undefined, false, {
+      Upgrade: 'websocket',
+    });
+    const payload = (await response.json()) as ApiErrorResponse;
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({ ok: false, code: 'NOT_FOUND' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/ws');
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.body).toBeNull();
+  });
+
   it('forwards lock_begin request to SecretVault DO and returns challenge response', async () => {
     const challengeResponse = {
       ok: true,

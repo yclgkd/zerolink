@@ -1,13 +1,24 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SECURITY_PROFILE } from '@zerolink/shared';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { deliverSecretMock, deleteChannelMock } = vi.hoisted(() => ({
+const { deliverSecretMock, deleteChannelMock, syncHarness } = vi.hoisted(() => ({
   deliverSecretMock: vi.fn(),
   deleteChannelMock: vi.fn(),
+  syncHarness: {
+    latestOptions: null as {
+      onStateChange: (update: {
+        state: string;
+        version: number;
+        adminMode: string;
+        receiverPubFpr?: string;
+      }) => void;
+      onChannelClosed: (reason: string) => void;
+    } | null,
+  },
 }));
 
 vi.mock('../crypto/orchestrator', async () => {
@@ -15,6 +26,26 @@ vi.mock('../crypto/orchestrator', async () => {
     cryptoOrchestrator: {
       deliverSecret: deliverSecretMock,
       deleteChannel: deleteChannelMock,
+    },
+  };
+});
+
+vi.mock('../sync/use-channel-sync.ts', async () => {
+  return {
+    useChannelSync: (
+      uuid: string | undefined,
+      options: {
+        onStateChange: (update: {
+          state: string;
+          version: number;
+          adminMode: string;
+          receiverPubFpr?: string;
+        }) => void;
+        onChannelClosed: (reason: string) => void;
+      }
+    ) => {
+      syncHarness.latestOptions = uuid ? options : null;
+      return { connectionMode: 'offline' as const };
     },
   };
 });
@@ -131,6 +162,14 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+function getLatestChannelSyncOptions() {
+  if (!syncHarness.latestOptions) {
+    throw new Error('useChannelSync options were not captured');
+  }
+
+  return syncHarness.latestOptions;
+}
+
 async function waitForManageActionsEnabled(): Promise<void> {
   await waitFor(() => {
     expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(false);
@@ -146,6 +185,7 @@ beforeEach(() => {
 
   useCreateStore.getState().resetCreateStore();
   useDeliverStore.getState().resetDeliverStore();
+  syncHarness.latestOptions = null;
 
   vi.clearAllMocks();
   mockDeliverSuccessWithStoreSideEffects();
@@ -627,6 +667,25 @@ describe('ManagePage integration', () => {
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
   });
 
+  it('keeps deleted state when realtime close follows a local delete', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+    await screen.findByTestId('manage-state-deleted');
+
+    act(() => {
+      getLatestChannelSyncOptions().onChannelClosed('deleted');
+    });
+
+    expect(screen.getByTestId('manage-state-deleted')).toBeTruthy();
+    expect(screen.queryByTestId('manage-state-unavailable')).toBeNull();
+  });
+
   it('uses quick profile for password-managed delete even when create state conflicts', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
@@ -780,6 +839,23 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
   });
 
+  it('shows unavailable state when realtime close arrives from a non-terminal state', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+
+    act(() => {
+      getLatestChannelSyncOptions().onChannelClosed('expired');
+    });
+
+    expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
+  });
+
   it.each([
     'deleted',
     'expired',
@@ -809,6 +885,26 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
     expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('clears public status error when realtime state arrives after load failure', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockRejectedValueOnce(new Error('network down'));
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-public-status-error');
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'locked',
+        version: 1,
+        adminMode: 'webauthn',
+      });
+    });
+
+    expect(screen.queryByTestId('manage-public-status-error')).toBeNull();
+    expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
   });
 
   it('hides SECRET PAYLOAD input after successful destroy', async () => {

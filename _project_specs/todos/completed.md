@@ -4,6 +4,18 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-021: Fix realtime terminal-state regressions on ManagePage and dead-link WebSockets
+
+**Completed**: 2026-03-11
+
+Followed up the realtime sync branch review by fixing two regressions in the new WebSocket path.
+On the frontend, `ManagePage` now preserves the current tab's local deleted confirmation when a
+`channel_closed` realtime event arrives after a successful delete, while remote delete/expiry
+events correctly switch the page into the unavailable state and clear stale public-status warnings.
+On the backend, Durable Object `/ws` upgrades are now rejected for missing or terminal channels,
+and subscribe requests still close immediately if the record disappears before the first snapshot,
+so revisiting dead links no longer leaves idle WebSocket connections open.
+
 ## DONE-020: Add channel sync fallback coverage and harden cached release revalidation
 
 **Completed**: 2026-03-11

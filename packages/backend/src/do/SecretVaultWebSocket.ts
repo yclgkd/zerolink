@@ -104,10 +104,13 @@ export function handleWebSocketMessage(
   }
 
   if (msg.type === 'subscribe') {
-    // Send current state snapshot so client has immediate data
-    if (currentRecord) {
-      trySend(ws, JSON.stringify(buildStateChangedMessage(currentRecord)));
+    if (!currentRecord) {
+      ws.close(WS_CLOSE_CHANNEL_GONE, 'channel gone');
+      return;
     }
+
+    // Send current state snapshot so client has immediate data
+    trySend(ws, JSON.stringify(buildStateChangedMessage(currentRecord)));
   }
 }
 

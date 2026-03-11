@@ -542,7 +542,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
     mountedRef,
   ]);
 
-  return { isUnavailable, publicStatusError, setPublicStatusError };
+  return { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable };
 }
 
 function useManageDeliveryLogic(
@@ -704,31 +704,47 @@ function useManagePageState(uuid?: string) {
     };
   }, []);
 
-  const { isUnavailable, publicStatusError, setPublicStatusError } = usePublicStatusFetcher(
-    uuid,
-    mountedRef
-  );
+  const { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable } =
+    usePublicStatusFetcher(uuid, mountedRef);
 
   // Real-time sync: auto-update when receiver locks or channel state changes
   useChannelSync(uuid, {
     onStateChange: useCallback(
       (update: ChannelStateUpdate) => {
         if (!mountedRef.current) return;
+        setIsUnavailable(false);
+        setPublicStatusError(null);
         store.setChannelState(update.state);
         store.setAdminMode(update.adminMode);
         store.setReceiverPubFpr(update.receiverPubFpr ?? null);
       },
-      [store.setChannelState, store.setAdminMode, store.setReceiverPubFpr]
+      [
+        setIsUnavailable,
+        setPublicStatusError,
+        store.setChannelState,
+        store.setAdminMode,
+        store.setReceiverPubFpr,
+      ]
     ),
     onChannelClosed: useCallback(
       (_reason: ChannelClosedReason) => {
         if (!mountedRef.current) return;
-        store.setChannelState(CHANNEL_STATE.WAITING);
+        const latestState = useDeliverStore.getState().channelState;
+        setPublicStatusError(null);
         store.setShowDestroyConfirm(false);
+        if (latestState === CHANNEL_STATE.DELETED) {
+          setIsUnavailable(false);
+          return;
+        }
+
+        setIsUnavailable(true);
+        store.setChannelState(CHANNEL_STATE.WAITING);
         store.setAdminMode(null);
         store.setReceiverPubFpr(null);
       },
       [
+        setPublicStatusError,
+        setIsUnavailable,
         store.setChannelState,
         store.setShowDestroyConfirm,
         store.setAdminMode,
