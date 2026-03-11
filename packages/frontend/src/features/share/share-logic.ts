@@ -5,12 +5,13 @@ import {
   PublicStatusResponseSchema,
   UUIDSchema,
 } from '@zerolink/shared';
-import { useEffect, useRef, useState } from 'react';
-
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { extractLockSecretFromHash } from '../../crypto/protocol-utils';
 import { useDecryptStore } from '../../stores/decrypt-store';
 import { useLockStore } from '../../stores/lock-store';
+import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
+import { useChannelSync } from '../../sync/use-channel-sync.ts';
 
 export function mapLockError(code: string): string {
   switch (code) {
@@ -163,6 +164,27 @@ export function usePublicShareState(uuid?: string) {
       cancelled = true;
     };
   }, [uuid]);
+
+  // Real-time sync: auto-update when sender delivers or channel state changes
+  useChannelSync(uuid, {
+    onStateChange: useCallback((update) => {
+      if (isTerminalPublicState(update.state)) {
+        setChannelState(CHANNEL_STATE.WAITING);
+        setIsUnavailable(true);
+        return;
+      }
+      setChannelState(update.state);
+      setIsUnavailable(false);
+      setIsPublicStatusLoading(false);
+      setPublicStatusError(null);
+    }, []),
+    onChannelClosed: useCallback((_reason: ChannelClosedReason) => {
+      setChannelState(CHANNEL_STATE.WAITING);
+      setIsUnavailable(true);
+      setIsPublicStatusLoading(false);
+      setPublicStatusError(null);
+    }, []),
+  });
 
   return {
     channelState,

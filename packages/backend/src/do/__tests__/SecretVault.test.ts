@@ -251,9 +251,11 @@ function createMockState(initialRecord?: ChannelRecord): {
   state: DurableObjectState;
   snapshot: Map<string, unknown>;
   getAlarm: () => number | null;
+  getAcceptedWebSocketCount: () => number;
 } {
   const snapshot = new Map<string, unknown>();
   let scheduledAlarm: number | null = null;
+  let acceptedWebSocketCount = 0;
   if (initialRecord) {
     snapshot.set(CHANNEL_RECORD_KEY, structuredClone(initialRecord));
   }
@@ -372,12 +374,24 @@ function createMockState(initialRecord?: ChannelRecord): {
     id: {} as DurableObjectId,
     storage,
     blockConcurrencyWhile: async <T>(callback: () => Promise<T>): Promise<T> => callback(),
+    // WebSocket Hibernation API mocks
+    getWebSockets(_tag?: string): WebSocket[] {
+      return [];
+    },
+    getTags(_ws: WebSocket): string[] {
+      return [];
+    },
+    acceptWebSocket(_ws: WebSocket, _tags?: string[]): void {
+      acceptedWebSocketCount += 1;
+    },
+    setWebSocketAutoResponse(_pair: WebSocketRequestResponsePair | null): void {},
   } as unknown as DurableObjectState;
 
   return {
     state,
     snapshot,
     getAlarm: () => scheduledAlarm,
+    getAcceptedWebSocketCount: () => acceptedWebSocketCount,
   };
 }
 
@@ -787,6 +801,47 @@ describe('SecretVault lock challenge flow', () => {
       ok: false,
       code: 'NOT_FOUND',
     });
+  });
+
+  it('rejects websocket upgrade when channel record is missing', async () => {
+    const { state, getAcceptedWebSocketCount } = createMockState();
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/ws', {
+        method: 'GET',
+        headers: { Upgrade: 'websocket' },
+      })
+    );
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({ ok: false, code: 'NOT_FOUND' });
+    expect(getAcceptedWebSocketCount()).toBe(0);
+  });
+
+  it('rejects websocket upgrade when channel record is already expired', async () => {
+    const now = 1_730_001_455_000;
+    const expiredRecord = {
+      ...createChannelRecord(CHANNEL_STATE.LOCKED),
+      expiresAt: asUnixMs(now - 1),
+    };
+    const { state, getAcceptedWebSocketCount, snapshot } = createMockState(expiredRecord);
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/ws', {
+        method: 'GET',
+        headers: { Upgrade: 'websocket' },
+      })
+    );
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(404);
+    expect(payload).toEqual({ ok: false, code: 'NOT_FOUND' });
+    expect(getAcceptedWebSocketCount()).toBe(0);
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+    expect(readTerminalTombstone(snapshot)?.reason).toBe('expired');
   });
 
   it('returns 400 for invalid lock_begin payload', async () => {

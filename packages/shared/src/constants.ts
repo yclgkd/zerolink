@@ -342,3 +342,38 @@ export const WEBAUTHN = {
   ATTESTATION_NONE: 'none' as const,
   ATTESTATION_DIRECT: 'direct' as const,
 } as const;
+
+// ─── WebSocket / Real-Time Sync ─────────────────────────────────────────────
+
+/** Standard WebSocket close code: normal closure. */
+export const WS_CLOSE_NORMAL = 1000 as const;
+
+/** Standard WebSocket close code: going away (tab close / navigation). */
+export const WS_CLOSE_GOING_AWAY = 1001 as const;
+
+/** Application close code: channel deleted or expired (terminal state). */
+export const WS_CLOSE_CHANNEL_GONE = 4000 as const;
+
+/** Application close code: client sent invalid/unparseable payload. */
+export const WS_CLOSE_INVALID_PAYLOAD = 4001 as const;
+
+/** Application close code: client did not send subscribe within timeout. */
+export const WS_CLOSE_SUBSCRIBE_TIMEOUT = 4002 as const;
+
+/** Base delay for exponential backoff reconnect (ms). */
+export const WS_RECONNECT_BASE_MS = 1_000 as const;
+
+/** Maximum delay cap for exponential backoff reconnect (ms). */
+export const WS_RECONNECT_MAX_MS = 30_000 as const;
+
+/**
+ * Ping interval to keep WebSocket alive (ms).
+ * Cloudflare DO idle timeout is ~60s; ping at 25s keeps connection open.
+ */
+export const WS_PING_INTERVAL_MS = 25_000 as const;
+
+/** Timeout for client to send subscribe message after connecting (ms). */
+export const WS_SUBSCRIBE_TIMEOUT_MS = 5_000 as const;
+
+/** Fallback polling interval when WebSocket is unavailable (ms). */
+export const POLL_INTERVAL_MS = 18_000 as const;

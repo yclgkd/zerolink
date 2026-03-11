@@ -4,6 +4,31 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-021: Fix realtime terminal-state regressions on ManagePage and dead-link WebSockets
+
+**Completed**: 2026-03-11
+
+Followed up the realtime sync branch review by fixing two regressions in the new WebSocket path.
+On the frontend, `ManagePage` now preserves the current tab's local deleted confirmation when a
+`channel_closed` realtime event arrives after a successful delete, while remote delete/expiry
+events correctly switch the page into the unavailable state and clear stale public-status warnings.
+On the backend, Durable Object `/ws` upgrades are now rejected for missing or terminal channels,
+and subscribe requests still close immediately if the record disappears before the first snapshot,
+so revisiting dead links no longer leaves idle WebSocket connections open.
+
+## DONE-020: Add channel sync fallback coverage and harden cached release revalidation
+
+**Completed**: 2026-03-11
+
+Added Durable Object WebSocket subscription/broadcast plumbing plus shared WebSocket schemas so the
+sender Manage page and receiver Share page can react to lock/deliver/delete/expire transitions
+without a manual refresh. The frontend now uses a WebSocket-first channel sync client with
+`/api/public/:uuid` polling fallback, and the fallback treats `404 NOT_FOUND` as a terminal channel
+closure after physical purge. Also hardened `tiered-verification.ts` so cached `Verified Release`
+snapshots are reused only after `manifest.json` and `manifest.sig` are revalidated, keeping
+`manifest-hash.txt` as an unsigned freshness hint instead of a trust anchor. Added shared, frontend,
+backend, and Playwright coverage for the new sync behavior and the cache-hardening path.
+
 ## DONE-019: Add PR validation gates before merge
 
 **Completed**: 2026-03-10

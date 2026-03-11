@@ -6,7 +6,8 @@ import {
 import { clearEntryRecoveryAttempt, recoverEntryMismatchOnce } from './bootstrap-recovery';
 import { MANIFEST_SIGNING_PUBLIC_KEY_PEM } from './release/public-key';
 import { setVerifiedReleaseSnapshot } from './release/runtime';
-import { type ReleaseVerificationResult, verifyRelease } from './release/verification';
+import { tieredVerifyRelease } from './release/tiered-verification';
+import type { ReleaseVerificationResult } from './release/verification';
 
 export interface MockWorker {
   start: (options?: Record<string, unknown>) => Promise<unknown>;
@@ -78,12 +79,14 @@ export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> 
   const recoverEntryMismatch = options.recoverEntryMismatchFn ?? recoverEntryMismatchOnce;
   const verifyReleaseImpl =
     options.verifyReleaseFn ??
-    (() =>
-      verifyRelease({
+    (async () => {
+      const { result } = await tieredVerifyRelease({
         baseUrl: window.location.href,
         currentEntryUrl: options.currentEntryUrl ?? import.meta.url,
         publicKeyPem: MANIFEST_SIGNING_PUBLIC_KEY_PEM,
-      }));
+      });
+      return result;
+    });
 
   renderVerificationGate({ status: 'verifying' });
   const verificationResult = await verifyReleaseImpl();

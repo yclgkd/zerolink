@@ -30,9 +30,13 @@ UPDATE WHEN:
 |----------|---------|
 | `packages/shared/src/crypto/` | Argon2id KDF, AES-GCM, HKDF, Ed25519 helpers |
 | `packages/backend/src/do/SecretVault.ts` | Durable Object — atomic channel lifecycle state machine |
+| `packages/backend/src/do/SecretVaultWebSocket.ts` | Durable Object WebSocket accept/broadcast helpers for channel state sync |
 | `packages/frontend/src/crypto/orchestrator.ts` | Frontend crypto orchestration (create / lock / deliver / decrypt) |
+| `packages/frontend/src/sync/` | Channel sync client: WebSocket-first subscription with `/api/public/:uuid` polling fallback |
 | `packages/frontend/src/stores/` | Zustand stores: `create-store`, `decrypt-store`, `deliver-store`, `lock-store` |
 | `packages/frontend/src/release/verification.ts` | Browser-side signed-manifest verifier |
+| `packages/frontend/src/release/tiered-verification.ts` | Cached release verifier that revalidates signed manifest bytes before reusing trusted snapshots |
+| `packages/shared/src/ws.ts` | Shared Zod schemas and types for channel sync WebSocket messages |
 | `scripts/generate-manifest.ts` | Build-time manifest generator (hashes `dist/assets/` + records `entryAssetPath`) |
 | `scripts/sign-manifest.ts` | Ed25519 manifest signer (requires `MANIFEST_SIGNING_KEY` env var) |
 | `scripts/verify-manifest.ts` | CLI manifest verifier — enforces entry binding + file hashes |
@@ -65,7 +69,7 @@ UPDATE WHEN:
 | `packages/shared/src/**/__tests__/` | Vitest unit tests for shared schemas/crypto |
 | `packages/frontend/src/__tests__/` | React component and integration tests (Vitest + Testing Library) |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
-| `packages/frontend/e2e/` | Playwright E2E: happy-path, expiration, rate-limit, manifest-verification |
+| `packages/frontend/e2e/` | Playwright E2E: happy-path, realtime-sync, expiration, rate-limit, manifest-verification |
 | `scripts/__tests__/` | Vitest unit tests for build scripts (manifest generation/verification) |
 
 ## Gotchas & Non-Obvious Behavior
@@ -77,4 +81,6 @@ UPDATE WHEN:
 | Biome | No ESLint plugins | Some rules need manual enforcement |
 | `packages/frontend/src/crypto/webauthn.ts` | `useLiteralKeys` Biome errors | Cannot auto-fix; TypeScript `noPropertyAccessFromIndexSignature` requires bracket notation in this file — do not touch |
 | `packages/frontend/src/release/verification.ts` | Verified Release covers only `dist/assets/*` | Root documents (`index.html`, `robots.txt`) are excluded from the signed manifest because Cloudflare can mutate edge responses; the executing bootstrap entry must still match `manifest.entryAssetPath` |
+| `packages/frontend/src/release/tiered-verification.ts` | Cached release trust still revalidates `manifest.json` + `manifest.sig` | `manifest-hash.txt` is an unsigned helper and may only be used as a freshness hint before deciding whether to run full verification |
+| `packages/backend/src/do/SecretVault.ts` | `/ws` upgrades require an active channel record | Missing or terminal channels must fail the WebSocket upgrade (and subscribe still closes as a race fallback) so dead links do not keep idle Durable Object sockets alive |
 | `packages/frontend/public/_headers` | `Cache-Control: no-store` on `/*` is intentional | Changing to `no-cache` causes stale HTML replay across signed deployments and breaks the Verified Release gate — see decisions.md [2026-03-10] |

@@ -31,6 +31,8 @@ import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
 import { useDeliverStore } from '../stores/deliver-store';
+import type { ChannelClosedReason, ChannelStateUpdate } from '../sync/channel-sync.ts';
+import { useChannelSync } from '../sync/use-channel-sync.ts';
 
 function mapActionError(code: string): string {
   switch (code) {
@@ -540,7 +542,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
     mountedRef,
   ]);
 
-  return { isUnavailable, publicStatusError, setPublicStatusError };
+  return { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable };
 }
 
 function useManageDeliveryLogic(
@@ -702,10 +704,55 @@ function useManagePageState(uuid?: string) {
     };
   }, []);
 
-  const { isUnavailable, publicStatusError, setPublicStatusError } = usePublicStatusFetcher(
-    uuid,
-    mountedRef
-  );
+  const { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable } =
+    usePublicStatusFetcher(uuid, mountedRef);
+
+  // Real-time sync: auto-update when receiver locks or channel state changes
+  useChannelSync(uuid, {
+    onStateChange: useCallback(
+      (update: ChannelStateUpdate) => {
+        if (!mountedRef.current) return;
+        setIsUnavailable(false);
+        setPublicStatusError(null);
+        store.setChannelState(update.state);
+        store.setAdminMode(update.adminMode);
+        store.setReceiverPubFpr(update.receiverPubFpr ?? null);
+      },
+      [
+        setIsUnavailable,
+        setPublicStatusError,
+        store.setChannelState,
+        store.setAdminMode,
+        store.setReceiverPubFpr,
+      ]
+    ),
+    onChannelClosed: useCallback(
+      (_reason: ChannelClosedReason) => {
+        if (!mountedRef.current) return;
+        const latestState = useDeliverStore.getState().channelState;
+        setPublicStatusError(null);
+        store.setShowDestroyConfirm(false);
+        if (latestState === CHANNEL_STATE.DELETED) {
+          setIsUnavailable(false);
+          return;
+        }
+
+        setIsUnavailable(true);
+        store.setChannelState(CHANNEL_STATE.WAITING);
+        store.setAdminMode(null);
+        store.setReceiverPubFpr(null);
+      },
+      [
+        setPublicStatusError,
+        setIsUnavailable,
+        store.setChannelState,
+        store.setShowDestroyConfirm,
+        store.setAdminMode,
+        store.setReceiverPubFpr,
+      ]
+    ),
+  });
+
   const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
 
   useEffect(() => {
