@@ -14,6 +14,20 @@ though the underlying channel could no longer be used. ManagePage now hides that
 for `404/unavailable`, legacy `deleted` and `expired` public states, and locally deleted sender
 sessions, with regression coverage to keep dead-link copy actions from reappearing.
 
+## DONE-024: Remove Node 20 GitHub Actions runtime warnings
+
+**Completed**: 2026-03-11
+
+Updated `.github/workflows/deploy.yml` and `.github/workflows/pr-validate.yml` to remove
+deprecated Node 20-based action runtimes. `actions/checkout` and `actions/setup-node` now use
+pinned `v5` SHAs, while `pnpm/action-setup` was replaced with `corepack enable` so CI resolves
+`pnpm@9.12.0` from the root `packageManager` field instead of a separate JavaScript action.
+Validated the workflow-facing commands with `pnpm typecheck`, `pnpm test`,
+`VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm build`,
+`pnpm manifest:generate`, and `git diff --check`. Local `pnpm manifest:verify` still requires a
+signed `packages/frontend/dist/manifest.sig`, so the final verify step remains gated on
+`pnpm manifest:sign` with the deployment signing secret.
+
 ## DONE-022: Hide ManagePage delivery composer until receiver lock
 
 **Completed**: 2026-03-11

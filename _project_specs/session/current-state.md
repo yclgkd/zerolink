@@ -4,16 +4,20 @@
 
 ## Active Task
 
-Remove dead share-link affordances from terminal sender Manage states.
+Remove Node 20 GitHub Actions runtime deprecation warnings from CI workflows.
 
 ## Current Status
 
-- **Phase**: Sender Manage terminal-state follow-up on `fix/remove-dead-channel-share-link`
-- **Progress**: ManagePage now hides the receiver share-link card whenever the sender view is in a terminal or unavailable state (`deleted`, `expired`, or dead-link unavailable), so the UI no longer suggests sharing a link that cannot be used. Regression coverage now locks this down for 404/unavailable, legacy terminal public states, and locally deleted channels.
-- **Known Constraint**: The audit for similar UX issues was limited to the current sender/receiver flows in `packages/frontend`; no additional dead-action affordances were found in SharePage during this pass.
+- **Phase**: Validation complete on `codex/ci-actions-node24`
+- **Progress**: Updated both CI workflows to remove Node 20-based GitHub Action runtimes by pinning `actions/checkout` and `actions/setup-node` to `v5` SHAs and replacing `pnpm/action-setup` with `corepack enable`, keeping pnpm version resolution tied to the root `packageManager` field.
+- **Known Constraint**: Local `pnpm manifest:verify` still depends on running `pnpm manifest:sign`, which requires the deployment signing secret to produce `packages/frontend/dist/manifest.sig`.
 
 ## Latest Update (2026-03-11)
 
+- `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Replaced Node 20-based `pnpm/action-setup` with `corepack enable` and upgraded `actions/checkout` / `actions/setup-node` to pinned `v5` SHAs so GitHub Actions jobs no longer rely on deprecated Node 20 action runtimes.
+- `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the CI runtime migration, validation results, and the release-signing constraint for future sessions.
+- Validation: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm build`, `pnpm manifest:generate`, `git diff --check`
+- Validation note: `pnpm manifest:verify` currently stops at missing `packages/frontend/dist/manifest.sig`; generating that file requires `pnpm manifest:sign` with the deployment signing secret.
 - `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Hid the sender share-link card for terminal/unavailable Manage states so deleted, expired, and dead-link channels no longer present a misleading copy/share action.
 - `_project_specs/session/current-state.md`, `_project_specs/todos/completed.md` — Recorded the terminal-state share-link cleanup for future sessions.
 - Validation: `pnpm --filter @zerolink/frontend test -- manage-page`, `pnpm --filter @zerolink/frontend typecheck`, `git diff --check`
