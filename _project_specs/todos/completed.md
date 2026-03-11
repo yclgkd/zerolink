@@ -4,6 +4,15 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-022: Hide ManagePage delivery composer until receiver lock
+
+**Completed**: 2026-03-11
+
+Updated the sender Manage page so the delivery composer no longer renders while a channel is still
+`waiting` for the receiver to lock. Password-managed channels still expose the management
+passphrase field so sender-side deletion remains available before lock, while delivery-focused UI
+and tests now start from `locked` and stay available through `delivered`.
+
 ## DONE-021: Fix realtime terminal-state regressions on ManagePage and dead-link WebSockets
 
 **Completed**: 2026-03-11

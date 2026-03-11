@@ -74,6 +74,10 @@ function resolveManageProfile(adminMode: AdminMode | null): SecurityProfile | nu
   return null;
 }
 
+function canComposeDelivery(status: ChannelState): boolean {
+  return status === CHANNEL_STATE.LOCKED || status === CHANNEL_STATE.DELIVERED;
+}
+
 function ManagePageHeader({ status, unavailable }: { status: ChannelState; unavailable: boolean }) {
   return (
     <PageCardHeader>
@@ -350,6 +354,7 @@ function ActionPanel({
   unavailable,
   showDestroyConfirm,
   pending,
+  showDeliverAction,
   canManageActions,
   canDeliver,
   onDeliver,
@@ -361,6 +366,7 @@ function ActionPanel({
   unavailable: boolean;
   showDestroyConfirm: boolean;
   pending: boolean;
+  showDeliverAction: boolean;
   canManageActions: boolean;
   canDeliver: boolean;
   onDeliver: () => void;
@@ -378,24 +384,26 @@ function ActionPanel({
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Button
-          data-testid="manage-deliver-button"
-          disabled={pending || !canDeliver}
-          onClick={onDeliver}
-          type="button"
-        >
-          {pending ? (
-            <>
-              <Spinner aria-hidden="true" className="size-4" />
-              Delivering…
-            </>
-          ) : (
-            <>
-              <Send aria-hidden="true" className="size-4" />
-              Deliver
-            </>
-          )}
-        </Button>
+        {showDeliverAction ? (
+          <Button
+            data-testid="manage-deliver-button"
+            disabled={pending || !canDeliver}
+            onClick={onDeliver}
+            type="button"
+          >
+            {pending ? (
+              <>
+                <Spinner aria-hidden="true" className="size-4" />
+                Delivering…
+              </>
+            ) : (
+              <>
+                <Send aria-hidden="true" className="size-4" />
+                Deliver
+              </>
+            )}
+          </Button>
+        ) : null}
         <Button
           data-testid="manage-destroy-button"
           disabled={pending || !canManageActions}
@@ -867,6 +875,16 @@ export function ManagePage(): ReactElement {
   const usesPasswordManagedChannel =
     state.adminMode === 'password' || state.adminMode === 'softkey';
   const showUnavailableState = state.isUnavailable && state.status !== CHANNEL_STATE.DELETED;
+  const showDeliveryComposer =
+    !showUnavailableState &&
+    state.status !== CHANNEL_STATE.DELETED &&
+    state.status !== CHANNEL_STATE.EXPIRED &&
+    canComposeDelivery(state.status);
+  const showPasswordSection =
+    !showUnavailableState &&
+    state.status !== CHANNEL_STATE.DELETED &&
+    state.status !== CHANNEL_STATE.EXPIRED &&
+    usesPasswordManagedChannel;
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
@@ -899,9 +917,7 @@ export function ManagePage(): ReactElement {
           <StatusContent safetyCode={state.safetyCode} status={state.status} />
         )}
 
-        {!showUnavailableState &&
-        state.status !== CHANNEL_STATE.DELETED &&
-        state.status !== CHANNEL_STATE.EXPIRED ? (
+        {showDeliveryComposer ? (
           <>
             <SecretInput
               ariaDescribedBy={
@@ -912,24 +928,24 @@ export function ManagePage(): ReactElement {
               onChange={state.handleSecretChange}
               value={state.secretInput}
             />
-
-            {usesPasswordManagedChannel ? (
-              <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
-                <p className="text-xs text-muted-foreground">
-                  This channel uses a password-protected management key. Enter the password you set
-                  when creating this channel.
-                </p>
-                <PassphraseInput
-                  inputId="manage-softkey-passphrase"
-                  label="Channel password"
-                  onChange={state.handleSoftkeyPassphraseChange}
-                  placeholder="Enter channel password"
-                  showStrength={false}
-                  value={state.softkeyPassphrase}
-                />
-              </section>
-            ) : null}
           </>
+        ) : null}
+
+        {showPasswordSection ? (
+          <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
+            <p className="text-xs text-muted-foreground">
+              This channel uses a password-protected management key. Enter the password you set when
+              creating this channel.
+            </p>
+            <PassphraseInput
+              inputId="manage-softkey-passphrase"
+              label="Channel password"
+              onChange={state.handleSoftkeyPassphraseChange}
+              placeholder="Enter channel password"
+              showStrength={false}
+              value={state.softkeyPassphrase}
+            />
+          </section>
         ) : null}
 
         {state.actionError ? (
@@ -951,6 +967,7 @@ export function ManagePage(): ReactElement {
           onDeliver={state.handleDeliver}
           onOpenDestroyConfirm={state.handleDestroyConfirm}
           pending={state.isActionPending}
+          showDeliverAction={showDeliveryComposer}
           showDestroyConfirm={state.showDestroyConfirm}
           status={state.status}
           unavailable={showUnavailableState}
