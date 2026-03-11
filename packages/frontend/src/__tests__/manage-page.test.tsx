@@ -249,11 +249,9 @@ describe('ManagePage integration', () => {
 
     expect(screen.getByTestId('manage-uuid').textContent).toContain('(missing)');
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('manage-secret-input')).toBeNull();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
 
-    fireEvent.change(screen.getByTestId('manage-secret-input'), {
-      target: { value: 'hello' },
-    });
-    fireEvent.click(screen.getByTestId('manage-deliver-button'));
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
 
     await waitFor(() => {
@@ -288,13 +286,25 @@ describe('ManagePage integration', () => {
     expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
-  it('keeps deliver disabled while secret input is empty', async () => {
+  it('hides delivery composer while waiting for receiver lock', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
     renderManagePage();
 
     await screen.findByTestId('manage-state-waiting');
+    expect(screen.queryByTestId('manage-secret-input')).toBeNull();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect(screen.getByTestId('manage-destroy-button')).toBeTruthy();
+  });
+
+  it('keeps deliver disabled while secret input is empty after receiver lock', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
     const deliverButton = screen.getByTestId('manage-deliver-button') as HTMLButtonElement;
     expect(deliverButton.disabled).toBe(true);
   });
@@ -329,14 +339,14 @@ describe('ManagePage integration', () => {
   it('calls deliverSecret with quick profile and channel password for password adminMode', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+      jsonResponse({ ok: true, state: 'locked', adminMode: 'password' })
     );
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'top secret payload' },
     });
@@ -361,7 +371,7 @@ describe('ManagePage integration', () => {
   it('shows the channel password error when password-managed delivery omits a password', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+      jsonResponse({ ok: true, state: 'locked', adminMode: 'password' })
     );
 
     deliverSecretMock.mockResolvedValueOnce({
@@ -371,7 +381,7 @@ describe('ManagePage integration', () => {
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'top secret payload' },
     });
@@ -385,12 +395,12 @@ describe('ManagePage integration', () => {
   it('calls deliverSecret with quick profile for softkey-managed channels', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'softkey' })
+      jsonResponse({ ok: true, state: 'locked', adminMode: 'softkey' })
     );
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'top secret payload' },
     });
@@ -414,14 +424,14 @@ describe('ManagePage integration', () => {
 
   it('uses secure profile for webauthn-managed delivery even when create state conflicts', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
+    mockPublicState(fetchSpy, 'locked');
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
     useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
@@ -435,7 +445,7 @@ describe('ManagePage integration', () => {
 
   it('disables deliver/destroy while deliver request is pending and re-enables after completion', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
+    mockPublicState(fetchSpy, 'locked');
 
     const deferred = createDeferred<{
       ok: true;
@@ -445,7 +455,7 @@ describe('ManagePage integration', () => {
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
@@ -476,16 +486,16 @@ describe('ManagePage integration', () => {
 
     renderManagePage();
 
+    expect(screen.queryByTestId('manage-secret-input')).toBeNull();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
+
+    publicStatus.resolve(jsonResponse({ ok: true, state: 'locked', adminMode: 'webauthn' }));
+
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
-
-    expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
-
-    publicStatus.resolve(jsonResponse({ ok: true, state: 'waiting', adminMode: 'webauthn' }));
-
-    await screen.findByTestId('manage-state-waiting');
     await waitFor(() => {
       expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(
         false
@@ -504,7 +514,7 @@ describe('ManagePage integration', () => {
         return Promise.resolve(
           jsonResponse({
             ok: true,
-            state: 'waiting',
+            state: 'locked',
             adminMode: 'webauthn',
           })
         );
@@ -521,7 +531,7 @@ describe('ManagePage integration', () => {
 
     const { router } = renderManagePageWithRouter();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
@@ -542,7 +552,7 @@ describe('ManagePage integration', () => {
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(`/api/public/${NEXT_UUID}`);
     });
-    expect(await screen.findByTestId('manage-state-waiting')).toBeTruthy();
+    expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
     expect(screen.getByTestId('manage-uuid').textContent).toContain(NEXT_UUID);
     expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(false);
 
@@ -557,7 +567,7 @@ describe('ManagePage integration', () => {
         return Promise.resolve(
           jsonResponse({
             ok: true,
-            state: 'waiting',
+            state: 'locked',
             adminMode: 'webauthn',
           })
         );
@@ -574,14 +584,14 @@ describe('ManagePage integration', () => {
 
     const { router } = renderManagePageWithRouter();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
     await router.navigate(`/m/${NEXT_UUID}`);
-    expect(await screen.findByTestId('manage-state-waiting')).toBeTruthy();
+    expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByTestId('manage-uuid').textContent).toContain(NEXT_UUID);
     });
@@ -594,13 +604,13 @@ describe('ManagePage integration', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('manage-action-error')).toBeNull();
-      expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+      expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
     });
   });
 
   it('shows action error on deliver failure and keeps non-delivered state', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
+    mockPublicState(fetchSpy, 'locked');
 
     deliverSecretMock.mockResolvedValueOnce({
       ok: false,
@@ -609,7 +619,7 @@ describe('ManagePage integration', () => {
 
     renderManagePage();
 
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'payload' },
     });
@@ -630,7 +640,7 @@ describe('ManagePage integration', () => {
         'aria-describedby'
       )
     ).toBeNull();
-    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+    expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
   });
 
   it('uses inline destroy confirm and transitions to deleted after confirm', async () => {
@@ -883,7 +893,8 @@ describe('ManagePage integration', () => {
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.getAttribute('aria-live')).toBe('polite');
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
-    expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('manage-secret-input')).toBeNull();
+    expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -909,10 +920,10 @@ describe('ManagePage integration', () => {
 
   it('hides SECRET PAYLOAD input after successful destroy', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
+    mockPublicState(fetchSpy, 'locked');
 
     renderManagePage();
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
     await waitForManageActionsEnabled();
 
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
@@ -931,7 +942,7 @@ describe('ManagePage integration', () => {
 
   it('retains SECRET PAYLOAD content after destroy failure', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
+    mockPublicState(fetchSpy, 'locked');
 
     deleteChannelMock.mockResolvedValueOnce({
       ok: false,
@@ -939,7 +950,7 @@ describe('ManagePage integration', () => {
     });
 
     renderManagePage();
-    await screen.findByTestId('manage-state-waiting');
+    await screen.findByTestId('manage-state-locked');
 
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'my secret text' },
