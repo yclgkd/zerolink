@@ -25,9 +25,10 @@ resolves `pnpm@9.12.0` from the root `packageManager` field instead of a separat
 action.
 Followed up after PR #135 showed `setup-node@v5` was still auto-detecting `pnpm` from the root
 `packageManager` field before the later Corepack steps ran. The workflows now set
-`package-manager-cache: false`, use `/tmp/corepack` as `COREPACK_HOME`, and run
-package-manager commands through `corepack pnpm ...` so the jobs no longer depend on a preexisting
-or shimmed `pnpm` executable on `PATH`.
+`package-manager-cache: false`, use `/tmp/corepack` as `COREPACK_HOME`, create a user-space `pnpm`
+shim under `/tmp/corepack-bin` with `corepack enable --install-directory`, and add that directory
+to `GITHUB_PATH` so both direct steps and nested package scripts can resolve pnpm without relying
+on a global shim.
 Validated the workflow-facing commands with `pnpm typecheck`, `pnpm test`,
 `VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm build`,
 `pnpm manifest:generate`, and `git diff --check`. Local `pnpm manifest:verify` still requires a

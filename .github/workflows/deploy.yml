@@ -46,23 +46,27 @@ jobs:
       - name: Resolve pnpm via Corepack
         run: |
           mkdir -p "$COREPACK_HOME"
-          corepack pnpm --version
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
-        run: corepack pnpm typecheck
+        run: pnpm typecheck
 
       - name: Run tests
-        run: corepack pnpm test
+        run: pnpm test
 
       - name: Install Playwright browsers
-        run: corepack pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
       - name: Run E2E tests
-        run: corepack pnpm --filter frontend test:e2e
+        run: pnpm --filter frontend test:e2e
 
   deploy-backend:
     name: Deploy Worker (${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }})
@@ -87,10 +91,14 @@ jobs:
       - name: Resolve pnpm via Corepack
         run: |
           mkdir -p "$COREPACK_HOME"
-          corepack pnpm --version
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Deploy Worker (production)
         if: startsWith(github.ref, 'refs/tags/')
@@ -131,26 +139,30 @@ jobs:
       - name: Resolve pnpm via Corepack
         run: |
           mkdir -p "$COREPACK_HOME"
-          corepack pnpm --version
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"
-        run: corepack pnpm --filter frontend build
+        run: pnpm --filter frontend build
 
       - name: Generate manifest
-        run: corepack pnpm manifest:generate
+        run: pnpm manifest:generate
 
       - name: Sign manifest
         env:
           MANIFEST_SIGNING_KEY: ${{ secrets.MANIFEST_SIGNING_KEY }}
-        run: corepack pnpm manifest:sign
+        run: pnpm manifest:sign
 
       - name: Verify manifest
-        run: corepack pnpm manifest:verify
+        run: pnpm manifest:verify
 
       - name: Deploy to Pages (production)
         if: startsWith(github.ref, 'refs/tags/')

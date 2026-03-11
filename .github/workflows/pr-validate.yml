@@ -36,16 +36,20 @@ jobs:
       - name: Resolve pnpm via Corepack
         run: |
           mkdir -p "$COREPACK_HOME"
-          corepack pnpm --version
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
-        run: corepack pnpm typecheck
+        run: pnpm typecheck
 
       - name: Run tests
-        run: corepack pnpm test
+        run: pnpm test
 
   pr-build:
     name: PR Build
@@ -67,15 +71,19 @@ jobs:
       - name: Resolve pnpm via Corepack
         run: |
           mkdir -p "$COREPACK_HOME"
-          corepack pnpm --version
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"
-        run: corepack pnpm --filter @zerolink/frontend build
+        run: pnpm --filter @zerolink/frontend build
 
   pr-e2e:
     name: PR E2E
@@ -97,14 +105,18 @@ jobs:
       - name: Resolve pnpm via Corepack
         run: |
           mkdir -p "$COREPACK_HOME"
-          corepack pnpm --version
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: corepack pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
       - name: Run E2E tests
-        run: corepack pnpm --filter @zerolink/frontend test:e2e
+        run: pnpm --filter @zerolink/frontend test:e2e
