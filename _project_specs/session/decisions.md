@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-11] Workflow and security docs must describe the shipped path precisely
+
+**Decision**: Keep runnable workflow examples complete, describe `/api/public/:uuid` as a minimal public snapshot rather than a non-disclosing endpoint, and scope Signed Manifest guarantees to signed-release builds that actually enable runtime verification.
+**Context**: The doc-drift cleanup updated several pages to match current `main`, but review caught that one CI example was no longer copy-pastable and two security bullets overstated privacy/integrity guarantees relative to the shipped implementation.
+**Options Considered**: Leave the docs aspirational; trim details until they are vague enough not to be wrong; restate the concrete runtime and deployment conditions exactly.
+**Choice**: Make the examples and guarantees explicit about prerequisites, public metadata disclosure, and the fact that fail-closed Verified Release protection is opt-in at build/deploy time.
+**Reasoning**: These docs are used as operational references. A concise but exact description is more valuable than a stronger claim that only applies to part of the deployment matrix.
+**Trade-offs**: The security section now states the web trust boundary more plainly, which is less marketing-friendly but more useful for engineering and review.
+
 ## [2026-03-11] `_project_specs/session/` keeps only durable context files
 
 **Decision**: Remove `_project_specs/session/current-state.md` and keep `_project_specs/session/` limited to `decisions.md` and `code-landmarks.md`.

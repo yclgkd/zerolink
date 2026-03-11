@@ -94,10 +94,10 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 
 ### 5. 最小元数据泄露 ✅
 
-**目标**：公共接口不可推断状态
+**目标**：公共接口只暴露前端运行所需的最小元数据，不暴露密文、管理凭据或明文密钥材料
 
 **保证**：
-- `/api/public/:uuid`：返回当前 `state`、`adminMode`、`securityProfile`，以及上锁后才会出现的可选 `receiverPubFpr`
+- `/api/public/:uuid`：返回前端同步所需的最小公开状态快照（`state`、`adminMode`、`securityProfile`，以及上锁后才会出现的可选 `receiverPubFpr`），但不返回密文、管理凭据、`lock_secret` 或接收方公钥本体
 - receiver_pub 仅在成功认证后返回给发送方
 - 错误响应恒定形状：`{ok: false}`，不泄露细节
 - Deleted/Expired 可统一返回 404
@@ -114,13 +114,14 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 
 **保证**：
 - CSP 限制第三方脚本与跨源资源；运行时脚本保持同源，样式暂允许 `unsafe-inline`
-- Signed Manifest + 同源运行时资源哈希校验
+- Signed Manifest + 同源运行时资源哈希校验，仅适用于启用了 `VITE_RELEASE_VERIFICATION_REQUIRED=true` 且同时发布签名产物的签名发布构建
 - 零第三方脚本/字体
+- 普通 `pnpm build` / 未签名手动部署仍可运行，但属于未验证启动
 - 可复现构建 + 签名 Manifest（已落地到官方签名发布路径）
 
 **边界**：
 - 服务器下发恶意 JS：Web 架构固有风险
-- 缓解：自托管 + 离线包 + Signed Manifest
+- 缓解：自托管 + 离线包 + Signed Manifest（针对签名发布路径）
 
 ---
 

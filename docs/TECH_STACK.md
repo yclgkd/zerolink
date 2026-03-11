@@ -910,11 +910,34 @@ jobs:
   pr-build:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
       - run: pnpm --filter @zerolink/frontend build
 
   pr-e2e:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
       - run: pnpm --filter @zerolink/frontend test:e2e
 ```
 
