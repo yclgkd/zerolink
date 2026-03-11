@@ -20,11 +20,14 @@ sessions, with regression coverage to keep dead-link copy actions from reappeari
 
 Updated `.github/workflows/deploy.yml` and `.github/workflows/pr-validate.yml` to remove
 deprecated Node 20-based action runtimes. `actions/checkout` and `actions/setup-node` now use
-pinned `v5` SHAs, while `pnpm/action-setup` was replaced with `corepack enable` so CI resolves
-`pnpm@9.12.0` from the root `packageManager` field instead of a separate JavaScript action.
-Followed up by removing `cache: "pnpm"` from `actions/setup-node` after PR #135 showed the cache
-path was evaluated before the later Corepack step exposed the `pnpm` binary, causing all three PR
-validation jobs to fail during setup.
+pinned `v5` SHAs, while `pnpm/action-setup` was replaced with a Corepack-based pnpm flow that
+resolves `pnpm@9.12.0` from the root `packageManager` field instead of a separate JavaScript
+action.
+Followed up after PR #135 showed `setup-node@v5` was still auto-detecting `pnpm` from the root
+`packageManager` field before the later Corepack steps ran. The workflows now set
+`package-manager-cache: false`, use `${{ runner.temp }}/corepack` as `COREPACK_HOME`, and run
+package-manager commands through `corepack pnpm ...` so the jobs no longer depend on a preexisting
+or shimmed `pnpm` executable on `PATH`.
 Validated the workflow-facing commands with `pnpm typecheck`, `pnpm test`,
 `VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm build`,
 `pnpm manifest:generate`, and `git diff --check`. Local `pnpm manifest:verify` still requires a

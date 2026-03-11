@@ -21,6 +21,8 @@ jobs:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      COREPACK_HOME: ${{ runner.temp }}/corepack
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -29,24 +31,29 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Type check
-        run: pnpm typecheck
+        run: corepack pnpm typecheck
 
       - name: Run tests
-        run: pnpm test
+        run: corepack pnpm test
 
   pr-build:
     name: PR Build
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      COREPACK_HOME: ${{ runner.temp }}/corepack
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -55,23 +62,28 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Build frontend
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"
-        run: pnpm --filter @zerolink/frontend build
+        run: corepack pnpm --filter @zerolink/frontend build
 
   pr-e2e:
     name: PR E2E
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      COREPACK_HOME: ${{ runner.temp }}/corepack
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -80,16 +92,19 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: corepack pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
       - name: Run E2E tests
-        run: pnpm --filter @zerolink/frontend test:e2e
+        run: corepack pnpm --filter @zerolink/frontend test:e2e

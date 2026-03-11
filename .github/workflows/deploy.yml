@@ -30,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      COREPACK_HOME: ${{ runner.temp }}/corepack
 
     steps:
       - name: Checkout
@@ -39,25 +41,28 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Type check
-        run: pnpm typecheck
+        run: corepack pnpm typecheck
 
       - name: Run tests
-        run: pnpm test
+        run: corepack pnpm test
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: corepack pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
       - name: Run E2E tests
-        run: pnpm --filter frontend test:e2e
+        run: corepack pnpm --filter frontend test:e2e
 
   deploy-backend:
     name: Deploy Worker (${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }})
@@ -66,6 +71,8 @@ jobs:
     environment: ${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }}
     permissions:
       contents: read
+    env:
+      COREPACK_HOME: ${{ runner.temp }}/corepack
 
     steps:
       - name: Checkout
@@ -75,12 +82,15 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Deploy Worker (production)
         if: startsWith(github.ref, 'refs/tags/')
@@ -105,6 +115,8 @@ jobs:
     environment: ${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }}
     permissions:
       contents: read
+    env:
+      COREPACK_HOME: ${{ runner.temp }}/corepack
 
     steps:
       - name: Checkout
@@ -114,28 +126,31 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          corepack pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: corepack pnpm install --frozen-lockfile
 
       - name: Build frontend
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"
-        run: pnpm --filter frontend build
+        run: corepack pnpm --filter frontend build
 
       - name: Generate manifest
-        run: pnpm manifest:generate
+        run: corepack pnpm manifest:generate
 
       - name: Sign manifest
         env:
           MANIFEST_SIGNING_KEY: ${{ secrets.MANIFEST_SIGNING_KEY }}
-        run: pnpm manifest:sign
+        run: corepack pnpm manifest:sign
 
       - name: Verify manifest
-        run: pnpm manifest:verify
+        run: corepack pnpm manifest:verify
 
       - name: Deploy to Pages (production)
         if: startsWith(github.ref, 'refs/tags/')
