@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-11] `_project_specs/session/` keeps only durable context files
+
+**Decision**: Remove `_project_specs/session/current-state.md` and keep `_project_specs/session/` limited to `decisions.md` and `code-landmarks.md`.
+**Context**: The archive layer was already removed, but `current-state.md` still duplicated volatile branch/PR history in a way that was harder to scan than `git log`, the open PR, or the current diff. The remaining value in `_project_specs/` is durable rationale and navigation, not a repo-local activity feed.
+**Options Considered**: Keep `current-state.md` as a handoff file; replace it with a smaller status template; remove it and rely on git/PR/worktree state for transient progress.
+**Choice**: Keep only `decisions.md` and `code-landmarks.md`.
+**Reasoning**: Humans and agents can already reconstruct "what is happening now" from branch status, recent commits, PR discussion, and the current diff. The repo-local files are most useful when they explain why the code looks this way and where to look next.
+**Trade-offs**: There is no longer a single markdown handoff file for in-progress work, so good commit hygiene and clear PR context matter more.
+
 ## [2026-03-11] `_project_specs/session/` keeps only live session files
 
 **Decision**: Remove `_project_specs/session/archive/` and keep `_project_specs/session/` limited to `current-state.md`, `decisions.md`, and `code-landmarks.md`.
@@ -21,6 +30,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Keep only the three live session files under `_project_specs/session/`.
 **Reasoning**: The high-value context is current status, durable decisions, and fast code navigation. Removing the archive layer lowers maintenance cost, reduces stale-path drift across agent docs, and keeps the handoff surface predictable.
 **Trade-offs**: Historical completion detail now lives in git/PR history, and `current-state.md` must stay concise so it does not become a de facto archive.
+**Follow-up (2026-03-11)**: Superseded later the same day. `current-state.md` was also removed, leaving only the durable context files `decisions.md` and `code-landmarks.md`.
 
 ## [2026-03-11] `_project_specs` keeps live state in `session/` and archives history under `session/archive/`
 
@@ -30,7 +40,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Collapse to `session/` plus `session/archive/`.
 **Reasoning**: Human readers mostly need current state, decisions, code landmarks, and a concise completed-history archive. Putting those under one `session/` tree reduces navigation cost, and newest-first archive ordering matches how recent work is usually read.
 **Trade-offs**: Repo-local workflow docs and skill files must move with the structure change, otherwise agents regress to stale path assumptions.
-**Follow-up (2026-03-11)**: Superseded later the same day. The archive layer turned out to be low-value duplication, so `_project_specs/session/archive/` was removed and the repo now keeps only `current-state.md`, `decisions.md`, and `code-landmarks.md`.
+**Follow-up (2026-03-11)**: Superseded later the same day. The archive layer turned out to be low-value duplication, and the subsequent cleanup also removed `current-state.md`, so `_project_specs/session/` now keeps only `decisions.md` and `code-landmarks.md`.
 ## [2026-03-11] Durable Object alarm scheduling must fail closed on corrupt timing state, and staging may reset its namespace independently
 
 **Decision**: Reconcile nonce cleanup inside the alarm scheduler, delete alarms when the next candidate is not a finite future timestamp, treat malformed `expiresAt` values as expired terminal state, and move staging onto a fresh `SecretVaultStaging` SQLite class while leaving production on `SecretVault`.
@@ -268,7 +278,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Decision**: Enforce an "Atomic Update Rule" where every code change must include a corresponding update to `_project_specs/`.
 **Rationale**: The `_project_specs` directory was becoming outdated (stale context), leading to AI assistants losing track of project progress and architectural decisions. Versioning these files alongside code ensures the project's "external brain" is always accurate.
 **Mechanism**:
-1. Every `feat` or `fix` commit must bundle updates to the live session files. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplification, the practical paths are `current-state.md`, `decisions.md`, and `code-landmarks.md` when workflow/navigation context changes.
+1. Every `feat` or `fix` commit must bundle updates to the durable session files when needed. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplifications, the practical paths are `decisions.md` and `code-landmarks.md` when rationale or navigation context changes.
 2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
 **Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update
