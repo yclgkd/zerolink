@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-11] `_project_specs/session/` keeps only live session files
+
+**Decision**: Remove `_project_specs/session/archive/` and keep `_project_specs/session/` limited to `current-state.md`, `decisions.md`, and `code-landmarks.md`.
+**Context**: After deleting `_project_specs/todos/`, the archive layer still duplicated `git log` / PR history while forcing repo guidance to carry stale path references. Human readers consistently need current state, rationale, and navigation more than a separate completed-work log.
+**Options Considered**: Keep `session/archive/` for completed history; keep archive files only for end-of-session snapshots; remove the archive layer entirely and rely on live session files plus GitHub/git history.
+**Choice**: Keep only the three live session files under `_project_specs/session/`.
+**Reasoning**: The high-value context is current status, durable decisions, and fast code navigation. Removing the archive layer lowers maintenance cost, reduces stale-path drift across agent docs, and keeps the handoff surface predictable.
+**Trade-offs**: Historical completion detail now lives in git/PR history, and `current-state.md` must stay concise so it does not become a de facto archive.
+
 ## [2026-03-11] `_project_specs` keeps live state in `session/` and archives history under `session/archive/`
 
 **Decision**: Remove `_project_specs/todos/`, keep live project context in `_project_specs/session/`, and store completed-history records in `_project_specs/session/archive/` with newest-first ordering.
@@ -21,6 +30,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Collapse to `session/` plus `session/archive/`.
 **Reasoning**: Human readers mostly need current state, decisions, code landmarks, and a concise completed-history archive. Putting those under one `session/` tree reduces navigation cost, and newest-first archive ordering matches how recent work is usually read.
 **Trade-offs**: Repo-local workflow docs and skill files must move with the structure change, otherwise agents regress to stale path assumptions.
+**Follow-up (2026-03-11)**: Superseded later the same day. The archive layer turned out to be low-value duplication, so `_project_specs/session/archive/` was removed and the repo now keeps only `current-state.md`, `decisions.md`, and `code-landmarks.md`.
 ## [2026-03-11] Durable Object alarm scheduling must fail closed on corrupt timing state, and staging may reset its namespace independently
 
 **Decision**: Reconcile nonce cleanup inside the alarm scheduler, delete alarms when the next candidate is not a finite future timestamp, treat malformed `expiresAt` values as expired terminal state, and move staging onto a fresh `SecretVaultStaging` SQLite class while leaving production on `SecretVault`.
@@ -258,7 +268,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Decision**: Enforce an "Atomic Update Rule" where every code change must include a corresponding update to `_project_specs/`.
 **Rationale**: The `_project_specs` directory was becoming outdated (stale context), leading to AI assistants losing track of project progress and architectural decisions. Versioning these files alongside code ensures the project's "external brain" is always accurate.
 **Mechanism**:
-1. Every `feat` or `fix` commit must bundle updates to the live session files and any affected archive history. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplification, the practical paths are `current-state.md`, `decisions.md`, and `session/archive/completed.md` when task history changes.
+1. Every `feat` or `fix` commit must bundle updates to the live session files. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplification, the practical paths are `current-state.md`, `decisions.md`, and `code-landmarks.md` when workflow/navigation context changes.
 2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
 **Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update

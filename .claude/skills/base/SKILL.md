@@ -119,10 +119,7 @@ project/
 │   ├── session/               # Session state (see session-management.md)
 │   │   ├── current-state.md   # Live session state
 │   │   ├── decisions.md       # Key decisions log
-│   │   ├── code-landmarks.md  # Important code locations
-│   │   └── archive/           # Past session summaries + completed history
-│   │       ├── completed.md
-│   │       └── 2025-01-15.md
+│   │   └── code-landmarks.md  # Important code locations
 │   └── prompts/               # LLM prompt specifications (if AI-first)
 └── CLAUDE.md                  # Claude instructions (references skills)
 ```
@@ -133,7 +130,7 @@ project/
 |----------|---------|
 | `docs/` | Technical documentation, API refs, setup guides |
 | `_project_specs/` | Business logic, features, requirements, and session metadata |
-| `_project_specs/session/` | Live session state, decisions, code landmarks, and archive history |
+| `_project_specs/session/` | Live session state, decisions, and code landmarks |
 | `CLAUDE.md` | Claude-specific instructions and skill references |
 
 ---
@@ -177,7 +174,7 @@ How to verify this is complete:
 | RED | `[test command]` | - | - |
 | GREEN | `[test command]` | - | - |
 | VALIDATE | `[lint && typecheck && test --coverage]` | - | - |
-| COMPLETE | Archived in `session/archive/completed.md` | - | - |
+| COMPLETE | Checkpoint recorded in `current-state.md` | - | - |
 ```
 
 ### Todo Rules
@@ -185,7 +182,7 @@ How to verify this is complete:
 2. **Testable** - Every todo has validation criteria and test cases
 3. **Sized** - If larger than "M", break it down further
 4. **Independent** - Minimize dependencies between todos
-5. **Tracked** - Keep active work in `current-state.md` and archive finished work in `session/archive/completed.md`
+5. **Tracked** - Keep active and freshly finished work in `current-state.md`; log durable rationale in `decisions.md`
 
 ### Todo Execution Workflow (TDD - Mandatory)
 
@@ -211,7 +208,7 @@ How to verify this is complete:
 ├─────────────────────────────────────────────────────────────┤
 │  4. COMPLETE: Mark Done                                     │
 │     └─ Only after ALL validations pass                      │
-│     └─ Archive completion in session/archive/completed.md   │
+│     └─ Update current-state.md and related session files    │
 │     └─ Checkpoint session state                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -383,7 +380,7 @@ Validate email format on the signup form before submission. Show inline error if
 | RED | `npm test -- --grep "email validation"` | 5 tests failed ✓ | - |
 | GREEN | `npm test -- --grep "email validation"` | 5 tests passed ✓ | - |
 | VALIDATE | `npm run lint && npm run typecheck && npm test -- --coverage` | Pass, 84% coverage ✓ | - |
-| COMPLETE | Archived in `session/archive/completed.md` | ✓ | - |
+| COMPLETE | Checkpoint recorded in `current-state.md` | ✓ | - |
 ```
 
 ---
@@ -466,17 +463,17 @@ Maintain context for resumability. See `session-management.md` for full details.
 After completing any task, ask:
 1. **Decision made?** → Log to `_project_specs/session/decisions.md`
 2. **>10 tool calls?** → Full checkpoint to `current-state.md`
-3. **Major feature done?** → Archive to `session/archive/`
+3. **Major feature done?** → Full checkpoint and update `code-landmarks.md` if navigation changed
 4. **Otherwise** → Quick update to `current-state.md`
 
 ### Session Start
 1. Read `_project_specs/session/current-state.md`
 2. Review documented "Next Steps"
-3. Check `_project_specs/session/archive/completed.md` only if recent finished work matters
+3. Review `decisions.md` or `code-landmarks.md` only if recent rationale or navigation matters
 
 ### Session End
-1. Archive current session
-2. Update `current-state.md` with handoff notes
+1. Update `current-state.md` with handoff notes
+2. Sync `decisions.md` / `code-landmarks.md` if workflow or entrypoints changed
 3. Ensure next steps are specific and actionable
 
 ---

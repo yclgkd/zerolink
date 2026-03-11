@@ -38,7 +38,7 @@ Long development sessions risk context loss. Proactively document state, decisio
 2. Log any decisions to decisions.md
 3. Update files being modified table
 
-### Tier 3: Session Archive (archive/ + full checkpoint)
+### Tier 3: Session Handoff (full checkpoint + cleanup)
 **Trigger**:
 - End of work session
 - Completing a major feature/milestone
@@ -46,10 +46,10 @@ Long development sessions risk context loss. Proactively document state, decisio
 - When context feels heavy (~50+ tool calls)
 
 **Action**:
-1. Create archive entry: `archive/YYYY-MM-DD[-topic].md`
-2. Full checkpoint
-3. Clear verbose notes from current-state.md
-4. Update code-landmarks.md if new patterns introduced
+1. Full checkpoint in `current-state.md`
+2. Log durable decisions in `decisions.md`
+3. Update `code-landmarks.md` if new patterns or entrypoints matter
+4. Trim stale detail and leave explicit resume steps in `current-state.md`
 
 ### Decision Heuristic
 ```
@@ -58,8 +58,8 @@ Long development sessions risk context loss. Proactively document state, decisio
 ├─────────────────────────────────────────────────────┤
 │ Was a decision made?        → Log to decisions.md   │
 │ Task took >10 tool calls?   → Full Checkpoint       │
-│ Major feature complete?     → Archive               │
-│ Ending session?             → Archive + Handoff     │
+│ Major feature complete?     → Full Checkpoint + Landmarks │
+│ Ending session?             → Handoff + Next Steps  │
 │ Otherwise                   → Quick Update          │
 └─────────────────────────────────────────────────────┘
 ```
@@ -75,9 +75,7 @@ _project_specs/
 └── session/
     ├── current-state.md      # Live session state (update frequently)
     ├── decisions.md          # Key decisions log (append-only)
-    ├── code-landmarks.md     # Important code locations
-    └── archive/              # Past session summaries
-        └── 2025-01-15.md
+    └── code-landmarks.md     # Important code locations
 ```
 
 ---
@@ -279,7 +277,7 @@ Ask yourself:
 - After any decision
 - When switching focus areas
 
-**Archive** (archive/ + full checkpoint):
+**Session Handoff** (full checkpoint + cleanup):
 - End of session
 - Major feature complete
 - Context feels heavy
@@ -288,30 +286,31 @@ Ask yourself:
 When beginning work:
 1. Read `_project_specs/session/current-state.md`
 2. Review recent `decisions.md` entries if needed
-3. Check `_project_specs/session/archive/completed.md` only if recent finished work matters
+3. Review `code-landmarks.md` if you need navigation back into an unfamiliar area
 4. Continue from "Next Steps"
 
 ### Session End Protocol
 Before ending or when context limit approaches:
-1. Create archive: `_project_specs/session/archive/YYYY-MM-DD.md`
-2. Update current-state.md with handoff format
-3. Ensure next steps are specific and actionable
+1. Update `current-state.md` with a concise handoff
+2. Log any durable decisions in `decisions.md`
+3. Update `code-landmarks.md` if new entrypoints or gotchas were introduced
+4. Ensure next steps are specific and actionable
 ```
 
 ---
 
 ## Compression Strategies
 
-### When to Compress (Tier 3 Archive)
+### When to Compress (Tier 3 Handoff)
 
 | Trigger | Action |
 |---------|--------|
-| ~50+ tool calls | Summarize progress, archive verbose notes |
-| Major feature complete | Archive feature details, update landmarks |
-| Context shift | Summarize previous context, archive, start fresh |
-| End of session | Full session handoff with archive |
+| ~50+ tool calls | Summarize progress and trim verbose notes |
+| Major feature complete | Leave a concise handoff and update landmarks |
+| Context shift | Summarize previous context and refresh next steps |
+| End of session | Full session handoff in `current-state.md` |
 
-### What to Keep vs Archive
+### What to Keep vs Compress
 
 **Keep in active context:**
 - Current task and immediate next steps
@@ -319,7 +318,7 @@ Before ending or when context limit approaches:
 - Blocking issues
 - Key decisions affecting current work
 
-**Archive/summarize:**
+**Compress/summarize:**
 - Exploration paths that didn't work out
 - Detailed debugging traces (keep conclusion only)
 - Verbose error messages (keep root cause only)
@@ -343,48 +342,23 @@ When compressing, use this format:
 **Relevant Code**:
 - [File:line references]
 
-**Archived Details**: [Link to archive file if created]
+**Stored In**: `current-state.md` (+ `decisions.md` / `code-landmarks.md` if needed)
 ```
 
 ---
 
-## Session Archive
+## Session Handoff
 
-After significant work or at session end, create archive:
-
-**`_project_specs/session/archive/YYYY-MM-DD[-topic].md`**
+After significant work or at session end, leave a concise handoff in `current-state.md` instead of creating a separate archive file:
 
 ```markdown
-# Session Archive: [Date] - [Topic]
+## Latest Update (2025-01-15)
+- `src/auth/login.ts`, `src/auth/refresh.ts` — Added token rotation and logout blacklist handling.
+- Validation: `npm test -- --grep "auth"`, `npm run typecheck`
 
-## Summary
-[Paragraph summarizing what was accomplished]
-
-## Tasks Completed
-- [TODO-XXX] Description - Done
-- [TODO-YYY] Description - Done
-
-## Key Decisions
-- [Reference decisions.md entries made this session]
-
-## Code Changes
-| File | Change Type | Description |
-|------|-------------|-------------|
-| src/auth/login.ts | Created | Login endpoint |
-| src/auth/types.ts | Modified | Added RefreshToken type |
-
-## Tests Added
-- tests/auth/login.test.ts - Login flow tests
-- tests/auth/refresh.test.ts - Token refresh tests
-
-## Open Items Carried Forward
-- [Anything not finished, now reflected in current-state.md `Next Steps`]
-
-## Session Stats
-- Duration: ~3 hours
-- Tool calls: ~120
-- Files modified: 8
-- Tests added: 12
+## Next Steps
+1. [ ] Add integration coverage for refresh-token expiry.
+2. [ ] Update `decisions.md` if token storage policy changes.
 ```
 
 ---
@@ -409,10 +383,9 @@ In your active task notes or issue tracker, reference session context:
 ### Auto-Update on Task Completion
 
 When completing a tracked task:
-1. Archive the completion in `session/archive/completed.md`
-2. Update current-state.md progress
-3. Log any decisions made
-4. Update code-landmarks.md if new patterns introduced
+1. Update `current-state.md` progress and handoff notes
+2. Log any durable decisions in `decisions.md`
+3. Update `code-landmarks.md` if new patterns introduced
 
 ---
 
@@ -429,13 +402,6 @@ alias session-edit="$EDITOR _project_specs/session/current-state.md"
 
 # View recent decisions
 alias decisions="tail -100 _project_specs/session/decisions.md"
-
-# Create session archive
-session-archive() {
-  cp _project_specs/session/current-state.md \
-     "_project_specs/session/archive/$(date +%Y-%m-%d).md"
-  echo "Archived to _project_specs/session/archive/$(date +%Y-%m-%d).md"
-}
 ```
 
 ---
@@ -454,7 +420,7 @@ Include enforcement reminders in session file headers:
 CHECKPOINT RULES (from session-management.md):
 - Quick update: After any todo completion
 - Full checkpoint: After ~20 tool calls or decisions
-- Archive: End of session or major feature complete
+- Session handoff: End of session or major feature complete
 -->
 ```
 
@@ -463,8 +429,8 @@ After completing any task, the agent should ask:
 ```
 □ Did I make a decision? → Log it
 □ Did this take >10 tool calls? → Full checkpoint
-□ Is a feature complete? → Archive
-□ Am I ending/switching context? → Archive + handoff
+□ Is a feature complete? → Full checkpoint + landmarks
+□ Am I ending/switching context? → Handoff + next steps
 ```
 
 ### 4. Session Start Verification
@@ -483,7 +449,7 @@ Every ~20 tool calls, the agent should check:
 Users can enforce by asking:
 - "Update session state" → Triggers checkpoint
 - "What's the current state?" → The agent reads and reports
-- "End session" → Triggers archive + handoff
+- "End session" → Triggers full checkpoint + handoff
 - "Resume from last session" → The agent reads state files first
 
 ---
@@ -495,7 +461,7 @@ Users can enforce by asking:
 - **Stale state files** - Update regularly or they become useless
 - **Missing decisions** - Future you won't remember why
 - **No code landmarks** - Wastes time re-discovering the codebase
-- **Never archiving** - Session files become cluttered
+- **Never handing off** - The next session starts without a reliable resume point
 - **Ignoring compression signals** - Context overload degrades performance
 - **Skipping checkpoint after decisions** - Key context lost
 - **No handoff at session end** - Next session starts blind
@@ -512,7 +478,7 @@ Task completed?
     │
     ├── >10 tool calls OR significant? ──→ Full Checkpoint
     │
-    ├── Major feature done? ─────────────→ Archive
+    ├── Major feature done? ─────────────→ Full Checkpoint + Landmarks
     │
     └── Otherwise ───────────────────────→ Quick Update
 ```
@@ -523,4 +489,3 @@ Task completed?
 | current-state.md | Every task | Live state, next steps |
 | decisions.md | When deciding | Architectural choices |
 | code-landmarks.md | When patterns change | Code navigation |
-| archive/*.md | End of session/feature | Historical record |
