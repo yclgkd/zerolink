@@ -27,7 +27,7 @@
 2. **协议一致性**: 前后端共享关键代码（Canonical、常量、Schema）
 3. **快速反馈**: Vite 快速开发 + Vitest 快速测试
 4. **代码质量**: Biome 统一规范 + TypeScript strict + 自动化检查
-5. **可维护性**: Monorepo + Changesets 版本管理
+5. **可维护性**: Monorepo + GitHub Actions 发布流程
 
 ### 技术选型理由（ZeroLink 特定）
 
@@ -464,39 +464,31 @@ Refs: PRD § 附录 C
 
 ### 版本管理与发布流水线
 
-#### Changesets
+#### PR 验证 + Tag 发布
 
-```json
-{
-  "devDependencies": {
-    "@changesets/cli": "^2.27.0"
-  }
-}
-```
+当前仓库不再使用 Changesets，版本与发布流程由 GitHub Actions 驱动：
 
-**用途**:
-- ✅ 版本号管理（semver）
-- ✅ 自动生成 CHANGELOG
-- ✅ 支持 Monorepo 多包独立版本
+- `pull_request` / `merge_group` 运行 `pr-validate.yml`
+- `push main` 自动部署 staging
+- `push v*` tag 自动部署 production
+- 官方签名发布会在部署前生成、签名并校验 `manifest.json`
 
 **工作流**:
 ```bash
-# 1. 开发完成后添加 changeset
-pnpm changeset add
+# 1. 开发并推送功能分支
+git push origin <branch>
 
-# 2. 选择影响的包和版本类型
-? Which packages would you like to include? @zerolink/frontend, @zerolink/shared
-? What kind of change is this for @zerolink/frontend? minor
-? What kind of change is this for @zerolink/shared? patch
+# 2. 等待 PR 验证通过
+pnpm typecheck
+pnpm test
+pnpm --filter @zerolink/frontend build
+pnpm --filter @zerolink/frontend test:e2e
 
-# 3. 写变更描述（会进入 CHANGELOG）
-Summary: 实现 Lock Secret 防抢占锁定
+# 3. 合并到 main 后自动部署 staging
 
-# 4. 发布时（CI 自动或手动）
-pnpm changeset version  # 更新版本号和 CHANGELOG
-pnpm install            # 更新 lockfile
-git commit -am "chore: version packages"
-pnpm changeset publish  # 发布
+# 4. 推送 tag 触发 production
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ---
@@ -569,7 +561,6 @@ ZeroLink/
 │       ├── wrangler.toml
 │       └── vitest.config.ts
 │
-├── .changeset/                    # Changesets 配置
 ├── .husky/                        # Git hooks
 ├── docs/                          # 文档
 ├── biome.json                     # Biome 配置
@@ -683,7 +674,7 @@ export async function wrapPrivateKey(
 
 ### 安全相关配置
 
-#### Vite 配置（CSP + SRI）
+#### Vite 配置（CSP + Verified Release）
 
 ```typescript
 // packages/frontend/vite.config.ts
@@ -716,7 +707,7 @@ export default defineConfig({
   },
 
   build: {
-    // 文件名包含 hash（便于 SRI）
+    // 文件名包含 hash（便于 Verified Release 运行时校验）
     rollupOptions: {
       output: {
         entryFileNames: 'assets/[name].[hash].js',
@@ -852,14 +843,13 @@ pnpm add -D -w \
   @biomejs/biome \
   husky lint-staged \
   @commitlint/cli @commitlint/config-conventional \
-  @changesets/cli \
   typescript
 
 # 7. 初始化 Git Hooks
 pnpm exec husky init
 
-# 8. 初始化 Changesets
-pnpm changeset init
+# 8. 准备 CI / deploy workflow
+# 使用仓库内现成的 .github/workflows/pr-validate.yml 与 deploy.yml
 ```
 
 ### 日常开发
@@ -891,36 +881,63 @@ pnpm --filter @zerolink/frontend test:e2e
 ### CI 流水线（GitHub Actions 示例）
 
 ```yaml
-# .github/workflows/ci.yml
-name: CI
+# .github/workflows/pr-validate.yml
+name: PR Validate
 
-on: [push, pull_request]
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
 
 jobs:
-  quality:
+  pr-quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
+          node-version: "22"
+          package-manager-cache: false
+
+      - run: corepack enable
 
       - run: pnpm install --frozen-lockfile
 
-      # 代码规范
-      - run: pnpm biome ci .
-
-      # 类型检查
       - run: pnpm typecheck
-
-      # 单元测试
       - run: pnpm test
 
-      # E2E 测试
+  pr-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @zerolink/frontend build
+
+  pr-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
       - run: pnpm --filter @zerolink/frontend test:e2e
 ```
 
@@ -942,21 +959,20 @@ jobs:
 
 ```
 合并前必须通过：
-1. ✅ biome ci .（无法修复的错误则失败）
-2. ✅ pnpm typecheck（类型错误则失败）
-3. ✅ pnpm test（单元测试失败则失败）
-4. ✅ pnpm test:e2e（E2E 测试失败则失败）
-5. ✅ commitlint（提交信息不符合规范则失败）
+1. ✅ pnpm typecheck（类型错误则失败）
+2. ✅ pnpm test（单元测试失败则失败）
+3. ✅ pnpm --filter @zerolink/frontend build（签名发布构建失败则失败）
+4. ✅ pnpm --filter @zerolink/frontend test:e2e（E2E 测试失败则失败）
 ```
 
 ### 发布前（Release）
 
 ```
 1. ✅ 所有 CI 检查通过
-2. ✅ pnpm changeset version（更新版本号）
-3. ✅ 手动验证 CHANGELOG
-4. ✅ 标记版本：git tag v1.0.0
-5. ✅ pnpm changeset publish（发布）
+2. ✅ 手动验证部署说明与签名配置
+3. ✅ 标记版本：git tag v1.0.0
+4. ✅ 推送 tag：git push origin v1.0.0
+5. ✅ 等待 `deploy.yml` 完成 production 发布
 ```
 
 ---
@@ -1018,11 +1034,11 @@ ZeroLink/
 ├── tsconfig.base.json        # 基础 TS 配置
 ├── biome.json                # Biome 配置
 ├── commitlint.config.js      # Commitlint 配置
-├── .changeset/config.json    # Changesets 配置
 ├── .husky/
 │   ├── pre-commit
 │   └── commit-msg
-├── .github/workflows/ci.yml  # CI 配置
+├── .github/workflows/pr-validate.yml  # PR CI
+├── .github/workflows/deploy.yml       # staging / production deploy
 └── .gitignore
 ```
 
@@ -1107,14 +1123,10 @@ packages/backend/
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
     "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
-    "prepare": "husky",
-    "changeset": "changeset",
-    "version-packages": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
-    "@changesets/cli": "^2.27.0",
     "@commitlint/cli": "^19.5.0",
     "@commitlint/config-conventional": "^19.5.0",
     "husky": "^9.1.0",
@@ -1206,13 +1218,13 @@ packages/backend/
 
 ## 相关文档
 
-- [PRD v2.5](./PRD.md) - 产品需求
+- [PRD v3.0](./PRD.md) - 产品需求
 - [架构设计](./ARCHITECTURE.md) - 系统架构
 - [安全模型](./SECURITY.md) - 威胁模型
 - [文档索引](./INDEX.md) - 快速导航
 
 ---
 
-**最后更新**: 2026-02-25
+**最后更新**: 2026-03-11
 **维护者**: ZeroLink Team
-**状态**: ✅ 规范确定，准备实施
+**状态**: ✅ 已落地，已按当前 main 分支流程更新

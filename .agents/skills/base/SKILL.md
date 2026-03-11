@@ -116,15 +116,9 @@ project/
 │   ├── features/              # Feature specifications
 │   │   ├── feature-a.md
 │   │   └── feature-b.md
-│   ├── todos/                 # Atomic todos tracking
-│   │   ├── active.md          # Current sprint/focus
-│   │   ├── backlog.md         # Future work
-│   │   └── completed.md       # Done items (for reference)
 │   ├── session/               # Session state (see session-management.md)
-│   │   ├── current-state.md   # Live session state
 │   │   ├── decisions.md       # Key decisions log
-│   │   ├── code-landmarks.md  # Important code locations
-│   │   └── archive/           # Past session summaries
+│   │   └── code-landmarks.md  # Important code locations
 │   └── prompts/               # LLM prompt specifications (if AI-first)
 └── AGENTS.md                  # Agent entrypoint doc (or CLAUDE.md / GEMINI.md)
 ```
@@ -134,8 +128,8 @@ project/
 | Location | Content |
 |----------|---------|
 | `docs/` | Technical documentation, API refs, setup guides |
-| `_project_specs/` | Business logic, features, requirements, todos |
-| `_project_specs/session/` | Session state, decisions, context for resumability |
+| `_project_specs/` | Business logic, features, requirements, and session metadata |
+| `_project_specs/session/` | Durable decisions and code-navigation context |
 | `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` | Agent entrypoint instructions and skill references |
 
 ---
@@ -179,7 +173,7 @@ How to verify this is complete:
 | RED | `[test command]` | - | - |
 | GREEN | `[test command]` | - | - |
 | VALIDATE | `[lint && typecheck && test --coverage]` | - | - |
-| COMPLETE | Moved to completed.md | - | - |
+| COMPLETE | Durable context updated if needed | - | - |
 ```
 
 ### Todo Rules
@@ -187,7 +181,7 @@ How to verify this is complete:
 2. **Testable** - Every todo has validation criteria and test cases
 3. **Sized** - If larger than "M", break it down further
 4. **Independent** - Minimize dependencies between todos
-5. **Tracked** - Move between active.md → completed.md when done
+5. **Tracked** - Use git/PR state for active progress; log durable rationale in `decisions.md`
 
 ### Todo Execution Workflow (TDD - Mandatory)
 
@@ -213,8 +207,8 @@ How to verify this is complete:
 ├─────────────────────────────────────────────────────────────┤
 │  4. COMPLETE: Mark Done                                     │
 │     └─ Only after ALL validations pass                      │
-│     └─ Move todo to completed.md                            │
-│     └─ Checkpoint session state                             │
+│     └─ Update `decisions.md` / `code-landmarks.md` if needed│
+│     └─ Keep git/PR context clear                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -385,7 +379,7 @@ Validate email format on the signup form before submission. Show inline error if
 | RED | `npm test -- --grep "email validation"` | 5 tests failed ✓ | - |
 | GREEN | `npm test -- --grep "email validation"` | 5 tests passed ✓ | - |
 | VALIDATE | `npm run lint && npm run typecheck && npm test -- --coverage` | Pass, 84% coverage ✓ | - |
-| COMPLETE | Moved to completed.md | ✓ | - |
+| COMPLETE | Durable context updated if needed | ✓ | - |
 ```
 
 ---
@@ -467,19 +461,18 @@ Maintain context for resumability. See `session-management.md` for full details.
 
 After completing any task, ask:
 1. **Decision made?** → Log to `_project_specs/session/decisions.md`
-2. **>10 tool calls?** → Full checkpoint to `current-state.md`
-3. **Major feature done?** → Archive to `session/archive/`
-4. **Otherwise** → Quick update to `current-state.md`
+2. **Navigation/gotcha changed?** → Update `code-landmarks.md`
+3. **Otherwise** → Rely on git status / commits / PR context
 
 ### Session Start
-1. Read `_project_specs/session/current-state.md`
-2. Check `_project_specs/todos/active.md`
-3. Continue from documented "Next Steps"
+1. Check branch status / open PR / recent commits
+2. Review `decisions.md` if rationale matters
+3. Review `code-landmarks.md` if navigation matters
 
 ### Session End
-1. Archive current session
-2. Update `current-state.md` with handoff notes
-3. Ensure next steps are specific and actionable
+1. Make sure the current diff or commit history reflects progress clearly
+2. Sync `decisions.md` / `code-landmarks.md` if workflow or entrypoints changed
+3. Leave the PR or final response with specific next steps when relevant
 
 ---
 

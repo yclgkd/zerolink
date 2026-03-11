@@ -94,10 +94,10 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 
 ### 5. 最小元数据泄露 ✅
 
-**目标**：公共接口不可推断状态
+**目标**：公共接口只暴露前端运行所需的最小元数据，不暴露密文、管理凭据或明文密钥材料
 
 **保证**：
-- `/api/public/:uuid`：只返回 `exists: true/false`
+- `/api/public/:uuid`：返回前端同步所需的最小公开状态快照（`state`、`adminMode`、`securityProfile`，以及上锁后才会出现的可选 `receiverPubFpr`），但不返回密文、管理凭据、`lock_secret` 或接收方公钥本体
 - receiver_pub 仅在成功认证后返回给发送方
 - 错误响应恒定形状：`{ok: false}`，不泄露细节
 - Deleted/Expired 可统一返回 404
@@ -113,14 +113,15 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 **目标**：前端代码未被篡改
 
 **保证**：
-- CSP 严格策略：no-unsafe-inline、no-unsafe-eval
-- SRI（Subresource Integrity）：所有静态资源 hash
+- CSP 限制第三方脚本与跨源资源；运行时脚本保持同源，样式暂允许 `unsafe-inline`
+- Signed Manifest + 同源运行时资源哈希校验，仅适用于启用了 `VITE_RELEASE_VERIFICATION_REQUIRED=true` 且同时发布签名产物的签名发布构建
 - 零第三方脚本/字体
-- 可复现构建 + 签名 Manifest（未来）
+- 普通 `pnpm build` / 未签名手动部署仍可运行，但属于未验证启动
+- 可复现构建 + 签名 Manifest（已落地到官方签名发布路径）
 
 **边界**：
 - 服务器下发恶意 JS：Web 架构固有风险
-- 缓解：自托管 + 离线包 + Signed Manifest
+- 缓解：自托管 + 离线包 + Signed Manifest（针对签名发布路径）
 
 ---
 
@@ -212,7 +213,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 
 ### Secure Share（Passkey）
 - **适用**：希望使用系统/硬件 passkey 的较高安全场景
-- **管理权**：WebAuthn，`userVerification = "required"`，`residentKey = "required"`
+- **管理权**：WebAuthn，`userVerification = "required"`，`residentKey = "discouraged"`
 - **Padding**：8KB
 - **风险边界**：依然受 Web 场景恶意 JS 边界影响，但管理私钥不可导出
 
@@ -362,7 +363,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 
 **防护**：
 - ⚠️ Web 架构固有风险，无法彻底解决
-- 🔒 CSP + SRI（提高篡改成本）
+- 🔒 CSP + Signed Manifest（提高篡改成本并检测篡改）
 - 🔒 可复现构建 + Signed Manifest（可检测）
 - 🔒 离线包（减少在线下发）
 - 🔒 自托管（完全控制）
@@ -484,7 +485,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - [ ] WebAuthn challenge 绑定 intent_hash
 - [ ] 敏感数据清零（用后即焚）
 - [ ] CSP 严格策略
-- [ ] SRI 所有静态资源
+- [ ] Signed Manifest 与运行时哈希校验
 
 ### UX
 - [ ] 分享链接提示"必须完整复制（包括 # 后）"

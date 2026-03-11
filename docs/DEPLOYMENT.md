@@ -136,13 +136,10 @@ id = "你的-kv-namespace-id"
 ```bash
 cd packages/backend
 
-# 替换为你的实际域名
-RP_ID="your-domain.example.com"
-RP_ORIGIN="https://your-domain.example.com"
+# 先在 Cloudflare Dashboard 中配置 RP_ID / RP_ORIGIN
+# Workers > zerolink-api > Settings > Variables and Secrets
 
-npx wrangler deploy \
-  --var RP_ID:"${RP_ID}" \
-  --var RP_ORIGIN:"${RP_ORIGIN}"
+npx wrangler deploy
 ```
 
 > **WebAuthn 说明 / WebAuthn Note**:
@@ -182,11 +179,11 @@ pnpm build
 
 ```bash
 # 首次创建项目
-npx wrangler pages project create zerolink-frontend
+npx wrangler pages project create zerolink
 
 # 部署到 Pages
 npx wrangler pages deploy dist \
-  --project-name zerolink-frontend \
+  --project-name zerolink \
   --branch main
 ```
 
@@ -197,15 +194,15 @@ npx wrangler pages deploy dist \
 
 #### 配置 API 代理
 
-前端需要通过 `_redirects` 文件将 `/api/*` 代理到 Worker。
+前端默认请求同源 `/api/*`。如果你的 Pages 站点和 Worker 不在同一个 origin，需要在 Cloudflare 边缘层额外提供一个同源代理或 route。
 
-在 `packages/frontend/public/_redirects` 中添加：
+例如：
 
 ```
 /api/* https://zerolink-api.username.workers.dev/:splat 200
 ```
 
-或使用 Pages Functions（`packages/frontend/functions/api/[[path]].ts`）进行代理。
+当前仓库没有内置 `packages/frontend/functions/api/[[path]].ts` 这样的 Pages Functions 代理实现。
 
 ### 选项 B：手动上传 dist
 
@@ -225,7 +222,7 @@ pnpm build
 
 ## 环境变量参考 / Environment Variables
 
-### Worker 运行时变量（通过 `--var` 传入）
+### Worker 运行时变量（在 Cloudflare Dashboard 中配置）
 
 | 变量名 | 必须 | 说明 | 示例 |
 |--------|------|------|------|
@@ -238,8 +235,6 @@ pnpm build
 |-----------|------|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker + Pages + KV 权限） |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
-| `CF_RP_ID` | 生产环境 RP_ID |
-| `CF_RP_ORIGIN` | 生产环境 RP_ORIGIN |
 | `MANIFEST_SIGNING_KEY` | Ed25519 私钥（base64）用于 manifest 签名 |
 
 ### 创建 Cloudflare API Token
@@ -317,7 +312,7 @@ routes = [
 
 ### Pages 自定义域名
 
-1. Cloudflare Dashboard → Pages → `zerolink-frontend` → Custom domains
+1. Cloudflare Dashboard → Pages → `zerolink` → Custom domains
 2. 添加你的域名，按提示配置 DNS
 3. 更新前端的 API 代理目标为新的 Worker 域名
 
@@ -326,8 +321,8 @@ routes = [
 ## CI/CD 自动部署 / Automated Deployment
 
 项目包含一个独立的部署工作流 `.github/workflows/deploy.yml`，支持：
-- 手动触发（选择环境）
-- Tag 推送自动触发
+- 命中 workflow 触发条件的 `push` 到 `main` 时自动部署 staging
+- 命中 workflow 触发条件的 `v*` tag 推送时自动部署 production
 
 ### 配置步骤
 
@@ -339,7 +334,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-3. 或在 GitHub Actions 页面手动触发 **Deploy** 工作流
+3. 当前工作流没有 `workflow_dispatch`，如需手动补发请重新推送对应分支或 tag
 
 ---
 

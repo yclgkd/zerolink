@@ -25,7 +25,7 @@ v3.0 的产品目标：
 3. **更新/销毁不可伪造**：仅管理者可授权写入/销毁
 4. **抗重放/乱序/并发覆盖**：version 单调 + nonce 去重 + DO 串行
 5. **最小元数据泄露**：公共接口不可推断状态；receiver_pub 不向未授权者暴露
-6. **前端完整性可验证**：CSP/SRI/零第三方脚本/可复现构建
+6. **前端完整性可验证**：CSP/Signed Manifest/零第三方脚本/可复现构建
 7. **管理权私钥不可导出**：WebAuthn 私钥驻留系统/硬件
 8. **TOFU 抢占锁定风险可控**：预加载爬虫无法先于真实接收方 lock
 9. **密文长度泄露显著降低**：默认 padding 到固定块边界
@@ -60,7 +60,7 @@ v3.0 的产品目标：
 
 创建时可选两档（Legacy 档位仅用于已有频道的向后兼容）：
 - **Quick Share**：密码模式，本地 Argon2id 派生 ECDSA 管理密钥，无需 passkey，4KB padding
-- **Secure Share**：Passkey 模式，UV=required / RK=required，8KB padding，合并原 Standard+Strict 的安全级别
+- **Secure Share**：Passkey 模式，UV=required / RK=discouraged，8KB padding，合并原 Standard+Strict 的安全级别
 - **Legacy（只读）**：standard / strict / hardware_only 仅渲染已有频道，不作为新建选项
 
 ### 3.5 新增：Self-Hosting / Verifiable Releases
@@ -73,7 +73,7 @@ v3.0 的产品目标：
 
 ## 4. 产品模式与安全档位（对外清晰）
 
-创建时可选 security_profile（v3.0 两档）：
+创建时可选 `securityProfile`（v3.0 两档）：
 
 ### 1. Quick Share（快速分享）
 
@@ -86,7 +86,7 @@ v3.0 的产品目标：
 
 ### 2. Secure Share（安全分享）
 
-- **管理权**：WebAuthn passkey（设备或平台），UV=required，RK=required
+- **管理权**：WebAuthn passkey（设备或平台），UV=required，RK=discouraged
 - **WebAuthn**：必须，不可降级
 - **接收方**：Argon2id 强制
 - **Padding**：8KB 块（更高隐私）
@@ -109,7 +109,7 @@ v3.0 的产品目标：
 
 1. 选择模式：**Quick Share**（密码）或 **Secure Share**（Passkey）
 2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（adminMode=password）
-3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required）→ Create Finish
+3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required，RK=discouraged）→ Create Finish
 4. 页面显示两条链接：
    - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
    - 管理链接（发送方）：/m/:uuid
@@ -262,58 +262,87 @@ Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用
 
 通用要求：
 
-- 所有响应：Cache-Control: no-store
-- public 仅 exists
-- 所有敏感操作走 DO 串行
-- 错误响应恒定形状 {ok:false}
+- 所有响应：`Cache-Control: no-store`
+- `/api/public/:uuid` 返回公开状态快照，而不是仅 `exists`
+- 所有敏感写操作走 DO 串行
+- 错误响应恒定形状 `{ok:false, code}`
 
 ### 10.1 GET /api/public/:uuid
 
-同 v2.4：只返回 exists。
+Response：
+```json
+{
+  "ok": true,
+  "state": "waiting|locked|delivered",
+  "adminMode": "webauthn|password|softkey",
+  "securityProfile": "quick|secure|standard|strict|hardware_only",
+  "receiverPubFpr": "hex..."
+}
+```
 
-### 10.2 创建（WebAuthn 注册）
+说明：
+
+- `receiverPubFpr` 仅在接收方已上锁后返回
+- 频道被物理删除或过期后，公共读取返回 `404 NOT_FOUND`
+- mixed-version 回滚/本地 mock 场景下仍可能见到 legacy `deleted` / `expired` 公共状态，前端应统一归一化为 unavailable
+
+### 10.2 创建（Quick Share / Secure Share）
 
 #### POST /api/create_begin/:uuid
-
-新增：返回 security_profile 与 lock_secret_hash 存储策略说明（仅用于服务端存储，不返回 lock_secret 本体）
 
 Request：
 ```json
 {
   "uuid": "string(21)",
   "timestamp": 1730000000000,
-  "security_profile": "Standard|Strict|HardwareOnly"
+  "securityProfile": "quick|secure|standard|strict|hardware_only"
 }
 ```
 
-Response：WebAuthn creation options + lock_secret_hint（仅提示存在 fragment，不泄露 secret）
+Response：
+```json
+{
+  "ok": true,
+  "creationOptions": { "...": "..." }
+}
+```
 
 服务端行为：
 
-- DO 生成 lock_secret（32 bytes）
-- **只把 lock_secret 返回给前端用于拼接分享链接 fragment**
-- KV 只存 lock_secret_hash = SHA256("GL-locksecret"||uuid||lock_secret)（不可逆）
-
-> 注意：lock_secret 绝不入日志，绝不写 KV 明文。
+- 创建 `waiting` 频道记录并持久化 `securityProfile`
+- 为 Secure Share 签发 WebAuthn 注册 challenge（封装在 `creationOptions` 中）
+- Quick Share 仍走同一个 `create_begin`/`create_finish` 协议，但前端不会使用返回的 WebAuthn `creationOptions`
+- `lock_secret` 由前端本地生成并拼接到分享链接 fragment；服务端只在 `create_finish` 后持久化 `lockKeyB64u`
 
 #### POST /api/create_finish/:uuid
 
-**关键修正**：前端必须回传 lock_key_b64u
-
-Request：
+WebAuthn 管理模式：
 ```json
 {
+  "adminMode": "webauthn",
   "uuid": "string(21)",
-  "attestation": {...},
-  "lock_key_b64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
+  "attestation": { "...": "..." },
+  "lockKeyB64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
   "timestamp": 1730000000000
 }
 ```
 
-服务端行为：
+Quick Share / legacy password 模式：
+```json
+{
+  "adminMode": "password",
+  "uuid": "string(21)",
+  "softkeyPubJwk": { "...": "..." },
+  "lockKeyB64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
+  "timestamp": 1730000000000
+}
+```
 
-- 保存 admin_webauthn + security_profile + lock_key（而不是 lock_secret_hash）
-- lock_key 用于后续验证 lock_proof
+说明：
+
+- legacy `softkey` 与 `password` 协议等价，只保留向后兼容
+- 服务端保存管理凭据、`securityProfile` 和 `lockKeyB64u`
+- `lockKeyB64u` 用于后续验证 `lock_proof`，服务端从不持久化 `lock_secret`
 
 ### 10.3 上锁（拆成 lock_begin / lock_commit）
 
@@ -388,7 +417,7 @@ DO 校验：
 - origin、rpIdHash、UV/UP、challenge 精确匹配、COSE ES256 验签
 - Secure Share / strict / hardware_only：
     - userVerification="required"
-    - residentKey="required"
+    - residentKey="discouraged"
     - attestation="none"
 
 ---
@@ -460,7 +489,7 @@ DO 校验：
 2. **lock_challenge 重放**：同 challenge_id 再次 lock_commit 必失败
 3. **padding**：不同长度明文映射到相同桶长度密文（至少 4KB 桶）
 4. **Argon2id 强制**：接收方私钥包裹必须为 Argon2id；Quick Share 管理密钥也必须使用 Argon2id 包裹
-5. **Secure Share Policy**：secure/strict/hardware_only 必须要求 UV=required 与 RK=required
+5. **Secure Share Policy**：secure/strict/hardware_only 必须要求 UV=required，且注册使用 non-discoverable credential（`residentKey="discouraged"`）
 
 ---
 
@@ -476,17 +505,18 @@ sequenceDiagram
   participant K as KV
 
   rect rgb(240,240,240)
-  Note over S,D: Create (WebAuthn + lock_secret)
-  S->>W: POST /api/create_begin/{uuid} (security_profile)
+  Note over S,D: Create (creationOptions + local lock_secret)
+  S->>W: POST /api/create_begin/{uuid} (securityProfile)
   W->>D: forward
-  D-->>W: creationOptions + lock_secret (client-only)
-  W-->>S: creationOptions + lock_secret
+  D-->>W: creationOptions
+  W-->>S: creationOptions
+  S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
   S->>S: build share URL: /s/{uuid}#k=lock_secret
-  S->>S: navigator.credentials.create(...)
-  S->>W: POST /api/create_finish/{uuid} (attestation + lock_key)
+  S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
+  S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
-  D->>K: store admin_webauthn + lock_key + status=Waiting
+  D->>K: store admin credential + lock_key + status=Waiting
   K-->>D: ok
   D-->>W: ok
   W-->>S: ok
@@ -517,7 +547,7 @@ sequenceDiagram
   W-->>S: begin
   S->>S: pad plaintext (4KB buckets) + hybrid encrypt + intent_hash
   S->>S: expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
-  S->>S: navigator.credentials.get(...) (or softkey sign in compat mode)
+  S->>S: navigator.credentials.get(...) (or password-mode ECDSA sign; legacy softkey alias)
   S->>W: POST /api/manage/compound_commit/{uuid} (assertion + update)
   W->>D: forward
   D->>D: verify intent_hash + expected_challenge + WebAuthn signature + version/nonce
@@ -629,7 +659,7 @@ canonical 输出必须为：
 
 ### C1. Create 时生成与存储（关键）
 
-- 生成 lock_secret：随机 32 bytes，**仅返回前端**，由前端写入分享链接 fragment：
+- 前端本地生成 lock_secret：随机 32 bytes，并写入分享链接 fragment：
     ```
     share_url = /s/<uuid>#k=<b64url(lock_secret)>
     ```
@@ -779,7 +809,7 @@ CipherBundle（base64url）：
 ### G2. Secure Share（secure）
 
 - userVerification = "required"（强制）
-- residentKey = "required"（强制）
+- residentKey = "discouraged"（使用 non-discoverable credential）
 - attestation = "none"
 - 适合平台 passkey 和硬件密钥
 
@@ -787,17 +817,17 @@ CipherBundle（base64url）：
 
 #### standard（等价于早期 Quick Share 安全级别）
 - userVerification = "preferred"
-- residentKey = "preferred"
+- residentKey = "discouraged"
 - attestation = "none"
 
 #### strict（等价于 Secure Share）
 - userVerification = "required"
-- residentKey = "required"
+- residentKey = "discouraged"
 - attestation = "none"
 
 #### hardware_only（等价于 Secure Share，attestation 强制已移除）
 - userVerification = "required"
-- residentKey = "required"
+- residentKey = "discouraged"
 - attestation = "none"（原 "direct" 强制执行已移除，cross-platform 限制已移除）
 - 移除原因：x5c attestation 验证技术实现复杂，且现代 passkey 生态中实际意义有限
 
@@ -866,7 +896,8 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
 公共接口 /api/public/:uuid：
 
-- 只返回 exists true/false，恒定形状，不返回 Locked/Delivered 等
+- 返回当前 `state`、`adminMode`、`securityProfile` 和可选 `receiverPubFpr`
+- 物理删除或过期后返回 `404 NOT_FOUND`
 
 ---
 

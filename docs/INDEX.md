@@ -53,7 +53,7 @@ docs/
 - **协议常量** → [PRD.md § 附录 A](./PRD.md#附录-a参数表与常量强制)
 
 #### API 协议
-- **完整 API 定义** → [PRD.md § 10. API](./PRD.md#10-apiv25-完整)
+- **完整 API 定义** → [PRD.md § 10. API](./PRD.md)
 - **Lock API** → [PRD.md § 附录 D](./PRD.md#附录-dlock-api-schemav25)
 - **协议图（Mermaid）** → [PRD.md § 15. 协议图](./PRD.md#15-协议图mermaid)
 
@@ -66,10 +66,10 @@ docs/
 #### UX 设计
 - **指纹核对柔化** → [PRD.md § 13.1](./PRD.md#131-指纹核对的柔化呈现)
 - **Safety Code 规范** → [PRD.md § 附录 K](./PRD.md#附录-k安全码safety-code视觉化规范emoji--color)
-- **WebAuthn 降级引导** → [PRD.md § 13.3](./PRD.md#133-webauthn-降级引导)
+- **WebAuthn 不可用引导** → [PRD.md § 13.3](./PRD.md)
 
 #### 测试
-- **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.md#14-测试向量与验收v25-新增)
+- **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.md)
 - **安全检查清单** → [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation)
 
 ---
@@ -94,7 +94,7 @@ docs/
 1. [QUICK_START.md](./QUICK_START.md) - 初始化项目
 2. [TECH_STACK.md § 后端部署](./TECH_STACK.md#部署与发布) - Cloudflare Workers 配置
 3. [ARCHITECTURE.md § 技术栈](./ARCHITECTURE.md#3-技术栈) - 后端架构
-4. [PRD.md § 10](./PRD.md#10-apiv25-完整) - 完整 API
+4. [PRD.md § 10](./PRD.md) - 完整 API
 5. [PRD.md § 附录 D](./PRD.md#附录-dlock-api-schemav25) - Lock API Schema
 6. [PRD.md § 附录 H](./PRD.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点) - WebAuthn 验证
 
@@ -107,10 +107,10 @@ docs/
 
 ### DevOps / 部署
 1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **完整部署指南（一键部署 + 手动部署）**
-2. [QUICK_START.md § CI 配置](./QUICK_START.md#添加-ci-配置github-actions) - GitHub Actions
+2. [DEPLOYMENT.md](./DEPLOYMENT.md) - GitHub Actions 与发布流程
 3. [TECH_STACK.md § 部署与发布](./TECH_STACK.md#部署与发布) - 前后端部署
-4. [TECH_STACK.md § 版本管理](./TECH_STACK.md#版本管理与发布流水线) - Changesets 工作流
-5. [ARCHITECTURE.md § 自托管](./ARCHITECTURE.md#123-自托管self-hosting) - 自托管选项
+4. [TECH_STACK.md § 发布流程](./TECH_STACK.md#版本管理与发布流水线) - PR 验证与 tag 发布
+5. [DEPLOYMENT.md](./DEPLOYMENT.md) - 域名与 Cloudflare 配置
 
 ---
 
@@ -180,11 +180,11 @@ docs/
 
 ### 当需要实现某个功能时
 1. 先查 [ARCHITECTURE.md](./ARCHITECTURE.md) 了解整体架构
-2. 再查 [PRD.md § 10. API](./PRD.md#10-apiv25-完整) 了解接口
+2. 再查 [PRD.md § 10. API](./PRD.md) 了解接口
 3. 最后查对应附录了解精确字节格式
 
 ### 当需要写测试时
-→ 直接查 [PRD.md § 14](./PRD.md#14-测试向量与验收v25-新增) 和 [PRD.md § 附录 B](./PRD.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
+→ 直接查 [PRD.md § 14](./PRD.md) 和 [PRD.md § 附录 B](./PRD.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
 
 ### 当需要审查安全性时
 → 按照 [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation) 逐项检查
@@ -205,6 +205,6 @@ docs/
 
 ---
 
-**最后更新**：2026-03-08
+**最后更新**：2026-03-11
 **当前版本**：v3.0
 **维护者**：ZeroLink Team

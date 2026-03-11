@@ -36,10 +36,9 @@
 9. Open a PR with summary, validation, risk, and rollback if the work is not already attached to an open PR.
 
 ## _project_specs Updates
-- Update `_project_specs/session/current-state.md` when active focus or status changes.
 - Append important workflow or architecture changes to `_project_specs/session/decisions.md`.
-- Move finished work into `_project_specs/todos/completed.md`.
 - Add landmarks when new entrypoints or shared workflow files are introduced.
+- Do not keep transient task/status logs in `_project_specs/`; use branch history, PR context, and the current diff for volatile progress.
 
 ## Validation
 - Run targeted checks for the touched area.
