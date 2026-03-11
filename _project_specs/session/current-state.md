@@ -4,16 +4,19 @@
 
 ## Active Task
 
-Remove Node 20 GitHub Actions runtime deprecation warnings from CI workflows.
+Hide the misleading ManagePage password prompt while a channel is still waiting for receiver lock.
 
 ## Current Status
 
-- **Phase**: Follow-up fix prepared on `codex/ci-actions-node24`
-- **Progress**: Updated both CI workflows to remove Node 20-based GitHub Action runtimes by pinning `actions/checkout` and `actions/setup-node` to `v5` SHAs. Follow-up review of PR #135 showed `setup-node@v5` was still auto-detecting `pnpm` from `packageManager` before later Corepack steps, and later job logs showed root scripts still shelling out to bare `pnpm`. The workflow now disables automatic package-manager caching, points `COREPACK_HOME` at `/tmp/corepack`, uses `corepack enable --install-directory /tmp/corepack-bin` to create a user-space pnpm shim, and adds that directory to `GITHUB_PATH` so both direct steps and nested package scripts can resolve pnpm.
-- **Known Constraint**: Local `pnpm manifest:verify` still depends on running `pnpm manifest:sign`, which requires the deployment signing secret to produce `packages/frontend/dist/manifest.sig`.
+- **Phase**: Frontend follow-up fix implemented on `fix/hide-manage-password-before-lock`
+- **Progress**: Updated `ManagePage` so password-managed channels no longer show the channel password input during the idle `waiting` state. The password prompt now appears only when the sender can deliver after `locked`, or when the sender explicitly opens the delete confirmation flow before lock.
+- **Known Constraint**: Password-managed delete still requires the sender to open the delete confirmation panel before the password input appears in `waiting`.
 
 ## Latest Update (2026-03-11)
 
+- `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Hid the password-managed channel password prompt during the idle `waiting` state and only reveal it when a sender action actually needs credentials (`locked` delivery or delete confirmation), so the Manage page no longer implies that a password is required before receiver lock.
+- `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the ManagePage password-prompt visibility rule and validation results for future sessions.
+- Validation: `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/manage-page.test.tsx`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/frontend build`
 - `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Disabled `setup-node@v5` automatic package-manager caching with `package-manager-cache: false`, set `COREPACK_HOME` to `/tmp/corepack`, created a user-space `pnpm` shim under `/tmp/corepack-bin` with `corepack enable --install-directory`, and added that directory to `GITHUB_PATH` so both direct steps and nested package scripts can resolve pnpm.
 - Validation: `git diff --check`
 - `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Replaced Node 20-based `pnpm/action-setup` with a Corepack-based pnpm flow and upgraded `actions/checkout` / `actions/setup-node` to pinned `v5` SHAs so GitHub Actions jobs no longer rely on deprecated Node 20 action runtimes.

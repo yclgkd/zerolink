@@ -4,6 +4,17 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-025: Hide misleading ManagePage password prompt before receiver lock
+
+**Completed**: 2026-03-11
+
+Followed up the sender Manage page after the waiting-state delivery cleanup uncovered another
+misleading prompt: password-managed channels were still rendering the channel password input before
+the receiver had locked the channel. `ManagePage` now hides that password field during the idle
+`waiting` state and only reveals it when the sender reaches a flow that actually needs the
+credential, either `locked` delivery or the pre-lock delete confirmation step. Added regression
+coverage so the waiting state stays clean without breaking password-managed deletion.
+
 ## DONE-023: Hide dead share links on terminal Manage states
 
 **Completed**: 2026-03-11

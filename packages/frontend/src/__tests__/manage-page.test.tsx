@@ -309,7 +309,7 @@ describe('ManagePage integration', () => {
     expect(deliverButton.disabled).toBe(true);
   });
 
-  it('shows the channel password input for password-managed channels', async () => {
+  it('hides the channel password input while password-managed channels are still waiting', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
@@ -318,6 +318,21 @@ describe('ManagePage integration', () => {
     renderManagePage();
 
     await screen.findByTestId('manage-state-waiting');
+    expect(screen.queryByTestId('manage-softkey-passphrase-section')).toBeNull();
+    expect(screen.queryByLabelText('Channel password')).toBeNull();
+  });
+
+  it('shows the channel password input when a password-managed delete is being confirmed', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+
     expect(screen.getByTestId('manage-softkey-passphrase-section')).toBeTruthy();
     expect(screen.getByLabelText('Channel password')).toBeTruthy();
     expect(screen.getByText(/password-protected management key/i)).toBeTruthy();
