@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: read
     env:
-      COREPACK_HOME: ${{ runner.temp }}/corepack
+      COREPACK_HOME: /tmp/corepack
 
     steps:
       - name: Checkout
@@ -72,7 +72,7 @@ jobs:
     permissions:
       contents: read
     env:
-      COREPACK_HOME: ${{ runner.temp }}/corepack
+      COREPACK_HOME: /tmp/corepack
 
     steps:
       - name: Checkout
@@ -116,7 +116,7 @@ jobs:
     permissions:
       contents: read
     env:
-      COREPACK_HOME: ${{ runner.temp }}/corepack
+      COREPACK_HOME: /tmp/corepack
 
     steps:
       - name: Checkout

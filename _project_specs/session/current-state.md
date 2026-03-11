@@ -9,12 +9,12 @@ Remove Node 20 GitHub Actions runtime deprecation warnings from CI workflows.
 ## Current Status
 
 - **Phase**: Follow-up fix prepared on `codex/ci-actions-node24`
-- **Progress**: Updated both CI workflows to remove Node 20-based GitHub Action runtimes by pinning `actions/checkout` and `actions/setup-node` to `v5` SHAs. Follow-up review of PR #135 showed `setup-node@v5` was still auto-detecting `pnpm` from `packageManager` before later Corepack steps, so the workflow now disables automatic package-manager caching, sets `COREPACK_HOME` to the runner temp directory, and invokes every pnpm command through `corepack pnpm` instead of relying on a shim on `PATH`.
+- **Progress**: Updated both CI workflows to remove Node 20-based GitHub Action runtimes by pinning `actions/checkout` and `actions/setup-node` to `v5` SHAs. Follow-up review of PR #135 showed `setup-node@v5` was still auto-detecting `pnpm` from `packageManager` before later Corepack steps, so the workflow now disables automatic package-manager caching, points `COREPACK_HOME` at `/tmp/corepack` on the Ubuntu runner, and invokes every pnpm command through `corepack pnpm` instead of relying on a shim on `PATH`.
 - **Known Constraint**: Local `pnpm manifest:verify` still depends on running `pnpm manifest:sign`, which requires the deployment signing secret to produce `packages/frontend/dist/manifest.sig`.
 
 ## Latest Update (2026-03-11)
 
-- `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Disabled `setup-node@v5` automatic package-manager caching with `package-manager-cache: false`, set `COREPACK_HOME` to `${{ runner.temp }}/corepack`, and switched workflow commands to `corepack pnpm ...` so PR checks no longer depend on a preinstalled or shimmed `pnpm` binary.
+- `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Disabled `setup-node@v5` automatic package-manager caching with `package-manager-cache: false`, set `COREPACK_HOME` to `/tmp/corepack`, and switched workflow commands to `corepack pnpm ...` so PR checks no longer depend on a preinstalled or shimmed `pnpm` binary.
 - Validation: `git diff --check`
 - `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Replaced Node 20-based `pnpm/action-setup` with a Corepack-based pnpm flow and upgraded `actions/checkout` / `actions/setup-node` to pinned `v5` SHAs so GitHub Actions jobs no longer rely on deprecated Node 20 action runtimes.
 - `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the CI runtime migration, validation results, and the release-signing constraint for future sessions.

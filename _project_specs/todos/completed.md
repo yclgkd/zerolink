@@ -25,7 +25,7 @@ resolves `pnpm@9.12.0` from the root `packageManager` field instead of a separat
 action.
 Followed up after PR #135 showed `setup-node@v5` was still auto-detecting `pnpm` from the root
 `packageManager` field before the later Corepack steps ran. The workflows now set
-`package-manager-cache: false`, use `${{ runner.temp }}/corepack` as `COREPACK_HOME`, and run
+`package-manager-cache: false`, use `/tmp/corepack` as `COREPACK_HOME`, and run
 package-manager commands through `corepack pnpm ...` so the jobs no longer depend on a preexisting
 or shimmed `pnpm` executable on `PATH`.
 Validated the workflow-facing commands with `pnpm typecheck`, `pnpm test`,
