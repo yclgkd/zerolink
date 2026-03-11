@@ -17,7 +17,8 @@ rearming a retry loop, and malformed `record.expiresAt` values are treated as ex
 state that must be purged. Added backend regression coverage for multi-batch nonce cleanup,
 malformed nonce indexes, and invalid record expiry handling. Staging also now binds to a fresh
 `SecretVaultStaging` SQLite class through an env-specific migration so the bad staging namespace is
-abandoned without touching production data.
+abandoned without touching production data. The fix was deployed to staging (`ef48cc3b-5614-466e-9786-651e6232d910`)
+and production (`6ae7b099-e6a2-4225-b993-844184b2ba7d`) with PR #139 opened for review.
 
 ## DONE-028: Align Playwright stateful mock with required securityProfile contracts
 
