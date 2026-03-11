@@ -219,6 +219,15 @@ This is append-only. Never delete entries.
 **Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
 **Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.
 
+## [2026-03-11] Use Corepack plus Node 24-based official actions in GitHub workflows
+
+**Decision**: Replace `pnpm/action-setup` with `corepack enable` in CI and pin `actions/checkout` / `actions/setup-node` to `v5` SHAs.
+**Context**: GitHub Actions started warning that the existing pinned `actions/checkout`, `actions/setup-node`, and `pnpm/action-setup` entries were still running on deprecated Node 20 runtimes in both deploy and PR validation workflows.
+**Options Considered**: Ignore the warnings until Node 20 is removed; keep `pnpm/action-setup` and only bump the official actions; switch pnpm bootstrapping to Corepack and upgrade the official actions to Node 24-based releases.
+**Choice**: Upgrade the official actions to `v5` SHAs and bootstrap pnpm through Corepack using the repo's root `packageManager` field.
+**Reasoning**: This removes the deprecated action runtime dependency without changing the project's Node 22 execution target, keeps pnpm version selection in one place, and avoids waiting on a separate `pnpm/action-setup` runtime migration.
+**Trade-offs**: CI now relies on Corepack being present in the Node runtime provided by `actions/setup-node`, and local reproduction of the full release path still needs the signing secret for `pnpm manifest:sign`. Follow-up on PR #135 also showed that `setup-node@v5` auto-detects package-manager caching from `packageManager` unless `package-manager-cache: false` is set, so the workflow now disables that behavior explicitly and calls `corepack pnpm` directly instead of relying on a shimmed `pnpm` binary.
+
 ## [2026-03-11] Channel sync uses Durable Object WebSockets with public-status polling fallback
 
 **Decision**: Sender Manage and receiver Share views should subscribe to channel state changes over Durable Object WebSockets and fall back to `/api/public/:uuid` polling when WebSockets are unavailable.

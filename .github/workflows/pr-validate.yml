@@ -21,20 +21,26 @@ jobs:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      COREPACK_HOME: /tmp/corepack
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
-        with:
-          version: 9.12.0
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          cache: "pnpm"
+          package-manager-cache: false
+
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -50,20 +56,26 @@ jobs:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      COREPACK_HOME: /tmp/corepack
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
-        with:
-          version: 9.12.0
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          cache: "pnpm"
+          package-manager-cache: false
+
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -78,26 +90,32 @@ jobs:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      COREPACK_HOME: /tmp/corepack
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
-        with:
-          version: 9.12.0
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          cache: "pnpm"
+          package-manager-cache: false
+
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
       - name: Run E2E tests
