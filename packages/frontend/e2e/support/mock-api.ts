@@ -16,12 +16,15 @@ import {
   LockCommitResponseSchema,
   PublicStatusResponseSchema,
   ROUTE_PATTERN,
+  SECURITY_PROFILE,
+  type SecurityProfile,
   UUIDSchema,
 } from '@zerolink/shared';
 import type { z } from 'zod';
 
 interface ChannelRuntimeState {
   state: ChannelState;
+  securityProfile: SecurityProfile;
   adminMode: z.output<typeof CreateFinishRequestSchema>['adminMode'];
   credentialId?: string;
   version: number;
@@ -96,6 +99,7 @@ function createChannel(
 
   const created: ChannelRuntimeState = {
     state: CHANNEL_STATE.WAITING,
+    securityProfile: SECURITY_PROFILE.SECURE,
     adminMode: 'webauthn',
     version: 0,
   };
@@ -144,6 +148,11 @@ export async function installStatefulApiMock(
       }
 
       createChannel(channels, parsedUuid.data);
+      const channel = requireChannel(channels, parsedUuid.data);
+      if (!channel) {
+        return notFound(route);
+      }
+      channel.securityProfile = parsedBody.data.securityProfile;
       return fulfillJson(route, 200, {
         ok: true,
         creationOptions: {
@@ -283,6 +292,7 @@ export async function installStatefulApiMock(
       const payload = {
         ok: true,
         challenge,
+        securityProfile: channel.securityProfile,
         adminMode: channel.adminMode,
         ...(channel.adminMode === 'webauthn' && channel.credentialId
           ? {
@@ -382,6 +392,7 @@ export async function installStatefulApiMock(
         ok: true,
         state: channel.state,
         adminMode: channel.adminMode,
+        securityProfile: channel.securityProfile,
         ...(channel.receiverPubFpr ? { receiverPubFpr: channel.receiverPubFpr } : {}),
       };
       const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
