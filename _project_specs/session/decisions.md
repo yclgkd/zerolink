@@ -308,3 +308,12 @@ This is append-only. Never delete entries.
 **Choice**: Extend the shared contracts so `PublicStatusResponse`, `CompoundBeginResponse`, and WebSocket `state_changed` all include `securityProfile`, persist that value in the sender Manage store, and consume it directly in Manage actions.
 **Reasoning**: `adminMode` answers "password vs WebAuthn" but not which WebAuthn compatibility profile was originally chosen. Surfacing the backend-stored profile restores correct legacy behavior, keeps padding selection aligned with product policy, and avoids duplicating security-policy inference in the frontend.
 **Trade-offs**: Public/manage read contracts and mocks/tests now carry one more field, and Manage actions remain gated on `securityProfile` loading before sender-side controls can run safely.
+
+## [2026-03-11] Stateful E2E mocks must mirror required shared wire contracts
+
+**Decision**: Treat Playwright's stateful API mock as another protocol client/server boundary that must emit every required shared response field, including `securityProfile`.
+**Context**: PR #137 correctly made `securityProfile` mandatory on public/manage read responses, but the Playwright stateful mock still returned the older payload shape. That left local unit tests green while Chromium E2E timed out on disabled Manage actions after merge.
+**Options Considered**: Keep the mock loosely shaped and patch individual tests; make the stateful mock persist `securityProfile` from `create_begin` and emit it from every affected route.
+**Choice**: Extend the stateful mock runtime state with `securityProfile`, persist it during create, and include it in `public` and `compound_begin` responses.
+**Reasoning**: The mock exists to emulate the real protocol boundary. Once a shared schema field becomes required for runtime behavior, omitting it from the stateful mock stops E2E from validating the real app state machine.
+**Trade-offs**: Protocol contract changes now require touching E2E infrastructure more often, but that is cheaper than letting green unit tests hide a broken `main` branch.

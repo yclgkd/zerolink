@@ -4,16 +4,18 @@
 
 ## Active Task
 
-Propagate the persisted channel `securityProfile` through Manage read paths so sender actions use the real channel policy.
+Restore `main` after PR #137 by aligning the Playwright stateful API mock with the new required `securityProfile` contracts.
 
 ## Current Status
 
-- **Phase**: Manage follow-up fix implemented on `fix/secure-share-padding`
-- **Progress**: `publicStatus`, `compoundBegin`, and WebSocket `state_changed` now carry the stored `securityProfile`, and the sender Manage flow persists that profile in local state instead of inferring it from `adminMode`. Legacy WebAuthn `standard` channels now keep their original 4 KB delivery padding and sender policy when a Manage link is reopened.
-- **Known Constraint**: `packages/shared/src/crypto/aes.ts` still defaults generic AES-GCM callers to 4 KB by design; profile-specific callers must continue to pass `padBlock` explicitly, and Manage actions stay disabled until the real `securityProfile` is loaded.
+- **Phase**: Post-merge hotfix in progress on `fix/e2e-security-profile`
+- **Progress**: The production code path merged in PR #137 is still the intended fix, but the Playwright stateful API mock lagged behind the updated shared contracts. The mock now persists `securityProfile` from `create_begin` and returns it from `/api/public/:uuid` and `/api/manage/compound_begin/:uuid`, restoring Manage enablement and polling-based E2E state transitions on `main`.
+- **Known Constraint**: `packages/shared/src/crypto/aes.ts` still defaults generic AES-GCM callers to 4 KB by design; profile-specific callers must continue to pass `padBlock` explicitly, and every stateful test fixture that mocks public/manage reads must now include `securityProfile`.
 
 ## Latest Update (2026-03-11)
 
+- `packages/frontend/e2e/support/mock-api.ts` — Fixed the Playwright stateful API mock after PR #137 merged: channel runtime state now stores `securityProfile` from `create_begin`, and the mock returns that field from `public` and `compound_begin` responses so the Manage page and polling fallback satisfy the current shared schemas on `main`.
+- Validation: `pnpm --filter @zerolink/frontend test:e2e -- e2e/happy-path.spec.ts e2e/realtime-sync.spec.ts e2e/terminal-state.spec.ts --project=chromium`
 - `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts`, `packages/shared/src/ws.ts`, `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultWebSocket.ts` — Extended the Manage/public read contracts so `PublicStatusResponse`, `CompoundBeginResponse`, and WebSocket `state_changed` snapshots all expose the persisted channel `securityProfile` instead of forcing the frontend to reconstruct it from `adminMode`.
 - `packages/frontend/src/stores/deliver-store.ts`, `packages/frontend/src/sync/channel-sync.ts`, `packages/frontend/src/pages/ManagePage.tsx` — Added `securityProfile` to sender Manage state, threaded it through initial public fetch, polling/WebSocket sync, and compound begin, and removed the old Manage-side WebAuthn profile inference so sender deliver/delete actions now use the exact backend-stored policy.
 - `packages/frontend/src/__tests__/manage-page.test.tsx`, `packages/frontend/src/__tests__/crypto-orchestrator.test.ts`, `packages/frontend/src/sync/__tests__/channel-sync.test.ts`, `packages/backend/src/do/__tests__/SecretVault.test.ts`, `packages/backend/src/do/__tests__/SecretVaultWebSocket.test.ts`, `packages/shared/src/__tests__/schemas.test.ts`, `packages/shared/src/__tests__/ws.test.ts` — Added regression coverage for `securityProfile` propagation across public status, compound begin, realtime updates, and the legacy `standard` Manage flow that must stay on 4 KB padding.

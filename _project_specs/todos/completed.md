@@ -4,6 +4,17 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-028: Align Playwright stateful mock with required securityProfile contracts
+
+**Completed**: 2026-03-11
+
+Fixed the post-merge E2E regression after PR #137 made `securityProfile` mandatory on sender
+Manage/public read paths. The Playwright stateful API mock had only been persisting `adminMode`,
+so `/api/public/:uuid` and `/api/manage/compound_begin/:uuid` started returning invalid payloads
+for the merged frontend and left Manage actions disabled in Chromium E2E. The mock now stores the
+channel security profile from `create_begin` and returns it from the affected routes, restoring the
+happy-path, realtime polling fallback, and terminal-state E2E coverage on `main`.
+
 ## DONE-027: Propagate real securityProfile through Manage read paths
 
 **Completed**: 2026-03-11
