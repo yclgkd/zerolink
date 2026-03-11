@@ -2,83 +2,85 @@ import type { Base64Url } from '@zerolink/shared';
 import {
   NONCE_INDEX_KEY_PREFIX,
   NONCE_SWEEP_BATCH_SIZE,
-  NONCE_SWEEP_RETRY_DELAY_MS,
   type NonceIndexRecord,
   nonceStorageKey,
 } from './SecretVaultTypes.ts';
 
+export interface NonceAlarmState {
+  readonly deletedExpiredEntries: number;
+  readonly deletedInvalidEntries: number;
+  readonly nextAlarmAt: number | null;
+}
+
 /**
- * Removes expired nonce entries from storage.
- * Iterates through the nonce index in sorted order and deletes expired records.
+ * Reconciles nonce index storage and returns the next valid future alarm time.
+ * Invalid entries are deleted immediately; expired entries are swept in batches
+ * until the earliest remaining entry is strictly in the future or storage is empty.
  */
-export async function sweepExpiredNonces(
+export async function reconcileNonceAlarmState(
   storage: DurableObjectStorage,
   now: number
-): Promise<void> {
-  const nonceIndexes = await storage.list<NonceIndexRecord>({
-    prefix: NONCE_INDEX_KEY_PREFIX,
-    limit: NONCE_SWEEP_BATCH_SIZE,
-  });
-  if (nonceIndexes.size === 0) {
-    return;
-  }
+): Promise<NonceAlarmState> {
+  let deletedExpiredEntries = 0;
+  let deletedInvalidEntries = 0;
 
-  const keysToDelete: string[] = [];
-  for (const [indexKey, indexRecord] of nonceIndexes) {
-    const resolved = resolveNonceIndexEntry(indexKey, indexRecord);
-    if (!resolved) {
-      keysToDelete.push(indexKey);
-      continue;
+  while (true) {
+    const nonceIndexes = await storage.list<NonceIndexRecord>({
+      prefix: NONCE_INDEX_KEY_PREFIX,
+      limit: NONCE_SWEEP_BATCH_SIZE,
+    });
+    if (nonceIndexes.size === 0) {
+      return {
+        deletedExpiredEntries,
+        deletedInvalidEntries,
+        nextAlarmAt: null,
+      };
     }
-    if (resolved.expiresAt > now) {
+
+    const keysToDelete: string[] = [];
+    let nextAlarmAt: number | null = null;
+
+    for (const [indexKey, indexRecord] of nonceIndexes) {
+      const resolved = resolveNonceIndexEntry(indexKey, indexRecord);
+      if (!resolved) {
+        deletedInvalidEntries += 1;
+        keysToDelete.push(indexKey);
+        continue;
+      }
+
+      if (resolved.expiresAt <= now) {
+        deletedExpiredEntries += 1;
+        keysToDelete.push(indexKey, nonceStorageKey(resolved.nonce));
+        continue;
+      }
+
+      nextAlarmAt = resolved.expiresAt;
       break;
     }
 
-    keysToDelete.push(indexKey, nonceStorageKey(resolved.nonce));
-  }
-
-  if (keysToDelete.length > 0) {
-    await storage.delete(keysToDelete);
-  }
-}
-
-/**
- * Resolves the next timestamp at which nonce cleanup should run.
- */
-export async function getNextNonceCleanupAt(
-  storage: DurableObjectStorage,
-  now: number
-): Promise<number | null> {
-  while (true) {
-    const firstEntry = await readEarliestNonceIndexEntry(storage);
-    if (!firstEntry) {
-      return null;
+    if (keysToDelete.length > 0) {
+      await storage.delete(keysToDelete);
     }
 
-    const [indexKey, indexRecord] = firstEntry;
-    const resolved = resolveNonceIndexEntry(indexKey, indexRecord);
-    if (!resolved) {
-      await storage.delete(indexKey);
-      continue;
+    if (nextAlarmAt !== null) {
+      return {
+        deletedExpiredEntries,
+        deletedInvalidEntries,
+        nextAlarmAt,
+      };
     }
 
-    return resolved.expiresAt <= now ? now + NONCE_SWEEP_RETRY_DELAY_MS : resolved.expiresAt;
+    // Defensive guard: logically unreachable because a batch with no deletions
+    // must contain at least one future entry, which sets nextAlarmAt and returns
+    // above. Kept as a safety valve against unexpected storage list behaviour.
+    if (keysToDelete.length === 0) {
+      return {
+        deletedExpiredEntries,
+        deletedInvalidEntries,
+        nextAlarmAt: null,
+      };
+    }
   }
-}
-
-async function readEarliestNonceIndexEntry(
-  storage: DurableObjectStorage
-): Promise<[string, NonceIndexRecord | undefined] | undefined> {
-  const nonceIndexes = await storage.list<NonceIndexRecord>({
-    prefix: NONCE_INDEX_KEY_PREFIX,
-    limit: 1,
-  });
-  const firstEntry = nonceIndexes.entries().next().value;
-  if (!firstEntry) {
-    return undefined;
-  }
-
-  return [firstEntry[0], firstEntry[1]];
 }
 
 function resolveNonceIndexEntry(

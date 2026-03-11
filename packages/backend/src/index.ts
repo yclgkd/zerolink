@@ -435,5 +435,5 @@ const worker: ExportedHandler<Env> = {
   },
 };
 
-export { SecretVault } from './do/SecretVault.ts';
+export { SecretVault, SecretVault as SecretVaultStaging } from './do/SecretVault.ts';
 export default worker;

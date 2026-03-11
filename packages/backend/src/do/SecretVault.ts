@@ -52,7 +52,7 @@ import {
   notFound,
   readJsonBody,
 } from './SecretVaultHttp.ts';
-import { getNextNonceCleanupAt, sweepExpiredNonces } from './SecretVaultNonces.ts';
+import { type NonceAlarmState, reconcileNonceAlarmState } from './SecretVaultNonces.ts';
 import {
   acceptWebSocket,
   broadcastToWebSockets,
@@ -202,8 +202,6 @@ export class SecretVault {
 
   async alarm(now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      await this.purgeExpiredRecord(now);
-      await sweepExpiredNonces(this.ctx.storage, now);
       await this.scheduleNextAlarm(now);
     });
   }
@@ -711,13 +709,23 @@ export class SecretVault {
   }
 
   private async scheduleNextAlarm(now: number = Date.now()): Promise<void> {
-    const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
-    const recordAlarmAt =
-      record && !this.shouldPurgeRecord(record, now) ? Number(record.expiresAt) : null;
-    const nonceAlarmAt = await getNextNonceCleanupAt(this.ctx.storage, now);
-    const nextAlarmAt = this.getEarlierAlarm(recordAlarmAt, nonceAlarmAt);
+    const purgeResult = await this.purgeExpiredRecord(now);
+    if (purgeResult.purged) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
 
-    if (nextAlarmAt === null) {
+    const nonceAlarmState = await reconcileNonceAlarmState(this.ctx.storage, now);
+    this.logNonceAlarmState(nonceAlarmState);
+
+    const { record } = purgeResult;
+    const recordAlarmAt = record ? this.getRecordAlarmAt(record, now) : null;
+    const nonceAlarmAt = nonceAlarmState.nextAlarmAt;
+    const nextAlarmAt = this.getEarlierAlarm(recordAlarmAt, nonceAlarmAt);
+    if (!this.isValidFutureAlarmAt(nextAlarmAt, now)) {
+      if (nextAlarmAt !== null) {
+        this.logRejectedAlarmCandidate(nextAlarmAt, now, recordAlarmAt, nonceAlarmAt);
+      }
       await this.ctx.storage.deleteAlarm();
       return;
     }
@@ -765,10 +773,12 @@ export class SecretVault {
     await this.ctx.storage.put(CHANNEL_RECORD_KEY, record);
   }
 
-  private async purgeExpiredRecord(now: number): Promise<void> {
+  private async purgeExpiredRecord(
+    now: number
+  ): Promise<{ purged: true } | { purged: false; record: ChannelRecord | undefined }> {
     const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
     if (!record || !this.shouldPurgeRecord(record, now)) {
-      return;
+      return { purged: false, record };
     }
 
     await this.finalizeTerminalRecord(record, now);
@@ -776,6 +786,7 @@ export class SecretVault {
     // Broadcast channel_closed to any connected clients
     broadcastToWebSockets(this.ctx, { type: 'channel_closed', reason: 'expired' });
     this.closeAllWebSockets('expired');
+    return { purged: true };
   }
 
   private async purgeChannelStorage(): Promise<void> {
@@ -787,10 +798,14 @@ export class SecretVault {
   }
 
   private async finalizeTerminalRecord(record: ChannelRecord, now: number): Promise<void> {
+    if (this.hasInvalidRecordExpiry(record)) {
+      this.logInvalidRecordExpiry(record);
+    }
+    const expiresAt = this.recordExpiresAt(record);
     const reason =
       record.state === CHANNEL_STATE.DELETED
         ? 'deleted'
-        : record.state === CHANNEL_STATE.EXPIRED || Number(record.expiresAt) <= now
+        : record.state === CHANNEL_STATE.EXPIRED || expiresAt === null || expiresAt <= now
           ? 'expired'
           : 'deleted';
     await this.finalizeTerminalState(record.uuid, reason, asUnixMs(now));
@@ -832,11 +847,70 @@ export class SecretVault {
   }
 
   private shouldPurgeRecord(record: ChannelRecord, now: number): boolean {
+    const expiresAt = this.recordExpiresAt(record);
     return (
       record.state === CHANNEL_STATE.DELETED ||
       record.state === CHANNEL_STATE.EXPIRED ||
-      Number(record.expiresAt) <= now
+      expiresAt === null ||
+      expiresAt <= now
     );
+  }
+
+  private recordExpiresAt(record: ChannelRecord): number | null {
+    const expiresAt = Number(record.expiresAt);
+    return Number.isFinite(expiresAt) ? expiresAt : null;
+  }
+
+  private hasInvalidRecordExpiry(record: ChannelRecord): boolean {
+    return this.recordExpiresAt(record) === null;
+  }
+
+  private getRecordAlarmAt(record: ChannelRecord, now: number): number | null {
+    const expiresAt = this.recordExpiresAt(record);
+    if (expiresAt === null || expiresAt <= now) {
+      return null;
+    }
+    return expiresAt;
+  }
+
+  private isValidFutureAlarmAt(candidate: number | null, now: number): candidate is number {
+    return candidate !== null && Number.isFinite(candidate) && candidate > now;
+  }
+
+  private logInvalidRecordExpiry(record: ChannelRecord): void {
+    // biome-ignore lint/suspicious/noConsole: intentional production diagnostics for alarm loops
+    console.warn('[SecretVault] invalid_record_expiry', {
+      expiresAtType: typeof record.expiresAt,
+      state: record.state,
+    });
+  }
+
+  private logNonceAlarmState(state: NonceAlarmState): void {
+    if (state.deletedExpiredEntries === 0 && state.deletedInvalidEntries === 0) {
+      return;
+    }
+
+    // biome-ignore lint/suspicious/noConsole: intentional production diagnostics for alarm loops
+    console.warn('[SecretVault] reconciled_nonce_alarm_state', {
+      deletedExpiredEntries: state.deletedExpiredEntries,
+      deletedInvalidEntries: state.deletedInvalidEntries,
+      nextAlarmAt: state.nextAlarmAt,
+    });
+  }
+
+  private logRejectedAlarmCandidate(
+    nextAlarmAt: number,
+    now: number,
+    recordAlarmAt: number | null,
+    nonceAlarmAt: number | null
+  ): void {
+    // biome-ignore lint/suspicious/noConsole: intentional production diagnostics for alarm loops
+    console.warn('[SecretVault] rejected_alarm_candidate', {
+      nextAlarmAt,
+      nonceAlarmAt,
+      now,
+      recordAlarmAt,
+    });
   }
 
   /**

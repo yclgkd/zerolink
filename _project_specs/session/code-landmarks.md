@@ -22,7 +22,7 @@ UPDATE WHEN:
 |----------|---------|
 | `packages/frontend/src/bootstrap-entry.ts` | Frontend bootstrap verifier entry; loads the app only after release verification |
 | `packages/frontend/src/main.tsx` | React app renderer invoked by the bootstrap entry after verification |
-| `packages/backend/src/index.ts` | Cloudflare Worker entry — routes all API requests |
+| `packages/backend/src/index.ts` | Cloudflare Worker entry — routes all API requests and re-exports `SecretVaultStaging` for staging-only DO namespace resets |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
 
 ## Core Business Logic
@@ -50,7 +50,7 @@ UPDATE WHEN:
 | `packages/frontend/public/_headers` | Cloudflare Pages cache and security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
 | `packages/frontend/public/_redirects` | SPA catch-all redirect (`/* /index.html 200`) |
 | `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, and Playwright E2E on `pull_request` / `merge_group` |
-| `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config (no `[[rate_limiting]]` — requires paid plan, removed in favour of Cloudflare WAF DDoS protection) |
+| `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; staging binds to `SecretVaultStaging` so broken staging namespaces can be reset without touching production |
 | `.github/workflows/deploy.yml` | Post-merge CI/CD: test → deploy Worker → build → generate/sign/verify manifest → deploy Pages |
 | `.changeset/config.json` | Changesets config |
 

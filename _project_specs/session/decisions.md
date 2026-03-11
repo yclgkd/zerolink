@@ -10,6 +10,15 @@ This is append-only. Never delete entries.
 
 # Decision Log
 
+## [2026-03-11] Durable Object alarm scheduling must fail closed on corrupt timing state, and staging may reset its namespace independently
+
+**Decision**: Reconcile nonce cleanup inside the alarm scheduler, delete alarms when the next candidate is not a finite future timestamp, treat malformed `expiresAt` values as expired terminal state, and move staging onto a fresh `SecretVaultStaging` SQLite class while leaving production on `SecretVault`.
+**Context**: Cloudflare GraphQL analytics showed that repeated daily free-tier exhaustion was coming from a single staging Durable Object object spinning on `alarm` invocations, not from user traffic. The loop pattern matched alarm candidates derived from corrupt or stale timing state after the physical-delete / nonce-cleanup refactor.
+**Options Considered**: Keep the existing `now + 1000`-style retry semantics for expired nonce cleanup; try to surgically clean the broken staging object while reusing the same namespace; fail closed on invalid timing data and abandon the bad staging namespace with a new class migration.
+**Choice**: Make alarm scheduling conservative: clean malformed/expired nonce index state before selecting the next alarm, only call `setAlarm()` for validated future timestamps, purge malformed record expiries as `expired`, and reset staging by switching its binding to a new `SecretVaultStaging` class created through an env-specific migration.
+**Reasoning**: The durable-object free-tier outage was caused by a scheduler feedback loop, so the safe default is to stop scheduling when timing data cannot be trusted. Resetting staging is cheaper and safer than trying to preserve bad data there, while production keeps the same class and storage namespace.
+**Trade-offs**: Staging Durable Object data is intentionally discarded on the next deploy, and alarm cleanup now does more synchronous storage work inside each scheduling pass to guarantee that expired or malformed nonce indexes do not survive by bouncing the alarm.
+
 ## [2026-02-24] Use pnpm workspaces monorepo
 
 **Decision**: Single pnpm monorepo with 3 packages

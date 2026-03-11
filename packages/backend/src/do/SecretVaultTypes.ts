@@ -154,7 +154,6 @@ export const COMPOUND_CHALLENGE_ID_BYTES = 16;
 // Internal sweep constants
 export const NONCE_INDEX_TIMESTAMP_WIDTH = 16;
 export const NONCE_SWEEP_BATCH_SIZE = 128;
-export const NONCE_SWEEP_RETRY_DELAY_MS = 1_000;
 
 // ---------------------------------------------------------------------------
 // Storage key helpers

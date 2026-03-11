@@ -4,16 +4,20 @@
 
 ## Active Task
 
-Restore `main` after PR #137 by aligning the Playwright stateful API mock with the new required `securityProfile` contracts.
+Stop the staging Durable Object `alarm` loop, harden backend alarm scheduling against corrupt state, and reset the staging namespace so bad objects cannot keep exhausting the free tier.
 
 ## Current Status
 
-- **Phase**: Post-merge hotfix in progress on `fix/e2e-security-profile`
-- **Progress**: The production code path merged in PR #137 is still the intended fix, but the Playwright stateful API mock lagged behind the updated shared contracts. The mock now persists `securityProfile` from `create_begin` and returns it from `/api/public/:uuid` and `/api/manage/compound_begin/:uuid`, restoring Manage enablement and polling-based E2E state transitions on `main`.
-- **Known Constraint**: `packages/shared/src/crypto/aes.ts` still defaults generic AES-GCM callers to 4 KB by design; profile-specific callers must continue to pass `padBlock` explicitly, and every stateful test fixture that mocks public/manage reads must now include `securityProfile`.
+- **Phase**: Incident fix implemented on `fix/do-alarm-loop`; PR #139 is open and backend safeguards are deployed to staging + production
+- **Progress**: Root cause was isolated to staging Durable Object `alarm` invocations, not end-user traffic. The backend now reconciles nonce alarm state in one pass, rejects invalid or non-future alarm candidates by deleting the alarm instead of rearming, and treats malformed `expiresAt` channel records as terminal state that must be purged. Staging now runs on a fresh `SecretVaultStaging` namespace, and Cloudflare metrics after deploy show no new staging DO invocations since `2026-03-11T10:05:00Z`.
+- **Known Constraint**: Staging data before the reset is intentionally abandoned; production kept the original `SecretVault` namespace and only received the scheduler hardening code.
 
 ## Latest Update (2026-03-11)
 
+- `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultNonces.ts`, `packages/backend/src/do/__tests__/SecretVault.test.ts` — Reworked Durable Object alarm scheduling so nonce cleanup deletes expired and malformed index entries before choosing the next alarm, invalid `expiresAt` records are purged as expired terminal state, and non-future/invalid alarm candidates now clear the alarm instead of rearming into a loop.
+- `packages/backend/src/index.ts`, `packages/backend/wrangler.toml` — Added a staging-only Durable Object export alias plus a new `env.staging` migration so staging deploys switch to a fresh SQLite namespace (`SecretVaultStaging`) without touching production data.
+- Validation: `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/backend test`, `pnpm --filter @zerolink/shared typecheck`, `pnpm --filter @zerolink/shared test`
+- Rollout: Opened PR #139 (`fix(backend): stop durable object alarm loops`), deployed `zerolink-api-staging` version `ef48cc3b-5614-466e-9786-651e6232d910`, deployed `zerolink-api` version `6ae7b099-e6a2-4225-b993-844184b2ba7d`, and verified via Cloudflare GraphQL that staging has no Durable Object invocations after `2026-03-11T10:05:00Z`.
 - `packages/frontend/e2e/support/mock-api.ts` — Fixed the Playwright stateful API mock after PR #137 merged: channel runtime state now stores `securityProfile` from `create_begin`, and the mock returns that field from `public` and `compound_begin` responses so the Manage page and polling fallback satisfy the current shared schemas on `main`.
 - Validation: `pnpm --filter @zerolink/frontend test:e2e -- e2e/happy-path.spec.ts e2e/realtime-sync.spec.ts e2e/terminal-state.spec.ts --project=chromium`
 - `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts`, `packages/shared/src/ws.ts`, `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultWebSocket.ts` — Extended the Manage/public read contracts so `PublicStatusResponse`, `CompoundBeginResponse`, and WebSocket `state_changed` snapshots all expose the persisted channel `securityProfile` instead of forcing the frontend to reconstruct it from `adminMode`.
