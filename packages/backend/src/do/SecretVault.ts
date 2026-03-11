@@ -150,54 +150,71 @@ export class SecretVault {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
+    let handler = 'fetch';
 
-    // Handle WebSocket upgrade before method check
-    if (url.pathname === '/ws' && request.headers.get('Upgrade') === 'websocket') {
-      const record = await this.tryLoadActiveRecord();
-      if (!record) {
-        return notFound();
+    try {
+      const url = new URL(request.url);
+
+      // Handle WebSocket upgrade before method check
+      if (url.pathname === '/ws' && request.headers.get('Upgrade') === 'websocket') {
+        handler = 'ws_subscribe';
+        const record = await this.tryLoadActiveRecord();
+        if (!record) {
+          return notFound();
+        }
+        return acceptWebSocket(this.ctx);
       }
-      return acceptWebSocket(this.ctx);
-    }
 
-    if (request.method !== 'POST') {
-      return methodNotAllowed();
-    }
+      if (request.method !== 'POST') {
+        handler = 'method_not_allowed';
+        return methodNotAllowed();
+      }
 
-    if (url.pathname === '/create_begin') {
-      return this.handleCreateBegin(request);
-    }
+      if (url.pathname === '/create_begin') {
+        handler = 'create_begin';
+        return this.handleCreateBegin(request);
+      }
 
-    if (url.pathname === '/create_finish') {
-      return this.handleCreateFinish(request);
-    }
+      if (url.pathname === '/create_finish') {
+        handler = 'create_finish';
+        return this.handleCreateFinish(request);
+      }
 
-    if (url.pathname === '/lock_begin') {
-      return this.handleLockBegin(request);
-    }
+      if (url.pathname === '/lock_begin') {
+        handler = 'lock_begin';
+        return this.handleLockBegin(request);
+      }
 
-    if (url.pathname === '/lock_commit') {
-      return this.handleLockCommit(request);
-    }
+      if (url.pathname === '/lock_commit') {
+        handler = 'lock_commit';
+        return this.handleLockCommit(request);
+      }
 
-    if (url.pathname === '/compound_begin') {
-      return this.handleCompoundBegin(request);
-    }
+      if (url.pathname === '/compound_begin') {
+        handler = 'compound_begin';
+        return this.handleCompoundBegin(request);
+      }
 
-    if (url.pathname === '/compound_commit') {
-      return this.handleCompoundCommit(request);
-    }
+      if (url.pathname === '/compound_commit') {
+        handler = 'compound_commit';
+        return this.handleCompoundCommit(request);
+      }
 
-    if (url.pathname === '/get_public_state') {
-      return this.handleGetPublicState();
-    }
+      if (url.pathname === '/get_public_state') {
+        handler = 'get_public_state';
+        return this.handleGetPublicState();
+      }
 
-    if (url.pathname === '/get_decrypt_payload') {
-      return this.handleGetDecryptPayload();
-    }
+      if (url.pathname === '/get_decrypt_payload') {
+        handler = 'get_decrypt_payload';
+        return this.handleGetDecryptPayload();
+      }
 
-    return notFound();
+      handler = 'not_found';
+      return notFound();
+    } catch (error) {
+      return mapError(error, { appEnv: this.env.APP_ENV, handler });
+    }
   }
 
   async alarm(now: number = Date.now()): Promise<void> {

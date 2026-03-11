@@ -28,6 +28,8 @@ function isProductionAppEnv(appEnv: string): boolean {
   return appEnv === 'production';
 }
 
+const STACK_FRAME_LIMIT = 5;
+
 function fingerprintText(value: string): string {
   let hash = 0x811c9dc5;
 
@@ -39,6 +41,84 @@ function fingerprintText(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
+}
+
+function stripLineAndColumnSuffix(value: string): string {
+  return value.replace(/:\d+:\d+$/u, '').replace(/:\d+$/u, '');
+}
+
+function stripQueryAndHash(value: string): string {
+  return value.replace(/[?#].*$/u, '');
+}
+
+function stripProtocolAndHost(value: string): string {
+  return value.replace(/^[a-z]+:\/\/[^/]+/iu, '');
+}
+
+function stripBundleHashSegment(value: string): string {
+  return value.replace(/-(?:[a-f0-9]{6,}|[A-Za-z0-9_-]{8,})(?=\.[A-Za-z0-9]+$)/u, '');
+}
+
+function normalizeLocationToken(location: string): string {
+  let normalized = stripProtocolAndHost(
+    stripQueryAndHash(stripLineAndColumnSuffix(location.trim()))
+  );
+
+  if (normalized.includes('/')) {
+    normalized = normalized.split('/').filter(Boolean).slice(-2).join('/');
+  }
+
+  normalized = stripBundleHashSegment(normalized);
+  return normalized || 'anonymous';
+}
+
+function normalizeStackFrame(frame: string): string {
+  const trimmed = frame.trim();
+  if (trimmed === '') {
+    return '';
+  }
+
+  const withoutAt = trimmed.replace(/^at\s+/u, '');
+  const wrappedLocationMatch = withoutAt.match(/^(.*?) \((.*)\)$/u);
+  if (wrappedLocationMatch) {
+    const functionName = normalizeWhitespace(wrappedLocationMatch[1] ?? '');
+    if (functionName !== '') {
+      return functionName;
+    }
+
+    return normalizeLocationToken(wrappedLocationMatch[2] ?? '');
+  }
+
+  return normalizeLocationToken(withoutAt);
+}
+
+function extractNormalizedFrames(stack: string | undefined): string[] {
+  if (!stack) {
+    return [];
+  }
+
+  return stack
+    .split('\n')
+    .slice(1)
+    .map((frame) => normalizeStackFrame(frame))
+    .filter((frame) => frame !== '')
+    .slice(0, STACK_FRAME_LIMIT);
+}
+
+function buildUnexpectedErrorFingerprintSource(error: unknown, context: ErrorLogContext): string {
+  if (!(error instanceof Error)) {
+    return `${context.handler}|NonErrorThrow|${Object.prototype.toString.call(error)}`;
+  }
+
+  const normalizedFrames = extractNormalizedFrames(error.stack);
+  const normalizedFrameSignature =
+    normalizedFrames.length > 0 ? normalizedFrames.join('|') : 'no-stack';
+
+  return `${context.handler}|${error.name}|${normalizedFrameSignature}`;
+}
+
 function buildUnexpectedErrorLog(
   error: unknown,
   context: ErrorLogContext
@@ -48,9 +128,7 @@ function buildUnexpectedErrorLog(
     app_env: context.appEnv,
     handler: context.handler,
     error_name: error instanceof Error ? error.name : 'NonErrorThrow',
-    stack_fingerprint: fingerprintText(
-      error instanceof Error ? (error.stack ?? `${error.name}:${error.message}`) : String(error)
-    ),
+    stack_fingerprint: fingerprintText(buildUnexpectedErrorFingerprintSource(error, context)),
   };
 
   if (isProductionAppEnv(context.appEnv)) {
