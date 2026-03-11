@@ -4,16 +4,19 @@
 
 ## Active Task
 
-Add real-time channel sync with polling fallback and harden cached Verified Release revalidation.
+Remove dead share-link affordances from terminal sender Manage states.
 
 ## Current Status
 
-- **Phase**: Review fixes applied on `feat/realtime-sync`
-- **Progress**: Added Durable Object WebSocket subscription plumbing plus frontend channel sync hooks so Manage and Share pages react to lock/deliver/delete/expire changes without a manual refresh, while falling back to `/api/public/:uuid` polling when WebSockets are unavailable. Follow-up fixes now preserve the sender's local deleted confirmation after realtime `channel_closed` events and reject dead-link WebSocket upgrades instead of leaving idle sockets open.
-- **Known Constraint**: Playwright currently validates the polling fallback path only; end-to-end WebSocket hibernation behavior still depends on deployed Cloudflare Worker + Durable Object runtime support.
+- **Phase**: Sender Manage terminal-state follow-up on `fix/remove-dead-channel-share-link`
+- **Progress**: ManagePage now hides the receiver share-link card whenever the sender view is in a terminal or unavailable state (`deleted`, `expired`, or dead-link unavailable), so the UI no longer suggests sharing a link that cannot be used. Regression coverage now locks this down for 404/unavailable, legacy terminal public states, and locally deleted channels.
+- **Known Constraint**: The audit for similar UX issues was limited to the current sender/receiver flows in `packages/frontend`; no additional dead-action affordances were found in SharePage during this pass.
 
 ## Latest Update (2026-03-11)
 
+- `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Hid the sender share-link card for terminal/unavailable Manage states so deleted, expired, and dead-link channels no longer present a misleading copy/share action.
+- `_project_specs/session/current-state.md`, `_project_specs/todos/completed.md` — Recorded the terminal-state share-link cleanup for future sessions.
+- Validation: `pnpm --filter @zerolink/frontend test -- manage-page`, `pnpm --filter @zerolink/frontend typecheck`, `git diff --check`
 - `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Hid the sender-side delivery composer while a channel is still `waiting`, kept password-managed delete credentials available, and limited delivery-focused UI/tests to `locked` and `delivered` states so the Manage page no longer invites payload entry before receiver lock.
 - `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Fixed realtime terminal handling so the current sender tab keeps its local deleted confirmation, remote delete/expire events render the unavailable state, and stale `/api/public/:uuid` warnings are cleared when a good realtime state arrives.
 - `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultWebSocket.ts`, `packages/backend/src/do/__tests__/SecretVault.test.ts`, `packages/backend/src/do/__tests__/SecretVaultWebSocket.test.ts`, `packages/backend/src/__tests__/index.test.ts` — Rejected `/ws` upgrades for missing or terminal channels and added a subscribe-time close fallback so dead links do not hold idle Durable Object WebSocket connections open.
