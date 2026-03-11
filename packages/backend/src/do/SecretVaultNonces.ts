@@ -70,6 +70,9 @@ export async function reconcileNonceAlarmState(
       };
     }
 
+    // Defensive guard: logically unreachable because a batch with no deletions
+    // must contain at least one future entry, which sets nextAlarmAt and returns
+    // above. Kept as a safety valve against unexpected storage list behaviour.
     if (keysToDelete.length === 0) {
       return {
         deletedExpiredEntries,

@@ -709,8 +709,8 @@ export class SecretVault {
   }
 
   private async scheduleNextAlarm(now: number = Date.now()): Promise<void> {
-    const recordPurged = await this.purgeExpiredRecord(now);
-    if (recordPurged) {
+    const purgeResult = await this.purgeExpiredRecord(now);
+    if (purgeResult.purged) {
       await this.ctx.storage.deleteAlarm();
       return;
     }
@@ -718,7 +718,7 @@ export class SecretVault {
     const nonceAlarmState = await reconcileNonceAlarmState(this.ctx.storage, now);
     this.logNonceAlarmState(nonceAlarmState);
 
-    const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+    const { record } = purgeResult;
     const recordAlarmAt = record ? this.getRecordAlarmAt(record, now) : null;
     const nonceAlarmAt = nonceAlarmState.nextAlarmAt;
     const nextAlarmAt = this.getEarlierAlarm(recordAlarmAt, nonceAlarmAt);
@@ -773,10 +773,12 @@ export class SecretVault {
     await this.ctx.storage.put(CHANNEL_RECORD_KEY, record);
   }
 
-  private async purgeExpiredRecord(now: number): Promise<boolean> {
+  private async purgeExpiredRecord(
+    now: number
+  ): Promise<{ purged: true } | { purged: false; record: ChannelRecord | undefined }> {
     const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
     if (!record || !this.shouldPurgeRecord(record, now)) {
-      return false;
+      return { purged: false, record };
     }
 
     await this.finalizeTerminalRecord(record, now);
@@ -784,7 +786,7 @@ export class SecretVault {
     // Broadcast channel_closed to any connected clients
     broadcastToWebSockets(this.ctx, { type: 'channel_closed', reason: 'expired' });
     this.closeAllWebSockets('expired');
-    return true;
+    return { purged: true };
   }
 
   private async purgeChannelStorage(): Promise<void> {
