@@ -372,6 +372,15 @@ function createMockState(initialRecord?: ChannelRecord): {
     id: {} as DurableObjectId,
     storage,
     blockConcurrencyWhile: async <T>(callback: () => Promise<T>): Promise<T> => callback(),
+    // WebSocket Hibernation API mocks
+    getWebSockets(_tag?: string): WebSocket[] {
+      return [];
+    },
+    getTags(_ws: WebSocket): string[] {
+      return [];
+    },
+    acceptWebSocket(_ws: WebSocket, _tags?: string[]): void {},
+    setWebSocketAutoResponse(_pair: WebSocketRequestResponsePair | null): void {},
   } as unknown as DurableObjectState;
 
   return {

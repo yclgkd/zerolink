@@ -219,6 +219,24 @@ This is append-only. Never delete entries.
 **Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
 **Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.
 
+## [2026-03-11] Channel sync uses Durable Object WebSockets with public-status polling fallback
+
+**Decision**: Sender Manage and receiver Share views should subscribe to channel state changes over Durable Object WebSockets and fall back to `/api/public/:uuid` polling when WebSockets are unavailable.
+**Context**: Share and Manage pages previously required refreshes or user actions to discover that the other party had locked or delivered the channel. Playwright mocks and some browsers also do not exercise the Cloudflare Durable Object WebSocket path directly.
+**Options Considered**: Keep manual refresh only; poll continuously from every page; use WebSockets only with no degraded path; use WebSockets first with HTTP polling fallback.
+**Choice**: Add a channel-scoped WebSocket endpoint on the Durable Object, broadcast lock/deliver/delete/expire events from the state machine, and let the frontend fall back to periodic `/api/public/:uuid` polling when the socket cannot stay connected.
+**Reasoning**: WebSockets give low-latency state updates in production, while polling fallback preserves correctness in test environments and browsers where the socket path is unavailable or interrupted.
+**Trade-offs**: Polling fallback cannot distinguish deleted vs expired once the channel has already been physically purged and only `404 NOT_FOUND` remains, so the degraded path treats that response as a generic terminal closure.
+
+## [2026-03-11] Cached Verified Release trust must revalidate signed manifest bytes
+
+**Decision**: Cached `Verified Release` snapshots may skip asset re-hashing only after `manifest.json` and `manifest.sig` are revalidated; `manifest-hash.txt` must remain a freshness hint, not a trust anchor.
+**Context**: The tiered verification follow-up introduced a local cache keyed by `manifest-hash.txt`. That fast path could have reused a cached trusted snapshot without re-checking the signed manifest bytes, which weakens the signed-release guarantee because `manifest-hash.txt` is an unsigned helper file.
+**Options Considered**: Trust `manifest-hash.txt` directly for fresh caches; remove cached verification entirely; reuse cached snapshots only after signature revalidation of the manifest bytes.
+**Choice**: Keep the cache, but always revalidate `manifest.json` plus `manifest.sig` before returning a cached trusted snapshot. Use `manifest-hash.txt` only as an optimization hint to decide whether a fresh cache should go straight to full verification.
+**Reasoning**: This preserves most of the performance win from skipping repeated asset hashing while keeping the trust boundary aligned with the signed manifest and embedded public key.
+**Trade-offs**: Fresh-cache startups still fetch and verify the manifest/signature pair, so the optimization is smaller than a pure hash-file cache hit.
+
 ## [2026-03-10] Secure Share WebAuthn must use stored credential IDs for sender assertions
 
 **Decision**: Secure Share sender manage/update flows must request WebAuthn assertions with `allowCredentials` derived from the channel's stored `credentialId`, and new registrations should prefer non-discoverable credentials.

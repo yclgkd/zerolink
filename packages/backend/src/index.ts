@@ -41,6 +41,7 @@ const DELETE_COMMIT_PATH = /^\/api\/delete_commit\/([^/]+)$/u;
 
 const PUBLIC_STATUS_PATH = /^\/api\/public\/([^/]+)$/u;
 const DECRYPT_FETCH_PATH = /^\/api\/decrypt_fetch\/([^/]+)$/u;
+const WS_SUBSCRIBE_PATH = /^\/api\/ws\/([^/]+)$/u;
 
 const API_ROUTES: readonly ApiRoute[] = [
   { method: 'POST', pattern: /^\/api\/create_begin\/[^/]+$/u },
@@ -305,9 +306,33 @@ async function handleCompoundCommit(
   return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsedData);
 }
 
+async function forwardWebSocketUpgrade(
+  env: Env,
+  uuid: string,
+  request: Request
+): Promise<Response> {
+  const durableObjectId = env.SECRET_VAULT.idFromName(uuid);
+  const stub = env.SECRET_VAULT.get(durableObjectId);
+  // Forward the upgrade request to the DO; it will call acceptWebSocket
+  return stub.fetch('https://secret-vault.internal/ws', {
+    headers: request.headers,
+  });
+}
+
 async function handleApiRequest(request: Request, pathname: string, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return preflight();
+  }
+
+  // WebSocket upgrade — must be checked before method restrictions
+  const wsMatch = pathname.match(WS_SUBSCRIBE_PATH);
+  if (wsMatch) {
+    const uuid = wsMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      return errorResponse('BAD_REQUEST', 426);
+    }
+    return forwardWebSocketUpgrade(env, uuid, request);
   }
 
   const lockBeginMatch = pathname.match(LOCK_BEGIN_PATH);

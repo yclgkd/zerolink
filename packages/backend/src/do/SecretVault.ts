@@ -26,6 +26,7 @@ import {
   TIMESTAMP_SKEW_MS,
   type UnixMs,
   type UUID,
+  WS_CLOSE_CHANNEL_GONE,
 } from '@zerolink/shared';
 import { type AttestationVerificationResult, verifyAttestation } from '../crypto/attestation.ts';
 import {
@@ -52,6 +53,14 @@ import {
   readJsonBody,
 } from './SecretVaultHttp.ts';
 import { getNextNonceCleanupAt, sweepExpiredNonces } from './SecretVaultNonces.ts';
+import {
+  acceptWebSocket,
+  broadcastToWebSockets,
+  buildStateChangedMessage,
+  handleWebSocketClose,
+  handleWebSocketError,
+  handleWebSocketMessage,
+} from './SecretVaultWebSocket.ts';
 
 // ---------------------------------------------------------------------------
 // Re-exports for backward compatibility (tests import from this module)
@@ -120,8 +129,34 @@ export class SecretVault {
     this.env = env;
   }
 
+  // ─── Hibernation API WebSocket handlers ───────────────────────────────────
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const record = await this.tryLoadRecord();
+    handleWebSocketMessage(ws, message, record);
+  }
+
+  async webSocketClose(
+    ws: WebSocket,
+    _code: number,
+    _reason: string,
+    _wasClean: boolean
+  ): Promise<void> {
+    handleWebSocketClose(ws);
+  }
+
+  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    handleWebSocketError(ws);
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // Handle WebSocket upgrade before method check
+    if (url.pathname === '/ws' && request.headers.get('Upgrade') === 'websocket') {
+      return acceptWebSocket(this.ctx);
+    }
+
     if (request.method !== 'POST') {
       return methodNotAllowed();
     }
@@ -528,6 +563,9 @@ export class SecretVault {
       if (intent.op === 'delete') {
         new SecretVaultStateMachine(record).commitDelete();
         await this.finalizeTerminalState(record.uuid, 'deleted', asUnixMs(now));
+        // Broadcast channel_closed to all connected clients
+        broadcastToWebSockets(this.ctx, { type: 'channel_closed', reason: 'deleted' });
+        this.closeAllWebSockets('deleted');
         return;
       }
 
@@ -565,6 +603,9 @@ export class SecretVault {
 
       await this.saveRecord(updatedRecord);
       await this.scheduleNextAlarm(now);
+
+      // Broadcast DELIVERED state to connected clients (e.g., receiver's SharePage)
+      broadcastToWebSockets(this.ctx, buildStateChangedMessage(updatedRecord));
     });
   }
 
@@ -644,6 +685,9 @@ export class SecretVault {
       });
       await this.saveRecord(nextRecord);
       await this.scheduleNextAlarm(now);
+
+      // Broadcast LOCKED state to connected clients (e.g., sender's ManagePage)
+      broadcastToWebSockets(this.ctx, buildStateChangedMessage(nextRecord));
     });
   }
 
@@ -682,6 +726,14 @@ export class SecretVault {
     return record;
   }
 
+  /**
+   * Load the channel record without throwing. Returns undefined if not found.
+   * Used by WebSocket message handler to send current state snapshots.
+   */
+  private async tryLoadRecord(): Promise<ChannelRecord | undefined> {
+    return this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
+  }
+
   private async loadActiveRecord(now: number = Date.now()): Promise<ChannelRecord> {
     const record = await this.loadRecord();
     if (!this.shouldPurgeRecord(record, now)) {
@@ -703,6 +755,10 @@ export class SecretVault {
     }
 
     await this.finalizeTerminalRecord(record, now);
+
+    // Broadcast channel_closed to any connected clients
+    broadcastToWebSockets(this.ctx, { type: 'channel_closed', reason: 'expired' });
+    this.closeAllWebSockets('expired');
   }
 
   private async purgeChannelStorage(): Promise<void> {
@@ -764,6 +820,20 @@ export class SecretVault {
       record.state === CHANNEL_STATE.EXPIRED ||
       Number(record.expiresAt) <= now
     );
+  }
+
+  /**
+   * Close all connected WebSockets after a terminal event (delete/expire).
+   */
+  private closeAllWebSockets(reason: string): void {
+    const sockets = this.ctx.getWebSockets();
+    for (const ws of sockets) {
+      try {
+        ws.close(WS_CLOSE_CHANNEL_GONE, reason);
+      } catch {
+        // Already closed
+      }
+    }
   }
 
   private getEarlierAlarm(left: number | null, right: number | null): number | null {

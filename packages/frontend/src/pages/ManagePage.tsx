@@ -31,6 +31,8 @@ import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
 import { useDeliverStore } from '../stores/deliver-store';
+import type { ChannelClosedReason, ChannelStateUpdate } from '../sync/channel-sync.ts';
+import { useChannelSync } from '../sync/use-channel-sync.ts';
 
 function mapActionError(code: string): string {
   switch (code) {
@@ -706,6 +708,35 @@ function useManagePageState(uuid?: string) {
     uuid,
     mountedRef
   );
+
+  // Real-time sync: auto-update when receiver locks or channel state changes
+  useChannelSync(uuid, {
+    onStateChange: useCallback(
+      (update: ChannelStateUpdate) => {
+        if (!mountedRef.current) return;
+        store.setChannelState(update.state);
+        store.setAdminMode(update.adminMode);
+        store.setReceiverPubFpr(update.receiverPubFpr ?? null);
+      },
+      [store.setChannelState, store.setAdminMode, store.setReceiverPubFpr]
+    ),
+    onChannelClosed: useCallback(
+      (_reason: ChannelClosedReason) => {
+        if (!mountedRef.current) return;
+        store.setChannelState(CHANNEL_STATE.WAITING);
+        store.setShowDestroyConfirm(false);
+        store.setAdminMode(null);
+        store.setReceiverPubFpr(null);
+      },
+      [
+        store.setChannelState,
+        store.setShowDestroyConfirm,
+        store.setAdminMode,
+        store.setReceiverPubFpr,
+      ]
+    ),
+  });
+
   const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
 
   useEffect(() => {

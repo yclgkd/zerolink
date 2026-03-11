@@ -110,11 +110,17 @@ function requireChannel(
   return channels.get(uuid);
 }
 
+export type ChannelMap = Map<string, ChannelRuntimeState>;
+
 /**
  * Installs a stateful API mock for the full happy-path flow.
+ * Accepts an optional shared channels map for cross-page state sharing.
  */
-export async function installStatefulApiMock(page: Page): Promise<void> {
-  const channels = new Map<string, ChannelRuntimeState>();
+export async function installStatefulApiMock(
+  page: Page,
+  sharedChannels?: ChannelMap
+): Promise<ChannelMap> {
+  const channels = sharedChannels ?? new Map<string, ChannelRuntimeState>();
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -376,6 +382,7 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
         ok: true,
         state: channel.state,
         adminMode: channel.adminMode,
+        ...(channel.receiverPubFpr ? { receiverPubFpr: channel.receiverPubFpr } : {}),
       };
       const parsedPayload = PublicStatusResponseSchema.safeParse(payload);
       if (!parsedPayload.success) {
@@ -421,4 +428,6 @@ export async function installStatefulApiMock(page: Page): Promise<void> {
       code: 'NOT_FOUND',
     });
   });
+
+  return channels;
 }

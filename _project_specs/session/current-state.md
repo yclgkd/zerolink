@@ -4,15 +4,24 @@
 
 ## Active Task
 
-Add PR-side validation gates so tests and builds fail before squash merge.
+Add real-time channel sync with polling fallback and harden cached Verified Release revalidation.
 
 ## Current Status
 
-- **Phase**: Ready for PR on `ci/pr-validation-gates`
-- **Progress**: Implemented a dedicated `pr-validate.yml` workflow so `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, frontend build, and Playwright E2E run on `pull_request` / `merge_group` before merge, while manifest signing and deployment stay post-merge in `deploy.yml`.
-- **Known Constraint**: Branch protection and required-check selection for `main` still need the one-time GitHub repository settings change after this PR merges.
+- **Phase**: Ready for PR on `feat/realtime-sync`
+- **Progress**: Added Durable Object WebSocket subscription plumbing plus frontend channel sync hooks so Manage and Share pages react to lock/deliver/delete/expire changes without a manual refresh, while falling back to `/api/public/:uuid` polling when WebSockets are unavailable.
+- **Known Constraint**: Playwright currently validates the polling fallback path only; end-to-end WebSocket hibernation behavior still depends on deployed Cloudflare Worker + Durable Object runtime support.
 
 ## Latest Update (2026-03-11)
+
+- `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultWebSocket.ts`, `packages/backend/src/index.ts`, `packages/shared/src/ws.ts`, `packages/shared/src/constants.ts` — Added Durable Object WebSocket subscribe/broadcast plumbing and shared wire contracts for channel state updates plus terminal close events.
+- `packages/frontend/src/sync/channel-sync.ts`, `packages/frontend/src/sync/use-channel-sync.ts`, `packages/frontend/src/features/share/share-logic.ts`, `packages/frontend/src/pages/ManagePage.tsx` — Added WebSocket-first channel sync with `/api/public/:uuid` polling fallback so Share and Manage views react to state changes without reloads; polling now treats `404 NOT_FOUND` as a terminal channel closure.
+- `packages/frontend/src/release/tiered-verification.ts`, `packages/frontend/src/__tests__/tiered-verification.test.ts` — Hardened cached Verified Release reuse so cached trust is returned only after re-validating the signed manifest and detached signature; `manifest-hash.txt` is now a freshness hint rather than a trust anchor.
+- `packages/frontend/e2e/realtime-sync.spec.ts`, `packages/frontend/e2e/support/mock-api.ts` — Added cross-page Playwright coverage for Manage/Share polling fallback and shared API mock state between browser contexts.
+- `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/session/code-landmarks.md`, `_project_specs/todos/completed.md` — Recorded the new sync/runtime-integrity behavior and validation results for future sessions.
+- Validation: `pnpm --filter @zerolink/shared typecheck`, `pnpm --filter @zerolink/shared test`, `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/backend test`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/frontend test`, `pnpm --filter @zerolink/frontend build`, `pnpm --filter @zerolink/frontend test:e2e -- e2e/realtime-sync.spec.ts --project=chromium`
+
+## Earlier Update (2026-03-11)
 
 - `.github/workflows/pr-validate.yml` — Added `pull_request.edited` to the PR validation trigger set so retargeting an existing PR to `main` still starts the required `PR Quality`, `PR Build`, and `PR E2E` checks instead of waiting for a new commit.
 
