@@ -8,12 +8,14 @@ Remove Node 20 GitHub Actions runtime deprecation warnings from CI workflows.
 
 ## Current Status
 
-- **Phase**: Validation complete on `codex/ci-actions-node24`
-- **Progress**: Updated both CI workflows to remove Node 20-based GitHub Action runtimes by pinning `actions/checkout` and `actions/setup-node` to `v5` SHAs and replacing `pnpm/action-setup` with `corepack enable`, keeping pnpm version resolution tied to the root `packageManager` field.
+- **Phase**: Follow-up fix prepared on `codex/ci-actions-node24`
+- **Progress**: Updated both CI workflows to remove Node 20-based GitHub Action runtimes by pinning `actions/checkout` and `actions/setup-node` to `v5` SHAs and replacing `pnpm/action-setup` with `corepack enable`. Follow-up review of PR #135 showed `actions/setup-node` was still trying to initialize `pnpm` caching before Corepack exposed the `pnpm` binary, so the workflow now drops `cache: "pnpm"` from the Node setup step.
 - **Known Constraint**: Local `pnpm manifest:verify` still depends on running `pnpm manifest:sign`, which requires the deployment signing secret to produce `packages/frontend/dist/manifest.sig`.
 
 ## Latest Update (2026-03-11)
 
+- `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Removed `cache: "pnpm"` from `actions/setup-node` after PR #135 checks showed the action was trying to resolve `pnpm` before the later `corepack enable` step, causing all three PR validation jobs to fail during setup.
+- Validation: `git diff --check`
 - `.github/workflows/deploy.yml`, `.github/workflows/pr-validate.yml` — Replaced Node 20-based `pnpm/action-setup` with `corepack enable` and upgraded `actions/checkout` / `actions/setup-node` to pinned `v5` SHAs so GitHub Actions jobs no longer rely on deprecated Node 20 action runtimes.
 - `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the CI runtime migration, validation results, and the release-signing constraint for future sessions.
 - Validation: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm build`, `pnpm manifest:generate`, `git diff --check`

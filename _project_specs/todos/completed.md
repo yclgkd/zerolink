@@ -22,6 +22,9 @@ Updated `.github/workflows/deploy.yml` and `.github/workflows/pr-validate.yml` t
 deprecated Node 20-based action runtimes. `actions/checkout` and `actions/setup-node` now use
 pinned `v5` SHAs, while `pnpm/action-setup` was replaced with `corepack enable` so CI resolves
 `pnpm@9.12.0` from the root `packageManager` field instead of a separate JavaScript action.
+Followed up by removing `cache: "pnpm"` from `actions/setup-node` after PR #135 showed the cache
+path was evaluated before the later Corepack step exposed the `pnpm` binary, causing all three PR
+validation jobs to fail during setup.
 Validated the workflow-facing commands with `pnpm typecheck`, `pnpm test`,
 `VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build`, `pnpm build`,
 `pnpm manifest:generate`, and `git diff --check`. Local `pnpm manifest:verify` still requires a

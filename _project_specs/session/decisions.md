@@ -226,7 +226,7 @@ This is append-only. Never delete entries.
 **Options Considered**: Ignore the warnings until Node 20 is removed; keep `pnpm/action-setup` and only bump the official actions; switch pnpm bootstrapping to Corepack and upgrade the official actions to Node 24-based releases.
 **Choice**: Upgrade the official actions to `v5` SHAs and bootstrap pnpm through Corepack using the repo's root `packageManager` field.
 **Reasoning**: This removes the deprecated action runtime dependency without changing the project's Node 22 execution target, keeps pnpm version selection in one place, and avoids waiting on a separate `pnpm/action-setup` runtime migration.
-**Trade-offs**: CI now relies on Corepack being present in the Node runtime provided by `actions/setup-node`, and local reproduction of the full release path still needs the signing secret for `pnpm manifest:sign`.
+**Trade-offs**: CI now relies on Corepack being present in the Node runtime provided by `actions/setup-node`, and local reproduction of the full release path still needs the signing secret for `pnpm manifest:sign`. Follow-up on PR #135 also showed that `actions/setup-node` cannot use `cache: pnpm` before Corepack exposes `pnpm`, so that cache integration was removed for now.
 
 ## [2026-03-11] Channel sync uses Durable Object WebSockets with public-status polling fallback
 
