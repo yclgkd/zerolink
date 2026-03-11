@@ -844,6 +844,7 @@ describe('ManagePage integration', () => {
 
     expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
 
+    expect(screen.queryByTestId('manage-share-link-card')).toBeNull();
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
@@ -876,6 +877,7 @@ describe('ManagePage integration', () => {
     renderManagePage();
 
     expect(await screen.findByTestId('manage-state-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('manage-share-link-card')).toBeNull();
     expect(screen.queryByTestId('manage-state-deleted')).toBeNull();
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect(screen.queryByTestId('manage-destroy-button')).toBeNull();
@@ -937,6 +939,7 @@ describe('ManagePage integration', () => {
     fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
     await screen.findByTestId('manage-state-deleted');
+    expect(screen.queryByTestId('manage-share-link-card')).toBeNull();
     expect(screen.queryByTestId('manage-secret-input')).toBeNull();
   });
 

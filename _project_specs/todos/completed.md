@@ -4,6 +4,16 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-023: Hide dead share links on terminal Manage states
+
+**Completed**: 2026-03-11
+
+Followed up the sender Manage page after terminal-state cleanup uncovered one more misleading CTA:
+the receiver share-link card still rendered for unavailable channels and local terminal states even
+though the underlying channel could no longer be used. ManagePage now hides that share-link card
+for `404/unavailable`, legacy `deleted` and `expired` public states, and locally deleted sender
+sessions, with regression coverage to keep dead-link copy actions from reappearing.
+
 ## DONE-022: Hide ManagePage delivery composer until receiver lock
 
 **Completed**: 2026-03-11

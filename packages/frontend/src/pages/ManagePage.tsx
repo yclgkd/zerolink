@@ -78,6 +78,10 @@ function canComposeDelivery(status: ChannelState): boolean {
   return status === CHANNEL_STATE.LOCKED || status === CHANNEL_STATE.DELIVERED;
 }
 
+function isTerminalManageState(status: ChannelState, unavailable: boolean): boolean {
+  return unavailable || status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
+}
+
 function ManagePageHeader({ status, unavailable }: { status: ChannelState; unavailable: boolean }) {
   return (
     <PageCardHeader>
@@ -374,10 +378,7 @@ function ActionPanel({
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
-  const terminal =
-    unavailable || status === CHANNEL_STATE.DELETED || status === CHANNEL_STATE.EXPIRED;
-
-  if (terminal) {
+  if (isTerminalManageState(status, unavailable)) {
     return <TerminalActions />;
   }
 
@@ -875,16 +876,10 @@ export function ManagePage(): ReactElement {
   const usesPasswordManagedChannel =
     state.adminMode === 'password' || state.adminMode === 'softkey';
   const showUnavailableState = state.isUnavailable && state.status !== CHANNEL_STATE.DELETED;
-  const showDeliveryComposer =
-    !showUnavailableState &&
-    state.status !== CHANNEL_STATE.DELETED &&
-    state.status !== CHANNEL_STATE.EXPIRED &&
-    canComposeDelivery(state.status);
-  const showPasswordSection =
-    !showUnavailableState &&
-    state.status !== CHANNEL_STATE.DELETED &&
-    state.status !== CHANNEL_STATE.EXPIRED &&
-    usesPasswordManagedChannel;
+  const isTerminalState = isTerminalManageState(state.status, showUnavailableState);
+  const showShareLink = !isTerminalState;
+  const showDeliveryComposer = !isTerminalState && canComposeDelivery(state.status);
+  const showPasswordSection = !isTerminalState && usesPasswordManagedChannel;
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
@@ -902,11 +897,13 @@ export function ManagePage(): ReactElement {
           </StateNotice>
         ) : null}
 
-        <ShareLinkCard
-          copied={state.copied}
-          onCopy={state.handleCopyShareLink}
-          shareLink={state.shareLink}
-        />
+        {showShareLink ? (
+          <ShareLinkCard
+            copied={state.copied}
+            onCopy={state.handleCopyShareLink}
+            shareLink={state.shareLink}
+          />
+        ) : null}
 
         {showUnavailableState ? (
           <ChannelUnavailableState
