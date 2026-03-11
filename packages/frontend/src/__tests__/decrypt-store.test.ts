@@ -2,6 +2,7 @@ import {
   CHANNEL_STATE,
   DecryptFetchResponseSchema,
   PublicStatusResponseSchema,
+  SECURITY_PROFILE,
   UUIDSchema,
 } from '@zerolink/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -18,6 +19,7 @@ function buildPublicStatusResponse() {
     ok: true,
     state: CHANNEL_STATE.DELIVERED,
     adminMode: 'webauthn',
+    securityProfile: SECURITY_PROFILE.SECURE,
   });
 }
 

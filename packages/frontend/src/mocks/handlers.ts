@@ -15,6 +15,7 @@ import {
   LockCommitRequestSchema,
   LockCommitResponseSchema,
   ROUTE_PATTERN,
+  SECURITY_PROFILE,
   SoftkeyCompoundCommitRequestSchema,
   UnixMsSchema,
   UUIDSchema,
@@ -135,6 +136,7 @@ export const handlers = [
       ok: true,
       state: CHANNEL_STATE.WAITING,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     });
   }),
 
@@ -292,6 +294,7 @@ export const handlers = [
         key_ops: ['encrypt'],
       },
       currentVersion: 0,
+      securityProfile: SECURITY_PROFILE.SECURE,
       adminMode: 'webauthn' as const,
     };
     const parsedPayload = CompoundBeginResponseSchema.safeParse(payload);

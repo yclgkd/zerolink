@@ -3,6 +3,7 @@ import {
   type CompoundBeginResponse,
   CompoundBeginResponseSchema,
   CompoundCommitResponseSchema,
+  SECURITY_PROFILE,
   UUIDSchema,
 } from '@zerolink/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -32,6 +33,7 @@ function buildCompoundBeginResponse(): CompoundBeginResponse {
       key_ops: ['encrypt'],
     },
     currentVersion: 3,
+    securityProfile: SECURITY_PROFILE.STANDARD,
     adminMode: 'webauthn',
   });
 
@@ -39,6 +41,7 @@ function buildCompoundBeginResponse(): CompoundBeginResponse {
     ok: parsed.ok,
     challenge: parsed.challenge,
     currentVersion: parsed.currentVersion,
+    securityProfile: parsed.securityProfile,
     adminMode: parsed.adminMode,
     ...(parsed.receiverPubFpr ? { receiverPubFpr: parsed.receiverPubFpr } : {}),
     ...(parsed.receiverPubJwk ? { receiverPubJwk: parsed.receiverPubJwk } : {}),
@@ -65,6 +68,7 @@ describe('useDeliverStore', () => {
     expect(state.copied).toBe(false);
     expect(state.challenge).toBeNull();
     expect(state.currentVersion).toBeNull();
+    expect(state.securityProfile).toBeNull();
     expect(state.receiverPubFpr).toBeNull();
     expect(state.receiverPubJwk).toBeNull();
     expect(state.compoundBegin).toEqual({
@@ -125,6 +129,7 @@ describe('useDeliverStore', () => {
     });
     expect(nextState.challenge).toEqual(beginPayload.challenge);
     expect(nextState.currentVersion).toBe(3);
+    expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
     expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr);
     expect(nextState.receiverPubJwk).toEqual(beginPayload.receiverPubJwk);
 
@@ -137,6 +142,7 @@ describe('useDeliverStore', () => {
     });
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
+    expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
     expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
   });
@@ -185,6 +191,7 @@ describe('useDeliverStore', () => {
     expect(nextState.copied).toBe(false);
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
+    expect(nextState.securityProfile).toBeNull();
     expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
     expect(nextState.compoundBegin).toEqual({
@@ -219,6 +226,7 @@ describe('useDeliverStore', () => {
     expect(nextState.copied).toBe(true);
     expect(nextState.challenge).toEqual(beginPayload.challenge);
     expect(nextState.currentVersion).toBe(beginPayload.currentVersion);
+    expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
     expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr ?? null);
     expect(nextState.receiverPubJwk).toEqual(beginPayload.receiverPubJwk ?? null);
     expect(nextState.compoundBegin.status).toBe('success');
@@ -243,6 +251,7 @@ describe('useDeliverStore', () => {
     expect(nextState.copied).toBe(false);
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
+    expect(nextState.securityProfile).toBeNull();
     expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
     expect(nextState.compoundBegin).toEqual({

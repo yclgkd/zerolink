@@ -1,3 +1,4 @@
+import { SECURITY_PROFILE } from '@zerolink/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelClosedReason, ChannelStateUpdate, ConnectionMode } from '../channel-sync.ts';
 import { ChannelSync } from '../channel-sync.ts';
@@ -144,6 +145,7 @@ describe('ChannelSync', () => {
         state: 'locked',
         version: 1,
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
         receiverPubFpr: 'ab01cd02',
       })
     );
@@ -190,6 +192,7 @@ describe('ChannelSync', () => {
         state: 'locked',
         version: 5,
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
 
@@ -200,6 +203,7 @@ describe('ChannelSync', () => {
         state: 'waiting',
         version: 3,
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
 

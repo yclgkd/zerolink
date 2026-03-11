@@ -67,6 +67,7 @@ export function buildStateChangedMessage(record: ChannelRecord): WsServerMessage
     state: record.state,
     version: record.version,
     adminMode: record.adminMode,
+    securityProfile: record.securityProfile,
   };
 
   if (record.receiver?.pubFpr) {

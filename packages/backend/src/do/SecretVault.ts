@@ -397,6 +397,7 @@ export class SecretVault {
     receiverPubFpr?: HexString;
     receiverPubJwk?: RSAPublicKeyJWK;
     currentVersion: number;
+    securityProfile: ChannelRecord['securityProfile'];
     adminMode: ChannelRecord['adminMode'];
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
@@ -422,6 +423,7 @@ export class SecretVault {
         currentVersion: number;
         receiverPubFpr?: HexString;
         receiverPubJwk?: RSAPublicKeyJWK;
+        securityProfile: ChannelRecord['securityProfile'];
         adminMode: ChannelRecord['adminMode'];
       } = {
         challenge: {
@@ -430,6 +432,7 @@ export class SecretVault {
           expiresAt: stored.expiresAt,
         },
         currentVersion: record.version,
+        securityProfile: record.securityProfile,
         adminMode: record.adminMode,
       };
       if (record.adminMode === 'webauthn') {
@@ -1028,6 +1031,7 @@ export class SecretVault {
         ok: true,
         state: record.state,
         adminMode: record.adminMode,
+        securityProfile: record.securityProfile,
       };
       if (record.receiver?.pubFpr) {
         // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   POLL_INTERVAL_MS,
+  SECURITY_PROFILE,
   WS_CLOSE_CHANNEL_GONE,
   WS_CLOSE_INVALID_PAYLOAD,
   WS_CLOSE_NORMAL,
@@ -28,6 +29,7 @@ describe('WsServerMessageSchema', () => {
       state: 'locked',
       version: 3,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
       receiverPubFpr: 'ab01cd02',
     };
     const result = WsServerMessageSchema.safeParse(msg);
@@ -43,6 +45,7 @@ describe('WsServerMessageSchema', () => {
       state: 'waiting',
       version: 0,
       adminMode: 'password',
+      securityProfile: SECURITY_PROFILE.QUICK,
     };
     const result = WsServerMessageSchema.safeParse(msg);
     expect(result.success).toBe(true);
@@ -81,6 +84,7 @@ describe('WsServerMessageSchema', () => {
       state: 'invalid_state',
       version: 1,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     };
     const result = WsServerMessageSchema.safeParse(msg);
     expect(result.success).toBe(false);
@@ -92,6 +96,7 @@ describe('WsServerMessageSchema', () => {
       state: 'locked',
       version: -1,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     };
     const result = WsServerMessageSchema.safeParse(msg);
     expect(result.success).toBe(false);
@@ -173,6 +178,7 @@ describe('type compatibility', () => {
       state: 'locked' as const,
       version: 1,
       adminMode: 'webauthn' as const,
+      securityProfile: SECURITY_PROFILE.SECURE,
     };
     const parsed = WsServerMessageSchema.parse(msg);
     const _check: WsServerMessage = parsed;

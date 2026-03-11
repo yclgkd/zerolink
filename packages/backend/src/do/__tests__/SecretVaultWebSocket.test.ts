@@ -85,6 +85,7 @@ describe('handleWebSocketMessage', () => {
       state: 'locked',
       version: 3,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.STANDARD,
       receiverPubFpr: 'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
     });
   });

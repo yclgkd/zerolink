@@ -3,6 +3,7 @@
 import 'fake-indexeddb/auto';
 
 import {
+  AES_GCM,
   type AssertionJSON,
   type AttestationJSON,
   Base64UrlSchema,
@@ -15,6 +16,7 @@ import {
   MAX_PLAINTEXT_BYTES,
   type RSAPublicKeyJWK,
   SECURITY_PROFILE,
+  type SecurityProfile,
   UnixMsSchema,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -198,6 +200,59 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve };
+}
+
+async function deliverAndCaptureCipherBundle(
+  profile: SecurityProfile
+): Promise<DecryptFetchResponse['cipherBundle']> {
+  const { orchestrator, apiClient } = createOrchestrator();
+  const receiverKeyPair = await generateReceiverKeyPair();
+  const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+  const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+  vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      challenge: {
+        id: VALID_B64U,
+        seed: VALID_B64U,
+        expiresAt: CHALLENGE_EXPIRES_AT,
+      },
+      receiverPubFpr,
+      receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+      currentVersion: 0,
+      securityProfile: profile,
+      adminMode: 'webauthn',
+    },
+  });
+  vi.mocked(assertWithWebAuthn).mockResolvedValue({
+    ok: true,
+    data: VALID_ASSERTION,
+  } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+  let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+  vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+    if (input.intent.op === 'update') {
+      committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+    }
+    return { ok: true, status: 200, data: { ok: true } };
+  });
+
+  const deliverResult = await orchestrator.deliverSecret({
+    uuid: VALID_UUID,
+    profile,
+    plaintext: 'padding coverage',
+  });
+
+  expect(deliverResult.ok).toBe(true);
+  expect(committedCipherBundle).not.toBeNull();
+  if (!committedCipherBundle) {
+    throw new Error('Expected a committed cipher bundle');
+  }
+
+  return committedCipherBundle;
 }
 
 beforeEach(() => {
@@ -1040,6 +1095,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1114,6 +1170,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1140,6 +1197,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1180,6 +1238,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1204,6 +1263,24 @@ describe('crypto orchestrator', () => {
     expect(useDeliverStore.getState().compoundCommit.errorCode).toBe('CRYPTO_ERROR');
   });
 
+  it('uses 4 KB padding for quick profile delivery', async () => {
+    const cipherBundle = await deliverAndCaptureCipherBundle(SECURITY_PROFILE.QUICK);
+
+    expect(cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_DEFAULT);
+  });
+
+  it('uses 8 KB padding for secure profile delivery', async () => {
+    const cipherBundle = await deliverAndCaptureCipherBundle(SECURITY_PROFILE.SECURE);
+
+    expect(cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_STRICT);
+  });
+
+  it('uses 8 KB padding for strict legacy profile delivery', async () => {
+    const cipherBundle = await deliverAndCaptureCipherBundle(SECURITY_PROFILE.STRICT);
+
+    expect(cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_STRICT);
+  });
+
   it('runs delete flow and marks deleted state', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     vi.mocked(apiClient.compoundBegin).mockResolvedValue({
@@ -1218,6 +1295,7 @@ describe('crypto orchestrator', () => {
         },
         allowCredentials: VALID_ALLOW_CREDENTIALS,
         currentVersion: 3,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1281,6 +1359,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 3,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1341,6 +1420,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1365,18 +1445,25 @@ describe('crypto orchestrator', () => {
     expect(deliverResult.ok).toBe(true);
     expect(committedCipherBundle).not.toBeNull();
     if (!committedCipherBundle) return;
+    const deliveredCipherBundle = committedCipherBundle as DecryptFetchResponse['cipherBundle'];
+    expect(deliveredCipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_DEFAULT);
 
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
         ok: true,
-        cipherBundle: committedCipherBundle,
+        cipherBundle: deliveredCipherBundle,
         receiverPubFpr: lockResult.data.receiverPubFpr,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
@@ -1441,6 +1528,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1492,7 +1580,12 @@ describe('crypto orchestrator', () => {
     statusDeferred.resolve({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
 
     const decryptResult = await decryptPromise;
@@ -1512,7 +1605,12 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.WAITING, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.WAITING,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
 
     const result = await orchestrator.decryptDelivered({
@@ -1561,7 +1659,12 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,
