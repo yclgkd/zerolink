@@ -4,16 +4,18 @@
 
 ## Active Task
 
-Fix documentation drift across protocol, security, deployment, and navigation docs, and clean up `_project_specs` timeline readability.
+Clean misleading historical `_project_specs` wording after the protocol/docs alignment pass.
 
 ## Current Status
 
-- **Phase**: Docs cleanup in progress on a dedicated documentation branch
-- **Progress**: Aligning `docs/PRD.md`, `docs/SECURITY.md`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`, `docs/INDEX.md`, and `docs/TECH_STACK.md` to the current `main` branch implementation, while also making `_project_specs` timeline files easier to read.
-- **Known Constraint**: Historical session snapshots remain intentionally preserved below, so chronology fixes focus on readability and labeling rather than rewriting historical content.
+- **Phase**: Historical spec cleanup completed locally on the documentation PR branch
+- **Progress**: Annotated the old `_project_specs` entries that still implied `RK=required`, snake_case protocol fields, or live Changesets usage, so they now read as dated history instead of current repo truth.
+- **Known Constraint**: Historical session snapshots remain intentionally preserved below, so this cleanup adds clarifications and supersession notes instead of deleting or rewriting the underlying work history.
 
 ## Latest Update (2026-03-11)
 
+- `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Cleaned the remaining misleading historical wording after the docs pass: old `RK=required`, `admin_mode`, `security_profile`, and active-Changesets phrasing is now either corrected to the shipped field name or explicitly annotated as superseded history.
+- Validation: `rg -n "RK=required|admin_mode|security_profile|Changesets|changeset" _project_specs`, `git diff --check`
 - `docs/PRD.md`, `docs/SECURITY.md`, `docs/ARCHITECTURE.md` — Aligned the protocol and security docs to the current `main` implementation: `Secure Share` now documents non-discoverable WebAuthn credentials (`residentKey: 'discouraged'`), `/api/public/:uuid` now documents the real `state` / `adminMode` / `securityProfile` contract, and the create-flow docs describe both Quick Share and Secure Share instead of the old WebAuthn-only path.
 - `docs/DEPLOYMENT.md`, `docs/INDEX.md`, `docs/TECH_STACK.md` — Corrected Cloudflare Pages project naming, Worker RP variable guidance, release/CI workflow descriptions, broken or stale index links, and removed the stale Changesets-based release guidance that no longer matches the repo.
 - `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md`, `_project_specs/session/code-landmarks.md` — Clarified append-only timeline expectations, fixed `current-state.md` section ordering, and removed the stale `.changeset/config.json` landmark.
@@ -170,7 +172,7 @@ Fix documentation drift across protocol, security, deployment, and navigation do
 - `packages/backend/src/do/__tests__/SecretVault.test.ts` — Updated 3 tests for removed attestation enforcement; 111 tests pass
 
 ### Phase 3: Frontend Crypto
-- `packages/frontend/src/crypto/webauthn.ts` — `SECURE/STRICT/HARDWARE_ONLY` all get `UV=required, RK=required, attestation=none`; `QUICK` and `STANDARD` allow fallback
+- `packages/frontend/src/crypto/webauthn.ts` — `SECURE/STRICT/HARDWARE_ONLY` all get `UV=required` and, as later clarified by the landed implementation, non-discoverable credentials (`residentKey: 'discouraged'`) with `attestation=none`; `QUICK` and `STANDARD` allow fallback
 - `packages/frontend/src/crypto/orchestrator.ts` — `createFinish` uses `adminMode: 'password'`; deliver/delete treat `'password' || 'softkey'` as password mode
 
 ### Phase 4: Frontend UI

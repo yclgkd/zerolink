@@ -11,6 +11,7 @@ This is append-only. Never delete entries.
 # Decision Log
 
 Entries are append-only. Follow-up backfills may make the bracketed dates non-monotonic in file order, so treat the date in each heading as canonical.
+When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
 ## [2026-03-11] Durable Object alarm scheduling must fail closed on corrupt timing state, and staging may reset its namespace independently
 
@@ -129,16 +130,17 @@ Entries are append-only. Follow-up backfills may make the bracketed dates non-mo
 **Choice**: Option 2 — two clear profiles
 **Reasoning**:
 - Quick Share is a legitimate secure option (Argon2id-derived keys), not a degraded fallback
-- Secure Share = merged Standard+Strict (UV=required, RK=required)
+- Secure Share = merged Standard+Strict (UV=required; original planning said `RK=required`, but the landed registration policy was later corrected to `residentKey: 'discouraged'`)
 - Hardware-Only attestation enforcement (x5c) was technically broken and complex to fix
 - Legacy profiles (standard/strict/hardware_only) kept for backward-compatible reads
 **Implementation**:
 - New `SECURITY_PROFILE.QUICK` and `SECURITY_PROFILE.SECURE` constants
-- `admin_mode: 'password'` replaces `'softkey'` as canonical name for Quick Share
+- `adminMode: 'password'` replaces `'softkey'` as canonical name for Quick Share
 - Backend treats `'password' || 'softkey'` identically for compound commits
 - Hardware-only enforcement removed from backend (attestation: 'none' always)
 - All 5 profile values remain valid in schemas for backward compatibility
 **Trade-offs**: Legacy channels with hardware_only profile lose the cross-platform authenticator restriction and attestation enforcement (was already broken in practice)
+**Follow-up (2026-03-11)**: The two-profile product decision still stands, but the shipped Secure Share registration policy uses non-discoverable credentials (`residentKey: 'discouraged'`). The earlier `RK=required` wording above reflected pre-landing intent and is superseded by the implementation that shipped on `main`.
 
 ## [2026-03-03] Follow-up fixes must stay on the existing open PR branch
 
@@ -232,7 +234,7 @@ Entries are append-only. Follow-up backfills may make the bracketed dates non-mo
 
 ## [2026-03-11] Delivery padding is selected by security profile in the frontend orchestrator
 
-**Decision**: Keep the shared AES-GCM helper default at 4 KB and make the frontend delivery orchestrator pass an explicit `padBlock` derived from `security_profile`.
+**Decision**: Keep the shared AES-GCM helper default at 4 KB and make the frontend delivery orchestrator pass an explicit `padBlock` derived from `securityProfile`.
 **Context**: Secure Share docs and UI promised 8 KB ciphertext padding, but the sender delivery path called `encryptAesGcm()` without `padBlock`, so every profile silently fell back to the helper's 4 KB default.
 **Options Considered**: Lower docs/UI to 4 KB everywhere; make the shared AES helper profile-aware or change its default; resolve the profile-specific padding policy in `packages/frontend/src/crypto/orchestrator.ts` and pass it explicitly.
 **Choice**: Resolve padding in the delivery orchestrator: `quick`/`standard` map to 4 KB and `secure`/`strict`/`hardware_only` map to 8 KB.

@@ -4,6 +4,20 @@ Done items for reference. Move here from active.md when complete. Entries may be
 
 ---
 
+## DONE-031: Clarify misleading historical `_project_specs` wording
+
+**Completed**: 2026-03-11
+
+Followed up the documentation-alignment pass by cleaning the remaining `_project_specs` entries
+that could still be mistaken for current repo truth. Added explicit supersession notes where old
+history still implied `RK=required`, corrected stale snake_case protocol field references
+(`admin_mode`, `security_profile`) to the shipped `adminMode` / `securityProfile` naming, and
+annotated the initial Changesets setup entry so readers do not confuse that bootstrapping history
+with the repo's current release flow.
+
+Validated with `rg -n "RK=required|admin_mode|security_profile|Changesets|changeset" _project_specs`
+and `git diff --check`.
+
 ## DONE-030: Align documentation with current protocol, release flow, and spec timelines
 
 **Completed**: 2026-03-11
@@ -66,7 +80,7 @@ status, compound begin, realtime sync, and Manage delivery/delete actions.
 
 Fixed a crypto-policy gap where the sender delivery path was still relying on the shared AES-GCM
 helper's 4 KB default padding block even for Secure Share channels. The frontend orchestrator now
-maps `security_profile` to an explicit `padBlock` before encryption so `quick` and legacy
+maps `securityProfile` to an explicit `padBlock` before encryption so `quick` and legacy
 `standard` channels keep 4 KB buckets, while `secure`, `strict`, and `hardware_only` commit 8 KB
 ciphertext padding as documented. Added regression coverage for quick, secure, strict, and the
 existing standard decrypt round-trip so future refactors cannot silently fall back to 4 KB again.
@@ -300,8 +314,10 @@ Closes original TODO-108 (accessibility audit) and TODO-109 (performance optimiz
 **Completed**: 2026-02-24
 
 Set up pnpm monorepo with 3 packages (`@zerolink/shared`, `@zerolink/frontend`, `@zerolink/backend`).
-Configured Biome, Husky + lint-staged, commitlint (Conventional Commits), Changesets.
-Installed 226 packages. Git hooks activated. Changesets initialized.
+Configured Biome, Husky + lint-staged, commitlint (Conventional Commits), and an initial Changesets
+setup that was later removed when the repo standardized on workflow-driven releases.
+Installed 226 packages. Git hooks activated. Changesets were initialized at that point in repo
+history, but the current repository no longer uses them.
 
 ## DONE-002: Claude project structure
 
