@@ -4,16 +4,19 @@
 
 ## Active Task
 
-Hide the misleading ManagePage password prompt while a channel is still waiting for receiver lock.
+Restore the documented 8 KB Secure Share ciphertext padding on the sender delivery path.
 
 ## Current Status
 
-- **Phase**: Frontend follow-up fix implemented on `fix/hide-manage-password-before-lock`
-- **Progress**: Updated `ManagePage` so password-managed channels no longer show the channel password input during the idle `waiting` state. The password prompt now appears only when the sender can deliver after `locked`, or when the sender explicitly opens the delete confirmation flow before lock.
-- **Known Constraint**: Password-managed delete still requires the sender to open the delete confirmation panel before the password input appears in `waiting`.
+- **Phase**: Frontend crypto fix implemented on `fix/secure-share-padding`
+- **Progress**: `deliverSecret` now resolves `padBlock` from `security_profile` before calling `encryptAesGcm`, so `quick`/`standard` stay on 4 KB while `secure`/`strict`/`hardware_only` use 8 KB as documented. Added regression coverage for quick, secure, strict, and the existing standard decrypt round-trip.
+- **Known Constraint**: `packages/shared/src/crypto/aes.ts` still defaults generic AES-GCM callers to 4 KB by design; profile-specific callers must continue to pass `padBlock` explicitly.
 
 ## Latest Update (2026-03-11)
 
+- `packages/frontend/src/crypto/orchestrator.ts`, `packages/frontend/src/__tests__/crypto-orchestrator.test.ts` — Added a profile-to-padding resolver on the sender delivery path so Secure Share and its legacy strict/hardware-only equivalents now commit cipher bundles with `padBlock = 8192`, while Quick Share and legacy standard stay at `4096`.
+- `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the padding policy fix, the decision to keep the shared AES helper default at 4 KB, and the regression validation footprint for future sessions.
+- Validation: `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/crypto-orchestrator.test.ts`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/frontend build`, `git diff --check`
 - `packages/frontend/src/pages/ManagePage.tsx`, `packages/frontend/src/__tests__/manage-page.test.tsx` — Hid the password-managed channel password prompt during the idle `waiting` state and only reveal it when a sender action actually needs credentials (`locked` delivery or delete confirmation), so the Manage page no longer implies that a password is required before receiver lock.
 - `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the ManagePage password-prompt visibility rule and validation results for future sessions.
 - Validation: `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/manage-page.test.tsx`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/frontend build`

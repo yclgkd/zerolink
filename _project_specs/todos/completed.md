@@ -4,6 +4,17 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-026: Restore Secure Share 8 KB delivery padding
+
+**Completed**: 2026-03-11
+
+Fixed a crypto-policy gap where the sender delivery path was still relying on the shared AES-GCM
+helper's 4 KB default padding block even for Secure Share channels. The frontend orchestrator now
+maps `security_profile` to an explicit `padBlock` before encryption so `quick` and legacy
+`standard` channels keep 4 KB buckets, while `secure`, `strict`, and `hardware_only` commit 8 KB
+ciphertext padding as documented. Added regression coverage for quick, secure, strict, and the
+existing standard decrypt round-trip so future refactors cannot silently fall back to 4 KB again.
+
 ## DONE-025: Hide misleading ManagePage password prompt before receiver lock
 
 **Completed**: 2026-03-11

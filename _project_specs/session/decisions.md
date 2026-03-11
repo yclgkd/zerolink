@@ -219,6 +219,15 @@ This is append-only. Never delete entries.
 **Reasoning**: Release validation should have a single definition of “bootable signed release.” Matching the CLI verifier to the browser verifier removes false-green deploy checks and catches broken artifacts before deployment.
 **Trade-offs**: The CLI verifier is now slightly stricter and depends on `dist/index.html` being present and parseable, but that is already a required deployment artifact for Pages.
 
+## [2026-03-11] Delivery padding is selected by security profile in the frontend orchestrator
+
+**Decision**: Keep the shared AES-GCM helper default at 4 KB and make the frontend delivery orchestrator pass an explicit `padBlock` derived from `security_profile`.
+**Context**: Secure Share docs and UI promised 8 KB ciphertext padding, but the sender delivery path called `encryptAesGcm()` without `padBlock`, so every profile silently fell back to the helper's 4 KB default.
+**Options Considered**: Lower docs/UI to 4 KB everywhere; make the shared AES helper profile-aware or change its default; resolve the profile-specific padding policy in `packages/frontend/src/crypto/orchestrator.ts` and pass it explicitly.
+**Choice**: Resolve padding in the delivery orchestrator: `quick`/`standard` map to 4 KB and `secure`/`strict`/`hardware_only` map to 8 KB.
+**Reasoning**: Padding size is product-policy behavior keyed off the channel security profile, not a generic AES primitive concern. Fixing it at the orchestration layer restores the documented behavior without surprising other AES helper callers.
+**Trade-offs**: Future profile additions must update the orchestrator mapping and its regression tests to keep runtime behavior aligned with docs and UI copy.
+
 ## [2026-03-11] Use Corepack plus Node 24-based official actions in GitHub workflows
 
 **Decision**: Replace `pnpm/action-setup` with `corepack enable` in CI and pin `actions/checkout` / `actions/setup-node` to `v5` SHAs.

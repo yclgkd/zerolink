@@ -1,5 +1,6 @@
 import type { CredentialCreationOptionsJSON } from '@github/webauthn-json';
 import {
+  AES_GCM,
   type AssertionJSON,
   type AttestationJSON,
   type Base64Url,
@@ -14,6 +15,7 @@ import {
   type LockBeginResponse,
   NONCE_BYTES,
   type RSAPublicKeyJWK,
+  SECURITY_PROFILE,
   type SecurityProfile,
   type UnixMs,
   type UpdateIntent,
@@ -339,6 +341,18 @@ function toCipherBundleTransport(input: {
     ciphertextHash: input.ciphertextHash as HexString,
     padBlock: input.padBlock,
   };
+}
+
+function resolvePadBlockForProfile(profile: SecurityProfile): number {
+  switch (profile) {
+    case SECURITY_PROFILE.SECURE:
+    case SECURITY_PROFILE.STRICT:
+    case SECURITY_PROFILE.HARDWARE_ONLY:
+      return AES_GCM.PAD_BLOCK_STRICT;
+    case SECURITY_PROFILE.QUICK:
+    case SECURITY_PROFILE.STANDARD:
+      return AES_GCM.PAD_BLOCK_DEFAULT;
+  }
 }
 
 function randomBase64Url(length: number, randomBytes: (length: number) => Uint8Array): Base64Url {
@@ -696,6 +710,7 @@ async function buildDeliverUpdateIntent(
     key: aesKey,
     plaintext: plaintextBytes,
     aad,
+    padBlock: resolvePadBlockForProfile(input.profile),
   });
   const receiverPublicKey = await importReceiverPublicKeyFromJwk(beginData.receiverPubJwk);
   const encContentKey = await wrapContentKey({
