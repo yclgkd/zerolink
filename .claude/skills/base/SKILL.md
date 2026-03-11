@@ -116,15 +116,13 @@ project/
 │   ├── features/              # Feature specifications
 │   │   ├── feature-a.md
 │   │   └── feature-b.md
-│   ├── todos/                 # Atomic todos tracking
-│   │   ├── active.md          # Current sprint/focus
-│   │   ├── backlog.md         # Future work
-│   │   └── completed.md       # Done items (for reference)
 │   ├── session/               # Session state (see session-management.md)
 │   │   ├── current-state.md   # Live session state
 │   │   ├── decisions.md       # Key decisions log
 │   │   ├── code-landmarks.md  # Important code locations
-│   │   └── archive/           # Past session summaries
+│   │   └── archive/           # Past session summaries + completed history
+│   │       ├── completed.md
+│   │       └── 2025-01-15.md
 │   └── prompts/               # LLM prompt specifications (if AI-first)
 └── CLAUDE.md                  # Claude instructions (references skills)
 ```
@@ -134,8 +132,8 @@ project/
 | Location | Content |
 |----------|---------|
 | `docs/` | Technical documentation, API refs, setup guides |
-| `_project_specs/` | Business logic, features, requirements, todos |
-| `_project_specs/session/` | Session state, decisions, context for resumability |
+| `_project_specs/` | Business logic, features, requirements, and session metadata |
+| `_project_specs/session/` | Live session state, decisions, code landmarks, and archive history |
 | `CLAUDE.md` | Claude-specific instructions and skill references |
 
 ---
@@ -179,7 +177,7 @@ How to verify this is complete:
 | RED | `[test command]` | - | - |
 | GREEN | `[test command]` | - | - |
 | VALIDATE | `[lint && typecheck && test --coverage]` | - | - |
-| COMPLETE | Moved to completed.md | - | - |
+| COMPLETE | Archived in `session/archive/completed.md` | - | - |
 ```
 
 ### Todo Rules
@@ -187,7 +185,7 @@ How to verify this is complete:
 2. **Testable** - Every todo has validation criteria and test cases
 3. **Sized** - If larger than "M", break it down further
 4. **Independent** - Minimize dependencies between todos
-5. **Tracked** - Move between active.md → completed.md when done
+5. **Tracked** - Keep active work in `current-state.md` and archive finished work in `session/archive/completed.md`
 
 ### Todo Execution Workflow (TDD - Mandatory)
 
@@ -213,7 +211,7 @@ How to verify this is complete:
 ├─────────────────────────────────────────────────────────────┤
 │  4. COMPLETE: Mark Done                                     │
 │     └─ Only after ALL validations pass                      │
-│     └─ Move todo to completed.md                            │
+│     └─ Archive completion in session/archive/completed.md   │
 │     └─ Checkpoint session state                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -385,7 +383,7 @@ Validate email format on the signup form before submission. Show inline error if
 | RED | `npm test -- --grep "email validation"` | 5 tests failed ✓ | - |
 | GREEN | `npm test -- --grep "email validation"` | 5 tests passed ✓ | - |
 | VALIDATE | `npm run lint && npm run typecheck && npm test -- --coverage` | Pass, 84% coverage ✓ | - |
-| COMPLETE | Moved to completed.md | ✓ | - |
+| COMPLETE | Archived in `session/archive/completed.md` | ✓ | - |
 ```
 
 ---
@@ -473,8 +471,8 @@ After completing any task, ask:
 
 ### Session Start
 1. Read `_project_specs/session/current-state.md`
-2. Check `_project_specs/todos/active.md`
-3. Continue from documented "Next Steps"
+2. Review documented "Next Steps"
+3. Check `_project_specs/session/archive/completed.md` only if recent finished work matters
 
 ### Session End
 1. Archive current session

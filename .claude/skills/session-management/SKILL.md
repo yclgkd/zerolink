@@ -287,8 +287,8 @@ Ask yourself:
 ### Session Start Protocol
 When beginning work:
 1. Read `_project_specs/session/current-state.md`
-2. Check `_project_specs/todos/active.md`
-3. Review recent `decisions.md` entries if needed
+2. Review recent `decisions.md` entries if needed
+3. Check `_project_specs/session/archive/completed.md` only if recent finished work matters
 4. Continue from "Next Steps"
 
 ### Session End Protocol
@@ -378,7 +378,7 @@ After significant work or at session end, create archive:
 - tests/auth/refresh.test.ts - Token refresh tests
 
 ## Open Items Carried Forward
-- [Anything not finished, now in active.md]
+- [Anything not finished, now reflected in current-state.md `Next Steps`]
 
 ## Session Stats
 - Duration: ~3 hours
@@ -389,11 +389,11 @@ After significant work or at session end, create archive:
 
 ---
 
-## Integration with Todo System
+## Integration with Task Tracking
 
-### Link Todos to Sessions
+### Link Tracked Tasks to Sessions
 
-In active todos, reference session context:
+In your active task notes or issue tracker, reference session context:
 
 ```markdown
 ## [TODO-042] Implement token refresh
@@ -406,10 +406,10 @@ In active todos, reference session context:
 - 2025-01-15: Added rotation logic, need error handling
 ```
 
-### Auto-Update on Todo Completion
+### Auto-Update on Task Completion
 
-When completing a todo:
-1. Mark todo complete in active.md
+When completing a tracked task:
+1. Archive the completion in `session/archive/completed.md`
 2. Update current-state.md progress
 3. Log any decisions made
 4. Update code-landmarks.md if new patterns introduced

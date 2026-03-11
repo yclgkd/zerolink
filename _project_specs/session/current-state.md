@@ -14,6 +14,8 @@ Simplify `_project_specs` to a session-plus-archive structure and remove the emp
 
 ## Latest Update (2026-03-11)
 
+- `.claude/skills/base/SKILL.md`, `.claude/skills/session-management/SKILL.md`, `_project_specs/session/decisions.md` — Synced the Claude-local skill layer to the new `session/archive/` paths and reordered `decisions.md` into strict newest-first order so the main human-facing logs now scan top-down by date.
+- Validation: `rg -n "_project_specs/todos|todos/active|todos/backlog|todos/completed" .claude .agents .ai _project_specs`, `git diff --check`
 - `_project_specs/session/archive/completed.md`, `_project_specs/session/archive/README.md`, `.ai/workflows.md`, repo-local skill docs — Replaced the unused `todos/` layer with a single archive location for completed history, documented that archive files are newest-first, and updated repo guidance to read live context from `session/` plus historical context from `session/archive/`.
 - `_project_specs/todos/active.md`, `_project_specs/todos/backlog.md` — Deleted the empty todo stubs; `_project_specs` now keeps live state in `session/current-state.md` and historical completion logs in `session/archive/completed.md`.
 - Validation: `rg -n "_project_specs/todos|todos/completed|todos/active|todos/backlog" .ai .agents _project_specs`, `git diff --check`
