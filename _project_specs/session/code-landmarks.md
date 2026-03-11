@@ -16,6 +16,8 @@ UPDATE WHEN:
 | `.ai/README.md` | Shared guidance index |
 | `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
 | `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
+| `_project_specs/session/archive/README.md` | Archive layout and ordering rules for historical project-spec files |
+| `_project_specs/session/archive/completed.md` | Reverse-chronological completed-work archive for historical lookup |
 
 ## Entry Points
 | Location | Purpose |

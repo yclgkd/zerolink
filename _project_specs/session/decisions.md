@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are append-only. Follow-up backfills may make the bracketed dates non-monotonic in file order, so treat the date in each heading as canonical.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-11] `_project_specs` keeps live state in `session/` and archives history under `session/archive/`
+
+**Decision**: Remove `_project_specs/todos/`, keep live project context in `_project_specs/session/`, and store completed-history records in `_project_specs/session/archive/` with newest-first ordering.
+**Context**: The `todos/active.md` and `todos/backlog.md` stubs were empty, while the completed-history file was the only useful artifact left in that folder. Keeping an extra task layer made humans and agents scan dead-end files before reaching the real session state.
+**Options Considered**: Keep `todos/` as-is; keep the folder but repurpose it; move completed history into `session/archive/` and delete the empty todo layer.
+**Choice**: Collapse to `session/` plus `session/archive/`.
+**Reasoning**: Human readers mostly need current state, decisions, code landmarks, and a concise completed-history archive. Putting those under one `session/` tree reduces navigation cost, and newest-first archive ordering matches how recent work is usually read.
+**Trade-offs**: Repo-local workflow docs and skill files must move with the structure change, otherwise agents regress to stale path assumptions.
+
 ## [2026-03-11] Durable Object alarm scheduling must fail closed on corrupt timing state, and staging may reset its namespace independently
 
 **Decision**: Reconcile nonce cleanup inside the alarm scheduler, delete alarms when the next candidate is not a finite future timestamp, treat malformed `expiresAt` values as expired terminal state, and move staging onto a fresh `SecretVaultStaging` SQLite class while leaving production on `SecretVault`.
@@ -64,7 +73,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Decision**: Enforce an "Atomic Update Rule" where every code change must include a corresponding update to `_project_specs/`.
 **Rationale**: The `_project_specs` directory was becoming outdated (stale context), leading to AI assistants losing track of project progress and architectural decisions. Versioning these files alongside code ensures the project's "external brain" is always accurate.
 **Mechanism**: 
-1. Every `feat` or `fix` commit must bundle updates to `current-state.md` and `active.md/completed.md`.
+1. Every `feat` or `fix` commit must bundle updates to the live session files and any affected archive history. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplification, the practical paths are `current-state.md`, `decisions.md`, and `session/archive/completed.md` when task history changes.
 2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
 **Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
 

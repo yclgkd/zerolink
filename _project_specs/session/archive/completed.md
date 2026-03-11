@@ -1,6 +1,7 @@
-# Completed
+# Completed Archive
 
-Done items for reference. Move here from active.md when complete. Entries may be grouped by workstream, so rely on each `Completed` date instead of assuming strict file-order chronology.
+Historical completed work. Newest entries first. Use each `Completed` value as the canonical
+date when an entry spans multiple days.
 
 ---
 
@@ -270,17 +271,6 @@ now surface a `share-public-status-error` notice instead of silently falling bac
 
 ---
 
-## DONE-010: Automated signed manifest in CI
-
-**Completed**: 2026-03-08
-
-Added manifest generation and Ed25519 signing steps to `.github/workflows/deploy.yml`. Every
-official Pages deploy now runs: `pnpm build` → `pnpm manifest:generate` → `pnpm manifest:sign`
-(using `MANIFEST_SIGNING_KEY` secret) → `pnpm manifest:verify`, and uploads `manifest.json` and
-`manifest.sig` alongside the built assets.
-
----
-
 ## DONE-017: Original backlog items 101–107, 110
 
 **Completed**: across 2026-02-24 – 2026-03-10
@@ -309,31 +299,38 @@ Closes original TODO-108 (accessibility audit) and TODO-109 (performance optimiz
 
 ---
 
-## DONE-001: Monorepo initialization
+## DONE-007: Trust page clarity and return-path fix
 
-**Completed**: 2026-02-24
+**Completed**: 2026-03-09
 
-Set up pnpm monorepo with 3 packages (`@zerolink/shared`, `@zerolink/frontend`, `@zerolink/backend`).
-Configured Biome, Husky + lint-staged, commitlint (Conventional Commits), and an initial Changesets
-setup that was later removed when the repo standardized on workflow-driven releases.
-Installed 226 packages. Git hooks activated. Changesets were initialized at that point in repo
-history, but the current repository no longer uses them.
+Expanded the frontend Trust Model page from four generic cards into six focused cards that
+accurately describe which secrets never reach the server, which protocol metadata is stored at each
+channel stage, what remains on sender and receiver devices, how physical delete plus tombstone
+reservation differs from local burn and TTL expiry, and what `Verified Release` does and does not
+guarantee when the indicator is actually present. Also replaced the trust-page shell self-link with
+`Back to Create`, carried explicit in-app return markers into trust-page links, and made the
+trust-page `Back` action return only to known in-app entries instead of guessing from browser
+history.
 
-## DONE-002: Claude project structure
+## DONE-008: Receiver lock-flow wording clarification
 
-**Completed**: 2026-02-24
+**Completed**: 2026-03-09
 
-Created CLAUDE.md, `.claude/skills/` with 7 skills (base, security, typescript, react-web,
-playwright-testing, session-management, code-review), and `_project_specs/` directory tree.
+Clarified the receiver-side share flow so the page now explicitly says the sender created the
+channel first, the receiver is setting their own passphrase on the shared-link page, and the lock
+actions/next steps are receiver-specific. Added `SharePage` tests to prevent the sender/receiver
+responsibility wording from drifting back into an ambiguous flow.
 
-## DONE-003: Multi-agent instruction structure
+## DONE-010: Automated signed manifest in CI
 
-**Completed**: 2026-03-03
+**Completed**: 2026-03-08
 
-Replaced the long root `CLAUDE.md` with short agent routers, added `AGENTS.md`, `GEMINI.md`,
-and a shared `.ai/` guidance layer, copied `.claude/skills/` to `.agents/skills/` as a
-compatibility directory, migrated branch naming to `<type>/<short-name>`, and codified the
-branch-plus-PR workflow plus neutral wording policy for AI-authored changes.
+Added manifest generation and Ed25519 signing steps to `.github/workflows/deploy.yml`. Every
+official Pages deploy now runs: `pnpm build` → `pnpm manifest:generate` → `pnpm manifest:sign`
+(using `MANIFEST_SIGNING_KEY` secret) → `pnpm manifest:verify`, and uploads `manifest.json` and
+`manifest.sig` alongside the built assets.
+
+---
 
 ## DONE-004: Physical delete semantics for channel destroy/expiry
 
@@ -365,24 +362,28 @@ same-origin runtime asset hashes before loading React, renders a fail-closed blo
 verification is not trusted, removes third-party hosted fonts from the verified runtime path, and
 updates the trust card to expose verified build metadata only after a successful boot snapshot.
 
-## DONE-007: Trust page clarity and return-path fix
+## DONE-003: Multi-agent instruction structure
 
-**Completed**: 2026-03-09
+**Completed**: 2026-03-03
 
-Expanded the frontend Trust Model page from four generic cards into six focused cards that
-accurately describe which secrets never reach the server, which protocol metadata is stored at each
-channel stage, what remains on sender and receiver devices, how physical delete plus tombstone
-reservation differs from local burn and TTL expiry, and what `Verified Release` does and does not
-guarantee when the indicator is actually present. Also replaced the trust-page shell self-link with
-`Back to Create`, carried explicit in-app return markers into trust-page links, and made the
-trust-page `Back` action return only to known in-app entries instead of guessing from browser
-history.
+Replaced the long root `CLAUDE.md` with short agent routers, added `AGENTS.md`, `GEMINI.md`,
+and a shared `.ai/` guidance layer, copied `.claude/skills/` to `.agents/skills/` as a
+compatibility directory, migrated branch naming to `<type>/<short-name>`, and codified the
+branch-plus-PR workflow plus neutral wording policy for AI-authored changes.
 
-## DONE-008: Receiver lock-flow wording clarification
+## DONE-001: Monorepo initialization
 
-**Completed**: 2026-03-09
+**Completed**: 2026-02-24
 
-Clarified the receiver-side share flow so the page now explicitly says the sender created the
-channel first, the receiver is setting their own passphrase on the shared-link page, and the lock
-actions/next steps are receiver-specific. Added `SharePage` tests to prevent the sender/receiver
-responsibility wording from drifting back into an ambiguous flow.
+Set up pnpm monorepo with 3 packages (`@zerolink/shared`, `@zerolink/frontend`, `@zerolink/backend`).
+Configured Biome, Husky + lint-staged, commitlint (Conventional Commits), and an initial Changesets
+setup that was later removed when the repo standardized on workflow-driven releases.
+Installed 226 packages. Git hooks activated. Changesets were initialized at that point in repo
+history, but the current repository no longer uses them.
+
+## DONE-002: Claude project structure
+
+**Completed**: 2026-02-24
+
+Created CLAUDE.md, `.claude/skills/` with 7 skills (base, security, typescript, react-web,
+playwright-testing, session-management, code-review), and `_project_specs/` directory tree.

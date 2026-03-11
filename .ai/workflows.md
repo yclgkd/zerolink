@@ -38,7 +38,7 @@
 ## _project_specs Updates
 - Update `_project_specs/session/current-state.md` when active focus or status changes.
 - Append important workflow or architecture changes to `_project_specs/session/decisions.md`.
-- Move finished work into `_project_specs/todos/completed.md`.
+- Archive finished work in `_project_specs/session/archive/completed.md`.
 - Add landmarks when new entrypoints or shared workflow files are introduced.
 
 ## Validation
