@@ -157,6 +157,7 @@ function createMockEnv(responder: (request: Request) => Promise<Response> | Resp
     env: {
       SECRET_VAULT: namespace,
       SECRETS_KV: {} as KVNamespace,
+      APP_ENV: 'test',
       RP_ID: 'zerolink.test',
       RP_ORIGIN: 'https://zerolink.test',
     },

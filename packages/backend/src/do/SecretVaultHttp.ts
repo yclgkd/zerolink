@@ -8,6 +8,147 @@ import type {
 } from './SecretVaultTypes.ts';
 import { StateTransitionError } from './SecretVaultTypes.ts';
 
+interface ErrorLogContext {
+  appEnv: string;
+  handler: string;
+}
+
+interface StructuredUnexpectedErrorLog {
+  event: 'secret_vault.unexpected_error';
+  app_env: string;
+  handler: string;
+  error_name: string;
+  stack_fingerprint: string;
+  error_message?: string;
+  error_stack?: string;
+  thrown_value?: string;
+}
+
+function isProductionAppEnv(appEnv: string): boolean {
+  return appEnv === 'production';
+}
+
+const STACK_FRAME_LIMIT = 5;
+
+function fingerprintText(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
+}
+
+function stripLineAndColumnSuffix(value: string): string {
+  return value.replace(/:\d+:\d+$/u, '').replace(/:\d+$/u, '');
+}
+
+function stripQueryAndHash(value: string): string {
+  return value.replace(/[?#].*$/u, '');
+}
+
+function stripProtocolAndHost(value: string): string {
+  return value.replace(/^[a-z]+:\/\/[^/]+/iu, '');
+}
+
+function stripBundleHashSegment(value: string): string {
+  return value.replace(/-(?:[a-f0-9]{6,}|[A-Za-z0-9_-]{8,})(?=\.[A-Za-z0-9]+$)/u, '');
+}
+
+function normalizeLocationToken(location: string): string {
+  let normalized = stripProtocolAndHost(
+    stripQueryAndHash(stripLineAndColumnSuffix(location.trim()))
+  );
+
+  if (normalized.includes('/')) {
+    normalized = normalized.split('/').filter(Boolean).slice(-2).join('/');
+  }
+
+  normalized = stripBundleHashSegment(normalized);
+  return normalized || 'anonymous';
+}
+
+function normalizeStackFrame(frame: string): string {
+  const trimmed = frame.trim();
+  if (trimmed === '') {
+    return '';
+  }
+
+  const withoutAt = trimmed.replace(/^at\s+/u, '');
+  const wrappedLocationMatch = withoutAt.match(/^(.*?) \((.*)\)$/u);
+  if (wrappedLocationMatch) {
+    const functionName = normalizeWhitespace(wrappedLocationMatch[1] ?? '');
+    if (functionName !== '') {
+      return functionName;
+    }
+
+    return normalizeLocationToken(wrappedLocationMatch[2] ?? '');
+  }
+
+  return normalizeLocationToken(withoutAt);
+}
+
+function extractNormalizedFrames(stack: string | undefined): string[] {
+  if (!stack) {
+    return [];
+  }
+
+  return stack
+    .split('\n')
+    .slice(1)
+    .map((frame) => normalizeStackFrame(frame))
+    .filter((frame) => frame !== '')
+    .slice(0, STACK_FRAME_LIMIT);
+}
+
+function buildUnexpectedErrorFingerprintSource(error: unknown, context: ErrorLogContext): string {
+  if (!(error instanceof Error)) {
+    return `${context.handler}|NonErrorThrow|${Object.prototype.toString.call(error)}`;
+  }
+
+  const normalizedFrames = extractNormalizedFrames(error.stack);
+  const normalizedFrameSignature =
+    normalizedFrames.length > 0 ? normalizedFrames.join('|') : 'no-stack';
+
+  return `${context.handler}|${error.name}|${normalizedFrameSignature}`;
+}
+
+function buildUnexpectedErrorLog(
+  error: unknown,
+  context: ErrorLogContext
+): StructuredUnexpectedErrorLog {
+  const baseLog: StructuredUnexpectedErrorLog = {
+    event: 'secret_vault.unexpected_error',
+    app_env: context.appEnv,
+    handler: context.handler,
+    error_name: error instanceof Error ? error.name : 'NonErrorThrow',
+    stack_fingerprint: fingerprintText(buildUnexpectedErrorFingerprintSource(error, context)),
+  };
+
+  if (isProductionAppEnv(context.appEnv)) {
+    return baseLog;
+  }
+
+  if (error instanceof Error) {
+    return {
+      ...baseLog,
+      error_message: error.message,
+      ...(error.stack ? { error_stack: error.stack } : {}),
+    };
+  }
+
+  return {
+    ...baseLog,
+    thrown_value: String(error),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // JSON response helpers
 // ---------------------------------------------------------------------------
@@ -75,17 +216,14 @@ export function normalizeAssertion(assertion: LooseAssertionJson): AssertionJSON
 // Error mappers
 // ---------------------------------------------------------------------------
 
-export function mapError(error: unknown): Response {
+export function mapError(error: unknown, context: ErrorLogContext): Response {
   if (error instanceof StateTransitionError) {
     return mapStateTransitionError(error);
   }
 
-  // Log unexpected errors so they appear in wrangler tail / Cloudflare dashboard
+  // Production logs keep only whitelisted metadata; staging retains raw details for debugging.
   // biome-ignore lint/suspicious/noConsole: intentional error logging for production observability
-  console.error(
-    '[SecretVault] unexpected error:',
-    error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error)
-  );
+  console.error(buildUnexpectedErrorLog(error, context));
 
   return jsonError('INTERNAL_ERROR', 500);
 }

@@ -13,6 +13,25 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-11] Durable Object fetch-level failures must use the same production redaction path
+
+**Decision**: Route unexpected errors from the Durable Object `fetch()` entrypoint, including `/ws` subscribe upgrades, through the same `mapError()` redaction path used by the JSON handlers.
+**Context**: Production observability was hardened for the main SecretVault HTTP handlers, but a review caught that uncaught websocket upgrade failures could still bypass redaction once Workers Logs were enabled.
+**Options Considered**: Rely on per-handler `catch` blocks only; disable observability again; add a top-level `fetch()` guard that supplies handler context and reuses the same structured logger.
+**Choice**: Keep observability enabled and wrap the full DO `fetch()` dispatch in a top-level `try/catch`, using `ws_subscribe` as the websocket handler name for structured logs.
+**Reasoning**: This closes the last request path that could emit raw production exception text while preserving existing `404` behavior for missing or expired websocket channels.
+**Trade-offs**: The `fetch()` dispatcher now carries handler-name bookkeeping so future routes keep accurate observability context.
+
+## [2026-03-11] Worker observability stays environment-explicit and production logs are redacted
+
+**Decision**: Add a committed `APP_ENV` Worker variable, enable full Workers Logs only in staging, and keep production observability limited to custom logs with structured redaction.
+**Context**: ZeroLink needs enough runtime visibility to debug Durable Object failures, but the backend handles high-sensitivity flows where raw exception messages or stacks could accidentally preserve user-derived values in provider logs.
+**Options Considered**: Leave observability disabled everywhere; enable full invocation logs and detailed exceptions in every environment; split behavior by environment and log only a whitelisted production payload.
+**Choice**: Stage with invocation logs enabled and detailed exception text, production with `invocation_logs = false`, no tracing, and structured error records that keep only handler, environment, error name, and a stable stack fingerprint.
+**Reasoning**: This preserves fast debugging in staging while making the production logging surface intentionally small and reproducible in code review. An explicit `APP_ENV` binding is more reliable than inferring environment from hostnames or dashboard-only state.
+**Trade-offs**: Production incidents now require correlating stack fingerprints with staging or local reproductions instead of reading raw stack text directly from Cloudflare logs.
+**Follow-up (2026-03-11)**: `stack_fingerprint` is derived from a normalized handler + error-name + frame signature, not the raw `error.stack`, so deploy-specific bundle offsets do not invalidate cross-environment correlation.
+
 ## [2026-03-11] Workflow and security docs must describe the shipped path precisely
 
 **Decision**: Keep runnable workflow examples complete, describe `/api/public/:uuid` as a minimal public snapshot rather than a non-disclosing endpoint, and scope Signed Manifest guarantees to signed-release builds that actually enable runtime verification.

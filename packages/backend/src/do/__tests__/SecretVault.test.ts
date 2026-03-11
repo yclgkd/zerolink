@@ -401,6 +401,7 @@ const RP_ORIGIN = 'https://zerolink.test';
 const env: SecretVaultEnv = {
   SECRET_VAULT: {} as DurableObjectNamespace,
   SECRETS_KV: {} as KVNamespace,
+  APP_ENV: 'test',
   RP_ID,
   RP_ORIGIN,
 };
@@ -842,6 +843,53 @@ describe('SecretVault lock challenge flow', () => {
     expect(getAcceptedWebSocketCount()).toBe(0);
     expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
     expect(readTerminalTombstone(snapshot)?.reason).toBe('expired');
+  });
+
+  it('redacts unexpected websocket upgrade errors through the top-level fetch guard', async () => {
+    const { state, getAcceptedWebSocketCount } = createMockState();
+    const storage = state.storage as unknown as {
+      get: (key: string | string[]) => Promise<unknown>;
+    };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const storageGet = vi.spyOn(storage, 'get');
+    const error = new Error('sensitive websocket failure');
+    error.stack = [
+      'Error: sensitive websocket failure',
+      '    at https://prod.example.com/assets/index-123abc456.js:10:20',
+      '    at websocketSubscribe (https://prod.example.com/assets/chunk-123abc456.js:30:40)',
+    ].join('\n');
+    storageGet.mockRejectedValue(error);
+
+    try {
+      const productionEnv: SecretVaultEnv = { ...env, APP_ENV: 'production' };
+      const vault = new SecretVault(state, productionEnv);
+
+      const response = await vault.fetch(
+        new Request('https://zerolink.test/ws', {
+          method: 'GET',
+          headers: { Upgrade: 'websocket' },
+        })
+      );
+      const payload = (await response.json()) as { ok: false; code: string };
+      const logEntry = consoleError.mock.calls[0]?.[0] as Record<string, unknown>;
+
+      expect(response.status).toBe(500);
+      expect(payload).toEqual({ ok: false, code: 'INTERNAL_ERROR' });
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(logEntry).toMatchObject({
+        event: 'secret_vault.unexpected_error',
+        app_env: 'production',
+        handler: 'ws_subscribe',
+        error_name: 'Error',
+        stack_fingerprint: expect.any(String),
+      });
+      expect(logEntry).not.toHaveProperty('error_message');
+      expect(logEntry).not.toHaveProperty('error_stack');
+      expect(getAcceptedWebSocketCount()).toBe(0);
+    } finally {
+      storageGet.mockRestore();
+      consoleError.mockRestore();
+    }
   });
 
   it('returns 400 for invalid lock_begin payload', async () => {
