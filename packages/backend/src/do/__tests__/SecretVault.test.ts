@@ -883,6 +883,7 @@ describe('SecretVault compound/delete flow', () => {
     };
 
     expect(result.currentVersion).toBe(lockedRecord.version);
+    expect(result.securityProfile).toBe(lockedRecord.securityProfile);
     expect(result.adminMode).toBe(lockedRecord.adminMode);
     expect(result.allowCredentials).toEqual([
       {
@@ -908,8 +909,37 @@ describe('SecretVault compound/delete flow', () => {
 
     const result = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
 
+    expect(result.securityProfile).toBe(lockedRecord.securityProfile);
     expect(result.adminMode).toBe('softkey');
     expect(result.allowCredentials).toBeUndefined();
+  });
+
+  it('returns securityProfile on active public reads', async () => {
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/get_public_state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const payload = (await response.json()) as {
+      ok: true;
+      state: string;
+      adminMode: string;
+      securityProfile: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: true,
+      state: record.state,
+      adminMode: record.adminMode,
+      securityProfile: record.securityProfile,
+    });
   });
 
   it('commits update intent and transitions locked to delivered', async () => {

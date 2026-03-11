@@ -223,6 +223,7 @@ async function deliverAndCaptureCipherBundle(
       receiverPubFpr,
       receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
       currentVersion: 0,
+      securityProfile: profile,
       adminMode: 'webauthn',
     },
   });
@@ -1094,6 +1095,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1168,6 +1170,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1194,6 +1197,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1234,6 +1238,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1290,6 +1295,7 @@ describe('crypto orchestrator', () => {
         },
         allowCredentials: VALID_ALLOW_CREDENTIALS,
         currentVersion: 3,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1353,6 +1359,7 @@ describe('crypto orchestrator', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 3,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1413,6 +1420,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1443,7 +1451,12 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,
@@ -1515,6 +1528,7 @@ describe('crypto orchestrator', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
         adminMode: 'webauthn',
       },
     });
@@ -1566,7 +1580,12 @@ describe('crypto orchestrator', () => {
     statusDeferred.resolve({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
 
     const decryptResult = await decryptPromise;
@@ -1586,7 +1605,12 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.WAITING, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.WAITING,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
 
     const result = await orchestrator.decryptDelivered({
@@ -1635,7 +1659,12 @@ describe('crypto orchestrator', () => {
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
-      data: { ok: true, state: CHANNEL_STATE.DELIVERED, adminMode: 'webauthn' as const },
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,

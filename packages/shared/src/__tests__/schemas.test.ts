@@ -829,6 +829,7 @@ describe('CompoundBeginResponseSchema', () => {
       ok: true,
       challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
       currentVersion: 0,
+      securityProfile: 'secure',
       adminMode: 'webauthn',
     });
     expect(result.currentVersion).toBe(0);
@@ -841,6 +842,7 @@ describe('CompoundBeginResponseSchema', () => {
       challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
       allowCredentials: [{ id: b64, type: 'public-key' }],
       currentVersion: 0,
+      securityProfile: 'secure',
       adminMode: 'webauthn',
     });
     expect(result.allowCredentials).toEqual([{ id: b64, type: 'public-key' }]);
@@ -853,6 +855,7 @@ describe('CompoundBeginResponseSchema', () => {
       currentVersion: 1,
       receiverPubFpr: hex,
       receiverPubJwk: validJwk,
+      securityProfile: 'standard',
       adminMode: 'webauthn',
     });
     expect(result.receiverPubFpr).toBe(hex);
@@ -863,6 +866,7 @@ describe('CompoundBeginResponseSchema', () => {
       ok: true,
       challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
       currentVersion: 2,
+      securityProfile: 'quick',
       adminMode: 'password',
     });
     expect(result.adminMode).toBe('password');
@@ -873,6 +877,7 @@ describe('CompoundBeginResponseSchema', () => {
       ok: true,
       challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
       currentVersion: 2,
+      securityProfile: 'quick',
       adminMode: 'softkey',
     });
     expect(result.adminMode).toBe('softkey');
@@ -884,7 +889,19 @@ describe('CompoundBeginResponseSchema', () => {
         ok: true,
         challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
         currentVersion: 0,
+        securityProfile: 'secure',
         adminMode: 'unknown',
+      })
+    ).toThrow();
+  });
+
+  it('rejects missing securityProfile', () => {
+    expect(() =>
+      CompoundBeginResponseSchema.parse({
+        ok: true,
+        challenge: { id: b64, seed: b64, expiresAt: 1_730_000_000_000 },
+        currentVersion: 0,
+        adminMode: 'webauthn',
       })
     ).toThrow();
   });
@@ -1016,13 +1033,29 @@ describe('CompoundCommitResponseSchema', () => {
 
 describe('PublicStatusResponseSchema', () => {
   it.each(['waiting', 'locked', 'delivered', 'deleted', 'expired'])('accepts state %s', (state) => {
-    const result = PublicStatusResponseSchema.parse({ ok: true, state, adminMode: 'webauthn' });
+    const result = PublicStatusResponseSchema.parse({
+      ok: true,
+      state,
+      adminMode: 'webauthn',
+      securityProfile: 'secure',
+    });
     expect(result.state).toBe(state);
   });
 
   it('rejects unknown state', () => {
     expect(() =>
-      PublicStatusResponseSchema.parse({ ok: true, state: 'open', adminMode: 'webauthn' })
+      PublicStatusResponseSchema.parse({
+        ok: true,
+        state: 'open',
+        adminMode: 'webauthn',
+        securityProfile: 'secure',
+      })
+    ).toThrow();
+  });
+
+  it('rejects missing securityProfile', () => {
+    expect(() =>
+      PublicStatusResponseSchema.parse({ ok: true, state: 'waiting', adminMode: 'webauthn' })
     ).toThrow();
   });
 });

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import { AdminModeSchema, ChannelStateSchema, HexStringSchema, UUIDSchema } from './schemas.ts';
+import {
+  AdminModeSchema,
+  ChannelStateSchema,
+  HexStringSchema,
+  SecurityProfileSchema,
+  UUIDSchema,
+} from './schemas.ts';
 
 // ─── Server → Client Messages ────────────────────────────────────────────────
 
@@ -9,6 +15,7 @@ const WsStateChangedSchema = z.object({
   state: ChannelStateSchema,
   version: z.number().int().nonnegative(),
   adminMode: AdminModeSchema,
+  securityProfile: SecurityProfileSchema,
   receiverPubFpr: HexStringSchema.optional(),
 });
 

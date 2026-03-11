@@ -489,12 +489,14 @@ export interface CompoundBeginResponse {
   ok: true;
   challenge: CompoundChallenge;
   /** Present for WebAuthn-managed channels to avoid discoverable credential lookup. */
-  allowCredentials?: PublicKeyCredentialDescriptorJSON[];
+  allowCredentials?: PublicKeyCredentialDescriptorJSON[] | undefined;
   /** Present when state is 'locked' or 'delivered'. */
-  receiverPubFpr?: HexString;
+  receiverPubFpr?: HexString | undefined;
   /** Present when state is 'locked' or 'delivered'. */
-  receiverPubJwk?: RSAPublicKeyJWK;
+  receiverPubJwk?: RSAPublicKeyJWK | undefined;
   currentVersion: number;
+  /** Stored security profile of the channel; used for profile-specific client behavior. */
+  securityProfile: SecurityProfile;
   /** Admin mode of the channel; controls how compound_commit is authenticated. */
   adminMode: AdminMode;
 }
@@ -563,6 +565,9 @@ export interface CompoundCommitResponse {
 export interface PublicStatusResponse {
   ok: true;
   state: ChannelState;
+  adminMode: AdminMode;
+  securityProfile: SecurityProfile;
+  receiverPubFpr?: HexString | undefined;
 }
 
 /** Standard error envelope for all 4xx / 5xx API responses. */

@@ -142,6 +142,7 @@ describe('api client', () => {
     if (!result.ok) return;
 
     expect(CompoundBeginResponseSchema.safeParse(result.data).success).toBe(true);
+    expect(result.data.securityProfile).toBe(SECURITY_PROFILE.SECURE);
     expect(result.data.adminMode).toBe('webauthn');
     expect(result.data.allowCredentials).toEqual([{ id: VALID_B64U, type: 'public-key' }]);
   });
@@ -197,15 +198,17 @@ describe('api client', () => {
     if (!result.ok) return;
 
     expect(PublicStatusResponseSchema.safeParse(result.data).success).toBe(true);
+    expect(result.data.securityProfile).toBe(SECURITY_PROFILE.SECURE);
   });
 
-  it('parses legacy deleted publicStatus payloads for compatibility', async () => {
+  it('parses deleted publicStatus payloads with securityProfile', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           ok: true,
           state: 'deleted',
           adminMode: 'webauthn',
+          securityProfile: SECURITY_PROFILE.SECURE,
         }),
         {
           status: 200,
@@ -228,6 +231,7 @@ describe('api client', () => {
         ok: true,
         state: 'deleted',
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
       status: 200,
     });

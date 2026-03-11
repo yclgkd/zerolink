@@ -4,6 +4,19 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-027: Propagate real securityProfile through Manage read paths
+
+**Completed**: 2026-03-11
+
+Followed up the Secure Share padding fix after review exposed that reopened sender Manage links
+could only recover `adminMode`, not the original `securityProfile`. Extended the shared public,
+compound-begin, and realtime WebSocket contracts so the backend now returns the persisted channel
+profile directly, then threaded that value through the sender deliver store, channel sync, and
+Manage page action handlers. This restores legacy WebAuthn `standard` behavior on Manage reopen,
+so those channels keep their original 4 KB padding and sender policy instead of being widened to
+the generic Secure Share path. Added shared, backend, and frontend regression coverage for public
+status, compound begin, realtime sync, and Manage delivery/delete actions.
+
 ## DONE-026: Restore Secure Share 8 KB delivery padding
 
 **Completed**: 2026-03-11

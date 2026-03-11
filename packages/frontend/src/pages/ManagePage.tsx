@@ -1,11 +1,9 @@
 import {
-  type AdminMode,
   CHANNEL_STATE,
   type ChannelState,
   ErrorResponseSchema,
   PublicStatusResponseSchema,
   ROUTE_PATTERN,
-  SECURITY_PROFILE,
   type SecurityProfile,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -66,12 +64,6 @@ function mapActionError(code: string): string {
 
 function isTerminalPublicState(state: ChannelState): boolean {
   return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
-}
-
-function resolveManageProfile(adminMode: AdminMode | null): SecurityProfile | null {
-  if (adminMode === 'webauthn') return SECURITY_PROFILE.SECURE;
-  if (adminMode === 'password' || adminMode === 'softkey') return SECURITY_PROFILE.QUICK;
-  return null;
 }
 
 function canComposeDelivery(status: ChannelState): boolean {
@@ -499,6 +491,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
           if (canceled || !mountedRef.current) return;
           store.setShowDestroyConfirm(false);
           store.setAdminMode(null);
+          store.setSecurityProfile(null);
           store.setReceiverPubFpr(null);
           store.setChannelState(CHANNEL_STATE.WAITING);
           setPublicStatusError(null);
@@ -514,6 +507,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
         if (isTerminalPublicState(parsedPayload.data.state)) {
           store.setShowDestroyConfirm(false);
           store.setAdminMode(null);
+          store.setSecurityProfile(null);
           store.setReceiverPubFpr(null);
           store.setChannelState(CHANNEL_STATE.WAITING);
           setPublicStatusError(null);
@@ -526,11 +520,13 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
         store.setShowDestroyConfirm(false);
         store.setChannelState(parsedPayload.data.state);
         store.setAdminMode(parsedPayload.data.adminMode);
+        store.setSecurityProfile(parsedPayload.data.securityProfile);
         store.setReceiverPubFpr(parsedPayload.data.receiverPubFpr ?? null);
       } catch {
         if (canceled || !mountedRef.current) return;
         store.setShowDestroyConfirm(false);
         store.setAdminMode(null);
+        store.setSecurityProfile(null);
         store.setReceiverPubFpr(null);
         store.setChannelState(CHANNEL_STATE.WAITING);
         setIsUnavailable(false);
@@ -545,6 +541,7 @@ function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<
   }, [
     uuid,
     store.setAdminMode,
+    store.setSecurityProfile,
     store.setChannelState,
     store.setReceiverPubFpr,
     store.setShowDestroyConfirm,
@@ -725,6 +722,7 @@ function useManagePageState(uuid?: string) {
         setPublicStatusError(null);
         store.setChannelState(update.state);
         store.setAdminMode(update.adminMode);
+        store.setSecurityProfile(update.securityProfile);
         store.setReceiverPubFpr(update.receiverPubFpr ?? null);
       },
       [
@@ -732,6 +730,7 @@ function useManagePageState(uuid?: string) {
         setPublicStatusError,
         store.setChannelState,
         store.setAdminMode,
+        store.setSecurityProfile,
         store.setReceiverPubFpr,
       ]
     ),
@@ -749,6 +748,7 @@ function useManagePageState(uuid?: string) {
         setIsUnavailable(true);
         store.setChannelState(CHANNEL_STATE.WAITING);
         store.setAdminMode(null);
+        store.setSecurityProfile(null);
         store.setReceiverPubFpr(null);
       },
       [
@@ -757,6 +757,7 @@ function useManagePageState(uuid?: string) {
         store.setChannelState,
         store.setShowDestroyConfirm,
         store.setAdminMode,
+        store.setSecurityProfile,
         store.setReceiverPubFpr,
       ]
     ),
@@ -795,7 +796,7 @@ function useManagePageState(uuid?: string) {
     }
   }, [store.receiverPubFpr]);
 
-  const profile = resolveManageProfile(store.adminMode);
+  const profile = store.securityProfile;
   const canManageActions =
     !isUnavailable &&
     store.channelState !== CHANNEL_STATE.DELETED &&

@@ -374,6 +374,7 @@ export const CompoundBeginResponseSchema = z.object({
   receiverPubFpr: HexStringSchema.optional(),
   receiverPubJwk: RSAPublicKeyJWKSchema.optional(),
   currentVersion: z.number().int().nonnegative(),
+  securityProfile: SecurityProfileSchema,
   adminMode: AdminModeSchema,
 });
 
@@ -437,6 +438,7 @@ export const PublicStatusResponseSchema = z.object({
   ok: z.literal(true),
   state: ChannelStateSchema,
   adminMode: AdminModeSchema,
+  securityProfile: SecurityProfileSchema,
   receiverPubFpr: HexStringSchema.optional(),
 });
 

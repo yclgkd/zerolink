@@ -4,16 +4,20 @@
 
 ## Active Task
 
-Restore the documented 8 KB Secure Share ciphertext padding on the sender delivery path.
+Propagate the persisted channel `securityProfile` through Manage read paths so sender actions use the real channel policy.
 
 ## Current Status
 
-- **Phase**: Frontend crypto fix implemented on `fix/secure-share-padding`
-- **Progress**: `deliverSecret` now resolves `padBlock` from `security_profile` before calling `encryptAesGcm`, so `quick`/`standard` stay on 4 KB while `secure`/`strict`/`hardware_only` use 8 KB as documented. Added regression coverage for quick, secure, strict, and the existing standard decrypt round-trip.
-- **Known Constraint**: `packages/shared/src/crypto/aes.ts` still defaults generic AES-GCM callers to 4 KB by design; profile-specific callers must continue to pass `padBlock` explicitly.
+- **Phase**: Manage follow-up fix implemented on `fix/secure-share-padding`
+- **Progress**: `publicStatus`, `compoundBegin`, and WebSocket `state_changed` now carry the stored `securityProfile`, and the sender Manage flow persists that profile in local state instead of inferring it from `adminMode`. Legacy WebAuthn `standard` channels now keep their original 4 KB delivery padding and sender policy when a Manage link is reopened.
+- **Known Constraint**: `packages/shared/src/crypto/aes.ts` still defaults generic AES-GCM callers to 4 KB by design; profile-specific callers must continue to pass `padBlock` explicitly, and Manage actions stay disabled until the real `securityProfile` is loaded.
 
 ## Latest Update (2026-03-11)
 
+- `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts`, `packages/shared/src/ws.ts`, `packages/backend/src/do/SecretVault.ts`, `packages/backend/src/do/SecretVaultWebSocket.ts` — Extended the Manage/public read contracts so `PublicStatusResponse`, `CompoundBeginResponse`, and WebSocket `state_changed` snapshots all expose the persisted channel `securityProfile` instead of forcing the frontend to reconstruct it from `adminMode`.
+- `packages/frontend/src/stores/deliver-store.ts`, `packages/frontend/src/sync/channel-sync.ts`, `packages/frontend/src/pages/ManagePage.tsx` — Added `securityProfile` to sender Manage state, threaded it through initial public fetch, polling/WebSocket sync, and compound begin, and removed the old Manage-side WebAuthn profile inference so sender deliver/delete actions now use the exact backend-stored policy.
+- `packages/frontend/src/__tests__/manage-page.test.tsx`, `packages/frontend/src/__tests__/crypto-orchestrator.test.ts`, `packages/frontend/src/sync/__tests__/channel-sync.test.ts`, `packages/backend/src/do/__tests__/SecretVault.test.ts`, `packages/backend/src/do/__tests__/SecretVaultWebSocket.test.ts`, `packages/shared/src/__tests__/schemas.test.ts`, `packages/shared/src/__tests__/ws.test.ts` — Added regression coverage for `securityProfile` propagation across public status, compound begin, realtime updates, and the legacy `standard` Manage flow that must stay on 4 KB padding.
+- Validation: `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/manage-page.test.tsx src/__tests__/crypto-orchestrator.test.ts src/__tests__/api-client.test.ts src/__tests__/deliver-store.test.ts src/__tests__/decrypt-store.test.ts src/__tests__/share-page.test.tsx src/sync/__tests__/channel-sync.test.ts`, `pnpm --filter @zerolink/backend exec vitest run src/do/__tests__/SecretVault.test.ts src/do/__tests__/SecretVaultWebSocket.test.ts src/__tests__/index.test.ts`, `pnpm --filter @zerolink/shared exec vitest run src/__tests__/schemas.test.ts src/__tests__/ws.test.ts`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/backend typecheck`, `pnpm --filter @zerolink/shared typecheck`
 - `packages/frontend/src/crypto/orchestrator.ts`, `packages/frontend/src/__tests__/crypto-orchestrator.test.ts` — Added a profile-to-padding resolver on the sender delivery path so Secure Share and its legacy strict/hardware-only equivalents now commit cipher bundles with `padBlock = 8192`, while Quick Share and legacy standard stay at `4096`.
 - `_project_specs/session/current-state.md`, `_project_specs/session/decisions.md`, `_project_specs/todos/completed.md` — Recorded the padding policy fix, the decision to keep the shared AES helper default at 4 KB, and the regression validation footprint for future sessions.
 - Validation: `pnpm --filter @zerolink/frontend exec vitest run src/__tests__/crypto-orchestrator.test.ts`, `pnpm --filter @zerolink/frontend typecheck`, `pnpm --filter @zerolink/frontend build`, `git diff --check`

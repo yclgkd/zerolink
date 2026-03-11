@@ -14,6 +14,7 @@ const { deliverSecretMock, deleteChannelMock, syncHarness } = vi.hoisted(() => (
         state: string;
         version: number;
         adminMode: string;
+        securityProfile: string;
         receiverPubFpr?: string;
       }) => void;
       onChannelClosed: (reason: string) => void;
@@ -39,6 +40,7 @@ vi.mock('../sync/use-channel-sync.ts', async () => {
           state: string;
           version: number;
           adminMode: string;
+          securityProfile: string;
           receiverPubFpr?: string;
         }) => void;
         onChannelClosed: (reason: string) => void;
@@ -110,6 +112,7 @@ function mockPublicState(fetchSpy: ReturnType<typeof vi.fn>, state: string) {
       ok: true,
       state,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     })
   );
 }
@@ -123,6 +126,7 @@ function mockLegacyTerminalPublicState(
       ok: true,
       state,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     })
   );
 }
@@ -312,7 +316,12 @@ describe('ManagePage integration', () => {
   it('hides the channel password input while password-managed channels are still waiting', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
     );
 
     renderManagePage();
@@ -325,7 +334,12 @@ describe('ManagePage integration', () => {
   it('shows the channel password input when a password-managed delete is being confirmed', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
     );
 
     renderManagePage();
@@ -341,7 +355,12 @@ describe('ManagePage integration', () => {
   it('does not show the channel password input for webauthn-managed channels', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'webauthn' })
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+      })
     );
 
     renderManagePage();
@@ -354,7 +373,12 @@ describe('ManagePage integration', () => {
   it('calls deliverSecret with quick profile and channel password for password adminMode', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'locked', adminMode: 'password' })
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
     );
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
@@ -386,7 +410,12 @@ describe('ManagePage integration', () => {
   it('shows the channel password error when password-managed delivery omits a password', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'locked', adminMode: 'password' })
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
     );
 
     deliverSecretMock.mockResolvedValueOnce({
@@ -410,7 +439,12 @@ describe('ManagePage integration', () => {
   it('calls deliverSecret with quick profile for softkey-managed channels', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'locked', adminMode: 'softkey' })
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'softkey',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
     );
 
     renderManagePage();
@@ -437,9 +471,16 @@ describe('ManagePage integration', () => {
     expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
   });
 
-  it('uses secure profile for webauthn-managed delivery even when create state conflicts', async () => {
+  it('uses backend securityProfile for webauthn-managed delivery even when create state conflicts', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'locked');
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      })
+    );
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
     useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
@@ -455,7 +496,34 @@ describe('ManagePage integration', () => {
     await waitFor(() => {
       expect(deliverSecretMock).toHaveBeenCalledTimes(1);
     });
-    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.SECURE);
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
+  });
+
+  it('uses realtime-updated securityProfile for later delivery actions', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'locked',
+        version: 2,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      });
+    });
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload after sync' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
   });
 
   it('disables deliver/destroy while deliver request is pending and re-enables after completion', async () => {
@@ -505,7 +573,14 @@ describe('ManagePage integration', () => {
     expect(screen.queryByTestId('manage-deliver-button')).toBeNull();
     expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
 
-    publicStatus.resolve(jsonResponse({ ok: true, state: 'locked', adminMode: 'webauthn' }));
+    publicStatus.resolve(
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+      })
+    );
 
     await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
@@ -531,6 +606,7 @@ describe('ManagePage integration', () => {
             ok: true,
             state: 'locked',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -584,6 +660,7 @@ describe('ManagePage integration', () => {
             ok: true,
             state: 'locked',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -714,7 +791,12 @@ describe('ManagePage integration', () => {
   it('uses quick profile for password-managed delete even when create state conflicts', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
-      jsonResponse({ ok: true, state: 'waiting', adminMode: 'password' })
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
     );
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
@@ -811,6 +893,7 @@ describe('ManagePage integration', () => {
             ok: true,
             state: 'waiting',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -928,6 +1011,7 @@ describe('ManagePage integration', () => {
         state: 'locked',
         version: 1,
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.STANDARD,
       });
     });
 

@@ -5,6 +5,7 @@ import {
   type HexString,
   POLL_INTERVAL_MS,
   PublicStatusResponseSchema,
+  type SecurityProfile,
   WS_CLOSE_NORMAL,
   WS_PING_INTERVAL_MS,
   WS_RECONNECT_BASE_MS,
@@ -21,6 +22,7 @@ export interface ChannelStateUpdate {
   readonly state: ChannelState;
   readonly version: number;
   readonly adminMode: AdminMode;
+  readonly securityProfile: SecurityProfile;
   readonly receiverPubFpr?: HexString;
 }
 
@@ -177,9 +179,15 @@ export class ChannelSync {
               state: msg.state,
               version: msg.version,
               adminMode: msg.adminMode,
+              securityProfile: msg.securityProfile,
               receiverPubFpr: msg.receiverPubFpr,
             }
-          : { state: msg.state, version: msg.version, adminMode: msg.adminMode };
+          : {
+              state: msg.state,
+              version: msg.version,
+              adminMode: msg.adminMode,
+              securityProfile: msg.securityProfile,
+            };
         this.callbacks.onStateChange(update);
       }
     }
@@ -276,9 +284,15 @@ export class ChannelSync {
             state,
             version: this.lastVersion,
             adminMode: data.adminMode,
+            securityProfile: data.securityProfile,
             receiverPubFpr: data.receiverPubFpr,
           }
-        : { state, version: this.lastVersion, adminMode: data.adminMode };
+        : {
+            state,
+            version: this.lastVersion,
+            adminMode: data.adminMode,
+            securityProfile: data.securityProfile,
+          };
       this.callbacks.onStateChange(update);
     } catch {
       // Network error during poll — silently ignore, will retry

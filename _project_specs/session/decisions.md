@@ -299,3 +299,12 @@ This is append-only. Never delete entries.
 **Choice**: Render the password input only when the delivery composer is available or when the sender opens delete confirmation.
 **Reasoning**: This keeps the idle waiting state aligned with the real protocol, removes a misleading prompt, and still preserves the ability to delete a password-managed channel before lock.
 **Trade-offs**: Password-managed delete now reveals the credential field one interaction later, after the sender opens the confirm step.
+
+## [2026-03-11] Manage flows must use the stored securityProfile, not infer from adminMode
+
+**Decision**: Treat `ChannelRecord.securityProfile` as the only source of truth for sender Manage policy and propagate it through every read path the Manage UI depends on.
+**Context**: The sender padding fix moved `deliverSecret()` to profile-based padding selection, but reopened Manage links still only knew `adminMode`. That collapsed legacy WebAuthn channels back to a generic "secure" assumption and made `standard` channels use the wrong 8 KB padding and WebAuthn policy after a Manage refresh.
+**Options Considered**: Keep inferring from `adminMode`; store a frontend-only reconstruction of the original create-page selection; expose the persisted `securityProfile` in public status, compound begin, and realtime state updates.
+**Choice**: Extend the shared contracts so `PublicStatusResponse`, `CompoundBeginResponse`, and WebSocket `state_changed` all include `securityProfile`, persist that value in the sender Manage store, and consume it directly in Manage actions.
+**Reasoning**: `adminMode` answers "password vs WebAuthn" but not which WebAuthn compatibility profile was originally chosen. Surfacing the backend-stored profile restores correct legacy behavior, keeps padding selection aligned with product policy, and avoids duplicating security-policy inference in the frontend.
+**Trade-offs**: Public/manage read contracts and mocks/tests now carry one more field, and Manage actions remain gated on `securityProfile` loading before sender-side controls can run safely.

@@ -206,6 +206,7 @@ describe('backend worker routing + lock/compound forwarding', () => {
       ok: true,
       state: 'waiting',
       adminMode: 'webauthn',
+      securityProfile: 'secure',
     };
     const { env, calls } = createMockEnv(async () => {
       return new Response(JSON.stringify(publicStateResponse), { status: 200 });
@@ -804,9 +805,17 @@ describe('backend worker routing + lock/compound forwarding', () => {
     it('accepts a valid UUID on GET /api/public/:uuid', async () => {
       const { env } = createMockEnv(
         async () =>
-          new Response(JSON.stringify({ ok: true, state: 'waiting', adminMode: 'webauthn' }), {
-            status: 200,
-          })
+          new Response(
+            JSON.stringify({
+              ok: true,
+              state: 'waiting',
+              adminMode: 'webauthn',
+              securityProfile: 'secure',
+            }),
+            {
+              status: 200,
+            }
+          )
       );
       const response = await dispatch(env, `/api/public/${VALID_UUID}`, 'GET');
       expect(response.status).not.toBe(400);

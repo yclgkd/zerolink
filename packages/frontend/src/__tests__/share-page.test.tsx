@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { HexStringSchema } from '@zerolink/shared';
+import { HexStringSchema, SECURITY_PROFILE } from '@zerolink/shared';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,6 +68,7 @@ function mockPublicState(
       ok: true,
       state,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     })
   );
 }
@@ -81,6 +82,7 @@ function mockLegacyTerminalPublicState(
       ok: true,
       state,
       adminMode: 'webauthn',
+      securityProfile: SECURITY_PROFILE.SECURE,
     })
   );
 }
@@ -624,6 +626,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -633,6 +636,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -715,6 +719,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -724,6 +729,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -791,6 +797,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -853,6 +860,7 @@ describe('SharePage', () => {
         ok: true,
         state: 'delivered',
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
@@ -912,6 +920,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -974,6 +983,7 @@ describe('SharePage', () => {
         ok: true,
         state: 'delivered',
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
@@ -1185,6 +1195,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'delivered',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }
@@ -1233,6 +1244,7 @@ describe('SharePage', () => {
         ok: true,
         state: 'waiting',
         adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
 
@@ -1250,6 +1262,7 @@ describe('SharePage', () => {
             ok: true,
             state: 'waiting',
             adminMode: 'webauthn',
+            securityProfile: SECURITY_PROFILE.SECURE,
           })
         );
       }

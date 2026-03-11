@@ -7,6 +7,7 @@ import {
   type CompoundCommitResponse,
   type HexString,
   type RSAPublicKeyJWK,
+  type SecurityProfile,
   type UUID,
 } from '@zerolink/shared';
 import { create } from 'zustand';
@@ -26,6 +27,7 @@ export interface DeliverStoreState {
   uuid: UUID | null;
   channelState: ChannelState;
   adminMode: AdminMode | null;
+  securityProfile: SecurityProfile | null;
   showDestroyConfirm: boolean;
   copied: boolean;
   compoundBegin: AsyncRequestState<CompoundBeginResponse>;
@@ -43,6 +45,7 @@ export interface DeliverStoreActions {
   setDeliverUuid: (uuid: UUID | null) => void;
   setChannelState: (state: ChannelState) => void;
   setAdminMode: (mode: AdminMode | null) => void;
+  setSecurityProfile: (profile: SecurityProfile | null) => void;
   setReceiverPubFpr: (fpr: HexString | null) => void;
   setShowDestroyConfirm: (show: boolean) => void;
   setCopied: (copied: boolean) => void;
@@ -67,6 +70,7 @@ function createInitialState(): DeliverStoreState {
     uuid: null,
     channelState: CHANNEL_STATE.WAITING,
     adminMode: null,
+    securityProfile: null,
     showDestroyConfirm: false,
     copied: false,
     compoundBegin: createIdleRequestState<CompoundBeginResponse>(),
@@ -100,6 +104,8 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
 
   setAdminMode: (mode) => set(() => ({ adminMode: mode })),
 
+  setSecurityProfile: (profile) => set(() => ({ securityProfile: profile })),
+
   setReceiverPubFpr: (fpr) => set(() => ({ receiverPubFpr: fpr })),
 
   setShowDestroyConfirm: (show) => set(() => ({ showDestroyConfirm: show })),
@@ -120,6 +126,7 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
       compoundBegin: createSuccessState<CompoundBeginResponse>(payload),
       challenge: payload.challenge,
       currentVersion: payload.currentVersion,
+      securityProfile: payload.securityProfile,
       receiverPubFpr: payload.receiverPubFpr ?? null,
       receiverPubJwk: payload.receiverPubJwk ?? null,
     })),
