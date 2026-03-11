@@ -709,23 +709,22 @@ export class SecretVault {
   }
 
   private async scheduleNextAlarm(now: number = Date.now()): Promise<void> {
-    const effectiveNow = now;
-    const recordPurged = await this.purgeExpiredRecord(effectiveNow);
-    const nonceAlarmState = await reconcileNonceAlarmState(this.ctx.storage, effectiveNow);
-    this.logNonceAlarmState(nonceAlarmState);
-
+    const recordPurged = await this.purgeExpiredRecord(now);
     if (recordPurged) {
       await this.ctx.storage.deleteAlarm();
       return;
     }
 
+    const nonceAlarmState = await reconcileNonceAlarmState(this.ctx.storage, now);
+    this.logNonceAlarmState(nonceAlarmState);
+
     const record = await this.ctx.storage.get<ChannelRecord>(CHANNEL_RECORD_KEY);
-    const recordAlarmAt = record ? this.getRecordAlarmAt(record, effectiveNow) : null;
+    const recordAlarmAt = record ? this.getRecordAlarmAt(record, now) : null;
     const nonceAlarmAt = nonceAlarmState.nextAlarmAt;
     const nextAlarmAt = this.getEarlierAlarm(recordAlarmAt, nonceAlarmAt);
-    if (!this.isValidFutureAlarmAt(nextAlarmAt, effectiveNow)) {
+    if (!this.isValidFutureAlarmAt(nextAlarmAt, now)) {
       if (nextAlarmAt !== null) {
-        this.logRejectedAlarmCandidate(nextAlarmAt, effectiveNow, recordAlarmAt, nonceAlarmAt);
+        this.logRejectedAlarmCandidate(nextAlarmAt, now, recordAlarmAt, nonceAlarmAt);
       }
       await this.ctx.storage.deleteAlarm();
       return;
