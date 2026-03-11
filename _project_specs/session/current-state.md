@@ -1,6 +1,6 @@
 # Current Session State
 
-*Last updated: 2026-03-10*
+*Last updated: 2026-03-11*
 
 ## Active Task
 
@@ -12,7 +12,9 @@ Add PR-side validation gates so tests and builds fail before squash merge.
 - **Progress**: Implemented a dedicated `pr-validate.yml` workflow so `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, frontend build, and Playwright E2E run on `pull_request` / `merge_group` before merge, while manifest signing and deployment stay post-merge in `deploy.yml`.
 - **Known Constraint**: Branch protection and required-check selection for `main` still need the one-time GitHub repository settings change after this PR merges.
 
-## Latest Update (2026-03-10)
+## Latest Update (2026-03-11)
+
+- `.github/workflows/pr-validate.yml` — Added `pull_request.edited` to the PR validation trigger set so retargeting an existing PR to `main` still starts the required `PR Quality`, `PR Build`, and `PR E2E` checks instead of waiting for a new commit.
 
 - `.github/workflows/pr-validate.yml`, `.github/workflows/pr-checklist.yml` — Added PR-only validation jobs (`PR Quality`, `PR Build`, `PR E2E`) on `pull_request` and `merge_group`, and taught the checklist-only workflow to report cleanly for merge groups so required checks stay compatible with merge queue.
 - `.github/workflows/deploy.yml` — Kept signed-manifest and deploy steps on `push main`, and excluded `pr-validate.yml`-only changes from triggering the post-merge deploy pipeline.

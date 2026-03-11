@@ -16,7 +16,8 @@ steps in `deploy.yml`, excluded `pr-validate.yml`-only changes from triggering t
 deploy workflow, and updated `pr-checklist.yml` so the required `All tasks completed` check still
 reports a result when merge queue dispatches `merge_group`. Updated `_project_specs` so the new
 “tests and build must pass before squash merge” rule is recorded for future sessions and
-branch-protection setup.
+branch-protection setup. Followed up by adding `pull_request.edited` to `pr-validate.yml` so
+retargeting a PR to `main` also creates the required validation checks immediately.
 
 ## DONE-018: Remove broken rate-limiter binding and add worker.fetch top-level catch
 
