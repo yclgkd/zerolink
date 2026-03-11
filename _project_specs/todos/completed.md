@@ -4,6 +4,21 @@ Done items for reference. Move here from active.md when complete.
 
 ---
 
+## DONE-029: Stop Durable Object alarm loops and reset staging namespace
+
+**Completed**: 2026-03-11
+
+Fixed a staging-only Cloudflare Durable Object incident where corrupt timing state caused a single
+object to spin on `alarm` invocations and burn through the free-tier request budget. The backend
+now reconciles nonce alarm state in one pass, deleting malformed nonce indexes immediately and
+clearing expired entries before it decides whether another alarm is actually needed. `setAlarm()`
+is now fail-closed: any missing, non-finite, or non-future candidate clears the alarm instead of
+rearming a retry loop, and malformed `record.expiresAt` values are treated as expired terminal
+state that must be purged. Added backend regression coverage for multi-batch nonce cleanup,
+malformed nonce indexes, and invalid record expiry handling. Staging also now binds to a fresh
+`SecretVaultStaging` SQLite class through an env-specific migration so the bad staging namespace is
+abandoned without touching production data.
+
 ## DONE-028: Align Playwright stateful mock with required securityProfile contracts
 
 **Completed**: 2026-03-11

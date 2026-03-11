@@ -1189,6 +1189,68 @@ describe('SecretVault compound/delete flow', () => {
     expect(getAlarm()).toBe(Number(activeAt));
   });
 
+  it('alarm clears expired nonce entries across multiple batches before rearming', async () => {
+    const now = 1_730_001_452_000;
+    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
+    const { state, snapshot, getAlarm } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const activeNonce = asBase64Url('nonce_active_tail');
+    const activeAt = asUnixMs(now + 20_000);
+
+    for (let index = 0; index < 140; index += 1) {
+      const nonce = asBase64Url(`nonce_expired_${String(index).padStart(3, '0')}`);
+      const expiresAt = asUnixMs(now - 5_000 - index);
+      snapshot.set(`${NONCE_KEY_PREFIX}${nonce}`, {
+        nonce,
+        usedAt: asUnixMs(now - 10_000 - index),
+        expiresAt,
+      });
+      snapshot.set(createNonceIndexKey(expiresAt, nonce), {
+        nonce,
+        expiresAt,
+      });
+    }
+
+    snapshot.set(`${NONCE_KEY_PREFIX}${activeNonce}`, {
+      nonce: activeNonce,
+      usedAt: asUnixMs(now),
+      expiresAt: activeAt,
+    });
+    snapshot.set(createNonceIndexKey(activeAt, activeNonce), {
+      nonce: activeNonce,
+      expiresAt: activeAt,
+    });
+
+    await vault.alarm(now);
+
+    for (let index = 0; index < 140; index += 1) {
+      const nonce = asBase64Url(`nonce_expired_${String(index).padStart(3, '0')}`);
+      const expiresAt = asUnixMs(now - 5_000 - index);
+      expect(snapshot.get(`${NONCE_KEY_PREFIX}${nonce}`)).toBeUndefined();
+      expect(snapshot.get(createNonceIndexKey(expiresAt, nonce))).toBeUndefined();
+    }
+
+    expect(snapshot.get(`${NONCE_KEY_PREFIX}${activeNonce}`)).toBeDefined();
+    expect(snapshot.get(createNonceIndexKey(activeAt, activeNonce))).toBeDefined();
+    expect(getAlarm()).toBe(Number(activeAt));
+  });
+
+  it('alarm deletes malformed nonce indexes without scheduling a retry loop', async () => {
+    const now = 1_730_001_453_000;
+    const { state, snapshot, getAlarm } = createMockState();
+    const vault = new SecretVault(state, env);
+
+    snapshot.set(`${NONCE_INDEX_KEY_PREFIX}not-a-timestamp:nonce_invalid_01`, {
+      nonce: asBase64Url('nonce_invalid_01'),
+      expiresAt: Number.NaN,
+    });
+
+    await vault.alarm(now);
+
+    expect([...snapshot.keys()]).toEqual([]);
+    expect(getAlarm()).toBeNull();
+  });
+
   it('lazy-purges expired record on public read and returns not found', async () => {
     const now = 1_730_001_455_000;
     const expiredRecord = {
@@ -1216,6 +1278,29 @@ describe('SecretVault compound/delete flow', () => {
     expect(tombstone?.reason).toBe('expired');
     expect(Number(tombstone?.finalizedAt)).toBeGreaterThan(Number(expiredRecord.expiresAt));
     expect(getAlarm()).toBeNull();
+  });
+
+  it('alarm purges records with invalid expiresAt values and clears the alarm', async () => {
+    const now = 1_730_001_455_500;
+    const invalidRecord = {
+      ...createChannelRecord(CHANNEL_STATE.LOCKED),
+      expiresAt: Number.NaN as UnixMs,
+    };
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { state, snapshot, getAlarm } = createMockState(invalidRecord);
+    const vault = new SecretVault(state, env);
+
+    await vault.alarm(now);
+
+    expect(snapshot.get(CHANNEL_RECORD_KEY)).toBeUndefined();
+    expect(readTerminalTombstone(snapshot)).toEqual({
+      uuid: invalidRecord.uuid,
+      reason: 'expired',
+      finalizedAt: asUnixMs(now),
+    });
+    expect(getAlarm()).toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it('alarm purges expired record and delete follow-up fetches return 404', async () => {

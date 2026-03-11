@@ -22,11 +22,15 @@ name = "zerolink-api-staging"
 
 [[env.staging.durable_objects.bindings]]
 name = "SECRET_VAULT"
-class_name = "SecretVault"
+class_name = "SecretVaultStaging"
 
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["SecretVault"]
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["SecretVaultStaging"]
 
 [[env.staging.kv_namespaces]]
 binding = "SECRETS_KV"
