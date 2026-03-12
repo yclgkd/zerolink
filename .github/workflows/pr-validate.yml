@@ -5,6 +5,22 @@ on:
     branches:
       - main
     types: [opened, edited, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "_project_specs/**"
+      - ".ai/**"
+      - ".agents/**"
+      - ".claude/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/deploy.yml"
+      - ".husky/**"
+      - "scripts/__tests__/**"
+      - "biome.json"
+      - "commitlint.config.js"
+      - "vitest.config.ts"
+      - ".gitignore"
+      - ".env.example"
   merge_group:
     types: [checks_requested]
 
@@ -16,11 +32,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr-quality:
-    name: PR Quality
+  pr-typecheck:
+    name: PR Type Check
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       COREPACK_HOME: /tmp/corepack
     steps:
@@ -48,6 +64,35 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+  pr-test:
+    name: PR Unit Tests
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      COREPACK_HOME: /tmp/corepack
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Run tests
         run: pnpm test
 
@@ -55,7 +100,7 @@ jobs:
     name: PR Build
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       COREPACK_HOME: /tmp/corepack
     steps:
