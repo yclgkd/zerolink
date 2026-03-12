@@ -154,11 +154,120 @@ test.describe('Real-time sync via polling fallback', () => {
       await expect(receiverPage.getByTestId('share-step-delivered')).toBeVisible({
         timeout: 30_000,
       });
+      await expect(receiverPage.getByTestId('safety-code-root')).toBeVisible({ timeout: 15_000 });
+      await expect(receiverPage.getByTestId('share-decrypt-panel')).toBeVisible({
+        timeout: 15_000,
+      });
     } finally {
       await senderAuth.teardown();
       await receiverAuth.teardown();
       await senderContext.close();
       await receiverContext.close();
+    }
+  });
+
+  test('Receiver SharePage on a different device does not expose Safety Code or decrypt controls', async ({
+    browser,
+  }) => {
+    const channels: ChannelMap = new Map();
+
+    const senderContext = await browser.newContext();
+    const receiverOwnerContext = await browser.newContext();
+    const receiverOtherContext = await browser.newContext();
+    const senderPage = await senderContext.newPage();
+    const receiverOwnerPage = await receiverOwnerContext.newPage();
+    const receiverOtherPage = await receiverOtherContext.newPage();
+
+    await installStatefulApiMock(senderPage, channels);
+    await installStatefulApiMock(receiverOwnerPage, channels);
+    await installStatefulApiMock(receiverOtherPage, channels);
+    const senderAuth = await installVirtualAuthenticator(senderPage);
+
+    const passphrase = 'CorrectHorseBatteryStaple!123';
+    const plaintext = 'Cross-device receiver guard secret';
+
+    try {
+      await senderPage.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(senderPage.getByTestId('page-create')).toBeVisible({ timeout: 15_000 });
+      await senderPage.getByTestId('mode-card-secure').click();
+      await expect(senderPage.getByTestId('mode-card-secure')).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      await expect(senderPage.getByTestId('create-submit-button')).toBeEnabled({
+        timeout: 15_000,
+      });
+      await senderPage.getByTestId('create-submit-button').click();
+
+      const shareUrl = await senderPage
+        .getByTestId('create-success-share-link')
+        .getAttribute('href');
+      const manageUrl = await senderPage
+        .getByTestId('create-success-manage-link')
+        .getAttribute('href');
+
+      expect(shareUrl).toBeTruthy();
+      expect(manageUrl).toBeTruthy();
+
+      await receiverOwnerPage.goto(shareUrl!, { waitUntil: 'domcontentloaded' });
+      await expect(receiverOwnerPage.getByTestId('share-step-onboarding')).toBeVisible({
+        timeout: 15_000,
+      });
+      await receiverOwnerPage.getByTestId('share-continue-button').click();
+      await receiverOwnerPage.getByTestId('passphrase-input-field').fill(passphrase);
+      await receiverOwnerPage.getByTestId('share-generate-button').click();
+      await expect(receiverOwnerPage.getByTestId('share-step-locked')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(receiverOwnerPage.getByTestId('safety-code-root')).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await receiverOtherPage.goto(shareUrl!, { waitUntil: 'domcontentloaded' });
+      await expect(receiverOtherPage.getByTestId('share-step-locked')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(receiverOtherPage.getByTestId('share-safety-unavailable')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(
+        receiverOtherPage.getByText('This device cannot verify the Safety Code.')
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(receiverOtherPage.getByTestId('safety-code-root')).toHaveCount(0);
+
+      await senderPage.goto(manageUrl!, { waitUntil: 'domcontentloaded' });
+      await expect(senderPage.getByTestId('manage-state-locked')).toBeVisible({ timeout: 30_000 });
+      await senderPage.getByTestId('manage-secret-input').fill(plaintext);
+      await senderPage.getByTestId('manage-deliver-button').click();
+      await expect(senderPage.getByTestId('manage-state-delivered')).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await expect(receiverOwnerPage.getByTestId('share-step-delivered')).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(receiverOwnerPage.getByTestId('safety-code-root')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(receiverOwnerPage.getByTestId('share-decrypt-panel')).toBeVisible({
+        timeout: 15_000,
+      });
+
+      await expect(receiverOtherPage.getByTestId('share-step-delivered')).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(receiverOtherPage.getByTestId('share-decrypt-panel')).toHaveCount(0);
+      await expect(receiverOtherPage.getByTestId('share-decrypt-unavailable')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(receiverOtherPage.getByText('Decrypt unavailable on this device.')).toBeVisible({
+        timeout: 15_000,
+      });
+    } finally {
+      await senderAuth.teardown();
+      await senderContext.close();
+      await receiverOwnerContext.close();
+      await receiverOtherContext.close();
     }
   });
 });

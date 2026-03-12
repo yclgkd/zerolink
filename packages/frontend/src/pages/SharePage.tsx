@@ -140,6 +140,7 @@ export function SharePage(): ReactElement {
           <DeliveredStep
             canBurn={decryptLogic.canBurn}
             canDecrypt={decryptLogic.canDecrypt}
+            canDecryptLocally={receiverSafetyCode.canDecryptLocally}
             decryptError={decryptLogic.decryptError}
             decryptPending={decryptLogic.decryptPending}
             isDecryptPassphraseInvalid={decryptLogic.isDecryptPassphraseInvalid}

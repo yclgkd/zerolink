@@ -90,6 +90,7 @@ export type ReceiverSafetyCodeStatus =
 export interface ReceiverSafetyCodeState {
   display: SafetyCodeDisplay | null;
   status: ReceiverSafetyCodeStatus;
+  canDecryptLocally: boolean;
 }
 
 export function usePublicShareState(uuid?: string) {
@@ -395,43 +396,42 @@ export function useReceiverSafetyCodeState({
     return {
       display: localSafetyCode,
       status: localSafetyCode ? 'verified-local-key' : 'not-applicable',
+      canDecryptLocally: Boolean(localSafetyCode),
     };
   }
 
+  const localReceiverPubFpr = localSafetyCode?.fullFpr ?? storedReceiverPubFpr;
+  const hasLocalReceiverKey = Boolean(localReceiverPubFpr);
+
   if (hasStorageError) {
-    return { display: null, status: 'storage-error' };
+    return { display: null, status: 'storage-error', canDecryptLocally: false };
+  }
+
+  if (isCheckingLocalKey && !hasLocalReceiverKey) {
+    return { display: null, status: 'checking-local-key', canDecryptLocally: false };
+  }
+
+  if (!hasLocalReceiverKey) {
+    return { display: null, status: 'missing-local-key', canDecryptLocally: false };
+  }
+
+  if (publicReceiverPubFpr && localReceiverPubFpr !== publicReceiverPubFpr) {
+    return { display: null, status: 'mismatched-local-key', canDecryptLocally: false };
   }
 
   if (!publicReceiverPubFpr) {
-    return { display: null, status: 'missing-receiver-fingerprint' };
+    return { display: null, status: 'missing-receiver-fingerprint', canDecryptLocally: true };
   }
 
-  if (localSafetyCode?.fullFpr) {
-    if (localSafetyCode.fullFpr !== publicReceiverPubFpr) {
-      return { display: null, status: 'mismatched-local-key' };
-    }
-
-    return {
-      display: localSafetyCode,
-      status: 'verified-local-key',
-    };
-  }
-
-  if (isCheckingLocalKey) {
-    return { display: null, status: 'checking-local-key' };
-  }
-
-  if (!storedReceiverPubFpr) {
-    return { display: null, status: 'missing-local-key' };
-  }
-
-  if (storedReceiverPubFpr !== publicReceiverPubFpr) {
-    return { display: null, status: 'mismatched-local-key' };
-  }
+  const verifiedLocalReceiverPubFpr = localReceiverPubFpr as HexString;
 
   return {
-    display: deriveSafetyCodeDisplay(storedReceiverPubFpr),
+    display:
+      localSafetyCode && localSafetyCode.fullFpr === verifiedLocalReceiverPubFpr
+        ? localSafetyCode
+        : deriveSafetyCodeDisplay(verifiedLocalReceiverPubFpr),
     status: 'verified-local-key',
+    canDecryptLocally: true,
   };
 }
 

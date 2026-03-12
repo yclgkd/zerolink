@@ -136,6 +136,39 @@ function SafetyCodeSection({
   );
 }
 
+function getDecryptUnavailableCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>
+) {
+  switch (status) {
+    case 'checking-local-key':
+      return {
+        tone: 'info' as const,
+        title: 'Checking this device before enabling decrypt…',
+        body: 'ZeroLink is verifying whether this device holds the receiver key needed for local decryption.',
+      };
+    case 'mismatched-local-key':
+      return {
+        tone: 'error' as const,
+        title: 'Decrypt blocked on this device.',
+        body: 'The receiver key stored on this device does not match the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.',
+      };
+    case 'storage-error':
+      return {
+        tone: 'warning' as const,
+        title: 'Unable to load the local receiver key.',
+        body: 'ZeroLink could not read the receiver key stored on this device, so local decrypt is unavailable here.',
+      };
+    case 'missing-local-key':
+    case 'missing-receiver-fingerprint':
+    default:
+      return {
+        tone: 'warning' as const,
+        title: 'Decrypt unavailable on this device.',
+        body: 'This device does not have the receiver key that locked the channel, so local decrypt is blocked here.',
+      };
+  }
+}
+
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   return (
     <section className="space-y-4" data-testid="share-step-onboarding">
@@ -302,6 +335,7 @@ export function DecryptErrorPanel({ error }: { error: string }) {
 export function DeliveredStep({
   safetyCodeAvailable,
   safetyCodeStatus,
+  canDecryptLocally,
   passphrase,
   decryptPending,
   decryptError,
@@ -316,6 +350,7 @@ export function DeliveredStep({
 }: {
   safetyCodeAvailable: SafetyCodeDisplay | null;
   safetyCodeStatus: ReceiverSafetyCodeStatus;
+  canDecryptLocally: boolean;
   passphrase: string;
   decryptPending: boolean;
   decryptError: string | null;
@@ -328,6 +363,12 @@ export function DeliveredStep({
   onDecrypt: () => void;
   onBurn: () => void;
 }) {
+  const decryptUnavailableCopy = getDecryptUnavailableCopy(
+    safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
+      ? 'missing-local-key'
+      : safetyCodeStatus
+  );
+
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
@@ -343,74 +384,90 @@ export function DeliveredStep({
         safetyCodeStatus={safetyCodeStatus}
       />
 
-      <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
-        <PassphraseInput
-          ariaDescribedBy={
-            decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
-          }
-          ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
-          inputId="share-decrypt-passphrase"
-          label="Decrypt passphrase"
-          onChange={onPassphraseChange}
-          placeholder="Enter passphrase to decrypt"
-          value={passphrase}
-        />
+      {canDecryptLocally ? (
+        <>
+          <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
+            <PassphraseInput
+              ariaDescribedBy={
+                decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
+              }
+              ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
+              inputId="share-decrypt-passphrase"
+              label="Decrypt passphrase"
+              onChange={onPassphraseChange}
+              placeholder="Enter passphrase to decrypt"
+              value={passphrase}
+            />
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            data-testid="share-decrypt-button"
-            disabled={!canDecrypt}
-            onClick={onDecrypt}
-            type="button"
-          >
-            {decryptPending ? (
-              <>
-                <Spinner aria-hidden="true" className="size-4" />
-                Decrypting…
-              </>
-            ) : (
-              <>
-                <Unlock aria-hidden="true" className="size-4" />
-                Decrypt
-              </>
-            )}
-          </Button>
-          <Button
-            data-testid="share-decrypt-burn"
-            disabled={!canBurn}
-            onClick={onBurn}
-            type="button"
-            variant="danger"
-          >
-            Burn Local Plaintext
-          </Button>
-        </div>
-      </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                data-testid="share-decrypt-button"
+                disabled={!canDecrypt}
+                onClick={onDecrypt}
+                type="button"
+              >
+                {decryptPending ? (
+                  <>
+                    <Spinner aria-hidden="true" className="size-4" />
+                    Decrypting…
+                  </>
+                ) : (
+                  <>
+                    <Unlock aria-hidden="true" className="size-4" />
+                    Decrypt
+                  </>
+                )}
+              </Button>
+              <Button
+                data-testid="share-decrypt-burn"
+                disabled={!canBurn}
+                onClick={onBurn}
+                type="button"
+                variant="danger"
+              >
+                Burn Local Plaintext
+              </Button>
+            </div>
+          </div>
 
-      {decryptError ? <DecryptErrorPanel error={decryptError} /> : null}
+          {decryptError ? <DecryptErrorPanel error={decryptError} /> : null}
 
-      {plaintext ? (
-        <div
-          className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
-          data-testid="share-decrypt-plaintext"
-        >
-          <p className="text-xs font-medium uppercase tracking-wide text-neon-green">Plaintext</p>
-          <pre className="whitespace-pre-wrap break-words text-sm text-foreground">{plaintext}</pre>
-        </div>
-      ) : null}
+          {plaintext ? (
+            <div
+              className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
+              data-testid="share-decrypt-plaintext"
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
+                Plaintext
+              </p>
+              <pre className="whitespace-pre-wrap break-words text-sm text-foreground">
+                {plaintext}
+              </pre>
+            </div>
+          ) : null}
 
-      {localPlaintextBurned ? (
+          {localPlaintextBurned ? (
+            <StateNotice
+              data-testid="share-decrypt-burned"
+              title="Local plaintext removed from this device."
+              tone="warning"
+            >
+              <p className="mt-1 text-xs text-neon-orange">
+                This does not delete the channel or mark it expired. Re-enter your passphrase to
+                decrypt again.
+              </p>
+            </StateNotice>
+          ) : null}
+        </>
+      ) : (
         <StateNotice
-          data-testid="share-decrypt-burned"
-          title="Local plaintext removed from this device."
-          tone="warning"
+          data-testid="share-decrypt-unavailable"
+          title={decryptUnavailableCopy.title}
+          tone={decryptUnavailableCopy.tone}
         >
-          <p className="mt-1 text-xs text-neon-orange">
-            This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt
-            again.
-          </p>
+          <p className="mt-1 text-xs text-foreground/90">{decryptUnavailableCopy.body}</p>
         </StateNotice>
-      ) : null}
+      )}
     </section>
   );
 }

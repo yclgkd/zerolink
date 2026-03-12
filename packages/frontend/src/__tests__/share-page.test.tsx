@@ -95,6 +95,23 @@ function renderSharePage(routePath = '/s/:uuid', initialPath = '/s/demo-channel-
   );
 }
 
+async function waitForDeliveredDecryptPanel() {
+  expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+  return screen.findByTestId('share-decrypt-panel');
+}
+
+async function waitForSafetyUnavailableTitle(title: string): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByTestId('share-safety-unavailable').textContent).toContain(title);
+  });
+}
+
+async function waitForDecryptUnavailableTitle(title: string): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByTestId('share-decrypt-unavailable').textContent).toContain(title);
+  });
+}
+
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
@@ -156,6 +173,14 @@ async function saveReceiverEnvelope(
 ): Promise<void> {
   const receiverKeyStorage = createIndexedDbReceiverKeyStorage();
   await receiverKeyStorage.save(createReceiverEnvelope(uuid, receiverPubFpr));
+}
+
+async function saveReceiverEnvelopesForDeliveredTests(): Promise<void> {
+  await Promise.all([
+    saveReceiverEnvelope(VALID_UUID),
+    saveReceiverEnvelope('uuidaaaaaaaaaaaaaaaaa'),
+    saveReceiverEnvelope('uuidbbbbbbbbbbbbbbbbb'),
+  ]);
 }
 
 async function clearReceiverKeyStorage(): Promise<void> {
@@ -603,11 +628,11 @@ describe('SharePage', () => {
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.getAttribute('aria-live')).toBe('polite');
-    expect(
-      screen.getByText(
+    await waitFor(() => {
+      expect(warning.textContent).toContain(
         'No matching receiver key was found on this device. Do not confirm the Safety Code from here. If you expected to be the receiver, ask the sender to recreate the channel.'
-      )
-    ).toBeTruthy();
+      );
+    });
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
@@ -639,11 +664,11 @@ describe('SharePage', () => {
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    await waitForSafetyUnavailableTitle('Safety Code unavailable right now.');
     const warning = screen.getByTestId('share-safety-unavailable');
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.getAttribute('aria-live')).toBe('polite');
-    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
     expect(
       screen.getByText(
         'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be verified here.'
@@ -654,19 +679,18 @@ describe('SharePage', () => {
 
   it('renders delivered decrypt panel with locally verified safety code and does not fetch /api/decrypt_fetch directly', async () => {
     const fetchSpy = getFetchSpy();
-    await saveReceiverEnvelope();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
     expect(screen.getByText('Decrypt Delivered Secret')).toBeTruthy();
     expect(
       screen.getByText(
         'If this device created the receiver lock, enter that passphrase to decrypt the secret locally.'
       )
     ).toBeTruthy();
-    expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
     expect(screen.getByText('Channel Delivered')).toBeTruthy();
     expect(
       screen.getByText(
@@ -678,16 +702,56 @@ describe('SharePage', () => {
     expect(fetchSpy).not.toHaveBeenCalledWith(`/api/decrypt_fetch/${VALID_UUID}`);
   });
 
-  it('shows a security warning when delivered state has no local receiver key on this device', async () => {
+  it('keeps local decrypt available when delivered state is missing receiver fingerprint but this device has the receiver key', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered', { receiverPubFpr: null });
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
+    await waitForSafetyUnavailableTitle('Safety Code unavailable right now.');
+    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+    expect(screen.queryByTestId('share-decrypt-unavailable')).toBeNull();
+  });
+
+  it('shows a security warning and blocks decrypt when delivered state has no local receiver key on this device', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
-    expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
+    expect(screen.queryByTestId('share-decrypt-panel')).toBeNull();
+    expect(screen.getByTestId('share-decrypt-unavailable')).toBeTruthy();
     expect(await screen.findByText('This device cannot verify the Safety Code.')).toBeTruthy();
+    await waitForDecryptUnavailableTitle('Decrypt unavailable on this device.');
+    await waitFor(() => {
+      expect(screen.getByTestId('share-decrypt-unavailable').textContent).toContain(
+        'This device does not have the receiver key that locked the channel, so local decrypt is blocked here.'
+      );
+    });
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('blocks decrypt when delivered state receiver identity does not match this device', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope(VALID_UUID, OTHER_VALID_HEX);
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await screen.findByText('Receiver identity mismatch detected.')).toBeTruthy();
+    expect(screen.queryByTestId('share-decrypt-panel')).toBeNull();
+    expect(screen.getByTestId('share-decrypt-unavailable')).toBeTruthy();
+    expect(screen.getByText('Decrypt blocked on this device.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'The receiver key stored on this device does not match the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.'
+      )
+    ).toBeTruthy();
   });
 
   it('does not render safety code after a realtime locked update if this device lacks the local receiver key', async () => {
@@ -738,6 +802,7 @@ describe('SharePage', () => {
   });
 
   it('shows a storage-error warning when IndexedDB read fails in locked state', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const spy = vi.spyOn(storageModule, 'createIndexedDbReceiverKeyStorage').mockReturnValue({
       load: () => Promise.reject(new Error('IndexedDB quota exceeded')),
       save: () => Promise.resolve(),
@@ -762,6 +827,34 @@ describe('SharePage', () => {
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
 
     spy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('shows a storage-error warning and blocks decrypt when delivered state cannot read IndexedDB', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.spyOn(storageModule, 'createIndexedDbReceiverKeyStorage').mockReturnValue({
+      load: () => Promise.reject(new Error('IndexedDB quota exceeded')),
+      save: () => Promise.resolve(),
+      remove: () => Promise.resolve(),
+    });
+
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(screen.queryByTestId('share-decrypt-panel')).toBeNull();
+    expect(await screen.findByText('Unable to load the local receiver key.')).toBeTruthy();
+    expect(screen.getByTestId('share-decrypt-unavailable')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'ZeroLink could not read the receiver key stored on this device, so local decrypt is unavailable here.'
+      )
+    ).toBeTruthy();
+
+    spy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   it('does not render safety code after a realtime delivered update if this device lacks the local receiver key', async () => {
@@ -784,12 +877,14 @@ describe('SharePage', () => {
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
     expect(await screen.findByText('This device cannot verify the Safety Code.')).toBeTruthy();
+    expect(screen.queryByTestId('share-decrypt-panel')).toBeNull();
+    expect(screen.getByTestId('share-decrypt-unavailable')).toBeTruthy();
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
   it('renders safety code after a realtime delivered update when this device has the matching receiver key', async () => {
     const fetchSpy = getFetchSpy();
-    await saveReceiverEnvelope();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'waiting');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
@@ -808,27 +903,30 @@ describe('SharePage', () => {
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
     expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
     expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
   });
 
   it('keeps decrypt button disabled when passphrase is empty in delivered state', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
     expect(decryptButton.disabled).toBe(true);
   });
 
   it('calls decryptDelivered with uuid/passphrase and shows plaintext on success', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
@@ -846,6 +944,7 @@ describe('SharePage', () => {
 
   it('disables decrypt and burn buttons while decrypt is pending, then restores controls', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     const deferred = createDeferred<{
@@ -861,7 +960,7 @@ describe('SharePage', () => {
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
@@ -891,11 +990,12 @@ describe('SharePage', () => {
 
   it('keeps decrypt pending during re-decrypt when plaintext already exists', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'first-passphrase' },
     });
@@ -939,6 +1039,7 @@ describe('SharePage', () => {
 
   it('resets decrypt pending when navigating to another delivered uuid mid-request', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/public/uuidaaaaaaaaaaaaaaaaa') {
@@ -990,7 +1091,7 @@ describe('SharePage', () => {
 
     render(<RouterProvider router={router} />);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'first-passphrase' },
     });
@@ -1007,7 +1108,7 @@ describe('SharePage', () => {
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith('/api/public/uuidbbbbbbbbbbbbbbbbb');
     });
-    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'second-passphrase' },
@@ -1032,6 +1133,7 @@ describe('SharePage', () => {
 
   it('ignores stale decrypt failure after navigating to a new delivered uuid', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/public/uuidaaaaaaaaaaaaaaaaa') {
@@ -1082,14 +1184,14 @@ describe('SharePage', () => {
 
     render(<RouterProvider router={router} />);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'first-passphrase' },
     });
     fireEvent.click(screen.getByTestId('share-decrypt-button'));
 
     await router.navigate('/s/uuidbbbbbbbbbbbbbbbbb');
-    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
     expect(screen.queryByTestId('share-decrypt-error')).toBeNull();
 
     deferred.resolve({
@@ -1109,6 +1211,7 @@ describe('SharePage', () => {
 
   it('does not clear current pending when stale decrypt response resolves', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     const uuidBPublic = createDeferred<Response>();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -1166,7 +1269,7 @@ describe('SharePage', () => {
 
     render(<RouterProvider router={router} />);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'first-passphrase' },
     });
@@ -1184,7 +1287,7 @@ describe('SharePage', () => {
         securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
-    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'second-passphrase' },
     });
@@ -1232,6 +1335,7 @@ describe('SharePage', () => {
 
   it('does not clear current pending when stale decrypt throws', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     const uuidBPublic = createDeferred<Response>();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -1289,7 +1393,7 @@ describe('SharePage', () => {
 
     render(<RouterProvider router={router} />);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'first-passphrase' },
     });
@@ -1307,7 +1411,7 @@ describe('SharePage', () => {
         securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
-    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'second-passphrase' },
     });
@@ -1348,6 +1452,7 @@ describe('SharePage', () => {
 
   it('shows decrypt error on decrypt failure without crashing delivered view', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     decryptDeliveredMock.mockResolvedValueOnce({
@@ -1361,7 +1466,7 @@ describe('SharePage', () => {
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
@@ -1387,6 +1492,7 @@ describe('SharePage', () => {
 
   it('marks decrypt passphrase invalid for CRYPTO_ERROR', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     decryptDeliveredMock.mockResolvedValueOnce({
@@ -1400,7 +1506,7 @@ describe('SharePage', () => {
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
@@ -1423,6 +1529,7 @@ describe('SharePage', () => {
 
   it('maps integrity mismatch to user-friendly decrypt error message', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     decryptDeliveredMock.mockResolvedValueOnce({
@@ -1436,7 +1543,7 @@ describe('SharePage', () => {
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
@@ -1448,11 +1555,12 @@ describe('SharePage', () => {
 
   it('burns local plaintext, shows local-only notice, and clears passphrase', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
@@ -1479,11 +1587,12 @@ describe('SharePage', () => {
 
   it('allows re-decrypt after burn with a new passphrase input', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
-    await screen.findByTestId('share-step-delivered');
+    await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'first-pass' },
     });
@@ -1507,6 +1616,7 @@ describe('SharePage', () => {
 
   it('shows loading and does not leak old plaintext while uuid route changes', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
     const uuidBPublic = createDeferred<Response>();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -1541,7 +1651,7 @@ describe('SharePage', () => {
 
     render(<RouterProvider router={router} />);
 
-    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await waitForDeliveredDecryptPanel()).toBeTruthy();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Receiver#Pass1234' },
     });
