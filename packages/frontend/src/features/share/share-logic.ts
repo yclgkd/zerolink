@@ -7,7 +7,7 @@ import {
   type SafetyCodeDisplay,
   UUIDSchema,
 } from '@zerolink/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { extractLockSecretFromHash } from '../../crypto/protocol-utils';
 import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
@@ -173,8 +173,12 @@ export function usePublicShareState(uuid?: string) {
         setIsUnavailable(false);
         setIsPublicStatusLoading(false);
         setPublicStatusError(null);
-      } catch {
+      } catch (error: unknown) {
         if (!cancelled) {
+          console.error('[usePublicShareState] Failed to load channel state', {
+            uuid: currentUuid,
+            error,
+          });
           setChannelState(CHANNEL_STATE.WAITING);
           setReceiverPubFpr(null);
           setIsUnavailable(false);
@@ -342,6 +346,8 @@ export function useReceiverSafetyCodeState({
   const [isCheckingLocalKey, setIsCheckingLocalKey] = useState(false);
   const [hasStorageError, setHasStorageError] = useState(false);
 
+  const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);
+
   const isReceiverVerificationState =
     channelState === CHANNEL_STATE.LOCKED || channelState === CHANNEL_STATE.DELIVERED;
 
@@ -360,7 +366,6 @@ export function useReceiverSafetyCodeState({
       return;
     }
 
-    const receiverKeyStorage = createIndexedDbReceiverKeyStorage();
     let cancelled = false;
     setStoredReceiverPubFpr(null);
     setIsCheckingLocalKey(true);
@@ -373,8 +378,9 @@ export function useReceiverSafetyCodeState({
         setStoredReceiverPubFpr((envelope?.receiverPubFpr ?? null) as HexString | null);
         setIsCheckingLocalKey(false);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
+        console.error('[useReceiverSafetyCodeState] IndexedDB load failed', { uuid, error });
         setStoredReceiverPubFpr(null);
         setIsCheckingLocalKey(false);
         setHasStorageError(true);
@@ -400,8 +406,6 @@ export function useReceiverSafetyCodeState({
     return { display: null, status: 'missing-receiver-fingerprint' };
   }
 
-  const localReceiverPubFpr = localSafetyCode?.fullFpr ?? storedReceiverPubFpr;
-
   if (localSafetyCode?.fullFpr) {
     if (localSafetyCode.fullFpr !== publicReceiverPubFpr) {
       return { display: null, status: 'mismatched-local-key' };
@@ -417,16 +421,16 @@ export function useReceiverSafetyCodeState({
     return { display: null, status: 'checking-local-key' };
   }
 
-  if (!localReceiverPubFpr) {
+  if (!storedReceiverPubFpr) {
     return { display: null, status: 'missing-local-key' };
   }
 
-  if (localReceiverPubFpr !== publicReceiverPubFpr) {
+  if (storedReceiverPubFpr !== publicReceiverPubFpr) {
     return { display: null, status: 'mismatched-local-key' };
   }
 
   return {
-    display: deriveSafetyCodeDisplay(localReceiverPubFpr),
+    display: deriveSafetyCodeDisplay(storedReceiverPubFpr),
     status: 'verified-local-key',
   };
 }

@@ -54,6 +54,7 @@ vi.mock('../sync/use-channel-sync.ts', async () => {
   };
 });
 
+import * as storageModule from '../crypto/storage';
 import { createIndexedDbReceiverKeyStorage, type ReceiverKeyEnvelope } from '../crypto/storage';
 import { SharePage } from '../pages/SharePage';
 import { useDecryptStore } from '../stores/decrypt-store';
@@ -164,8 +165,8 @@ async function clearReceiverKeyStorage(): Promise<void> {
     RECEIVER_STORAGE_UUIDS.map(async (uuid) => {
       try {
         await receiverKeyStorage.remove(uuid);
-      } catch {
-        return;
+      } catch (error: unknown) {
+        console.warn(`[test cleanup] Failed to remove receiver key for ${uuid}`, error);
       }
     })
   );
@@ -732,6 +733,80 @@ describe('SharePage', () => {
     });
 
     expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
+  });
+
+  it('shows a storage-error warning when IndexedDB read fails in locked state', async () => {
+    const spy = vi.spyOn(storageModule, 'createIndexedDbReceiverKeyStorage').mockReturnValue({
+      load: () => Promise.reject(new Error('IndexedDB quota exceeded')),
+      save: () => Promise.resolve(),
+      remove: () => Promise.resolve(),
+    });
+
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(await screen.findByText('Unable to check the local receiver key.')).toBeTruthy();
+    const warning = screen.getByTestId('share-safety-unavailable');
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
+    expect(
+      screen.getByText(
+        'ZeroLink could not read the receiver key material stored on this device, so the Safety Code cannot be verified here.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+
+    spy.mockRestore();
+  });
+
+  it('does not render safety code after a realtime delivered update if this device lacks the local receiver key', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'delivered',
+        version: 1,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+        receiverPubFpr: VALID_HEX,
+      });
+    });
+
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(await screen.findByText('This device cannot verify the Safety Code.')).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('renders safety code after a realtime delivered update when this device has the matching receiver key', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'delivered',
+        version: 1,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+        receiverPubFpr: VALID_HEX,
+      });
+    });
+
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
     expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
     expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
   });
