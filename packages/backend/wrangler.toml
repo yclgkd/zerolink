@@ -29,6 +29,7 @@ id = "b8313bed33c9492885c12c9d26034420"
 
 [env.staging]
 name = "zerolink-api-staging"
+main = "src/index.staging.ts"
 
 [env.staging.vars]
 APP_ENV = "staging"
