@@ -24,8 +24,8 @@ UPDATE WHEN:
 |----------|---------|
 | `packages/frontend/src/bootstrap-entry.ts` | Frontend bootstrap verifier entry; loads the app only after release verification |
 | `packages/frontend/src/main.tsx` | React app renderer invoked by the bootstrap entry after verification |
-| `packages/backend/src/index.ts` | Production Worker entry — routes API requests, binds production to `SecretVaultProduction`, and temporarily keeps the legacy `SecretVault` export available during namespace cutovers |
-| `packages/backend/src/index.staging.ts` | Staging-only Worker entry — exports only `SecretVaultStaging` so delete migrations can retire legacy staging DO classes |
+| `packages/backend/src/index.ts` | Production Worker entry — routes API requests, binds production to `SecretVaultV2`, and keeps legacy exports available during namespace cutovers |
+| `packages/backend/src/index.staging.ts` | Staging-only Worker entry — binds staging to `SecretVaultV2` and keeps the legacy staging export available during namespace cutovers |
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
 
