@@ -22,6 +22,8 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: Cloudflare's delete migrations require the class being deleted to be absent from the deployed worker code. A staging-only entrypoint satisfies that requirement without changing the production durable object class.
 **Trade-offs**: Backend bootstrap wiring is slightly more explicit, and future entrypoint changes must stay aligned through the shared `worker.ts`.
 
+**Follow-up (2026-03-12)**: Production also moved to a fresh `SecretVaultProduction` class name before deleting the legacy `zerolink-api_SecretVault` namespace, so the live worker can recreate a clean production namespace without depending on the removed class.
+
 ## [2026-03-11] Durable Object fetch-level failures must use the same production redaction path
 
 **Decision**: Route unexpected errors from the Durable Object `fetch()` entrypoint, including `/ws` subscribe upgrades, through the same `mapError()` redaction path used by the JSON handlers.

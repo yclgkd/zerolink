@@ -24,7 +24,7 @@ UPDATE WHEN:
 |----------|---------|
 | `packages/frontend/src/bootstrap-entry.ts` | Frontend bootstrap verifier entry; loads the app only after release verification |
 | `packages/frontend/src/main.tsx` | React app renderer invoked by the bootstrap entry after verification |
-| `packages/backend/src/index.ts` | Production Worker entry — routes API requests and exports the production `SecretVault` class |
+| `packages/backend/src/index.ts` | Production Worker entry — routes API requests and exports the production `SecretVaultProduction` class |
 | `packages/backend/src/index.staging.ts` | Staging-only Worker entry — exports only `SecretVaultStaging` so delete migrations can retire legacy staging DO classes |
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
@@ -54,7 +54,7 @@ UPDATE WHEN:
 | `packages/frontend/public/_headers` | Cloudflare Pages cache and security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
 | `packages/frontend/public/_redirects` | SPA catch-all redirect (`/* /index.html 200`) |
 | `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, and Playwright E2E on `pull_request` / `merge_group` |
-| `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; `env.staging.main` points at the staging-only entry so `deleted_classes = ["SecretVault"]` can retire the old staging namespace |
+| `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; production binds to `SecretVaultProduction` for clean namespace recreation, and `env.staging.main` points at the staging-only entry so `deleted_classes = ["SecretVault"]` can retire the old staging namespace |
 | `.github/workflows/deploy.yml` | Post-merge CI/CD: test → deploy Worker → build → generate/sign/verify manifest → deploy Pages |
 
 ## Key Patterns

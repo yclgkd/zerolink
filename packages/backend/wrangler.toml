@@ -14,11 +14,15 @@ invocation_logs = false
 
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
-class_name = "SecretVault"
+class_name = "SecretVaultProduction"
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SecretVault"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SecretVaultProduction"]
 
 [[kv_namespaces]]
 binding = "SECRETS_KV"
