@@ -2,6 +2,7 @@ import {
   CHANNEL_STATE,
   type ChannelState,
   ErrorResponseSchema,
+  type HexString,
   PublicStatusResponseSchema,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -76,6 +77,7 @@ function isTerminalPublicState(state: ChannelState): boolean {
 
 export function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
+  const [receiverPubFpr, setReceiverPubFpr] = useState<HexString | null>(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
   const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function usePublicShareState(uuid?: string) {
   useEffect(() => {
     if (!uuid) {
       setChannelState(CHANNEL_STATE.WAITING);
+      setReceiverPubFpr(null);
       setIsUnavailable(false);
       setIsPublicStatusLoading(false);
       setPublicStatusError(null);
@@ -91,6 +94,7 @@ export function usePublicShareState(uuid?: string) {
 
     const currentUuid = uuid;
     setChannelState(CHANNEL_STATE.WAITING);
+    setReceiverPubFpr(null);
     setIsUnavailable(false);
     setIsPublicStatusLoading(true);
     setPublicStatusError(null);
@@ -109,6 +113,7 @@ export function usePublicShareState(uuid?: string) {
           (parsedError.success && parsedError.data.code === 'NOT_FOUND')
         ) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(true);
           setIsPublicStatusLoading(false);
           setPublicStatusError(null);
@@ -117,6 +122,7 @@ export function usePublicShareState(uuid?: string) {
 
         if (!response.ok) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
           setPublicStatusError(
@@ -127,6 +133,7 @@ export function usePublicShareState(uuid?: string) {
 
         if (!parsedPayload.success) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
           setPublicStatusError(
@@ -137,6 +144,7 @@ export function usePublicShareState(uuid?: string) {
 
         if (isTerminalPublicState(parsedPayload.data.state)) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(true);
           setIsPublicStatusLoading(false);
           setPublicStatusError(null);
@@ -144,12 +152,14 @@ export function usePublicShareState(uuid?: string) {
         }
 
         setChannelState(parsedPayload.data.state);
+        setReceiverPubFpr(parsedPayload.data.receiverPubFpr ?? null);
         setIsUnavailable(false);
         setIsPublicStatusLoading(false);
         setPublicStatusError(null);
       } catch {
         if (!cancelled) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
           setPublicStatusError(
@@ -170,16 +180,19 @@ export function usePublicShareState(uuid?: string) {
     onStateChange: useCallback((update) => {
       if (isTerminalPublicState(update.state)) {
         setChannelState(CHANNEL_STATE.WAITING);
+        setReceiverPubFpr(null);
         setIsUnavailable(true);
         return;
       }
       setChannelState(update.state);
+      setReceiverPubFpr(update.receiverPubFpr ?? null);
       setIsUnavailable(false);
       setIsPublicStatusLoading(false);
       setPublicStatusError(null);
     }, []),
     onChannelClosed: useCallback((_reason: ChannelClosedReason) => {
       setChannelState(CHANNEL_STATE.WAITING);
+      setReceiverPubFpr(null);
       setIsUnavailable(true);
       setIsPublicStatusLoading(false);
       setPublicStatusError(null);
@@ -188,6 +201,7 @@ export function usePublicShareState(uuid?: string) {
 
   return {
     channelState,
+    receiverPubFpr,
     isUnavailable,
     isPublicStatusLoading,
     publicStatusError,

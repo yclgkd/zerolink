@@ -61,9 +61,33 @@ export function StepIndicator({
 
 export const nextSteps = [
   'Coordinate with the sender over another channel.',
-  'Compare Safety Code values before delivery when they are available on this device.',
-  'Keep this tab open until the sender confirms the encrypted delivery.',
+  'Compare the Safety Code before delivery when it is shown here.',
+  'This page updates automatically when the sender delivers the encrypted secret.',
 ] as const;
+
+const SAFETY_CODE_UNAVAILABLE_TITLE = 'Safety Code unavailable right now.';
+const SAFETY_CODE_UNAVAILABLE_BODY =
+  'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.';
+
+function SafetyCodeSection({
+  safetyCodeAvailable,
+}: {
+  safetyCodeAvailable: SafetyCodeDisplay | null;
+}) {
+  if (safetyCodeAvailable) {
+    return <SafetyCode display={safetyCodeAvailable} />;
+  }
+
+  return (
+    <StateNotice
+      data-testid="share-safety-unavailable"
+      title={SAFETY_CODE_UNAVAILABLE_TITLE}
+      tone="warning"
+    >
+      <p className="mt-1 text-xs text-neon-orange">{SAFETY_CODE_UNAVAILABLE_BODY}</p>
+    </StateNotice>
+  );
+}
 
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   return (
@@ -189,24 +213,11 @@ export function LockedStep({
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">Receiver channel is locked</h3>
         <p className="text-xs text-muted-foreground">
-          Verify the Safety Code with the sender before delivery when it is available on this
-          device.
+          Verify the Safety Code with the sender before delivery when it is shown below.
         </p>
       </div>
 
-      {safetyCodeAvailable ? (
-        <SafetyCode display={safetyCodeAvailable} />
-      ) : (
-        <StateNotice
-          data-testid="share-safety-unavailable"
-          title="Safety Code unavailable on this device."
-          tone="warning"
-        >
-          <p className="mt-1 text-xs text-neon-orange">
-            Safety Code is generated locally during lock and is not recoverable from server state.
-          </p>
-        </StateNotice>
-      )}
+      <SafetyCodeSection safetyCodeAvailable={safetyCodeAvailable} />
 
       <div
         className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
@@ -237,6 +248,7 @@ export function DecryptErrorPanel({ error }: { error: string }) {
 }
 
 export function DeliveredStep({
+  safetyCodeAvailable,
   passphrase,
   decryptPending,
   decryptError,
@@ -249,6 +261,7 @@ export function DeliveredStep({
   onDecrypt,
   onBurn,
 }: {
+  safetyCodeAvailable: SafetyCodeDisplay | null;
   passphrase: string;
   decryptPending: boolean;
   decryptError: string | null;
@@ -266,9 +279,12 @@ export function DeliveredStep({
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">Channel Delivered</h3>
         <p className="text-xs text-muted-foreground">
-          The channel is delivered. Decrypt happens locally on this device.
+          The encrypted secret has been delivered. Decryption still requires the device that created
+          the receiver lock.
         </p>
       </div>
+
+      <SafetyCodeSection safetyCodeAvailable={safetyCodeAvailable} />
 
       <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
         <PassphraseInput

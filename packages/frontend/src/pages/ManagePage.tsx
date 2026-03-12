@@ -169,7 +169,8 @@ function StatusContent({
       <section className="space-y-2" data-testid="manage-state-waiting">
         <h3 className="text-base font-semibold text-foreground">Waiting for Receiver Lock</h3>
         <p className="text-xs text-muted-foreground">
-          Receiver has not locked the channel yet. Share the link and wait for confirmation.
+          Receiver has not locked the channel yet. Share the link and this page will update
+          automatically once they do.
         </p>
       </section>
     );
@@ -190,12 +191,12 @@ function StatusContent({
         ) : (
           <StateNotice
             data-testid="manage-safety-unavailable"
-            title="Safety Code unavailable on this device."
+            title="Safety Code unavailable right now."
             tone="warning"
           >
             <p className="mt-1 text-xs text-neon-orange">
-              Safety Code is generated locally and can only be shown when receiver fingerprint is
-              available on this device.
+              Receiver fingerprint is missing from the current channel state, so the Safety Code
+              cannot be shown.
             </p>
           </StateNotice>
         )}
@@ -208,7 +209,8 @@ function StatusContent({
       <section className="space-y-2" data-testid="manage-state-delivered">
         <h3 className="text-base font-semibold text-foreground">Delivery Completed</h3>
         <p className="text-xs text-muted-foreground">
-          Ciphertext has been delivered to the receiver flow. Await receiver-side decrypt.
+          Ciphertext has been delivered to the receiver flow. Receiver-side decrypt happens locally
+          and does not send confirmation back here.
         </p>
       </section>
     );

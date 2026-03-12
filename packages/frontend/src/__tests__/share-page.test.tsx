@@ -1,13 +1,25 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { HexStringSchema, SECURITY_PROFILE } from '@zerolink/shared';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { lockChannelMock, decryptDeliveredMock } = vi.hoisted(() => ({
+const { lockChannelMock, decryptDeliveredMock, syncHarness } = vi.hoisted(() => ({
   lockChannelMock: vi.fn(),
   decryptDeliveredMock: vi.fn(),
+  syncHarness: {
+    latestOptions: null as {
+      onStateChange: (update: {
+        state: string;
+        version: number;
+        adminMode: string;
+        securityProfile: string;
+        receiverPubFpr?: string;
+      }) => void;
+      onChannelClosed: (reason: string) => void;
+    } | null,
+  },
 }));
 
 vi.mock('../crypto/orchestrator', async () => {
@@ -15,6 +27,27 @@ vi.mock('../crypto/orchestrator', async () => {
     cryptoOrchestrator: {
       lockChannel: lockChannelMock,
       decryptDelivered: decryptDeliveredMock,
+    },
+  };
+});
+
+vi.mock('../sync/use-channel-sync.ts', async () => {
+  return {
+    useChannelSync: (
+      uuid: string | undefined,
+      options: {
+        onStateChange: (update: {
+          state: string;
+          version: number;
+          adminMode: string;
+          securityProfile: string;
+          receiverPubFpr?: string;
+        }) => void;
+        onChannelClosed: (reason: string) => void;
+      }
+    ) => {
+      syncHarness.latestOptions = uuid ? options : null;
+      return { connectionMode: 'offline' as const };
     },
   };
 });
@@ -61,14 +94,23 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 function mockPublicState(
   fetchSpy: ReturnType<typeof vi.fn>,
-  state: 'waiting' | 'locked' | 'delivered'
+  state: 'waiting' | 'locked' | 'delivered',
+  options?: { receiverPubFpr?: string | null }
 ) {
+  const receiverPubFpr =
+    options && 'receiverPubFpr' in options
+      ? options.receiverPubFpr
+      : state === 'locked' || state === 'delivered'
+        ? VALID_HEX
+        : null;
+
   fetchSpy.mockResolvedValueOnce(
     jsonResponse({
       ok: true,
       state,
       adminMode: 'webauthn',
       securityProfile: SECURITY_PROFILE.SECURE,
+      ...(receiverPubFpr ? { receiverPubFpr } : {}),
     })
   );
 }
@@ -159,6 +201,14 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function getLatestChannelSyncOptions() {
+  if (!syncHarness.latestOptions) {
+    throw new Error('useChannelSync options were not captured');
+  }
+
+  return syncHarness.latestOptions;
+}
+
 beforeEach(() => {
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
@@ -167,6 +217,7 @@ beforeEach(() => {
   });
   useLockStore.getState().resetLockStore();
   useDecryptStore.getState().resetDecryptStore();
+  syncHarness.latestOptions = null;
   vi.clearAllMocks();
   mockLockSuccessWithStoreSideEffects();
   mockDecryptSuccessWithStoreSideEffects();
@@ -448,7 +499,7 @@ describe('SharePage', () => {
     ).toBe('share-lock-error');
   });
 
-  it('shows safety unavailable hint when server state is locked but local safety code is missing', async () => {
+  it('renders public safety code when server state is locked and receiver fingerprint is available', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
@@ -457,18 +508,40 @@ describe('SharePage', () => {
     expect(screen.getByText('Receiver channel is locked')).toBeTruthy();
     expect(
       screen.getByText(
-        'This channel is already locked for the receiver. If you need the Safety Code, reopen this link on the device that created the lock.'
+        'This receiver channel is locked. Safety Code can be compared here when receiver identity data is available, and delivery updates appear automatically.'
       )
     ).toBeTruthy();
     expect(screen.getByText('Coordinate with the sender over another channel.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This page updates automatically when the sender delivers the encrypted secret.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+  });
+
+  it('shows a generic safety fallback when locked state is missing receiver fingerprint', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked', { receiverPubFpr: null });
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
     const warning = screen.getByTestId('share-safety-unavailable');
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.'
+      )
+    ).toBeTruthy();
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
-  it('renders delivered decrypt panel and does not fetch /api/decrypt_fetch directly', async () => {
+  it('renders delivered decrypt panel with public safety code and does not fetch /api/decrypt_fetch directly', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'delivered');
 
@@ -484,10 +557,48 @@ describe('SharePage', () => {
     expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
     expect(screen.getByText('Channel Delivered')).toBeTruthy();
     expect(
-      screen.getByText('The channel is delivered. Decrypt happens locally on this device.')
+      screen.getByText(
+        'The encrypted secret has been delivered. Decryption still requires the device that created the receiver lock.'
+      )
     ).toBeTruthy();
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
     expect(fetchSpy).toHaveBeenCalledWith(`/api/public/${VALID_UUID}`);
     expect(fetchSpy).not.toHaveBeenCalledWith(`/api/decrypt_fetch/${VALID_UUID}`);
+  });
+
+  it('shows a generic safety fallback when delivered state is missing receiver fingerprint', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered', { receiverPubFpr: null });
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    expect(screen.getByTestId('share-safety-unavailable')).toBeTruthy();
+    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('renders safety code after a realtime locked update includes receiver fingerprint', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'locked',
+        version: 1,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+        receiverPubFpr: VALID_HEX,
+      });
+    });
+
+    expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
   });
 
   it('keeps decrypt button disabled when passphrase is empty in delivered state', async () => {

@@ -28,7 +28,7 @@ const WAITING_HEADER_COPY: SharePageHeaderCopy = {
 const LOCKED_HEADER_COPY: SharePageHeaderCopy = {
   title: 'Receiver Channel',
   description:
-    'This channel is already locked for the receiver. If you need the Safety Code, reopen this link on the device that created the lock.',
+    'This receiver channel is locked. Safety Code can be compared here when receiver identity data is available, and delivery updates appear automatically.',
 };
 
 const DELIVERED_HEADER_COPY: SharePageHeaderCopy = {
