@@ -24,6 +24,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 
 **Follow-up (2026-03-12)**: Production also moved to a fresh `SecretVaultProduction` class name before deleting the legacy `zerolink-api_SecretVault` namespace. The live worker keeps exporting the legacy `SecretVault` class during the cutover so Cloudflare will accept the migration, then the old namespace is removed manually after the new binding is active.
 **Follow-up (2026-03-12)**: Once production and staging were both clean, the active bindings were aligned again on a shared class name, `SecretVaultV2`, so the Cloudflare namespace list differs only by worker name instead of mixing `...Production` and `...Staging` suffixes.
+**Follow-up (2026-03-12)**: After the `SecretVaultV2` namespaces were live in both environments and the old namespaces were deleted, the worker entrypoints dropped the temporary `SecretVault`, `SecretVaultProduction`, and `SecretVaultStaging` export aliases so only the active Durable Object class remains exposed.
 
 ## [2026-03-11] Durable Object fetch-level failures must use the same production redaction path
 
