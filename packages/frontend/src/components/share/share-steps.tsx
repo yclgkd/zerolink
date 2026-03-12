@@ -5,6 +5,7 @@ import { PassphraseInput } from '../../components/lock/passphrase-input';
 import { SafetyCode } from '../../components/safety/safety-code';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
+import type { ReceiverSafetyCodeStatus } from '../../features/share/share-logic';
 import { cn } from '../../lib/utils';
 import { ChannelUnavailableState } from '../channel/channel-unavailable-state';
 
@@ -61,30 +62,76 @@ export function StepIndicator({
 
 export const nextSteps = [
   'Coordinate with the sender over another channel.',
-  'Compare the Safety Code before delivery when it is shown here.',
+  'Only confirm the Safety Code if this device shows it below.',
   'This page updates automatically when the sender delivers the encrypted secret.',
 ] as const;
 
 const SAFETY_CODE_UNAVAILABLE_TITLE = 'Safety Code unavailable right now.';
 const SAFETY_CODE_UNAVAILABLE_BODY =
-  'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.';
+  'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be verified here.';
+
+function getSafetyCodeNoticeCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>
+) {
+  switch (status) {
+    case 'checking-local-key':
+      return {
+        tone: 'info' as const,
+        title: 'Checking this device for the receiver key…',
+        body: 'ZeroLink only shows the Safety Code after confirming that this device created the current lock.',
+      };
+    case 'missing-local-key':
+      return {
+        tone: 'warning' as const,
+        title: 'This device cannot verify the Safety Code.',
+        body: 'No matching receiver key was found on this device. Do not confirm the Safety Code from here. If you expected to be the receiver, ask the sender to recreate the channel.',
+      };
+    case 'mismatched-local-key':
+      return {
+        tone: 'error' as const,
+        title: 'Receiver identity mismatch detected.',
+        body: 'This device has different local receiver key material than the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.',
+      };
+    case 'storage-error':
+      return {
+        tone: 'warning' as const,
+        title: 'Unable to check the local receiver key.',
+        body: 'ZeroLink could not read the receiver key material stored on this device, so the Safety Code cannot be verified here.',
+      };
+    case 'missing-receiver-fingerprint':
+    default:
+      return {
+        tone: 'warning' as const,
+        title: SAFETY_CODE_UNAVAILABLE_TITLE,
+        body: SAFETY_CODE_UNAVAILABLE_BODY,
+      };
+  }
+}
 
 function SafetyCodeSection({
   safetyCodeAvailable,
+  safetyCodeStatus,
 }: {
   safetyCodeAvailable: SafetyCodeDisplay | null;
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
 }) {
   if (safetyCodeAvailable) {
     return <SafetyCode display={safetyCodeAvailable} />;
   }
 
+  const noticeCopy = getSafetyCodeNoticeCopy(
+    safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
+      ? 'missing-receiver-fingerprint'
+      : safetyCodeStatus
+  );
+
   return (
     <StateNotice
       data-testid="share-safety-unavailable"
-      title={SAFETY_CODE_UNAVAILABLE_TITLE}
-      tone="warning"
+      title={noticeCopy.title}
+      tone={noticeCopy.tone}
     >
-      <p className="mt-1 text-xs text-neon-orange">{SAFETY_CODE_UNAVAILABLE_BODY}</p>
+      <p className="mt-1 text-xs text-foreground/90">{noticeCopy.body}</p>
     </StateNotice>
   );
 }
@@ -205,19 +252,24 @@ export function LockStep({
 
 export function LockedStep({
   safetyCodeAvailable,
+  safetyCodeStatus,
 }: {
   safetyCodeAvailable: SafetyCodeDisplay | null;
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
 }) {
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">Receiver channel is locked</h3>
         <p className="text-xs text-muted-foreground">
-          Verify the Safety Code with the sender before delivery when it is shown below.
+          Verify the Safety Code with the sender only if this device shows it below.
         </p>
       </div>
 
-      <SafetyCodeSection safetyCodeAvailable={safetyCodeAvailable} />
+      <SafetyCodeSection
+        safetyCodeAvailable={safetyCodeAvailable}
+        safetyCodeStatus={safetyCodeStatus}
+      />
 
       <div
         className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
@@ -249,6 +301,7 @@ export function DecryptErrorPanel({ error }: { error: string }) {
 
 export function DeliveredStep({
   safetyCodeAvailable,
+  safetyCodeStatus,
   passphrase,
   decryptPending,
   decryptError,
@@ -262,6 +315,7 @@ export function DeliveredStep({
   onBurn,
 }: {
   safetyCodeAvailable: SafetyCodeDisplay | null;
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
   passphrase: string;
   decryptPending: boolean;
   decryptError: string | null;
@@ -284,7 +338,10 @@ export function DeliveredStep({
         </p>
       </div>
 
-      <SafetyCodeSection safetyCodeAvailable={safetyCodeAvailable} />
+      <SafetyCodeSection
+        safetyCodeAvailable={safetyCodeAvailable}
+        safetyCodeStatus={safetyCodeStatus}
+      />
 
       <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
         <PassphraseInput

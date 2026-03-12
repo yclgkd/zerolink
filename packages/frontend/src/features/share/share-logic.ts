@@ -4,11 +4,14 @@ import {
   ErrorResponseSchema,
   type HexString,
   PublicStatusResponseSchema,
+  type SafetyCodeDisplay,
   UUIDSchema,
 } from '@zerolink/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { extractLockSecretFromHash } from '../../crypto/protocol-utils';
+import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
+import { createIndexedDbReceiverKeyStorage } from '../../crypto/storage';
 import { useDecryptStore } from '../../stores/decrypt-store';
 import { useLockStore } from '../../stores/lock-store';
 import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
@@ -73,6 +76,20 @@ export function isDecryptPassphraseErrorCode(code: string): boolean {
 
 function isTerminalPublicState(state: ChannelState): boolean {
   return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
+}
+
+export type ReceiverSafetyCodeStatus =
+  | 'not-applicable'
+  | 'checking-local-key'
+  | 'verified-local-key'
+  | 'missing-local-key'
+  | 'missing-receiver-fingerprint'
+  | 'mismatched-local-key'
+  | 'storage-error';
+
+export interface ReceiverSafetyCodeState {
+  display: SafetyCodeDisplay | null;
+  status: ReceiverSafetyCodeStatus;
 }
 
 export function usePublicShareState(uuid?: string) {
@@ -307,6 +324,110 @@ export function useSharePageLockLogic(uuid?: string, hash?: string) {
     lockSecretWarning,
     handlePassphraseChange,
     handleGenerate,
+  };
+}
+
+export function useReceiverSafetyCodeState({
+  uuid,
+  channelState,
+  publicReceiverPubFpr,
+  localSafetyCode,
+}: {
+  uuid: string | undefined;
+  channelState: ChannelState;
+  publicReceiverPubFpr: HexString | null;
+  localSafetyCode: SafetyCodeDisplay | null;
+}): ReceiverSafetyCodeState {
+  const [storedReceiverPubFpr, setStoredReceiverPubFpr] = useState<HexString | null>(null);
+  const [isCheckingLocalKey, setIsCheckingLocalKey] = useState(false);
+  const [hasStorageError, setHasStorageError] = useState(false);
+
+  const isReceiverVerificationState =
+    channelState === CHANNEL_STATE.LOCKED || channelState === CHANNEL_STATE.DELIVERED;
+
+  useEffect(() => {
+    if (!uuid || !isReceiverVerificationState) {
+      setStoredReceiverPubFpr(null);
+      setIsCheckingLocalKey(false);
+      setHasStorageError(false);
+      return;
+    }
+
+    if (localSafetyCode?.fullFpr) {
+      setStoredReceiverPubFpr(localSafetyCode.fullFpr);
+      setIsCheckingLocalKey(false);
+      setHasStorageError(false);
+      return;
+    }
+
+    const receiverKeyStorage = createIndexedDbReceiverKeyStorage();
+    let cancelled = false;
+    setStoredReceiverPubFpr(null);
+    setIsCheckingLocalKey(true);
+    setHasStorageError(false);
+
+    void receiverKeyStorage
+      .load(uuid)
+      .then((envelope) => {
+        if (cancelled) return;
+        setStoredReceiverPubFpr((envelope?.receiverPubFpr ?? null) as HexString | null);
+        setIsCheckingLocalKey(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStoredReceiverPubFpr(null);
+        setIsCheckingLocalKey(false);
+        setHasStorageError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uuid, isReceiverVerificationState, localSafetyCode?.fullFpr]);
+
+  if (!isReceiverVerificationState) {
+    return {
+      display: localSafetyCode,
+      status: localSafetyCode ? 'verified-local-key' : 'not-applicable',
+    };
+  }
+
+  if (hasStorageError) {
+    return { display: null, status: 'storage-error' };
+  }
+
+  if (!publicReceiverPubFpr) {
+    return { display: null, status: 'missing-receiver-fingerprint' };
+  }
+
+  const localReceiverPubFpr = localSafetyCode?.fullFpr ?? storedReceiverPubFpr;
+
+  if (localSafetyCode?.fullFpr) {
+    if (localSafetyCode.fullFpr !== publicReceiverPubFpr) {
+      return { display: null, status: 'mismatched-local-key' };
+    }
+
+    return {
+      display: localSafetyCode,
+      status: 'verified-local-key',
+    };
+  }
+
+  if (isCheckingLocalKey) {
+    return { display: null, status: 'checking-local-key' };
+  }
+
+  if (!localReceiverPubFpr) {
+    return { display: null, status: 'missing-local-key' };
+  }
+
+  if (localReceiverPubFpr !== publicReceiverPubFpr) {
+    return { display: null, status: 'mismatched-local-key' };
+  }
+
+  return {
+    display: deriveSafetyCodeDisplay(localReceiverPubFpr),
+    status: 'verified-local-key',
   };
 }
 

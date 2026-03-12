@@ -1,6 +1,5 @@
 import { CHANNEL_STATE } from '@zerolink/shared';
 import type { ReactElement } from 'react';
-import { useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
 import { PageCard, PageCardContent, StateNotice } from '../components/layout';
@@ -14,9 +13,9 @@ import {
   StepIndicator,
   UnavailableStep,
 } from '../components/share/share-steps';
-import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
 import {
   usePublicShareState,
+  useReceiverSafetyCodeState,
   useSharePageDecryptLogic,
   useSharePageLockLogic,
 } from '../features/share/share-logic';
@@ -55,11 +54,12 @@ export function SharePage(): ReactElement {
   const isDeliveredState =
     !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
   const decryptLogic = useSharePageDecryptLogic(uuid, isDeliveredState);
-  const safetyCodeAvailable = useMemo(() => {
-    if (lockLogic.store.safetyCode) return lockLogic.store.safetyCode;
-    if (!publicState.receiverPubFpr) return null;
-    return deriveSafetyCodeDisplay(publicState.receiverPubFpr);
-  }, [lockLogic.store.safetyCode, publicState.receiverPubFpr]);
+  const receiverSafetyCode = useReceiverSafetyCodeState({
+    uuid,
+    channelState: publicState.channelState,
+    publicReceiverPubFpr: publicState.receiverPubFpr,
+    localSafetyCode: lockLogic.store.safetyCode,
+  });
   const isPageBusy =
     publicState.isPublicStatusLoading || lockLogic.lockPending || decryptLogic.decryptPending;
 
@@ -119,7 +119,10 @@ export function SharePage(): ReactElement {
               />
             ) : null}
             {lockLogic.store.step === 'locked' ? (
-              <LockedStep safetyCodeAvailable={safetyCodeAvailable} />
+              <LockedStep
+                safetyCodeAvailable={lockLogic.store.safetyCode}
+                safetyCodeStatus="verified-local-key"
+              />
             ) : null}
           </>
         ) : null}
@@ -127,7 +130,10 @@ export function SharePage(): ReactElement {
         {!publicState.isPublicStatusLoading &&
         !publicState.isUnavailable &&
         publicState.channelState === CHANNEL_STATE.LOCKED ? (
-          <LockedStep safetyCodeAvailable={safetyCodeAvailable} />
+          <LockedStep
+            safetyCodeAvailable={receiverSafetyCode.display}
+            safetyCodeStatus={receiverSafetyCode.status}
+          />
         ) : null}
 
         {!publicState.isUnavailable && isDeliveredState ? (
@@ -143,7 +149,8 @@ export function SharePage(): ReactElement {
             onPassphraseChange={decryptLogic.handlePassphraseChange}
             passphrase={decryptLogic.passphrase}
             plaintext={decryptLogic.store.plaintext}
-            safetyCodeAvailable={safetyCodeAvailable}
+            safetyCodeAvailable={receiverSafetyCode.display}
+            safetyCodeStatus={receiverSafetyCode.status}
           />
         ) : null}
       </PageCardContent>

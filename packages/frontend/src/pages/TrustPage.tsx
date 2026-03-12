@@ -35,7 +35,7 @@ const TRUST_SECTIONS = [
   },
   {
     title: 'What stays on the receiver device',
-    body: 'The receiver device keeps a wrapped receiver private key in IndexedDB for that channel. Plaintext appears only on the local device after decrypt. A receiver fingerprint may also be surfaced in channel status so either side can compare the Safety Code without exposing plaintext.',
+    body: 'The receiver device keeps a wrapped receiver private key in IndexedDB for that channel. Plaintext appears only on the local device after decrypt. Channel status may surface the receiver fingerprint to the sender, but the receiver page should show a Safety Code only after this device proves it holds the matching local receiver key.',
     accentClass: 'text-neon-cyan',
   },
   {

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { HexStringSchema, SECURITY_PROFILE } from '@zerolink/shared';
+import { Base64UrlSchema, HexStringSchema, SECURITY_PROFILE } from '@zerolink/shared';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,6 +54,7 @@ vi.mock('../sync/use-channel-sync.ts', async () => {
   };
 });
 
+import { createIndexedDbReceiverKeyStorage, type ReceiverKeyEnvelope } from '../crypto/storage';
 import { SharePage } from '../pages/SharePage';
 import { useDecryptStore } from '../stores/decrypt-store';
 import { useLockStore } from '../stores/lock-store';
@@ -61,9 +64,17 @@ const VALID_UUID = 'aaaaaaaaaaaaaaaaaaaaa';
 const VALID_HEX = HexStringSchema.parse(
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 );
-const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
+const OTHER_VALID_HEX = HexStringSchema.parse(
+  'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210'
+);
+const VALID_B64U = Base64UrlSchema.parse('bW9ja19iYXNlNjR1cmw');
 const VALID_LOCK_SECRET = 'bW9ja19sb2NrX3NlY3JldA';
 const MOCK_TIMESTAMP = 1_700_000_000_000;
+const RECEIVER_STORAGE_UUIDS = [
+  VALID_UUID,
+  'uuidaaaaaaaaaaaaaaaaa',
+  'uuidbbbbbbbbbbbbbbbbb',
+] as const;
 
 function getFetchSpy(): ReturnType<typeof vi.fn> {
   if (!vi.isMockFunction(globalThis.fetch)) {
@@ -111,6 +122,51 @@ function mockPublicState(
       adminMode: 'webauthn',
       securityProfile: SECURITY_PROFILE.SECURE,
       ...(receiverPubFpr ? { receiverPubFpr } : {}),
+    })
+  );
+}
+
+function createReceiverEnvelope(
+  uuid: string = VALID_UUID,
+  receiverPubFpr: string = VALID_HEX
+): ReceiverKeyEnvelope {
+  return {
+    uuid,
+    receiverPubFpr,
+    wrappedPrivateKey: {
+      encryptedKey: VALID_B64U,
+      iv: VALID_B64U,
+      kdf: {
+        kdfType: 'argon2id',
+        version: 19,
+        m: 65_536,
+        t: 3,
+        p: 1,
+        salt: VALID_B64U,
+      },
+    },
+    updatedAt: MOCK_TIMESTAMP,
+  };
+}
+
+async function saveReceiverEnvelope(
+  uuid: string = VALID_UUID,
+  receiverPubFpr: string = VALID_HEX
+): Promise<void> {
+  const receiverKeyStorage = createIndexedDbReceiverKeyStorage();
+  await receiverKeyStorage.save(createReceiverEnvelope(uuid, receiverPubFpr));
+}
+
+async function clearReceiverKeyStorage(): Promise<void> {
+  const receiverKeyStorage = createIndexedDbReceiverKeyStorage();
+
+  await Promise.all(
+    RECEIVER_STORAGE_UUIDS.map(async (uuid) => {
+      try {
+        await receiverKeyStorage.remove(uuid);
+      } catch {
+        return;
+      }
     })
   );
 }
@@ -209,7 +265,8 @@ function getLatestChannelSyncOptions() {
   return syncHarness.latestOptions;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await clearReceiverKeyStorage();
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
     writable: true,
@@ -223,8 +280,9 @@ beforeEach(() => {
   mockDecryptSuccessWithStoreSideEffects();
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  await clearReceiverKeyStorage();
 
   if (originalFetch) {
     Object.defineProperty(globalThis, 'fetch', {
@@ -249,7 +307,7 @@ describe('SharePage', () => {
     });
 
     expect(screen.getByTestId('page-share')).toBeTruthy();
-    expect(screen.getByTestId('share-step-onboarding')).toBeTruthy();
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
     expect(
       screen.getByText(
         'The sender already created this channel. Set your own passphrase here to generate your receiver key and lock the channel on this device.'
@@ -499,8 +557,9 @@ describe('SharePage', () => {
     ).toBe('share-lock-error');
   });
 
-  it('renders public safety code when server state is locked and receiver fingerprint is available', async () => {
+  it('renders safety code when locked state matches this device receiver key after refresh', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope();
     mockPublicState(fetchSpy, 'locked');
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
@@ -508,21 +567,72 @@ describe('SharePage', () => {
     expect(screen.getByText('Receiver channel is locked')).toBeTruthy();
     expect(
       screen.getByText(
-        'This receiver channel is locked. Safety Code can be compared here when receiver identity data is available, and delivery updates appear automatically.'
+        'This receiver channel is locked. This page updates automatically, but only the device that created the lock can verify the Safety Code shown below.'
       )
     ).toBeTruthy();
     expect(screen.getByText('Coordinate with the sender over another channel.')).toBeTruthy();
+    expect(
+      screen.getByText('Only confirm the Safety Code if this device shows it below.')
+    ).toBeTruthy();
     expect(
       screen.getByText(
         'This page updates automatically when the sender delivers the encrypted secret.'
       )
     ).toBeTruthy();
+    expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
     expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
-    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
   });
 
-  it('shows a generic safety fallback when locked state is missing receiver fingerprint', async () => {
+  it('shows a security warning when locked state is present but this device has no receiver key', async () => {
     const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('share-safety-unavailable').textContent).toContain(
+          'This device cannot verify the Safety Code.'
+        );
+      },
+      { timeout: 5_000 }
+    );
+    const warning = screen.getByTestId('share-safety-unavailable');
+    expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
+    expect(
+      screen.getByText(
+        'No matching receiver key was found on this device. Do not confirm the Safety Code from here. If you expected to be the receiver, ask the sender to recreate the channel.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('shows a mismatch warning when local receiver identity does not match the locked channel', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope(VALID_UUID, OTHER_VALID_HEX);
+    mockPublicState(fetchSpy, 'locked');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(await screen.findByText('Receiver identity mismatch detected.')).toBeTruthy();
+    const warning = screen.getByTestId('share-safety-unavailable');
+    expect(warning.getAttribute('role')).toBe('alert');
+    expect(warning.getAttribute('aria-live')).toBe('assertive');
+    expect(
+      screen.getByText(
+        'This device has different local receiver key material than the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('shows the generic fallback when locked state is missing receiver fingerprint', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope();
     mockPublicState(fetchSpy, 'locked', { receiverPubFpr: null });
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
@@ -535,14 +645,15 @@ describe('SharePage', () => {
     expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
     expect(
       screen.getByText(
-        'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.'
+        'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be verified here.'
       )
     ).toBeTruthy();
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
-  it('renders delivered decrypt panel with public safety code and does not fetch /api/decrypt_fetch directly', async () => {
+  it('renders delivered decrypt panel with locally verified safety code and does not fetch /api/decrypt_fetch directly', async () => {
     const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope();
     mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
@@ -561,24 +672,24 @@ describe('SharePage', () => {
         'The encrypted secret has been delivered. Decryption still requires the device that created the receiver lock.'
       )
     ).toBeTruthy();
-    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
     expect(fetchSpy).toHaveBeenCalledWith(`/api/public/${VALID_UUID}`);
     expect(fetchSpy).not.toHaveBeenCalledWith(`/api/decrypt_fetch/${VALID_UUID}`);
   });
 
-  it('shows a generic safety fallback when delivered state is missing receiver fingerprint', async () => {
+  it('shows a security warning when delivered state has no local receiver key on this device', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'delivered', { receiverPubFpr: null });
+    mockPublicState(fetchSpy, 'delivered');
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
 
     expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
-    expect(screen.getByTestId('share-safety-unavailable')).toBeTruthy();
-    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
+    expect(screen.getByTestId('share-decrypt-panel')).toBeTruthy();
+    expect(await screen.findByText('This device cannot verify the Safety Code.')).toBeTruthy();
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
-  it('renders safety code after a realtime locked update includes receiver fingerprint', async () => {
+  it('does not render safety code after a realtime locked update if this device lacks the local receiver key', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
@@ -597,7 +708,31 @@ describe('SharePage', () => {
     });
 
     expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
-    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(await screen.findByText('This device cannot verify the Safety Code.')).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('renders safety code after a realtime locked update when this device has the matching receiver key', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelope();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'locked',
+        version: 1,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+        receiverPubFpr: VALID_HEX,
+      });
+    });
+
+    expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
     expect(screen.queryByTestId('share-safety-unavailable')).toBeNull();
   });
 
