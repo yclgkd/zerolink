@@ -15,6 +15,7 @@ import {
 } from '../components/share/share-steps';
 import {
   usePublicShareState,
+  useReceiverSafetyCodeState,
   useSharePageDecryptLogic,
   useSharePageLockLogic,
 } from '../features/share/share-logic';
@@ -53,6 +54,12 @@ export function SharePage(): ReactElement {
   const isDeliveredState =
     !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
   const decryptLogic = useSharePageDecryptLogic(uuid, isDeliveredState);
+  const receiverSafetyCode = useReceiverSafetyCodeState({
+    uuid,
+    channelState: publicState.channelState,
+    publicReceiverPubFpr: publicState.receiverPubFpr,
+    localSafetyCode: lockLogic.store.safetyCode,
+  });
   const isPageBusy =
     publicState.isPublicStatusLoading || lockLogic.lockPending || decryptLogic.decryptPending;
 
@@ -112,7 +119,10 @@ export function SharePage(): ReactElement {
               />
             ) : null}
             {lockLogic.store.step === 'locked' ? (
-              <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
+              <LockedStep
+                safetyCodeAvailable={lockLogic.store.safetyCode}
+                safetyCodeStatus="verified-local-key"
+              />
             ) : null}
           </>
         ) : null}
@@ -120,13 +130,17 @@ export function SharePage(): ReactElement {
         {!publicState.isPublicStatusLoading &&
         !publicState.isUnavailable &&
         publicState.channelState === CHANNEL_STATE.LOCKED ? (
-          <LockedStep safetyCodeAvailable={lockLogic.store.safetyCode} />
+          <LockedStep
+            safetyCodeAvailable={receiverSafetyCode.display}
+            safetyCodeStatus={receiverSafetyCode.status}
+          />
         ) : null}
 
         {!publicState.isUnavailable && isDeliveredState ? (
           <DeliveredStep
             canBurn={decryptLogic.canBurn}
             canDecrypt={decryptLogic.canDecrypt}
+            canDecryptLocally={receiverSafetyCode.canDecryptLocally}
             decryptError={decryptLogic.decryptError}
             decryptPending={decryptLogic.decryptPending}
             isDecryptPassphraseInvalid={decryptLogic.isDecryptPassphraseInvalid}
@@ -136,6 +150,8 @@ export function SharePage(): ReactElement {
             onPassphraseChange={decryptLogic.handlePassphraseChange}
             passphrase={decryptLogic.passphrase}
             plaintext={decryptLogic.store.plaintext}
+            safetyCodeAvailable={receiverSafetyCode.display}
+            safetyCodeStatus={receiverSafetyCode.status}
           />
         ) : null}
       </PageCardContent>

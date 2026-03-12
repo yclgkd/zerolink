@@ -106,13 +106,25 @@ function getFetchSpy(): ReturnType<typeof vi.fn> {
   return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
 }
 
-function mockPublicState(fetchSpy: ReturnType<typeof vi.fn>, state: string) {
+function mockPublicState(
+  fetchSpy: ReturnType<typeof vi.fn>,
+  state: string,
+  options?: { receiverPubFpr?: string | null }
+) {
+  const receiverPubFpr =
+    options && 'receiverPubFpr' in options
+      ? options.receiverPubFpr
+      : state === 'locked' || state === 'delivered'
+        ? VALID_HEX
+        : null;
+
   fetchSpy.mockResolvedValueOnce(
     jsonResponse({
       ok: true,
       state,
       adminMode: 'webauthn',
       securityProfile: SECURITY_PROFILE.SECURE,
+      ...(receiverPubFpr ? { receiverPubFpr } : {}),
     })
   );
 }
@@ -264,9 +276,9 @@ describe('ManagePage integration', () => {
     });
   });
 
-  it('renders locked state from public status and shows safety unavailable by default', async () => {
+  it('renders locked state fallback when public status is missing receiver fingerprint', async () => {
     const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'locked');
+    mockPublicState(fetchSpy, 'locked', { receiverPubFpr: null });
 
     renderManagePage();
 
@@ -275,17 +287,17 @@ describe('ManagePage integration', () => {
     expect(warning).toBeTruthy();
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
   });
 
-  it('renders real safety code in locked state when receiver fingerprint exists in store', async () => {
+  it('renders real safety code in locked state when public status includes receiver fingerprint', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
 
     renderManagePage();
 
     expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
-    useDeliverStore.setState({ receiverPubFpr: VALID_HEX as never });
     expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
     expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
@@ -1012,11 +1024,13 @@ describe('ManagePage integration', () => {
         version: 1,
         adminMode: 'webauthn',
         securityProfile: SECURITY_PROFILE.STANDARD,
+        receiverPubFpr: VALID_HEX,
       });
     });
 
     expect(screen.queryByTestId('manage-public-status-error')).toBeNull();
     expect(await screen.findByTestId('manage-state-locked')).toBeTruthy();
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
   });
 
   it('hides SECRET PAYLOAD input after successful destroy', async () => {

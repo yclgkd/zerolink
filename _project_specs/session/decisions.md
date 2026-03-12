@@ -13,6 +13,17 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-12] Receiver Safety Code and realtime copy align with public channel state
+
+**Decision**: Treat `receiverPubFpr` from `/api/public/:uuid` and websocket state updates as the source of truth for receiver-side Safety Code rendering when local lock state is unavailable, and update frontend copy to describe automatic realtime refresh instead of manual reopen/refresh steps.
+**Context**: The frontend already auto-syncs channel state with websocket plus polling fallback, and the backend already returns `receiverPubFpr` in public status. Receiver-facing copy still told users to reopen the original lock device for Safety Code visibility, while sender copy implied delivery could be confirmed after receiver decrypt even though decrypt remains local-only.
+**Options Considered**: Only rewrite the stale copy; keep receiver Safety Code limited to local lock state; surface Safety Code from the public fingerprint on both sender and receiver flows and update the copy to match the shipped behavior.
+**Choice**: Reuse the public `receiverPubFpr` for `SharePage` Safety Code display in `locked` and `delivered` states, keep decrypt gated on local key material, and revise sender/receiver messaging to say the page updates automatically and that receiver decrypt does not send a confirmation back to the sender view.
+**Reasoning**: This removes false instructions without changing the security boundary. The Safety Code is derived from the receiver public fingerprint, so surfacing it from public channel state improves continuity across reloads and devices while leaving private keys and plaintext local-only.
+**Trade-offs**: Receiver pages now show a generic fallback when the fingerprint is unexpectedly missing from public state, and delivered-state receiver views render Safety Code alongside the decrypt form for continuity.
+**Follow-up (2026-03-12)**: Security review found that receiver pages must not render Safety Code from public `receiverPubFpr` alone. A link interceptor could lock the channel first with an attacker key, then trick the real receiver into reading out an attacker-derived Safety Code. Receiver-side Safety Code rendering is therefore restricted to devices that can prove local possession of a matching `ReceiverKeyEnvelope`; the public fingerprint is used only to compare current channel state against that local proof. Sender-side Safety Code rendering and realtime copy updates stay unchanged.
+**Follow-up (2026-03-12)**: The same local-proof requirement also gates delivered-state decrypt UI. Receiver pages only expose decrypt controls when the current device has a matching local `ReceiverKeyEnvelope`; wrong-device, mismatched-key, and storage-error states render explicit blocking warnings instead of a passphrase form.
+
 ## [2026-03-12] Staging Durable Object deletions require a staging-only entrypoint
 
 **Decision**: Deploy staging from `packages/backend/src/index.staging.ts` so the staging bundle exports only `SecretVaultStaging`, while production continues exporting `SecretVault` from `packages/backend/src/index.ts`.

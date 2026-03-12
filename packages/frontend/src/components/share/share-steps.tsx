@@ -5,6 +5,7 @@ import { PassphraseInput } from '../../components/lock/passphrase-input';
 import { SafetyCode } from '../../components/safety/safety-code';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
+import type { ReceiverSafetyCodeStatus } from '../../features/share/share-logic';
 import { cn } from '../../lib/utils';
 import { ChannelUnavailableState } from '../channel/channel-unavailable-state';
 
@@ -61,9 +62,130 @@ export function StepIndicator({
 
 export const nextSteps = [
   'Coordinate with the sender over another channel.',
-  'Compare Safety Code values before delivery when they are available on this device.',
-  'Keep this tab open until the sender confirms the encrypted delivery.',
+  'Only confirm the Safety Code if this device shows it below.',
+  'This page updates automatically when the sender delivers the encrypted secret.',
 ] as const;
+
+const SAFETY_CODE_UNAVAILABLE_TITLE = 'Safety Code unavailable right now.';
+const SAFETY_CODE_UNAVAILABLE_BODY =
+  'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be verified here.';
+
+function getSafetyCodeNoticeCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>
+) {
+  switch (status) {
+    case 'checking-local-key':
+      return {
+        tone: 'info' as const,
+        title: 'Checking this device for the receiver key…',
+        body: 'ZeroLink only shows the Safety Code after confirming that this device created the current lock.',
+      };
+    case 'missing-local-key':
+      return {
+        tone: 'warning' as const,
+        title: 'This device cannot verify the Safety Code.',
+        body: 'No matching receiver key was found on this device. Do not confirm the Safety Code from here. If you expected to be the receiver, ask the sender to recreate the channel.',
+      };
+    case 'mismatched-local-key':
+      return {
+        tone: 'error' as const,
+        title: 'Receiver identity mismatch detected.',
+        body: 'This device has different local receiver key material than the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.',
+      };
+    case 'storage-error':
+      return {
+        tone: 'warning' as const,
+        title: 'Unable to check the local receiver key.',
+        body: 'ZeroLink could not read the receiver key material stored on this device, so the Safety Code cannot be verified here.',
+      };
+    case 'missing-receiver-fingerprint':
+    default:
+      return {
+        tone: 'warning' as const,
+        title: SAFETY_CODE_UNAVAILABLE_TITLE,
+        body: SAFETY_CODE_UNAVAILABLE_BODY,
+      };
+  }
+}
+
+function SafetyCodeSection({
+  safetyCodeAvailable,
+  safetyCodeStatus,
+}: {
+  safetyCodeAvailable: SafetyCodeDisplay | null;
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
+}) {
+  if (safetyCodeAvailable) {
+    return <SafetyCode display={safetyCodeAvailable} />;
+  }
+
+  const noticeCopy = getSafetyCodeNoticeCopy(
+    safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
+      ? 'missing-receiver-fingerprint'
+      : safetyCodeStatus
+  );
+
+  return (
+    <StateNotice
+      data-testid="share-safety-unavailable"
+      title={noticeCopy.title}
+      tone={noticeCopy.tone}
+    >
+      <p className="mt-1 text-xs text-foreground/90">{noticeCopy.body}</p>
+    </StateNotice>
+  );
+}
+
+function getDecryptUnavailableCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>
+) {
+  switch (status) {
+    case 'checking-local-key':
+      return {
+        tone: 'info' as const,
+        title: 'Checking this device before enabling decrypt…',
+        body: 'ZeroLink is verifying whether this device holds the receiver key needed for local decryption.',
+      };
+    case 'mismatched-local-key':
+      return {
+        tone: 'error' as const,
+        title: 'Decrypt blocked on this device.',
+        body: 'The receiver key stored on this device does not match the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.',
+      };
+    case 'storage-error':
+      return {
+        tone: 'warning' as const,
+        title: 'Unable to load the local receiver key.',
+        body: 'ZeroLink could not read the receiver key stored on this device, so local decrypt is unavailable here.',
+      };
+    case 'missing-local-key':
+    case 'missing-receiver-fingerprint':
+    default:
+      return {
+        tone: 'warning' as const,
+        title: 'Decrypt unavailable on this device.',
+        body: 'This device does not have the receiver key that locked the channel, so local decrypt is blocked here.',
+      };
+  }
+}
+
+function DecryptUnavailableNotice({
+  safetyCodeStatus,
+}: {
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
+}) {
+  const copy = getDecryptUnavailableCopy(
+    safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
+      ? 'missing-local-key'
+      : safetyCodeStatus
+  );
+
+  return (
+    <StateNotice data-testid="share-decrypt-unavailable" title={copy.title} tone={copy.tone}>
+      <p className="mt-1 text-xs text-foreground/90">{copy.body}</p>
+    </StateNotice>
+  );
+}
 
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   return (
@@ -181,32 +303,24 @@ export function LockStep({
 
 export function LockedStep({
   safetyCodeAvailable,
+  safetyCodeStatus,
 }: {
   safetyCodeAvailable: SafetyCodeDisplay | null;
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
 }) {
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">Receiver channel is locked</h3>
         <p className="text-xs text-muted-foreground">
-          Verify the Safety Code with the sender before delivery when it is available on this
-          device.
+          Verify the Safety Code with the sender only if this device shows it below.
         </p>
       </div>
 
-      {safetyCodeAvailable ? (
-        <SafetyCode display={safetyCodeAvailable} />
-      ) : (
-        <StateNotice
-          data-testid="share-safety-unavailable"
-          title="Safety Code unavailable on this device."
-          tone="warning"
-        >
-          <p className="mt-1 text-xs text-neon-orange">
-            Safety Code is generated locally during lock and is not recoverable from server state.
-          </p>
-        </StateNotice>
-      )}
+      <SafetyCodeSection
+        safetyCodeAvailable={safetyCodeAvailable}
+        safetyCodeStatus={safetyCodeStatus}
+      />
 
       <div
         className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
@@ -237,6 +351,9 @@ export function DecryptErrorPanel({ error }: { error: string }) {
 }
 
 export function DeliveredStep({
+  safetyCodeAvailable,
+  safetyCodeStatus,
+  canDecryptLocally,
   passphrase,
   decryptPending,
   decryptError,
@@ -249,6 +366,9 @@ export function DeliveredStep({
   onDecrypt,
   onBurn,
 }: {
+  safetyCodeAvailable: SafetyCodeDisplay | null;
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
+  canDecryptLocally: boolean;
   passphrase: string;
   decryptPending: boolean;
   decryptError: string | null;
@@ -266,78 +386,94 @@ export function DeliveredStep({
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">Channel Delivered</h3>
         <p className="text-xs text-muted-foreground">
-          The channel is delivered. Decrypt happens locally on this device.
+          The encrypted secret has been delivered. Decryption still requires the device that created
+          the receiver lock.
         </p>
       </div>
 
-      <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
-        <PassphraseInput
-          ariaDescribedBy={
-            decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
-          }
-          ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
-          inputId="share-decrypt-passphrase"
-          label="Decrypt passphrase"
-          onChange={onPassphraseChange}
-          placeholder="Enter passphrase to decrypt"
-          value={passphrase}
-        />
+      <SafetyCodeSection
+        safetyCodeAvailable={safetyCodeAvailable}
+        safetyCodeStatus={safetyCodeStatus}
+      />
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            data-testid="share-decrypt-button"
-            disabled={!canDecrypt}
-            onClick={onDecrypt}
-            type="button"
-          >
-            {decryptPending ? (
-              <>
-                <Spinner aria-hidden="true" className="size-4" />
-                Decrypting…
-              </>
-            ) : (
-              <>
-                <Unlock aria-hidden="true" className="size-4" />
-                Decrypt
-              </>
-            )}
-          </Button>
-          <Button
-            data-testid="share-decrypt-burn"
-            disabled={!canBurn}
-            onClick={onBurn}
-            type="button"
-            variant="danger"
-          >
-            Burn Local Plaintext
-          </Button>
-        </div>
-      </div>
+      {canDecryptLocally ? (
+        <>
+          <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
+            <PassphraseInput
+              ariaDescribedBy={
+                decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
+              }
+              ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
+              inputId="share-decrypt-passphrase"
+              label="Decrypt passphrase"
+              onChange={onPassphraseChange}
+              placeholder="Enter passphrase to decrypt"
+              value={passphrase}
+            />
 
-      {decryptError ? <DecryptErrorPanel error={decryptError} /> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                data-testid="share-decrypt-button"
+                disabled={!canDecrypt}
+                onClick={onDecrypt}
+                type="button"
+              >
+                {decryptPending ? (
+                  <>
+                    <Spinner aria-hidden="true" className="size-4" />
+                    Decrypting…
+                  </>
+                ) : (
+                  <>
+                    <Unlock aria-hidden="true" className="size-4" />
+                    Decrypt
+                  </>
+                )}
+              </Button>
+              <Button
+                data-testid="share-decrypt-burn"
+                disabled={!canBurn}
+                onClick={onBurn}
+                type="button"
+                variant="danger"
+              >
+                Burn Local Plaintext
+              </Button>
+            </div>
+          </div>
 
-      {plaintext ? (
-        <div
-          className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
-          data-testid="share-decrypt-plaintext"
-        >
-          <p className="text-xs font-medium uppercase tracking-wide text-neon-green">Plaintext</p>
-          <pre className="whitespace-pre-wrap break-words text-sm text-foreground">{plaintext}</pre>
-        </div>
-      ) : null}
+          {decryptError ? <DecryptErrorPanel error={decryptError} /> : null}
 
-      {localPlaintextBurned ? (
-        <StateNotice
-          data-testid="share-decrypt-burned"
-          title="Local plaintext removed from this device."
-          tone="warning"
-        >
-          <p className="mt-1 text-xs text-neon-orange">
-            This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt
-            again.
-          </p>
-        </StateNotice>
-      ) : null}
+          {plaintext ? (
+            <div
+              className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
+              data-testid="share-decrypt-plaintext"
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
+                Plaintext
+              </p>
+              <pre className="whitespace-pre-wrap break-words text-sm text-foreground">
+                {plaintext}
+              </pre>
+            </div>
+          ) : null}
+
+          {localPlaintextBurned ? (
+            <StateNotice
+              data-testid="share-decrypt-burned"
+              title="Local plaintext removed from this device."
+              tone="warning"
+            >
+              <p className="mt-1 text-xs text-neon-orange">
+                This does not delete the channel or mark it expired. Re-enter your passphrase to
+                decrypt again.
+              </p>
+            </StateNotice>
+          ) : null}
+        </>
+      ) : (
+        <DecryptUnavailableNotice safetyCodeStatus={safetyCodeStatus} />
+      )}
     </section>
   );
 }

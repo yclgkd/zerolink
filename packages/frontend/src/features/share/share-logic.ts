@@ -2,12 +2,16 @@ import {
   CHANNEL_STATE,
   type ChannelState,
   ErrorResponseSchema,
+  type HexString,
   PublicStatusResponseSchema,
+  type SafetyCodeDisplay,
   UUIDSchema,
 } from '@zerolink/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { extractLockSecretFromHash } from '../../crypto/protocol-utils';
+import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
+import { createIndexedDbReceiverKeyStorage } from '../../crypto/storage';
 import { useDecryptStore } from '../../stores/decrypt-store';
 import { useLockStore } from '../../stores/lock-store';
 import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
@@ -74,8 +78,24 @@ function isTerminalPublicState(state: ChannelState): boolean {
   return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
 }
 
+export type ReceiverSafetyCodeStatus =
+  | 'not-applicable'
+  | 'checking-local-key'
+  | 'verified-local-key'
+  | 'missing-local-key'
+  | 'missing-receiver-fingerprint'
+  | 'mismatched-local-key'
+  | 'storage-error';
+
+export interface ReceiverSafetyCodeState {
+  display: SafetyCodeDisplay | null;
+  status: ReceiverSafetyCodeStatus;
+  canDecryptLocally: boolean;
+}
+
 export function usePublicShareState(uuid?: string) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
+  const [receiverPubFpr, setReceiverPubFpr] = useState<HexString | null>(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
   const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
@@ -83,6 +103,7 @@ export function usePublicShareState(uuid?: string) {
   useEffect(() => {
     if (!uuid) {
       setChannelState(CHANNEL_STATE.WAITING);
+      setReceiverPubFpr(null);
       setIsUnavailable(false);
       setIsPublicStatusLoading(false);
       setPublicStatusError(null);
@@ -91,6 +112,7 @@ export function usePublicShareState(uuid?: string) {
 
     const currentUuid = uuid;
     setChannelState(CHANNEL_STATE.WAITING);
+    setReceiverPubFpr(null);
     setIsUnavailable(false);
     setIsPublicStatusLoading(true);
     setPublicStatusError(null);
@@ -109,6 +131,7 @@ export function usePublicShareState(uuid?: string) {
           (parsedError.success && parsedError.data.code === 'NOT_FOUND')
         ) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(true);
           setIsPublicStatusLoading(false);
           setPublicStatusError(null);
@@ -117,6 +140,7 @@ export function usePublicShareState(uuid?: string) {
 
         if (!response.ok) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
           setPublicStatusError(
@@ -127,6 +151,7 @@ export function usePublicShareState(uuid?: string) {
 
         if (!parsedPayload.success) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
           setPublicStatusError(
@@ -137,6 +162,7 @@ export function usePublicShareState(uuid?: string) {
 
         if (isTerminalPublicState(parsedPayload.data.state)) {
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(true);
           setIsPublicStatusLoading(false);
           setPublicStatusError(null);
@@ -144,12 +170,18 @@ export function usePublicShareState(uuid?: string) {
         }
 
         setChannelState(parsedPayload.data.state);
+        setReceiverPubFpr(parsedPayload.data.receiverPubFpr ?? null);
         setIsUnavailable(false);
         setIsPublicStatusLoading(false);
         setPublicStatusError(null);
-      } catch {
+      } catch (error: unknown) {
         if (!cancelled) {
+          console.error('[usePublicShareState] Failed to load channel state', {
+            uuid: currentUuid,
+            error,
+          });
           setChannelState(CHANNEL_STATE.WAITING);
+          setReceiverPubFpr(null);
           setIsUnavailable(false);
           setIsPublicStatusLoading(false);
           setPublicStatusError(
@@ -170,16 +202,19 @@ export function usePublicShareState(uuid?: string) {
     onStateChange: useCallback((update) => {
       if (isTerminalPublicState(update.state)) {
         setChannelState(CHANNEL_STATE.WAITING);
+        setReceiverPubFpr(null);
         setIsUnavailable(true);
         return;
       }
       setChannelState(update.state);
+      setReceiverPubFpr(update.receiverPubFpr ?? null);
       setIsUnavailable(false);
       setIsPublicStatusLoading(false);
       setPublicStatusError(null);
     }, []),
     onChannelClosed: useCallback((_reason: ChannelClosedReason) => {
       setChannelState(CHANNEL_STATE.WAITING);
+      setReceiverPubFpr(null);
       setIsUnavailable(true);
       setIsPublicStatusLoading(false);
       setPublicStatusError(null);
@@ -188,6 +223,7 @@ export function usePublicShareState(uuid?: string) {
 
   return {
     channelState,
+    receiverPubFpr,
     isUnavailable,
     isPublicStatusLoading,
     publicStatusError,
@@ -293,6 +329,111 @@ export function useSharePageLockLogic(uuid?: string, hash?: string) {
     lockSecretWarning,
     handlePassphraseChange,
     handleGenerate,
+  };
+}
+
+export function useReceiverSafetyCodeState({
+  uuid,
+  channelState,
+  publicReceiverPubFpr,
+  localSafetyCode,
+}: {
+  uuid: string | undefined;
+  channelState: ChannelState;
+  publicReceiverPubFpr: HexString | null;
+  localSafetyCode: SafetyCodeDisplay | null;
+}): ReceiverSafetyCodeState {
+  const [storedReceiverPubFpr, setStoredReceiverPubFpr] = useState<HexString | null>(null);
+  const [isCheckingLocalKey, setIsCheckingLocalKey] = useState(false);
+  const [hasStorageError, setHasStorageError] = useState(false);
+
+  const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);
+
+  const isReceiverVerificationState =
+    channelState === CHANNEL_STATE.LOCKED || channelState === CHANNEL_STATE.DELIVERED;
+
+  useEffect(() => {
+    if (!uuid || !isReceiverVerificationState) {
+      setStoredReceiverPubFpr(null);
+      setIsCheckingLocalKey(false);
+      setHasStorageError(false);
+      return;
+    }
+
+    if (localSafetyCode?.fullFpr) {
+      setStoredReceiverPubFpr(localSafetyCode.fullFpr);
+      setIsCheckingLocalKey(false);
+      setHasStorageError(false);
+      return;
+    }
+
+    let cancelled = false;
+    setStoredReceiverPubFpr(null);
+    setIsCheckingLocalKey(true);
+    setHasStorageError(false);
+
+    void receiverKeyStorage
+      .load(uuid)
+      .then((envelope) => {
+        if (cancelled) return;
+        setStoredReceiverPubFpr((envelope?.receiverPubFpr ?? null) as HexString | null);
+        setIsCheckingLocalKey(false);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        console.error('[useReceiverSafetyCodeState] IndexedDB load failed', { uuid, error });
+        setStoredReceiverPubFpr(null);
+        setIsCheckingLocalKey(false);
+        setHasStorageError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uuid, isReceiverVerificationState, localSafetyCode?.fullFpr]);
+
+  if (!isReceiverVerificationState) {
+    return {
+      display: localSafetyCode,
+      status: localSafetyCode ? 'verified-local-key' : 'not-applicable',
+      canDecryptLocally: Boolean(localSafetyCode),
+    };
+  }
+
+  const localReceiverPubFpr = localSafetyCode?.fullFpr ?? storedReceiverPubFpr;
+  const hasLocalReceiverKey = Boolean(localReceiverPubFpr);
+
+  if (hasStorageError) {
+    return { display: null, status: 'storage-error', canDecryptLocally: false };
+  }
+
+  // Skip checking state when in-memory localSafetyCode already provides the fingerprint
+  // (same-session lock), so the UI never flashes a "checking…" notice unnecessarily.
+  if (isCheckingLocalKey && !hasLocalReceiverKey) {
+    return { display: null, status: 'checking-local-key', canDecryptLocally: false };
+  }
+
+  if (!hasLocalReceiverKey) {
+    return { display: null, status: 'missing-local-key', canDecryptLocally: false };
+  }
+
+  if (publicReceiverPubFpr && localReceiverPubFpr !== publicReceiverPubFpr) {
+    return { display: null, status: 'mismatched-local-key', canDecryptLocally: false };
+  }
+
+  if (!publicReceiverPubFpr) {
+    return { display: null, status: 'missing-receiver-fingerprint', canDecryptLocally: true };
+  }
+
+  const verifiedLocalReceiverPubFpr = localReceiverPubFpr as HexString;
+
+  return {
+    display:
+      localSafetyCode && localSafetyCode.fullFpr === verifiedLocalReceiverPubFpr
+        ? localSafetyCode
+        : deriveSafetyCodeDisplay(verifiedLocalReceiverPubFpr),
+    status: 'verified-local-key',
+    canDecryptLocally: true,
   };
 }
 
