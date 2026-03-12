@@ -122,4 +122,14 @@ describe('PassphraseInput', () => {
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.getAttribute('aria-describedby')).toBe('share-lock-error');
   });
+
+  it('disables browser and password-manager autofill heuristics', () => {
+    render(<PassphraseInput onChange={() => {}} value="" />);
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('autocomplete')).toBe('off');
+    expect(input.getAttribute('data-1p-ignore')).toBe('true');
+    expect(input.getAttribute('data-bwignore')).toBe('true');
+    expect(input.getAttribute('data-lpignore')).toBe('true');
+  });
 });
