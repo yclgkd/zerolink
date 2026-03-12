@@ -407,6 +407,8 @@ export function useReceiverSafetyCodeState({
     return { display: null, status: 'storage-error', canDecryptLocally: false };
   }
 
+  // Skip checking state when in-memory localSafetyCode already provides the fingerprint
+  // (same-session lock), so the UI never flashes a "checking…" notice unnecessarily.
   if (isCheckingLocalKey && !hasLocalReceiverKey) {
     return { display: null, status: 'checking-local-key', canDecryptLocally: false };
   }

@@ -169,6 +169,24 @@ function getDecryptUnavailableCopy(
   }
 }
 
+function DecryptUnavailableNotice({
+  safetyCodeStatus,
+}: {
+  safetyCodeStatus: ReceiverSafetyCodeStatus;
+}) {
+  const copy = getDecryptUnavailableCopy(
+    safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
+      ? 'missing-local-key'
+      : safetyCodeStatus
+  );
+
+  return (
+    <StateNotice data-testid="share-decrypt-unavailable" title={copy.title} tone={copy.tone}>
+      <p className="mt-1 text-xs text-foreground/90">{copy.body}</p>
+    </StateNotice>
+  );
+}
+
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   return (
     <section className="space-y-4" data-testid="share-step-onboarding">
@@ -363,12 +381,6 @@ export function DeliveredStep({
   onDecrypt: () => void;
   onBurn: () => void;
 }) {
-  const decryptUnavailableCopy = getDecryptUnavailableCopy(
-    safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
-      ? 'missing-local-key'
-      : safetyCodeStatus
-  );
-
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
@@ -460,13 +472,7 @@ export function DeliveredStep({
           ) : null}
         </>
       ) : (
-        <StateNotice
-          data-testid="share-decrypt-unavailable"
-          title={decryptUnavailableCopy.title}
-          tone={decryptUnavailableCopy.tone}
-        >
-          <p className="mt-1 text-xs text-foreground/90">{decryptUnavailableCopy.body}</p>
-        </StateNotice>
+        <DecryptUnavailableNotice safetyCodeStatus={safetyCodeStatus} />
       )}
     </section>
   );
