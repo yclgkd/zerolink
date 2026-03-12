@@ -13,6 +13,19 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-12] Staging Durable Object deletions require a staging-only entrypoint
+
+**Decision**: Deploy staging from `packages/backend/src/index.staging.ts` so the staging bundle exports only `SecretVaultStaging`, while production continues exporting `SecretVault` from `packages/backend/src/index.ts`.
+**Context**: Cloudflare kept serving and billing the legacy `zerolink-api-staging_SecretVault` namespace after the staging binding moved to `SecretVaultStaging`. The old namespace had to be deleted manually because the shared worker entry still referenced `SecretVault`, which prevented `deleted_classes = ["SecretVault"]` from fully retiring the staging class.
+**Options Considered**: Keep one shared entrypoint and rely on env-specific bindings alone; continue manual cleanup whenever staging rotates namespaces; split the worker entry so staging no longer references the legacy class at all.
+**Choice**: Extract the shared fetch/router logic into `packages/backend/src/worker.ts`, keep production and staging entrypoints separate, and point `env.staging.main` at the staging-only entrypoint.
+**Reasoning**: Cloudflare's delete migrations require the class being deleted to be absent from the deployed worker code. A staging-only entrypoint satisfies that requirement without changing the production durable object class.
+**Trade-offs**: Backend bootstrap wiring is slightly more explicit, and future entrypoint changes must stay aligned through the shared `worker.ts`.
+
+**Follow-up (2026-03-12)**: Production also moved to a fresh `SecretVaultProduction` class name before deleting the legacy `zerolink-api_SecretVault` namespace. The live worker keeps exporting the legacy `SecretVault` class during the cutover so Cloudflare will accept the migration, then the old namespace is removed manually after the new binding is active.
+**Follow-up (2026-03-12)**: Once production and staging were both clean, the active bindings were aligned again on a shared class name, `SecretVaultV2`, so the Cloudflare namespace list differs only by worker name instead of mixing `...Production` and `...Staging` suffixes.
+**Follow-up (2026-03-12)**: After the `SecretVaultV2` namespaces were live in both environments and the old namespaces were deleted, the worker entrypoints dropped the temporary `SecretVault`, `SecretVaultProduction`, and `SecretVaultStaging` export aliases so only the active Durable Object class remains exposed.
+
 ## [2026-03-11] Durable Object fetch-level failures must use the same production redaction path
 
 **Decision**: Route unexpected errors from the Durable Object `fetch()` entrypoint, including `/ws` subscribe upgrades, through the same `mapError()` redaction path used by the JSON handlers.

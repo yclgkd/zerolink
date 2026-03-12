@@ -14,11 +14,19 @@ invocation_logs = false
 
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
-class_name = "SecretVault"
+class_name = "SecretVaultV2"
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SecretVault"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SecretVaultProduction"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["SecretVaultV2"]
 
 [[kv_namespaces]]
 binding = "SECRETS_KV"
@@ -29,6 +37,7 @@ id = "b8313bed33c9492885c12c9d26034420"
 
 [env.staging]
 name = "zerolink-api-staging"
+main = "src/index.staging.ts"
 
 [env.staging.vars]
 APP_ENV = "staging"
@@ -42,7 +51,7 @@ invocation_logs = true
 
 [[env.staging.durable_objects.bindings]]
 name = "SECRET_VAULT"
-class_name = "SecretVaultStaging"
+class_name = "SecretVaultV2"
 
 [[env.staging.migrations]]
 tag = "v1"
@@ -52,6 +61,10 @@ new_sqlite_classes = ["SecretVault"]
 tag = "v2"
 new_sqlite_classes = ["SecretVaultStaging"]
 deleted_classes = ["SecretVault"]
+
+[[env.staging.migrations]]
+tag = "v3"
+new_sqlite_classes = ["SecretVaultV2"]
 
 [[env.staging.kv_namespaces]]
 binding = "SECRETS_KV"
