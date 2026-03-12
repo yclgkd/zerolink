@@ -123,6 +123,7 @@ export function PassphraseInput({
               ? 'border-neon-amber/60 focus-visible:ring-neon-amber/60'
               : 'focus-visible:ring-ring'
           )}
+          autoComplete="new-password"
           data-testid="passphrase-input-field"
           id={resolvedInputId}
           onChange={(event) => onChange(event.target.value)}
