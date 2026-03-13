@@ -22,6 +22,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: The fingerprint is durable channel state, not request-scoped begin metadata. Keeping it in the store prevents misleading UI flicker on sender manage actions without weakening the authoritative update path.
 **Trade-offs**: Delete flows now share the same preserved-fingerprint behavior because they also use `compound_begin`, but any fresh response that truly omits `receiverPubFpr` still overwrites the store and surfaces the warning as before.
 **Follow-up (2026-03-13)**: `compound_begin` error handling now preserves `receiverPubFpr` only for loading and non-authoritative/retryable begin failures. Terminal begin errors such as `NOT_FOUND` and `LOCK_FORBIDDEN` clear the cached fingerprint so sender Safety Code UI does not outlive the backend's channel validity.
+**Follow-up (2026-03-13)**: Regression coverage now asserts both terminal begin error codes, `NOT_FOUND` and `LOCK_FORBIDDEN`, clear the sender-side Safety Code state in the deliver store and ManagePage tests.
 
 ## [2026-03-13] WebAuthn normalization keeps bracket notation without stale Biome suppressions
 

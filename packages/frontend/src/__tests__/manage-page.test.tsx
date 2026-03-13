@@ -562,7 +562,10 @@ describe('ManagePage integration', () => {
     expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
-  it('falls back to the safety warning after terminal compound begin errors', async () => {
+  it.each([
+    'NOT_FOUND',
+    'LOCK_FORBIDDEN',
+  ] as const)('falls back to the safety warning after terminal compound begin error %s', async (errorCode) => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
 
@@ -572,7 +575,7 @@ describe('ManagePage integration', () => {
     expect(screen.getByTestId('safety-code-root')).toBeTruthy();
 
     act(() => {
-      useDeliverStore.getState().failCompoundBegin('NOT_FOUND');
+      useDeliverStore.getState().failCompoundBegin(errorCode);
     });
 
     expect(screen.queryByTestId('safety-code-root')).toBeNull();

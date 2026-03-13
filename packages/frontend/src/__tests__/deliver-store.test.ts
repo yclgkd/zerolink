@@ -165,19 +165,22 @@ describe('useDeliverStore', () => {
     expect(nextState.receiverPubJwk).toBeNull();
   });
 
-  it('clears a known receiver fingerprint on terminal compound_begin failures', () => {
+  it.each([
+    'NOT_FOUND',
+    'LOCK_FORBIDDEN',
+  ] as const)('clears a known receiver fingerprint on terminal compound_begin failure %s', (errorCode) => {
     const state = useDeliverStore.getState();
 
     const beginPayload = buildCompoundBeginResponse();
     state.completeCompoundBegin(beginPayload);
 
-    state.failCompoundBegin('NOT_FOUND');
+    state.failCompoundBegin(errorCode);
 
     const nextState = useDeliverStore.getState();
     expect(nextState.compoundBegin).toEqual({
       status: 'error',
       data: null,
-      errorCode: 'NOT_FOUND',
+      errorCode,
     });
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
