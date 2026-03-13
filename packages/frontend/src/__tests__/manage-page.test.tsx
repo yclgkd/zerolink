@@ -1091,19 +1091,15 @@ describe('ManagePage integration', () => {
     expect(screen.queryByTestId('manage-secret-input')).toBeNull();
   });
 
-  it('keeps copy label when clipboard api is unavailable', async () => {
+  it('does not render share link copy controls while managing a channel', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
     renderManagePage();
     await screen.findByTestId('manage-state-waiting');
-
-    Reflect.deleteProperty(navigator, 'clipboard');
-
-    const copyButton = screen.getByTestId('manage-copy-button');
-    fireEvent.click(copyButton);
-
-    expect(copyButton.textContent).toBe('Copy');
+    expect(screen.queryByTestId('manage-share-link-card')).toBeNull();
+    expect(screen.queryByTestId('manage-share-link-value')).toBeNull();
+    expect(screen.queryByTestId('manage-copy-button')).toBeNull();
   });
 
   it('navigates to home when create new button is clicked after destroy', async () => {
@@ -1140,28 +1136,5 @@ describe('ManagePage integration', () => {
     await screen.findByTestId('manage-state-unavailable');
     expect(screen.getByTestId('manage-terminal-actions')).toBeTruthy();
     expect(screen.getByTestId('manage-create-new-button')).toBeTruthy();
-  });
-
-  it('shows copied label only after clipboard write succeeds', async () => {
-    const fetchSpy = getFetchSpy();
-    mockPublicState(fetchSpy, 'waiting');
-
-    const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
-
-    renderManagePage();
-    await screen.findByTestId('manage-state-waiting');
-
-    const copyButton = screen.getByTestId('manage-copy-button');
-    fireEvent.click(copyButton);
-
-    await waitFor(() => {
-      expect(copyButton.textContent).toBe('Copied');
-    });
-    expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`/s/${VALID_UUID}`));
   });
 });

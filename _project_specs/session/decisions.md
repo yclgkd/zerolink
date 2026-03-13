@@ -397,3 +397,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Disable autofill across all passphrase prompts
 **Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
 **Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
+## [2026-03-13] Share links are shown only on channel creation
+
+**Decision**: Show the receiver share link only in the create success state and remove it from `ManagePage`.
+**Context**: `ManagePage` rebuilt `/s/:uuid` without the required `#k=` fragment, producing unusable receiver links. Persisting the fragment locally would extend the lifetime of lock material on the sender device.
+**Options Considered**: Restore the fragment from same-tab storage, persist the fragment across sessions, only show the share link at creation time.
+**Choice**: Only show the complete share link once, immediately after channel creation.
+**Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
+**Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.

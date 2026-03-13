@@ -52,6 +52,8 @@ test.describe('Real-time sync via polling fallback', () => {
       await senderPage.goto(manageUrl, { waitUntil: 'domcontentloaded' });
       await expect(senderPage.getByTestId('page-manage')).toBeVisible({ timeout: 15_000 });
       await expect(senderPage.getByTestId('manage-state-waiting')).toBeVisible({ timeout: 15_000 });
+      await expect(senderPage.getByTestId('manage-share-link-card')).toHaveCount(0);
+      await expect(senderPage.getByTestId('manage-copy-button')).toHaveCount(0);
 
       // ── Step 3: Receiver opens SharePage and locks ─────────────────────
 

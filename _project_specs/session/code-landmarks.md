@@ -44,6 +44,7 @@ UPDATE WHEN:
 | `scripts/generate-manifest.ts` | Build-time manifest generator (hashes `dist/assets/` + records `entryAssetPath`) |
 | `scripts/sign-manifest.ts` | Ed25519 manifest signer (requires `MANIFEST_SIGNING_KEY` env var) |
 | `scripts/verify-manifest.ts` | CLI manifest verifier — enforces entry binding + file hashes |
+| `packages/frontend/e2e/happy-path.spec.ts` | Canonical end-to-end coverage for create-only share-link visibility and ManagePage sender flow |
 
 ## Configuration
 | Location | Purpose |
