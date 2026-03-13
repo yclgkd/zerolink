@@ -116,7 +116,7 @@ describe('useDeliverStore', () => {
     expect(nextState.showDestroyConfirm).toBe(false);
   });
 
-  it('preserves a known receiver fingerprint across compound_begin loading and error states', () => {
+  it('preserves a known receiver fingerprint when compound_begin starts loading', () => {
     const state = useDeliverStore.getState();
     state.setReceiverPubFpr(VALID_HEX);
 
@@ -127,6 +127,14 @@ describe('useDeliverStore', () => {
       errorCode: null,
     });
     expect(useDeliverStore.getState().receiverPubFpr).toBe(VALID_HEX);
+    expect(useDeliverStore.getState().challenge).toBeNull();
+    expect(useDeliverStore.getState().currentVersion).toBeNull();
+    expect(useDeliverStore.getState().receiverPubJwk).toBeNull();
+  });
+
+  it('preserves a known receiver fingerprint on retryable compound_begin failures', () => {
+    const state = useDeliverStore.getState();
+    state.setReceiverPubFpr(VALID_HEX);
 
     const beginPayload = buildCompoundBeginResponse();
     state.completeCompoundBegin(beginPayload);
@@ -143,17 +151,38 @@ describe('useDeliverStore', () => {
     expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr);
     expect(nextState.receiverPubJwk).toEqual(beginPayload.receiverPubJwk);
 
-    state.failCompoundBegin('BAD_REQUEST');
+    state.failCompoundBegin('NETWORK_ERROR');
     nextState = useDeliverStore.getState();
     expect(nextState.compoundBegin).toEqual({
       status: 'error',
       data: null,
-      errorCode: 'BAD_REQUEST',
+      errorCode: 'NETWORK_ERROR',
     });
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
     expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
     expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr);
+    expect(nextState.receiverPubJwk).toBeNull();
+  });
+
+  it('clears a known receiver fingerprint on terminal compound_begin failures', () => {
+    const state = useDeliverStore.getState();
+
+    const beginPayload = buildCompoundBeginResponse();
+    state.completeCompoundBegin(beginPayload);
+
+    state.failCompoundBegin('NOT_FOUND');
+
+    const nextState = useDeliverStore.getState();
+    expect(nextState.compoundBegin).toEqual({
+      status: 'error',
+      data: null,
+      errorCode: 'NOT_FOUND',
+    });
+    expect(nextState.challenge).toBeNull();
+    expect(nextState.currentVersion).toBeNull();
+    expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
+    expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
   });
 
