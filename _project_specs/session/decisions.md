@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-13] Release verification crypto helpers stay on the static import path
+
+**Decision**: Remove the dynamic `import('./crypto')` from frontend tiered release verification and use a static import for `verifyManifestSignature`.
+**Context**: `pnpm build` was emitting a Vite warning because `packages/frontend/src/release/crypto.ts` was already pulled into the static dependency graph by both `tiered-verification.ts` and `verification.ts`, so the dynamic import could not create a separate async chunk.
+**Options Considered**: Keep the mixed static and dynamic imports and tolerate the warning; force a broader module split to create a real lazy boundary; align the code with the actual bundle graph and use static imports only.
+**Choice**: Use static imports only.
+**Reasoning**: The current `crypto.ts` helper is small and already required on the eager path, so the dynamic import had no runtime bundle benefit and only expressed a lazy boundary that did not exist in practice. Static imports make the dependency model explicit and remove the noisy build warning.
+**Trade-offs**: This keeps the release-verification crypto helpers in the initial bundle. If future performance work wants true lazy loading here, that should come from splitting a new module that is reachable only through an async path.
+
 ## [2026-03-13] Sender manage flow preserves known Safety Code fingerprint during begin retries
 
 **Decision**: Keep the sender-side `receiverPubFpr` in the deliver store when `compound_begin` enters loading or error states, and only replace it when a fresh `compound_begin`, public-status fetch, or realtime update returns authoritative data.
