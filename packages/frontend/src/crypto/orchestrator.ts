@@ -289,12 +289,22 @@ function mapWebAuthnError(
   return toError('WEBAUTHN_ERROR', stage, code);
 }
 
+const MIN_PASSPHRASE_LENGTH = 8;
+
 function ensurePassphrase(
   passphrase: string,
   stage: string
 ): CryptoOrchestratorResult<never> | null {
-  if (passphrase.length > 0) return null;
-  return toError('PASSPHRASE_REQUIRED', stage);
+  if (passphrase.length === 0) return toError('PASSPHRASE_REQUIRED', stage);
+  // L-5: Enforce minimum passphrase length for key wrapping security
+  if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
+    return toError(
+      'PASSPHRASE_REQUIRED',
+      stage,
+      `passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`
+    );
+  }
+  return null;
 }
 
 function toUtf8Bytes(input: string): Uint8Array {
@@ -311,6 +321,15 @@ function asUuid(value: string): UUID {
 
 function asUnixMs(value: number): UnixMs {
   return value as UnixMs;
+}
+
+function constantTimeHexEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
 async function computeReceiverPubFingerprint(publicKey: CryptoKey): Promise<HexString> {
@@ -1017,7 +1036,7 @@ async function performDecryptionPipeline(
 ) {
   const ciphertextBytes = decodeBase64UrlBytes(payload.cipherBundle.ciphertext);
   const computedHash = await computeSha256Hex(ciphertextBytes);
-  if (computedHash !== payload.cipherBundle.ciphertextHash) {
+  if (!constantTimeHexEqual(computedHash, payload.cipherBundle.ciphertextHash)) {
     throw new Error('INTEGRITY_MISMATCH');
   }
 
@@ -1029,6 +1048,10 @@ async function performDecryptionPipeline(
     receiverPrivateKey,
     wrappedKey: decodeBase64UrlBytes(payload.cipherBundle.encContentKey),
   });
+  // L-4: Validate content key is exactly 32 bytes (AES-256)
+  if (contentKeyBytes.byteLength !== AES_GCM.KEY_LENGTH_BITS / 8) {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
   const contentKey = await crypto.subtle.importKey(
     'raw',
     toArrayBuffer(contentKeyBytes),
@@ -1106,6 +1129,14 @@ async function executeDecryptDelivered(
     applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
       state.setPlaintext(plaintext);
     });
+
+    // L-2: Clean up wrapped private key from IndexedDB after successful decryption
+    try {
+      await deps.receiverKeyStorage.remove(input.uuid);
+    } catch {
+      // Best-effort cleanup — decryption already succeeded
+    }
+
     return {
       ok: true,
       data: {

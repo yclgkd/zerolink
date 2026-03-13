@@ -24,7 +24,7 @@ import {
   SECURITY_PROFILE,
   TIMESTAMP_SKEW_MS,
 } from '@zerolink/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
 import { verifyAttestation } from '../../crypto/attestation.ts';
@@ -137,15 +137,36 @@ function createLockKey(): Base64Url {
   return encodeBase64Url(Uint8Array.from([1, 35, 69, 103, 137, 171, 205, 239]));
 }
 
-function createReceiverJwk(): RSAPublicKeyJWK {
-  return {
+// Real RSA key pair generated in beforeAll for fingerprint validation tests
+let realReceiverJwk: RSAPublicKeyJWK;
+let realReceiverPubFpr: HexString;
+
+beforeAll(async () => {
+  const keyPair = await crypto.subtle.generateKey(
+    {
+      name: 'RSA-OAEP',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256',
+    },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  const jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  realReceiverJwk = {
     kty: 'RSA',
     alg: 'RSA-OAEP-256',
-    n: asBase64Url('n-modulus-value'),
-    e: asBase64Url('AQAB'),
+    n: jwk.n as Base64Url,
+    e: jwk.e as Base64Url,
     ext: true,
-    key_ops: ['encrypt'],
+    key_ops: ['encrypt'] as const,
   };
+  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keyPair.publicKey));
+  realReceiverPubFpr = await sha256Hex([spki]);
+});
+
+function createReceiverJwk(): RSAPublicKeyJWK {
+  return realReceiverJwk;
 }
 
 function createCipherBundle(): CipherBundle {
@@ -162,7 +183,7 @@ function createCipherBundle(): CipherBundle {
 function createCommitLockParams(): CommitLockParams {
   return {
     receiverPubJwk: createReceiverJwk(),
-    receiverPubFpr: asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd'),
+    receiverPubFpr: realReceiverPubFpr,
     lockedAt: asUnixMs(1_730_000_200_000),
   };
 }
@@ -768,6 +789,30 @@ describe('SecretVault lock challenge flow', () => {
     ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
   });
 
+  it('rejects lock_commit when receiverPubFpr does not match JWK fingerprint (M-1)', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const lockProof = await computeLockProof(record.uuid, challenge, record.lockKey);
+
+    await expect(
+      vault.commitLockChallenge(
+        {
+          uuid: record.uuid,
+          lockChallengeId: challenge.id,
+          lockProof,
+          receiverPubJwk: lockParams.receiverPubJwk,
+          receiverPubFpr: asHex('0000000000000000000000000000000000000000000000000000000000000000'),
+          lockedAt: lockParams.lockedAt,
+        },
+        now + 1_000
+      )
+    ).rejects.toThrow('receiverPubFpr does not match');
+  });
+
   it('returns 405 for non-POST method in fetch', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
@@ -960,6 +1005,22 @@ describe('SecretVault compound/delete flow', () => {
     expect(result.securityProfile).toBe(lockedRecord.securityProfile);
     expect(result.adminMode).toBe('softkey');
     expect(result.allowCredentials).toBeUndefined();
+  });
+
+  it('rejects beginCompoundChallenge when an active challenge already exists (M-3)', async () => {
+    const now = 1_730_001_000_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+
+    await expect(vault.beginCompoundChallenge(lockedRecord.uuid, now + 1_000)).rejects.toThrow(
+      'an active compound challenge already exists'
+    );
   });
 
   it('returns securityProfile on active public reads', async () => {
@@ -1677,7 +1738,7 @@ describe('SecretVault create flow', () => {
     expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
   });
 
-  it('allows creation for HARDWARE_ONLY with unverified attestation (enforcement removed)', async () => {
+  it('rejects creation for HARDWARE_ONLY with unverified attestation', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
@@ -1694,15 +1755,14 @@ describe('SecretVault create flow', () => {
       warning: 'none attestation is considered unverified',
     });
 
-    // hardware_only no longer enforces direct attestation — creation should succeed
-    await vault.commitCreate({
-      uuid,
-      adminMode: 'webauthn',
-      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
-      lockKeyB64u: asBase64Url('lock-key'),
-    });
-    const updated = await vault.getRecord();
-    expect(updated.adminMode).toBe('webauthn');
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toThrow('requires verified attestation');
   });
 
   it('allows creation for HARDWARE_ONLY with all-zero AAGUID (enforcement removed)', async () => {
@@ -1732,7 +1792,7 @@ describe('SecretVault create flow', () => {
     expect(updated.adminMode).toBe('webauthn');
   });
 
-  it('allows creation for STRICT with unverified attestation', async () => {
+  it('rejects creation for STRICT with unverified attestation', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
@@ -1748,16 +1808,72 @@ describe('SecretVault create flow', () => {
       signCount: 0,
     });
 
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toThrow('requires verified attestation');
+  });
+
+  it('rejects password adminMode for secure profile (H-1 downgrade prevention)', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'password',
+        softkeyPubJwk: {
+          kty: 'EC',
+          crv: 'P-256',
+          x: asBase64Url('x'),
+          y: asBase64Url('y'),
+        } as never,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toThrow("security profile 'secure' requires webauthn admin mode");
+  });
+
+  it('rejects softkey adminMode for hardware_only profile (H-1 downgrade prevention)', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'softkey',
+        softkeyPubJwk: {
+          kty: 'EC',
+          crv: 'P-256',
+          x: asBase64Url('x'),
+          y: asBase64Url('y'),
+        } as never,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toThrow("security profile 'hardware_only' requires webauthn admin mode");
+  });
+
+  it('allows password adminMode for standard profile', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.STANDARD);
+
     await vault.commitCreate({
       uuid,
-      adminMode: 'webauthn',
-      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      adminMode: 'password',
+      softkeyPubJwk: { kty: 'EC', crv: 'P-256', x: asBase64Url('x'), y: asBase64Url('y') } as never,
       lockKeyB64u: asBase64Url('lock-key'),
     });
-
     const updated = await vault.getRecord();
-    expect(updated.securityProfile).toBe(SECURITY_PROFILE.STRICT);
-    expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
+    expect(updated.adminMode).toBe('password');
   });
 
   it('beginCreate stores creation challenge under CREATION_CHALLENGE_KEY', async () => {
@@ -1903,8 +2019,8 @@ describe('SecretVault create flow', () => {
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
     verifyAttestationMock.mockResolvedValueOnce({
-      verified: false,
-      fmt: 'none',
+      verified: true,
+      fmt: 'packed',
       credentialId: asBase64Url('cred-id'),
       publicKey: asBase64Url('pub-key'),
       aaguid: asBase64Url('aaguid'),

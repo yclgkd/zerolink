@@ -127,6 +127,16 @@ export class SecretVault {
   constructor(ctx: DurableObjectState, env: SecretVaultEnv) {
     this.ctx = ctx;
     this.env = env;
+
+    // L-3: Validate RP_ID and RP_ORIGIN at construction time
+    if (!env.RP_ID || typeof env.RP_ID !== 'string') {
+      throw new Error('RP_ID environment variable is missing or empty');
+    }
+    if (!env.RP_ORIGIN || typeof env.RP_ORIGIN !== 'string' || !env.RP_ORIGIN.startsWith('http')) {
+      throw new Error(
+        'RP_ORIGIN environment variable is missing or malformed (must start with http)'
+      );
+    }
   }
 
   // ─── Hibernation API WebSocket handlers ───────────────────────────────────
@@ -328,6 +338,18 @@ export class SecretVault {
         throw new StateTransitionError('INVALID_TRANSITION', 'channel already finalized');
       }
 
+      // H-1: Enforce securityProfile → adminMode binding (prevent downgrade attack)
+      const requiresWebAuthn =
+        record.securityProfile === 'secure' ||
+        record.securityProfile === 'strict' ||
+        record.securityProfile === 'hardware_only';
+      if (requiresWebAuthn && params.adminMode !== 'webauthn') {
+        throw new StateTransitionError(
+          'LOCK_FORBIDDEN',
+          `security profile '${record.securityProfile}' requires webauthn admin mode`
+        );
+      }
+
       let adminCredential: StoredCredential | SoftkeyCredential;
 
       if (params.adminMode === 'password' || params.adminMode === 'softkey') {
@@ -378,6 +400,14 @@ export class SecretVault {
           );
         }
 
+        // M-4: Reject unverifiable attestation for secure profiles
+        if (requiresWebAuthn && !verification.verified) {
+          throw new StateTransitionError(
+            'ATTESTATION_UNVERIFIABLE',
+            `security profile '${record.securityProfile}' requires verified attestation (got fmt:'${verification.fmt}')`
+          );
+        }
+
         adminCredential = {
           credentialId: verification.credentialId,
           publicKey: verification.publicKey,
@@ -418,6 +448,20 @@ export class SecretVault {
     return this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, uuid);
+
+      // M-3: Reject if an unconsumed, unexpired challenge already exists
+      const existingChallenge =
+        await this.ctx.storage.get<StoredCompoundChallenge>(COMPOUND_CHALLENGE_KEY);
+      if (
+        existingChallenge &&
+        existingChallenge.consumedAt === undefined &&
+        existingChallenge.expiresAt > now
+      ) {
+        throw new StateTransitionError(
+          'CHALLENGE_INVALID',
+          'an active compound challenge already exists; wait for it to expire or be consumed'
+        );
+      }
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
@@ -485,6 +529,16 @@ export class SecretVault {
           'VERSION_MISMATCH',
           `expected version ${record.version}, got ${intent.version}`
         );
+      }
+
+      // M-2: Cross-validate intent.receiverPubFpr against stored receiver fingerprint
+      if (intent.op === 'update' && record.receiver) {
+        if (intent.receiverPubFpr !== record.receiver.pubFpr) {
+          throw new StateTransitionError(
+            'LOCK_FORBIDDEN',
+            'intent receiverPubFpr does not match locked receiver fingerprint'
+          );
+        }
       }
 
       const skew = Math.abs(intent.timestamp - now);
@@ -694,6 +748,31 @@ export class SecretVault {
       ]);
       if (!constantTimeEqual(expectedProof, lockProof)) {
         throw new StateTransitionError('LOCK_FORBIDDEN', 'lock proof mismatch');
+      }
+
+      // M-1: Validate receiverPubFpr matches SHA256(SPKI(receiverPubJwk))
+      const cryptoApiLock = getCryptoApi();
+      let importedReceiverKey: CryptoKey;
+      try {
+        importedReceiverKey = await cryptoApiLock.subtle.importKey(
+          'jwk',
+          receiverPubJwk as unknown as JsonWebKey,
+          { name: 'RSA-OAEP', hash: 'SHA-256' },
+          true,
+          ['encrypt']
+        );
+      } catch {
+        throw new StateTransitionError('LOCK_FORBIDDEN', 'invalid receiver public key JWK');
+      }
+      const spkiBytes = new Uint8Array(
+        await cryptoApiLock.subtle.exportKey('spki', importedReceiverKey)
+      );
+      const computedFpr = await sha256Hex([spkiBytes]);
+      if (computedFpr !== receiverPubFpr) {
+        throw new StateTransitionError(
+          'LOCK_FORBIDDEN',
+          'receiverPubFpr does not match SHA256(SPKI(receiverPubJwk))'
+        );
       }
 
       await this.saveLockChallenge({
