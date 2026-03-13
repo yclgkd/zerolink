@@ -538,6 +538,30 @@ describe('ManagePage integration', () => {
     expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
   });
 
+  it('keeps the safety code visible while compound begin loads or errors after lock', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+
+    act(() => {
+      useDeliverStore.getState().startCompoundBegin();
+    });
+
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
+
+    act(() => {
+      useDeliverStore.getState().failCompoundBegin('BAD_REQUEST');
+    });
+
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
+  });
+
   it('disables deliver/destroy while deliver request is pending and re-enables after completion', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');

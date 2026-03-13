@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-13] Sender manage flow preserves known Safety Code fingerprint during begin retries
+
+**Decision**: Keep the sender-side `receiverPubFpr` in the deliver store when `compound_begin` enters loading or error states, and only replace it when a fresh `compound_begin`, public-status fetch, or realtime update returns authoritative data.
+**Context**: `ManagePage` derives the sender Safety Code directly from `deliver-store.receiverPubFpr`. The previous `startCompoundBegin()` and `failCompoundBegin()` implementations cleared that field immediately, so the first `Deliver` click briefly swapped a valid Safety Code for the generic yellow warning even though the backend still had the receiver fingerprint.
+**Options Considered**: Keep clearing the fingerprint and patch the UI to special-case pending state; preserve the last known fingerprint in the shared deliver store begin lifecycle; move Safety Code display to a separate memoized cache outside the store.
+**Choice**: Preserve `receiverPubFpr` across `compound_begin` loading and error transitions, while still clearing request-scoped fields such as `challenge`, `currentVersion`, and `receiverPubJwk`.
+**Reasoning**: The fingerprint is durable channel state, not request-scoped begin metadata. Keeping it in the store prevents misleading UI flicker on sender manage actions without weakening the authoritative update path.
+**Trade-offs**: Delete flows now share the same preserved-fingerprint behavior because they also use `compound_begin`, but any fresh response that truly omits `receiverPubFpr` still overwrites the store and surfaces the warning as before.
+
 ## [2026-03-13] WebAuthn normalization keeps bracket notation without stale Biome suppressions
 
 **Decision**: Remove unused `biome-ignore lint/complexity/useLiteralKeys` comments from `packages/frontend/src/crypto/webauthn.ts` while keeping bracket notation for `Record<string, unknown>` access.

@@ -117,7 +117,6 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
       compoundBegin: createLoadingState<CompoundBeginResponse>(),
       challenge: null,
       currentVersion: null,
-      receiverPubFpr: null,
       receiverPubJwk: null,
     })),
 
@@ -136,7 +135,6 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
       compoundBegin: createErrorState<CompoundBeginResponse>(errorCode),
       challenge: null,
       currentVersion: null,
-      receiverPubFpr: null,
       receiverPubJwk: null,
     })),
 
