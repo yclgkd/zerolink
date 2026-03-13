@@ -163,10 +163,7 @@ export async function installStatefulApiMock(
             name: `sender-${parsedUuid.data}@e2e.local`,
             displayName: 'E2E Sender',
           },
-          pubKeyCredParams: [
-            { type: 'public-key', alg: -7 },
-            { type: 'public-key', alg: -257 },
-          ],
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
           timeout: 60_000,
           attestation: 'none',
         },

@@ -66,10 +66,7 @@ export function generateCreationOptions(params: {
       name: `zerolink-${uuid}`,
       displayName: `ZeroLink (${uuid})`,
     },
-    pubKeyCredParams: [
-      { type: 'public-key', alg: -7 }, // ES256
-      { type: 'public-key', alg: -257 }, // RS256
-    ],
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 only
     authenticatorSelection: {
       userVerification: requireUserVerification ? 'required' : 'preferred',
       residentKey: 'discouraged',
@@ -158,7 +155,7 @@ export async function verifyAssertion(params: WebAuthnVerifyParams): Promise<Web
   //
   // The stored publicKey is COSE CBOR-encoded (raw bytes from the authenticator's
   // attested credential data). We decode it to detect the algorithm, then import
-  // via JWK to support both ES256 (ECDSA P-256) and RS256 (RSASSA-PKCS1-v1_5).
+  // via JWK. Only ES256 (ECDSA P-256) is supported.
   const signatureBytes = decodeBase64Url(assertion.response.signature);
   const publicKeyBytes = decodeBase64Url(storedCredential.publicKey);
 
@@ -175,101 +172,58 @@ export async function verifyAssertion(params: WebAuthnVerifyParams): Promise<Web
 
   const coseAlg = coseKey.get(3);
 
-  if (coseAlg === -7) {
-    // ES256: ECDSA P-256
-    const x = coseKey.get(-2);
-    const y = coseKey.get(-3);
-    if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array)) {
-      return {
-        ok: false,
-        error: 'invalid COSE P-256 key: missing x or y coordinates',
-      };
-    }
-
-    let publicKey: CryptoKey;
-    try {
-      publicKey = await cryptoApi.subtle.importKey(
-        'jwk',
-        {
-          kty: 'EC',
-          crv: 'P-256',
-          x: encodeBase64Url(x),
-          y: encodeBase64Url(y),
-          ext: true,
-          key_ops: ['verify'],
-        },
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['verify']
-      );
-    } catch {
-      return { ok: false, error: 'failed to import stored P-256 public key' };
-    }
-
-    let p1363Sig: Uint8Array;
-    try {
-      p1363Sig = isP1363Signature(signatureBytes) ? signatureBytes : derToP1363(signatureBytes);
-    } catch {
-      return { ok: false, error: 'invalid ECDSA signature encoding' };
-    }
-
-    const valid = await cryptoApi.subtle.verify(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      publicKey,
-      toArrayBufferBytes(p1363Sig),
-      toArrayBufferBytes(signedData)
-    );
-
-    if (!valid) {
-      return { ok: false, error: 'signature verification failed' };
-    }
-  } else if (coseAlg === -257) {
-    // RS256: RSASSA-PKCS1-v1_5 SHA-256
-    // COSE RSA key parameters: -1 = n (modulus), -2 = e (public exponent)
-    const n = coseKey.get(-1);
-    const e = coseKey.get(-2);
-    if (!(n instanceof Uint8Array) || !(e instanceof Uint8Array)) {
-      return {
-        ok: false,
-        error: 'invalid COSE RSA key: missing n or e components',
-      };
-    }
-
-    let publicKey: CryptoKey;
-    try {
-      publicKey = await cryptoApi.subtle.importKey(
-        'jwk',
-        {
-          kty: 'RSA',
-          alg: 'RS256',
-          n: encodeBase64Url(n),
-          e: encodeBase64Url(e),
-          ext: true,
-          key_ops: ['verify'],
-        },
-        { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
-        false,
-        ['verify']
-      );
-    } catch {
-      return { ok: false, error: 'failed to import stored RSA public key' };
-    }
-
-    const valid = await cryptoApi.subtle.verify(
-      { name: 'RSASSA-PKCS1-v1_5' },
-      publicKey,
-      toArrayBufferBytes(signatureBytes),
-      toArrayBufferBytes(signedData)
-    );
-
-    if (!valid) {
-      return { ok: false, error: 'signature verification failed' };
-    }
-  } else {
+  if (coseAlg !== -7) {
     return {
       ok: false,
-      error: `unsupported COSE key algorithm: ${String(coseAlg)}`,
+      error: `only ES256 (alg -7) is supported, got: ${String(coseAlg)}`,
     };
+  }
+
+  const x = coseKey.get(-2);
+  const y = coseKey.get(-3);
+  if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array)) {
+    return {
+      ok: false,
+      error: 'invalid COSE P-256 key: missing x or y coordinates',
+    };
+  }
+
+  let publicKey: CryptoKey;
+  try {
+    publicKey = await cryptoApi.subtle.importKey(
+      'jwk',
+      {
+        kty: 'EC',
+        crv: 'P-256',
+        x: encodeBase64Url(x),
+        y: encodeBase64Url(y),
+        ext: true,
+        key_ops: ['verify'],
+      },
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify']
+    );
+  } catch {
+    return { ok: false, error: 'failed to import stored P-256 public key' };
+  }
+
+  let p1363Sig: Uint8Array;
+  try {
+    p1363Sig = isP1363Signature(signatureBytes) ? signatureBytes : derToP1363(signatureBytes);
+  } catch {
+    return { ok: false, error: 'invalid ECDSA signature encoding' };
+  }
+
+  const valid = await cryptoApi.subtle.verify(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    publicKey,
+    toArrayBufferBytes(p1363Sig),
+    toArrayBufferBytes(signedData)
+  );
+
+  if (!valid) {
+    return { ok: false, error: 'signature verification failed' };
   }
 
   // Step 6: signCount check (log regression, don't hard-block per PRD H.5)

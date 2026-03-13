@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-13] Remove RS256 from WebAuthn, ES256 only
+
+**Decision**: Remove RS256 (COSE alg -257) support from WebAuthn registration and assertion verification.
+**Context**: `pubKeyCredParams` and `verifyAssertion` supported both ES256 and RS256, but `attestation.ts` has always only accepted ES256. The RS256 verification branch was unreachable dead code from day one — no RS256 credential could ever be stored.
+**Options Considered**: (1) Keep RS256 for hypothetical future device compatibility; (2) Remove RS256 entirely; (3) Complete RS256 support by adding it to attestation.
+**Choice**: Remove RS256 entirely.
+**Reasoning**: ES256 is mandatory per WebAuthn L2 spec (all FIDO2 authenticators must support it). RS256 added ~40 lines of dead code and created a false impression of broader algorithm support. Removing it narrows the attack surface and eliminates the inconsistency. If RS256 is ever needed, it can be re-added with full attestation support.
+
 ## [2026-03-13] Release verification crypto helpers stay on the static import path
 
 **Decision**: Remove the dynamic `import('./crypto')` from frontend tiered release verification and use a static import for `verifyManifestSignature`.
