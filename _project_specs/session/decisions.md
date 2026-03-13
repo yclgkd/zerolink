@@ -13,6 +13,17 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-13] WebAuthn normalization keeps bracket notation without stale Biome suppressions
+
+**Decision**: Remove unused `biome-ignore lint/complexity/useLiteralKeys` comments from `packages/frontend/src/crypto/webauthn.ts` while keeping bracket notation for `Record<string, unknown>` access.
+**Context**: `pnpm lint` was clean on the underlying code path but started failing on `suppressions/unused` because the existing ignores no longer matched any active Biome diagnostic. The file still relies on `Record<string, unknown>` narrowing under `noPropertyAccessFromIndexSignature`, so bracket notation remains the clearest and safest access pattern there.
+**Options Considered**: Keep the dead suppressions; switch the accessors to dot notation to satisfy the old comment rationale; remove only the stale comments and preserve the existing runtime/type behavior.
+**Choice**: Remove the dead suppressions only.
+**Reasoning**: This restores lint cleanliness with the smallest possible diff and avoids touching WebAuthn request normalization logic in a security-sensitive path.
+**Trade-offs**: The file keeps explicit bracket access, so future formatter or lint changes should be evaluated against the TypeScript index-signature constraint before reintroducing suppressions.
+**Follow-up (2026-03-13)**: In tests that inspect structured log payloads, prefer a tiny explicit object shape over `Record<string, unknown>` when the assertion needs named fields such as `stack_fingerprint`. That avoids a `useLiteralKeys` vs. `noPropertyAccessFromIndexSignature` conflict without needing suppressions.
+**Follow-up (2026-03-13)**: Frontend test teardown for receiver-key IndexedDB cleanup now aggregates per-UUID delete failures and throws once cleanup completes. Test-isolation failures are treated as blocking rather than logged or silently ignored, so dirty IndexedDB state surfaces immediately and deterministically.
+
 ## [2026-03-12] Receiver Safety Code and realtime copy align with public channel state
 
 **Decision**: Treat `receiverPubFpr` from `/api/public/:uuid` and websocket state updates as the source of truth for receiver-side Safety Code rendering when local lock state is unavailable, and update frontend copy to describe automatic realtime refresh instead of manual reopen/refresh steps.

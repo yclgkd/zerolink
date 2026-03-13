@@ -45,18 +45,17 @@ test.describe('Real-time sync via polling fallback', () => {
 
       const shareUrl = await shareLinkLocator.getAttribute('href');
       const manageUrl = await manageLinkLocator.getAttribute('href');
-      expect(shareUrl).toBeTruthy();
-      expect(manageUrl).toBeTruthy();
+      if (!shareUrl || !manageUrl) throw new Error('Missing share or manage URL');
 
       // ── Step 2: Sender opens ManagePage — should show WAITING ──────────
 
-      await senderPage.goto(manageUrl!, { waitUntil: 'domcontentloaded' });
+      await senderPage.goto(manageUrl, { waitUntil: 'domcontentloaded' });
       await expect(senderPage.getByTestId('page-manage')).toBeVisible({ timeout: 15_000 });
       await expect(senderPage.getByTestId('manage-state-waiting')).toBeVisible({ timeout: 15_000 });
 
       // ── Step 3: Receiver opens SharePage and locks ─────────────────────
 
-      await receiverPage.goto(shareUrl!, { waitUntil: 'domcontentloaded' });
+      await receiverPage.goto(shareUrl, { waitUntil: 'domcontentloaded' });
       await expect(receiverPage.getByTestId('share-step-onboarding')).toBeVisible({
         timeout: 15_000,
       });
@@ -125,8 +124,9 @@ test.describe('Real-time sync via polling fallback', () => {
       const manageUrl = await manageLinkLocator.getAttribute('href');
 
       // ── Step 2: Receiver locks ─────────────────────────────────────────
+      if (!shareUrl || !manageUrl) throw new Error('Missing share or manage URL');
 
-      await receiverPage.goto(shareUrl!, { waitUntil: 'domcontentloaded' });
+      await receiverPage.goto(shareUrl, { waitUntil: 'domcontentloaded' });
       await expect(receiverPage.getByTestId('share-step-onboarding')).toBeVisible({
         timeout: 15_000,
       });
@@ -137,7 +137,7 @@ test.describe('Real-time sync via polling fallback', () => {
 
       // ── Step 3: Sender delivers ────────────────────────────────────────
 
-      await senderPage.goto(manageUrl!, { waitUntil: 'domcontentloaded' });
+      await senderPage.goto(manageUrl, { waitUntil: 'domcontentloaded' });
       await expect(senderPage.getByTestId('page-manage')).toBeVisible({ timeout: 15_000 });
       // Wait for LOCKED state (initial fetch or poll)
       await expect(senderPage.getByTestId('manage-state-locked')).toBeVisible({ timeout: 30_000 });
@@ -206,10 +206,9 @@ test.describe('Real-time sync via polling fallback', () => {
         .getByTestId('create-success-manage-link')
         .getAttribute('href');
 
-      expect(shareUrl).toBeTruthy();
-      expect(manageUrl).toBeTruthy();
+      if (!shareUrl || !manageUrl) throw new Error('Missing share or manage URL');
 
-      await receiverOwnerPage.goto(shareUrl!, { waitUntil: 'domcontentloaded' });
+      await receiverOwnerPage.goto(shareUrl, { waitUntil: 'domcontentloaded' });
       await expect(receiverOwnerPage.getByTestId('share-step-onboarding')).toBeVisible({
         timeout: 15_000,
       });
@@ -223,7 +222,7 @@ test.describe('Real-time sync via polling fallback', () => {
         timeout: 15_000,
       });
 
-      await receiverOtherPage.goto(shareUrl!, { waitUntil: 'domcontentloaded' });
+      await receiverOtherPage.goto(shareUrl, { waitUntil: 'domcontentloaded' });
       await expect(receiverOtherPage.getByTestId('share-step-locked')).toBeVisible({
         timeout: 15_000,
       });
@@ -235,7 +234,7 @@ test.describe('Real-time sync via polling fallback', () => {
       ).toBeVisible({ timeout: 15_000 });
       await expect(receiverOtherPage.getByTestId('safety-code-root')).toHaveCount(0);
 
-      await senderPage.goto(manageUrl!, { waitUntil: 'domcontentloaded' });
+      await senderPage.goto(manageUrl, { waitUntil: 'domcontentloaded' });
       await expect(senderPage.getByTestId('manage-state-locked')).toBeVisible({ timeout: 30_000 });
       await senderPage.getByTestId('manage-secret-input').fill(plaintext);
       await senderPage.getByTestId('manage-deliver-button').click();

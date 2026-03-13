@@ -98,6 +98,7 @@ function getSafetyCodeNoticeCopy(
         title: 'Unable to check the local receiver key.',
         body: 'ZeroLink could not read the receiver key material stored on this device, so the Safety Code cannot be verified here.',
       };
+    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
     case 'missing-receiver-fingerprint':
     default:
       return {
@@ -158,7 +159,9 @@ function getDecryptUnavailableCopy(
         title: 'Unable to load the local receiver key.',
         body: 'ZeroLink could not read the receiver key stored on this device, so local decrypt is unavailable here.',
       };
+    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
     case 'missing-local-key':
+    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
     case 'missing-receiver-fingerprint':
     default:
       return {

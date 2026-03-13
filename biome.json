@@ -60,6 +60,21 @@
       "indentWidth": 2
     }
   },
+  "overrides": [
+    {
+      "includes": [
+        "packages/frontend/src/crypto/webauthn.ts",
+        "packages/frontend/src/release/tiered-verification.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "useLiteralKeys": "off"
+          }
+        }
+      }
+    }
+  ],
   "files": {
     "ignoreUnknown": true,
     "includes": ["**", "!pnpm-lock.yaml", "!packages/frontend/public/mockServiceWorker.js"]

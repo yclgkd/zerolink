@@ -140,8 +140,8 @@ describe('tieredVerifyRelease', () => {
 
     const cached = readCachedDigest();
     expect(cached).not.toBeNull();
-    expect(cached!.manifestHash).toBe(fixture.manifestHash);
-    expect(cached!.version).toBe(fixture.manifest.version);
+    expect(cached?.manifestHash).toBe(fixture.manifestHash);
+    expect(cached?.version).toBe(fixture.manifest.version);
   });
 
   it('re-validates signed manifest bytes even when cache is fresh', async () => {
@@ -200,7 +200,7 @@ describe('tieredVerifyRelease', () => {
     // Cache should be refreshed with new verifiedAt
     const refreshed = readCachedDigest();
     expect(refreshed).not.toBeNull();
-    expect(refreshed!.verifiedAt).toBe(now);
+    expect(refreshed?.verifiedAt).toBe(now);
   });
 
   it('falls to full when cache is expired and version changed', async () => {
