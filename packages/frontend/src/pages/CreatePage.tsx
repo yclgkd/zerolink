@@ -1,5 +1,5 @@
 import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
-import { ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -366,6 +366,17 @@ function SuccessSummary({
           testId="create-success-share-link"
           url={links.shareUrlWithFragment}
         />
+        <StateNotice
+          data-testid="create-success-share-link-warning"
+          title="This share link is shown only once."
+          tone="warning"
+        >
+          <p className="mt-1 text-sm text-neon-orange">
+            <AlertTriangle aria-hidden="true" className="mr-1 inline size-4" />
+            Save it now. After you leave this page, ZeroLink cannot recover it. If you lose it,
+            create a new channel.
+          </p>
+        </StateNotice>
         <CopyableLinkRow
           copyTestId="create-success-manage-link-copy"
           label="Manage link — keep this private"

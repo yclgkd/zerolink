@@ -3,11 +3,10 @@ import {
   type ChannelState,
   ErrorResponseSchema,
   PublicStatusResponseSchema,
-  ROUTE_PATTERN,
   type SecurityProfile,
   UUIDSchema,
 } from '@zerolink/shared';
-import { ClipboardCheck, Copy, PlusCircle, Send, Trash2 } from 'lucide-react';
+import { PlusCircle, Send, Trash2 } from 'lucide-react';
 import type { ReactElement, RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -104,56 +103,6 @@ function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
         {uuid ?? '(missing)'}
       </code>
     </p>
-  );
-}
-
-function ShareLinkCard({
-  shareLink,
-  copied,
-  onCopy,
-}: {
-  shareLink: string;
-  copied: boolean;
-  onCopy: () => Promise<void>;
-}) {
-  return (
-    <section
-      className="space-y-3 rounded-xl border border-border/60 bg-card/50 p-4"
-      data-testid="manage-share-link-card"
-    >
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Share Link</h3>
-        <p className="text-xs text-muted-foreground">
-          Send this receiver link through a trusted channel.
-        </p>
-      </div>
-      <div className="flex flex-col gap-2 md:flex-row md:items-center">
-        <code
-          className="block flex-1 break-all rounded bg-muted px-2 py-2 text-xs text-neon-cyan"
-          data-testid="manage-share-link-value"
-        >
-          {shareLink}
-        </code>
-        <Button
-          data-testid="manage-copy-button"
-          onClick={() => void onCopy()}
-          size="sm"
-          type="button"
-        >
-          {copied ? (
-            <>
-              <ClipboardCheck aria-hidden="true" className="size-3.5 text-neon-green" />
-              Copied
-            </>
-          ) : (
-            <>
-              <Copy aria-hidden="true" className="size-3.5" />
-              Copy
-            </>
-          )}
-        </Button>
-      </div>
-    </section>
   );
 }
 
@@ -420,50 +369,6 @@ function ActionPanel({
       ) : null}
     </section>
   );
-}
-
-function useShareLinkGenerator(uuid?: string) {
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const shareLink = useMemo(() => {
-    if (!uuid) return '(missing uuid)';
-    const sharePath = ROUTE_PATTERN.SHARE.replace(':uuid', uuid);
-    return typeof window === 'undefined' ? sharePath : `${window.location.origin}${sharePath}`;
-  }, [uuid]);
-
-  const handleCopyShareLink = useCallback(async () => {
-    if (!uuid) {
-      setCopied(false);
-      return;
-    }
-
-    try {
-      const writeText =
-        typeof navigator !== 'undefined'
-          ? navigator.clipboard?.writeText?.bind(navigator.clipboard)
-          : undefined;
-      if (!writeText) {
-        setCopied(false);
-        return;
-      }
-
-      await writeText(shareLink);
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-      setCopied(true);
-      timerRef.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }, [uuid, shareLink]);
-
-  return { copied, shareLink, handleCopyShareLink };
 }
 
 function usePublicStatusFetcher(uuid: string | undefined, mountedRef: RefObject<boolean>) {
@@ -765,8 +670,6 @@ function useManagePageState(uuid?: string) {
     ),
   });
 
-  const { copied, shareLink, handleCopyShareLink } = useShareLinkGenerator(uuid);
-
   useEffect(() => {
     actionScopeRef.current += 1;
     setIsActionPending(false);
@@ -837,8 +740,6 @@ function useManagePageState(uuid?: string) {
     status: store.channelState,
     adminMode: store.adminMode,
     showDestroyConfirm: store.showDestroyConfirm,
-    copied,
-    shareLink,
     secretInput,
     softkeyPassphrase,
     safetyCode,
@@ -866,7 +767,6 @@ function useManagePageState(uuid?: string) {
     handleDestroyConfirm,
     handleCancelDestroy: () => store.setShowDestroyConfirm(false),
     handleApplyDestroy,
-    handleCopyShareLink,
   };
 }
 
@@ -880,7 +780,6 @@ export function ManagePage(): ReactElement {
     state.adminMode === 'password' || state.adminMode === 'softkey';
   const showUnavailableState = state.isUnavailable && state.status !== CHANNEL_STATE.DELETED;
   const isTerminalState = isTerminalManageState(state.status, showUnavailableState);
-  const showShareLink = !isTerminalState;
   const showDeliveryComposer = !isTerminalState && canComposeDelivery(state.status);
   const showPasswordSection =
     !isTerminalState &&
@@ -901,14 +800,6 @@ export function ManagePage(): ReactElement {
           >
             {state.publicStatusError}
           </StateNotice>
-        ) : null}
-
-        {showShareLink ? (
-          <ShareLinkCard
-            copied={state.copied}
-            onCopy={state.handleCopyShareLink}
-            shareLink={state.shareLink}
-          />
         ) : null}
 
         {showUnavailableState ? (

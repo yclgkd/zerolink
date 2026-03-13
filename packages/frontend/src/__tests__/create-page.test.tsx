@@ -245,6 +245,19 @@ describe('CreatePage integration', () => {
     });
   });
 
+  it('warns that the share link is shown only once', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    const warning = await screen.findByTestId('create-success-share-link-warning');
+    expect(warning.textContent).toContain('This share link is shown only once.');
+    expect(warning.textContent).toContain('After you leave this page, ZeroLink cannot recover it.');
+    expect(warning.textContent).toContain('If you lose it, create a new channel.');
+  });
+
   it('shows password mode badge in success summary for Quick Share', async () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
