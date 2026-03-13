@@ -1,4 +1,4 @@
-import { sha256Hex } from './crypto';
+import { sha256Hex, verifyManifestSignature } from './crypto';
 import type {
   ReleaseVerificationResult,
   VerifiedReleaseSnapshot,
@@ -128,7 +128,6 @@ async function verifySignatureOnly(
   if (!manifestText || !signatureText) return null;
 
   try {
-    const { verifyManifestSignature } = await import('./crypto');
     const valid = await verifyManifestSignature({
       manifestBytes: new TextEncoder().encode(manifestText),
       publicKeyPem,
