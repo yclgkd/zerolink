@@ -378,3 +378,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: URL fragment
 **Reasoning**: Browsers never send fragments to servers (HTTP spec); recipient copies entire URL; zero-knowledge guarantee
 **Trade-offs**: Entire link must be shared intact; no server-side logging of key material (intentional)
+## [2026-03-12] Disable passphrase autofill across frontend flows
+
+**Decision**: Use `autocomplete="off"` on shared passphrase inputs without vendor-specific ignore hints
+**Context**: The same passphrase field is reused for channel creation, receiver lock setup, sender delivery, receiver decryption, and password-managed delete confirmation. `autocomplete="new-password"` triggered confusing password-manager prompts in non-signup flows.
+**Options Considered**: Keep `new-password` everywhere, split autocomplete by flow, disable autofill across all passphrase prompts, disable autofill plus password-manager ignore hints
+**Choice**: Disable autofill across all passphrase prompts
+**Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
+**Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.

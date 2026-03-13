@@ -122,4 +122,11 @@ describe('PassphraseInput', () => {
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.getAttribute('aria-describedby')).toBe('share-lock-error');
   });
+
+  it('disables browser autocomplete on passphrase inputs', () => {
+    render(<PassphraseInput onChange={() => {}} value="" />);
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('autocomplete')).toBe('off');
+  });
 });

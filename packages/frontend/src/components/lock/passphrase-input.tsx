@@ -116,6 +116,7 @@ export function PassphraseInput({
         <input
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
+          autoComplete="off"
           className={cn(
             'w-full rounded-xl border px-4 py-3 transition focus-visible:outline-none focus-visible:ring-2',
             'border-input bg-input-background text-foreground placeholder:text-muted-foreground',
@@ -123,7 +124,6 @@ export function PassphraseInput({
               ? 'border-neon-amber/60 focus-visible:ring-neon-amber/60'
               : 'focus-visible:ring-ring'
           )}
-          autoComplete="new-password"
           data-testid="passphrase-input-field"
           id={resolvedInputId}
           onChange={(event) => onChange(event.target.value)}
