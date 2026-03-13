@@ -151,8 +151,8 @@ describe('ChannelSync', () => {
     );
 
     expect(stateChanges).toHaveLength(1);
-    expect(stateChanges[0]!.state).toBe('locked');
-    expect(stateChanges[0]!.version).toBe(1);
+    expect(stateChanges[0]?.state).toBe('locked');
+    expect(stateChanges[0]?.version).toBe(1);
   });
 
   it('fires onChannelClosed for channel_closed messages', async () => {
@@ -208,7 +208,7 @@ describe('ChannelSync', () => {
     );
 
     expect(stateChanges).toHaveLength(1);
-    expect(stateChanges[0]!.version).toBe(5);
+    expect(stateChanges[0]?.version).toBe(5);
   });
 
   it('reconnects with exponential backoff on WS close', async () => {

@@ -176,6 +176,7 @@ export function usePublicShareState(uuid?: string) {
         setPublicStatusError(null);
       } catch (error: unknown) {
         if (!cancelled) {
+          // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging channel load failures
           console.error('[usePublicShareState] Failed to load channel state', {
             uuid: currentUuid,
             error,
@@ -381,6 +382,7 @@ export function useReceiverSafetyCodeState({
       })
       .catch((error: unknown) => {
         if (cancelled) return;
+        // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging IndexedDB failures
         console.error('[useReceiverSafetyCodeState] IndexedDB load failed', { uuid, error });
         setStoredReceiverPubFpr(null);
         setIsCheckingLocalKey(false);
@@ -390,7 +392,7 @@ export function useReceiverSafetyCodeState({
     return () => {
       cancelled = true;
     };
-  }, [uuid, isReceiverVerificationState, localSafetyCode?.fullFpr]);
+  }, [uuid, isReceiverVerificationState, localSafetyCode?.fullFpr, receiverKeyStorage]);
 
   if (!isReceiverVerificationState) {
     return {

@@ -921,17 +921,15 @@ export function ManagePage(): ReactElement {
         )}
 
         {showDeliveryComposer ? (
-          <>
-            <SecretInput
-              ariaDescribedBy={
-                state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
-              }
-              ariaInvalid={state.isSecretInputInvalid ? true : undefined}
-              disabled={state.isActionPending}
-              onChange={state.handleSecretChange}
-              value={state.secretInput}
-            />
-          </>
+          <SecretInput
+            ariaDescribedBy={
+              state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
+            }
+            ariaInvalid={state.isSecretInputInvalid ? true : undefined}
+            disabled={state.isActionPending}
+            onChange={state.handleSecretChange}
+            value={state.secretInput}
+          />
         ) : null}
 
         {showPasswordSection ? (

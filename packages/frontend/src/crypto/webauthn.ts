@@ -121,15 +121,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isValidCreationPublicKeyOptions(value: unknown): value is CreationPublicKeyOptions {
   if (!isRecord(value)) return false;
 
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
   const challenge = value['challenge'];
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
   const rp = value['rp'];
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
   const user = value['user'];
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
   const pubKeyCredParams = value['pubKeyCredParams'];
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
   const userId = isRecord(user) ? user['id'] : undefined;
 
   return (
@@ -143,7 +138,6 @@ function isValidCreationPublicKeyOptions(value: unknown): value is CreationPubli
 
 function isValidRequestPublicKeyOptions(value: unknown): value is RequestPublicKeyOptions {
   if (!isRecord(value)) return false;
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
   return typeof value['challenge'] === 'string';
 }
 
@@ -155,13 +149,11 @@ function normalizeCreationOptions(
   }
 
   if ('publicKey' in input) {
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
     const publicKey = input['publicKey'];
     if (!isValidCreationPublicKeyOptions(publicKey)) {
       return null;
     }
 
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
     const signal = input['signal'];
     return {
       ...(signal !== undefined ? { signal: signal as AbortSignal } : {}),
@@ -184,15 +176,12 @@ function normalizeRequestOptions(
   }
 
   if ('publicKey' in input) {
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
     const publicKey = input['publicKey'];
     if (!isValidRequestPublicKeyOptions(publicKey)) {
       return null;
     }
 
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
     const mediation = input['mediation'];
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
     const signal = input['signal'];
     return {
       ...(mediation !== undefined
@@ -212,7 +201,6 @@ function normalizeRequestOptions(
 
 function normalizeWebAuthnFailure(error: unknown): WebAuthnAdapterError {
   const causeNameFromPayload =
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string, unknown>
     isRecord(error) && typeof error['name'] === 'string' ? error['name'] : undefined;
   const causeName = causeNameFromPayload ?? (error instanceof Error ? error.name : undefined);
   const message = error instanceof Error ? error.message : undefined;

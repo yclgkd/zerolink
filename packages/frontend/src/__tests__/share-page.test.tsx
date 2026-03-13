@@ -185,16 +185,23 @@ async function saveReceiverEnvelopesForDeliveredTests(): Promise<void> {
 
 async function clearReceiverKeyStorage(): Promise<void> {
   const receiverKeyStorage = createIndexedDbReceiverKeyStorage();
+  const failures: string[] = [];
 
   await Promise.all(
     RECEIVER_STORAGE_UUIDS.map(async (uuid) => {
       try {
         await receiverKeyStorage.remove(uuid);
       } catch (error: unknown) {
-        console.warn(`[test cleanup] Failed to remove receiver key for ${uuid}`, error);
+        failures.push(`${uuid}: ${error instanceof Error ? error.message : String(error)}`);
       }
     })
   );
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Failed to clear receiver key storage for test isolation:\n${failures.join('\n')}`
+    );
+  }
 }
 
 function mockLegacyTerminalPublicState(

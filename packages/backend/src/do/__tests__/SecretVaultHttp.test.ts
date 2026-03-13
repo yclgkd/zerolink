@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mapError } from '../SecretVaultHttp.ts';
 import { StateTransitionError } from '../SecretVaultTypes.ts';
 
+type StructuredUnexpectedErrorLogShape = {
+  stack_fingerprint?: string;
+  error_message?: string;
+  error_stack?: string;
+  thrown_value?: string;
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -25,7 +32,7 @@ describe('mapError', () => {
       error_name: 'Error',
       stack_fingerprint: expect.any(String),
     });
-    const logEntry = consoleError.mock.calls[0]?.[0] as Record<string, unknown>;
+    const logEntry = consoleError.mock.calls[0]?.[0] as StructuredUnexpectedErrorLogShape;
     expect(logEntry).not.toHaveProperty('error_message');
     expect(logEntry).not.toHaveProperty('error_stack');
     expect(logEntry).not.toHaveProperty('thrown_value');
@@ -50,10 +57,10 @@ describe('mapError', () => {
     mapError(firstError, { appEnv: 'production', handler: 'lock_commit' });
     mapError(secondError, { appEnv: 'production', handler: 'lock_commit' });
 
-    const firstLog = consoleError.mock.calls[0]?.[0] as Record<string, unknown>;
-    const secondLog = consoleError.mock.calls[1]?.[0] as Record<string, unknown>;
+    const firstLog = consoleError.mock.calls[0]?.[0] as StructuredUnexpectedErrorLogShape;
+    const secondLog = consoleError.mock.calls[1]?.[0] as StructuredUnexpectedErrorLogShape;
 
-    expect(firstLog['stack_fingerprint']).toBe(secondLog['stack_fingerprint']);
+    expect(firstLog.stack_fingerprint).toBe(secondLog.stack_fingerprint);
     expect(firstLog).not.toHaveProperty('error_message');
     expect(secondLog).not.toHaveProperty('error_message');
   });
