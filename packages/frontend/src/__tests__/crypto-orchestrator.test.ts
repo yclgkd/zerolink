@@ -1130,6 +1130,64 @@ describe('crypto orchestrator', () => {
     });
   });
 
+  it('binds AAD to uuid, version, and receiverPubFpr', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+    const currentVersion = 0;
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        allowCredentials: VALID_ALLOW_CREDENTIALS,
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+    const captured: { aad: string | null } = { aad: null };
+    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+      if (input.intent.op === 'update') {
+        captured.aad = input.intent.cipherBundle?.aad ?? null;
+      }
+      return { ok: true, status: 200, data: { ok: true } };
+    });
+
+    const result = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'test aad binding',
+    });
+
+    expect(result.ok).toBe(true);
+    if (captured.aad == null) {
+      throw new Error('Expected a committed AAD value');
+    }
+
+    // Decode the base64url AAD and verify it contains uuid||version||fpr
+    const aadBytes = Uint8Array.from(
+      atob(captured.aad.replaceAll('-', '+').replaceAll('_', '/')),
+      (c) => c.charCodeAt(0)
+    );
+    const aadText = new TextDecoder().decode(aadBytes);
+    expect(aadText).toBe(`${VALID_UUID}||${currentVersion}||${receiverPubFpr}`);
+  });
+
   it('does not apply deliver store updates when uuid changes mid-flow', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     useDeliverStore.getState().setDeliverUuid(VALID_UUID_BRANDED);

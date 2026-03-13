@@ -13,6 +13,13 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-13] Strengthen AAD binding to match documented spec
+
+**Decision**: Change AES-GCM AAD from `uuid` alone to `uuid||version||receiver_pub_fpr`.
+**Context**: SECURITY.md and PRD.md documented AAD as binding uuid, version, and receiver public key fingerprint, but the implementation only bound uuid. This was a gap between documented and actual binding strength.
+**Choice**: Align code to documentation — bind all three fields.
+**Reasoning**: Binding version prevents ciphertext replay across channel versions; binding receiver_pub_fpr prevents ciphertext substitution across receivers. The change is backward-compatible because AAD is stored alongside the cipherBundle and read back as-is during decryption.
+
 ## [2026-03-13] Remove RS256 from WebAuthn, ES256 only
 
 **Decision**: Remove RS256 (COSE alg -257) support from WebAuthn registration and assertion verification.

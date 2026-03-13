@@ -703,7 +703,9 @@ async function buildDeliverUpdateIntent(
   beginData: ResolvedDeliverBeginData
 ) {
   const plaintextBytes = toPlaintextBytes(input.plaintext);
-  const aad = toUtf8Bytes(input.uuid);
+  const aad = toUtf8Bytes(
+    `${input.uuid}||${beginData.currentVersion}||${beginData.receiverPubFpr}`
+  );
   const aesKey = await generateAesKey();
   const rawContentKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
   const encrypted = await encryptAesGcm({
