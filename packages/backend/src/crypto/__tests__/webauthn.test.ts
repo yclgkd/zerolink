@@ -215,6 +215,34 @@ describe('verifyAssertion', () => {
     });
   });
 
+  it('rejects a non-ES256 COSE key algorithm', async () => {
+    const { params } = await buildVerifyParams();
+
+    // Re-encode the stored public key with RS256 (alg -257) instead of ES256 (alg -7)
+    const { encode } = await import('cborg');
+    const rs256CoseMap = new Map<number, unknown>([
+      [1, 3], // kty = RSA (3)
+      [3, -257], // alg = RS256
+      [-1, new Uint8Array(256).fill(0x01)], // fake n
+      [-2, new Uint8Array([0x01, 0x00, 0x01])], // fake e
+    ]);
+    const rs256Key = encodeBase64Url(encode(rs256CoseMap));
+
+    const badParams = {
+      ...params,
+      storedCredential: {
+        ...params.storedCredential,
+        publicKey: rs256Key,
+      },
+    };
+
+    const result = await verifyAssertion(badParams);
+    expect(result).toEqual({
+      ok: false,
+      error: 'only ES256 (alg -7) is supported, got: -257',
+    });
+  });
+
   it('accepts a valid 64-byte P1363 signature even when it starts with 0x30', async () => {
     let params: WebAuthnVerifyParams | null = null;
 
@@ -268,6 +296,18 @@ describe('generateCreationOptions', () => {
       residentKey: 'discouraged',
       requireResidentKey: false,
     });
+  });
+
+  it('only includes ES256 in pubKeyCredParams', () => {
+    const options = generateCreationOptions({
+      rpId: RP_ID,
+      rpName: 'ZeroLink',
+      uuid: 'test-uuid',
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      securityProfile: 'secure',
+    }) as { pubKeyCredParams: Array<{ type: string; alg: number }> };
+
+    expect(options.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);
   });
 
   it('uses non-discoverable credential settings for standard profile', () => {
