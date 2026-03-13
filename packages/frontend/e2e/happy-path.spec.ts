@@ -27,6 +27,13 @@ test.describe('ZL-032 e2e happy path', () => {
       const manageLinkLocator = page.getByTestId('create-success-manage-link');
       await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
       await expect(manageLinkLocator).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('create-success-share-link-warning')).toContainText(
+        'This share link is shown only once.',
+        { timeout: 15_000 }
+      );
+      await expect(page.getByTestId('create-success-share-link-warning')).toContainText(
+        'After you leave this page, ZeroLink cannot recover it.'
+      );
 
       const shareUrl = await shareLinkLocator.getAttribute('href');
       const manageUrl = await manageLinkLocator.getAttribute('href');
@@ -54,6 +61,8 @@ test.describe('ZL-032 e2e happy path', () => {
 
       await page.goto(manageUrl ?? '/');
       await expect(page.getByTestId('page-manage')).toBeVisible();
+      await expect(page.getByTestId('manage-share-link-card')).toHaveCount(0);
+      await expect(page.getByTestId('manage-copy-button')).toHaveCount(0);
 
       await page.getByTestId('manage-secret-input').fill(plaintext);
       await page.getByTestId('manage-deliver-button').click();
