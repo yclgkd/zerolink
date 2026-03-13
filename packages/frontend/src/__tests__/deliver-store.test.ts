@@ -3,6 +3,7 @@ import {
   type CompoundBeginResponse,
   CompoundBeginResponseSchema,
   CompoundCommitResponseSchema,
+  HexStringSchema,
   SECURITY_PROFILE,
   UUIDSchema,
 } from '@zerolink/shared';
@@ -12,10 +13,17 @@ import { useDeliverStore } from '../stores/deliver-store';
 
 const VALID_UUID = UUIDSchema.parse('aaaaaaaaaaaaaaaaaaaaa');
 const NEXT_UUID = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
-const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const VALID_HEX = HexStringSchema.parse(
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+);
+const NEXT_VALID_HEX = HexStringSchema.parse(
+  'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210'
+);
 const VALID_B64U = 'bW9ja19iYXNlNjR1cmw';
 
-function buildCompoundBeginResponse(): CompoundBeginResponse {
+function buildCompoundBeginResponse(
+  overrides?: Partial<Pick<CompoundBeginResponse, 'receiverPubFpr'>>
+): CompoundBeginResponse {
   const parsed = CompoundBeginResponseSchema.parse({
     ok: true,
     challenge: {
@@ -23,7 +31,7 @@ function buildCompoundBeginResponse(): CompoundBeginResponse {
       seed: VALID_B64U,
       expiresAt: 1_700_000_000_000,
     },
-    receiverPubFpr: VALID_HEX,
+    receiverPubFpr: overrides?.receiverPubFpr ?? VALID_HEX,
     receiverPubJwk: {
       kty: 'RSA',
       alg: 'RSA-OAEP-256',
@@ -108,8 +116,9 @@ describe('useDeliverStore', () => {
     expect(nextState.showDestroyConfirm).toBe(false);
   });
 
-  it('tracks compound_begin lifecycle and stores challenge/version details', () => {
+  it('preserves a known receiver fingerprint when compound_begin starts loading', () => {
     const state = useDeliverStore.getState();
+    state.setReceiverPubFpr(VALID_HEX);
 
     state.startCompoundBegin();
     expect(useDeliverStore.getState().compoundBegin).toEqual({
@@ -117,6 +126,15 @@ describe('useDeliverStore', () => {
       data: null,
       errorCode: null,
     });
+    expect(useDeliverStore.getState().receiverPubFpr).toBe(VALID_HEX);
+    expect(useDeliverStore.getState().challenge).toBeNull();
+    expect(useDeliverStore.getState().currentVersion).toBeNull();
+    expect(useDeliverStore.getState().receiverPubJwk).toBeNull();
+  });
+
+  it('preserves a known receiver fingerprint on retryable compound_begin failures', () => {
+    const state = useDeliverStore.getState();
+    state.setReceiverPubFpr(VALID_HEX);
 
     const beginPayload = buildCompoundBeginResponse();
     state.completeCompoundBegin(beginPayload);
@@ -133,18 +151,54 @@ describe('useDeliverStore', () => {
     expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr);
     expect(nextState.receiverPubJwk).toEqual(beginPayload.receiverPubJwk);
 
-    state.failCompoundBegin('BAD_REQUEST');
+    state.failCompoundBegin('NETWORK_ERROR');
     nextState = useDeliverStore.getState();
     expect(nextState.compoundBegin).toEqual({
       status: 'error',
       data: null,
-      errorCode: 'BAD_REQUEST',
+      errorCode: 'NETWORK_ERROR',
+    });
+    expect(nextState.challenge).toBeNull();
+    expect(nextState.currentVersion).toBeNull();
+    expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
+    expect(nextState.receiverPubFpr).toBe(beginPayload.receiverPubFpr);
+    expect(nextState.receiverPubJwk).toBeNull();
+  });
+
+  it.each([
+    'NOT_FOUND',
+    'LOCK_FORBIDDEN',
+  ] as const)('clears a known receiver fingerprint on terminal compound_begin failure %s', (errorCode) => {
+    const state = useDeliverStore.getState();
+
+    const beginPayload = buildCompoundBeginResponse();
+    state.completeCompoundBegin(beginPayload);
+
+    state.failCompoundBegin(errorCode);
+
+    const nextState = useDeliverStore.getState();
+    expect(nextState.compoundBegin).toEqual({
+      status: 'error',
+      data: null,
+      errorCode,
     });
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
     expect(nextState.securityProfile).toBe(beginPayload.securityProfile);
     expect(nextState.receiverPubFpr).toBeNull();
     expect(nextState.receiverPubJwk).toBeNull();
+  });
+
+  it('replaces receiver fingerprint with the latest compound_begin payload', () => {
+    const state = useDeliverStore.getState();
+    state.setReceiverPubFpr(VALID_HEX);
+
+    const beginPayload = buildCompoundBeginResponse({ receiverPubFpr: NEXT_VALID_HEX });
+    state.completeCompoundBegin(beginPayload);
+
+    const nextState = useDeliverStore.getState();
+    expect(nextState.receiverPubFpr).toBe(NEXT_VALID_HEX);
+    expect(nextState.receiverPubJwk).toEqual(beginPayload.receiverPubJwk);
   });
 
   it('tracks compound_commit lifecycle', () => {

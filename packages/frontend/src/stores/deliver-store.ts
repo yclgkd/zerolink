@@ -65,6 +65,10 @@ export interface DeliverStoreActions {
  */
 export type DeliverStore = DeliverStoreState & DeliverStoreActions;
 
+function shouldClearReceiverFingerprintOnCompoundBeginError(errorCode: string): boolean {
+  return errorCode === 'NOT_FOUND' || errorCode === 'LOCK_FORBIDDEN';
+}
+
 function createInitialState(): DeliverStoreState {
   return {
     uuid: null,
@@ -117,7 +121,6 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
       compoundBegin: createLoadingState<CompoundBeginResponse>(),
       challenge: null,
       currentVersion: null,
-      receiverPubFpr: null,
       receiverPubJwk: null,
     })),
 
@@ -132,11 +135,13 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
     })),
 
   failCompoundBegin: (errorCode) =>
-    set(() => ({
+    set((state) => ({
       compoundBegin: createErrorState<CompoundBeginResponse>(errorCode),
       challenge: null,
       currentVersion: null,
-      receiverPubFpr: null,
+      receiverPubFpr: shouldClearReceiverFingerprintOnCompoundBeginError(errorCode)
+        ? null
+        : state.receiverPubFpr,
       receiverPubJwk: null,
     })),
 
