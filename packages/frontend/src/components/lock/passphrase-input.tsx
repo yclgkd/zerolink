@@ -124,9 +124,6 @@ export function PassphraseInput({
               ? 'border-neon-amber/60 focus-visible:ring-neon-amber/60'
               : 'focus-visible:ring-ring'
           )}
-          data-1p-ignore="true"
-          data-bwignore="true"
-          data-lpignore="true"
           data-testid="passphrase-input-field"
           id={resolvedInputId}
           onChange={(event) => onChange(event.target.value)}
