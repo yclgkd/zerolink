@@ -19,6 +19,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Context**: Phase 2 of issue #154 aims to reduce the window where the lock secret sits in browser-visible URL state. The receiver flow still needs the same secret to survive refreshes and same-tab navigation before the first lock succeeds.
 **Choice**: Resolve the lock secret from the URL hash first, then from `sessionStorage` keyed by channel UUID. Only call `history.replaceState` after `sessionStorage` persistence succeeds. Clear the cached secret on lock success and whenever public channel state stops being `waiting`.
 **Reasoning**: This shortens the address-bar and history exposure window without regressing the receiver's ability to refresh, visit the Trust page, or otherwise continue the first-lock flow in the same browser session.
+**Follow-up (2026-03-14)**: Initialize the receiver lock secret synchronously from the current hash or session cache so the lock step does not depend on a post-render effect to know whether `#k` is available. Keep the Trust route helper typed to `pathname + search` only, with an explicit note that fragments must not be preserved in router state.
 
 ## [2026-03-14] Trusted Types enforcement uses a zero-policy frontend hardening path
 

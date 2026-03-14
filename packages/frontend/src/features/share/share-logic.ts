@@ -100,6 +100,13 @@ function getLockSecretSessionStorageKey(uuid: string): string {
   return `${LOCK_SECRET_SESSION_STORAGE_PREFIX}${uuid}`;
 }
 
+function resolveLockSecret(uuid?: string, hash?: string): Base64Url | null {
+  if (!uuid) return null;
+  const hashLockSecret = extractLockSecretFromHash(hash ?? '');
+  if (hashLockSecret) return hashLockSecret;
+  return readStoredLockSecret(uuid);
+}
+
 function readStoredLockSecret(uuid: string): Base64Url | null {
   try {
     const value = window.sessionStorage.getItem(getLockSecretSessionStorageKey(uuid));
@@ -316,7 +323,9 @@ export function useSharePageLockLogic(
   const [lockError, setLockError] = useState<string | null>(null);
   const [isLockPassphraseInvalid, setIsLockPassphraseInvalid] = useState(false);
   const [isLockSubmitting, setIsLockSubmitting] = useState(false);
-  const [lockSecretB64u, setLockSecretB64u] = useState<Base64Url | null>(null);
+  const [lockSecretB64u, setLockSecretB64u] = useState<Base64Url | null>(() =>
+    resolveLockSecret(uuid, hash)
+  );
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -371,7 +380,7 @@ export function useSharePageLockLogic(
       return;
     }
 
-    setLockSecretB64u(readStoredLockSecret(uuid));
+    setLockSecretB64u(resolveLockSecret(uuid, hash));
   }, [uuid, pathname, search, hash]);
 
   useEffect(() => {
