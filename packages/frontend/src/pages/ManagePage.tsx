@@ -26,6 +26,7 @@ import { SafetyCode } from '../components/safety/safety-code';
 import { Button } from '../components/ui/button';
 import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
+import { getPassphraseLengthMessage, validatePassphrase } from '../crypto/passphrase-policy';
 import { deriveSafetyCodeDisplay } from '../crypto/safety-code-derive';
 import { useDeliverStore } from '../stores/deliver-store';
 import type { ChannelClosedReason, ChannelStateUpdate } from '../sync/channel-sync.ts';
@@ -44,7 +45,7 @@ function mapActionError(code: string): string {
     case 'MISSING_RECEIVER_IDENTITY':
       return 'Receiver identity is unavailable. Ask receiver to lock again.';
     case 'PASSPHRASE_REQUIRED':
-      return 'A channel password is required for this action.';
+      return getPassphraseLengthMessage('Channel password');
     case 'NETWORK_ERROR':
       return 'Network error while performing manage action. Please retry.';
     case 'BAD_REQUEST':
@@ -59,6 +60,16 @@ function mapActionError(code: string): string {
     default:
       return 'An unexpected error occurred. Please try again.';
   }
+}
+
+function requiresChannelPassword(adminMode: string | null): boolean {
+  return adminMode === 'password' || adminMode === 'softkey';
+}
+
+function getChannelPasswordValidationError(passphrase: string): string | null {
+  return validatePassphrase(passphrase) === null
+    ? null
+    : getPassphraseLengthMessage('Channel password');
 }
 
 function isTerminalPublicState(state: ChannelState): boolean {
@@ -491,6 +502,14 @@ function useManageDeliveryLogic(
       setIsSecretInputInvalid(true);
       return setActionError('Secret payload is required before delivery.');
     }
+    const needsChannelPassword = requiresChannelPassword(store.adminMode);
+    if (needsChannelPassword) {
+      const passwordError = getChannelPasswordValidationError(softkeyPassphrase);
+      if (passwordError) {
+        setIsSecretInputInvalid(false);
+        return setActionError(passwordError);
+      }
+    }
 
     setIsSecretInputInvalid(false);
     setActionError(null);
@@ -504,7 +523,7 @@ function useManageDeliveryLogic(
         uuid: actionUuid,
         profile,
         plaintext: secretInput,
-        ...(softkeyPassphrase.trim().length > 0 ? { softkeyPassphrase } : {}),
+        ...(needsChannelPassword ? { softkeyPassphrase } : {}),
       });
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
@@ -564,6 +583,14 @@ function useManageDestructionLogic(
       setIsSecretInputInvalid(false);
       return setActionError('Channel authentication mode is still loading. Please retry.');
     }
+    const needsChannelPassword = requiresChannelPassword(store.adminMode);
+    if (needsChannelPassword) {
+      const passwordError = getChannelPasswordValidationError(softkeyPassphrase);
+      if (passwordError) {
+        setIsSecretInputInvalid(false);
+        return setActionError(passwordError);
+      }
+    }
 
     setIsSecretInputInvalid(false);
     setActionError(null);
@@ -576,7 +603,7 @@ function useManageDestructionLogic(
       result = await cryptoOrchestrator.deleteChannel({
         uuid: actionUuid,
         profile,
-        ...(softkeyPassphrase.trim().length > 0 ? { softkeyPassphrase } : {}),
+        ...(needsChannelPassword ? { softkeyPassphrase } : {}),
       });
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;

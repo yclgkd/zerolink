@@ -30,6 +30,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 - **L-5**: Enforce minimum 8-character passphrase length.
 **Reasoning**: Defense-in-depth — prevent protocol downgrade attacks, ensure cryptographic binding invariants are server-enforced, reduce local key material exposure.
 **Follow-up (2026-03-14)**: Reverted the frontend portion of L-2 that deleted the wrapped receiver private key immediately after every successful decrypt. Receiver key cleanup now happens only when the Share page confirms a terminal channel state (`NOT_FOUND`, `deleted`, `expired`, or realtime close), preserving local-burn re-decrypt semantics while still performing best-effort IndexedDB cleanup once the channel is no longer usable.
+**Follow-up (2026-03-14)**: Tightened L-5 so Quick Share / password-managed softkey flows now enforce the same 8-character minimum on create, deliver, and delete, with Create/Manage UI gating using the same frontend helper as the orchestrator. Adjusted M-3 from a hard rejection to an idempotent `compound_begin`: when an active challenge already exists, the DO returns the existing challenge instead of overwriting it or blocking sender retries until TTL expiry.
 
 ## [2026-03-13] Strengthen AAD binding to match documented spec
 

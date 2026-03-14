@@ -449,29 +449,27 @@ export class SecretVault {
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, uuid);
 
-      // M-3: Reject if an unconsumed, unexpired challenge already exists
       const existingChallenge =
         await this.ctx.storage.get<StoredCompoundChallenge>(COMPOUND_CHALLENGE_KEY);
-      if (
+      const activeChallenge =
         existingChallenge &&
         existingChallenge.consumedAt === undefined &&
         existingChallenge.expiresAt > now
-      ) {
-        throw new StateTransitionError(
-          'CHALLENGE_INVALID',
-          'an active compound challenge already exists; wait for it to expire or be consumed'
+          ? existingChallenge
+          : null;
+      let challenge = activeChallenge;
+
+      if (!challenge) {
+        const cryptoApi = getCryptoApi();
+        const id = encodeBase64Url(
+          cryptoApi.getRandomValues(new Uint8Array(COMPOUND_CHALLENGE_ID_BYTES))
         );
+        const seed = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES)));
+        const expiresAt = asUnixMs(now + CHALLENGE_TTL_MS);
+        challenge = { id, seed, expiresAt };
+
+        await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, challenge);
       }
-
-      const cryptoApi = getCryptoApi();
-      const id = encodeBase64Url(
-        cryptoApi.getRandomValues(new Uint8Array(COMPOUND_CHALLENGE_ID_BYTES))
-      );
-      const seed = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES)));
-      const expiresAt = asUnixMs(now + CHALLENGE_TTL_MS);
-      const stored: StoredCompoundChallenge = { id, seed, expiresAt };
-
-      await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, stored);
 
       const response: {
         challenge: CompoundChallenge;
@@ -486,9 +484,9 @@ export class SecretVault {
         adminMode: ChannelRecord['adminMode'];
       } = {
         challenge: {
-          id: stored.id,
-          seed: stored.seed,
-          expiresAt: stored.expiresAt,
+          id: challenge.id,
+          seed: challenge.seed,
+          expiresAt: challenge.expiresAt,
         },
         currentVersion: record.version,
         securityProfile: record.securityProfile,

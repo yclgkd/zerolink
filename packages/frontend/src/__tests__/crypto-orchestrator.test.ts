@@ -1760,7 +1760,28 @@ describe('crypto orchestrator', () => {
   });
 
   it('returns PASSPHRASE_REQUIRED when passphrase is shorter than 8 characters (L-5)', async () => {
-    const { orchestrator } = createOrchestrator();
+    const { orchestrator, apiClient } = createOrchestrator();
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+    const createResult = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.QUICK,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'short',
+    });
+
+    expect(createResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'create.softkey-passphrase',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+    expect(vi.mocked(apiClient.createBegin)).not.toHaveBeenCalled();
 
     const lockResult = await orchestrator.lockChannel({
       uuid: VALID_UUID,
@@ -1777,6 +1798,59 @@ describe('crypto orchestrator', () => {
         message: 'passphrase must be at least 8 characters',
       },
     });
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.QUICK,
+        adminMode: 'password',
+      },
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.QUICK,
+      plaintext: 'hello from sender',
+      softkeyPassphrase: '1234567',
+    });
+
+    expect(deliverResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'deliver.softkey-passphrase',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+    expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
+
+    const deleteResult = await orchestrator.deleteChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.QUICK,
+      softkeyPassphrase: '1234567',
+    });
+
+    expect(deleteResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'delete.softkey-passphrase',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+    expect(vi.mocked(apiClient.deleteCommit)).not.toHaveBeenCalled();
 
     const decryptResult = await orchestrator.decryptDelivered({
       uuid: VALID_UUID,

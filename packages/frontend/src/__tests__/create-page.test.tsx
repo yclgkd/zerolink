@@ -163,7 +163,20 @@ describe('CreatePage integration', () => {
     expect(submit.textContent).not.toContain('Creating');
   });
 
-  it('enables submit button in Quick mode when password is entered', () => {
+  it('keeps submit button disabled in Quick mode when password is shorter than 8 characters', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'short' } });
+
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it('enables submit button in Quick mode when password is at least 8 characters', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 

@@ -43,6 +43,7 @@ import {
   type SecretVaultEnv,
   SecretVaultStateMachine,
   StateTransitionError,
+  type StoredCompoundChallenge,
   type StoredTerminalTombstone,
   TERMINAL_TOMBSTONE_KEY,
 } from '../SecretVault.ts';
@@ -1007,20 +1008,69 @@ describe('SecretVault compound/delete flow', () => {
     expect(result.allowCredentials).toBeUndefined();
   });
 
-  it('rejects beginCompoundChallenge when an active challenge already exists (M-3)', async () => {
+  it('returns the existing active compound challenge without overwriting it (M-3)', async () => {
     const now = 1_730_001_000_000;
     const lockParams = createCommitLockParams();
     const lockedRecord = new SecretVaultStateMachine(
       createChannelRecord(CHANNEL_STATE.WAITING)
     ).commitLock(lockParams);
-    const { state } = createMockState(lockedRecord);
+    const { state, snapshot } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
 
-    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const firstChallenge = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const secondChallenge = await vault.beginCompoundChallenge(lockedRecord.uuid, now + 1_000);
 
-    await expect(vault.beginCompoundChallenge(lockedRecord.uuid, now + 1_000)).rejects.toThrow(
-      'an active compound challenge already exists'
+    expect(secondChallenge).toEqual(firstChallenge);
+    expect(snapshot.get(COMPOUND_CHALLENGE_KEY)).toMatchObject({
+      id: firstChallenge.challenge.id,
+      seed: firstChallenge.challenge.seed,
+      expiresAt: firstChallenge.challenge.expiresAt,
+    });
+  });
+
+  it('issues a new compound challenge after the previous one is consumed', async () => {
+    const now = 1_730_001_000_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    const firstChallenge = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    snapshot.set(COMPOUND_CHALLENGE_KEY, {
+      ...(snapshot.get(COMPOUND_CHALLENGE_KEY) as StoredCompoundChallenge),
+      consumedAt: asUnixMs(now + 500),
+    });
+
+    const secondChallenge = await vault.beginCompoundChallenge(lockedRecord.uuid, now + 1_000);
+
+    expect(secondChallenge.challenge.id).not.toBe(firstChallenge.challenge.id);
+    expect(secondChallenge.challenge.seed).not.toBe(firstChallenge.challenge.seed);
+  });
+
+  it('issues a new compound challenge after the previous one expires', async () => {
+    const now = 1_730_001_000_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    const firstChallenge = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    snapshot.set(COMPOUND_CHALLENGE_KEY, {
+      ...(snapshot.get(COMPOUND_CHALLENGE_KEY) as StoredCompoundChallenge),
+      expiresAt: asUnixMs(now + 500),
+    });
+
+    const secondChallenge = await vault.beginCompoundChallenge(
+      lockedRecord.uuid,
+      now + CHALLENGE_TTL_MS + 1
     );
+
+    expect(secondChallenge.challenge.id).not.toBe(firstChallenge.challenge.id);
+    expect(secondChallenge.challenge.seed).not.toBe(firstChallenge.challenge.seed);
   });
 
   it('returns securityProfile on active public reads', async () => {

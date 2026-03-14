@@ -33,6 +33,7 @@ import {
 
 import { type ApiClient, apiClient as defaultApiClient } from '../api/client';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
+import { getPassphraseLengthMessage, validatePassphrase } from './passphrase-policy';
 import {
   buildShareUrlWithFragment,
   computeSha256Hex,
@@ -289,20 +290,16 @@ function mapWebAuthnError(
   return toError('WEBAUTHN_ERROR', stage, code);
 }
 
-const MIN_PASSPHRASE_LENGTH = 8;
-
 function ensurePassphrase(
   passphrase: string,
   stage: string
 ): CryptoOrchestratorResult<never> | null {
-  if (passphrase.length === 0) return toError('PASSPHRASE_REQUIRED', stage);
-  // L-5: Enforce minimum passphrase length for key wrapping security
-  if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
-    return toError(
-      'PASSPHRASE_REQUIRED',
-      stage,
-      `passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`
-    );
+  const validationResult = validatePassphrase(passphrase);
+  if (validationResult === 'missing') {
+    return toError('PASSPHRASE_REQUIRED', stage);
+  }
+  if (validationResult === 'too_short') {
+    return toError('PASSPHRASE_REQUIRED', stage, getPassphraseLengthMessage());
   }
   return null;
 }
@@ -474,6 +471,15 @@ async function executeCreateChannel(
   input: CreateChannelInput
 ): Promise<CryptoOrchestratorResult<CreateChannelOutput>> {
   await retryPendingSoftkeyCleanup(deps.softkeyAdminStorage, deps.pendingSoftkeyCleanupStorage);
+  if (input.useCompatibilityMode) {
+    const passphraseError = ensurePassphrase(
+      input.softkeyPassphrase ?? '',
+      'create.softkey-passphrase'
+    );
+    if (passphraseError) {
+      return passphraseError;
+    }
+  }
 
   const state = deps.createStore.getState();
   state.startCreateBegin();
@@ -499,17 +505,12 @@ async function executeCreateChannel(
   }
 
   if (input.useCompatibilityMode) {
-    if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
-      return toError('PASSPHRASE_REQUIRED', 'create.softkey-passphrase');
-    }
+    const softkeyPassphrase = input.softkeyPassphrase ?? '';
     let softkeyPubJwk: ECDSAPublicKeyJWK;
     try {
       const keypair = await generateSoftkeyPair();
       softkeyPubJwk = await exportSoftkeyPublicJwk(keypair.publicKey);
-      const wrappedPrivateKey = await wrapSoftkeyPrivateKey(
-        keypair.privateKey,
-        input.softkeyPassphrase
-      );
+      const wrappedPrivateKey = await wrapSoftkeyPrivateKey(keypair.privateKey, softkeyPassphrase);
       await deps.softkeyAdminStorage.save({
         uuid: input.uuid,
         softkeyPubJwk,
@@ -840,17 +841,19 @@ async function executeDeliverSecret(
     resolvedBeginData.adminMode === 'password' || resolvedBeginData.adminMode === 'softkey';
 
   if (deliverIsPasswordMode) {
-    if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
+    const softkeyPassphrase = input.softkeyPassphrase ?? '';
+    const passphraseError = ensurePassphrase(softkeyPassphrase, 'deliver.softkey-passphrase');
+    if (passphraseError) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('PASSPHRASE_REQUIRED');
       });
-      return toError('PASSPHRASE_REQUIRED', 'deliver.softkey-passphrase');
+      return passphraseError;
     }
     try {
       softkeySignature = await signChallengeWithSoftkey(
         deps.softkeyAdminStorage,
         input.uuid,
-        input.softkeyPassphrase,
+        softkeyPassphrase,
         intentData.expectedChallenge as Base64Url
       );
     } catch {
@@ -960,17 +963,19 @@ async function executeDeleteChannel(
     beginData.adminMode === 'password' || beginData.adminMode === 'softkey';
 
   if (deleteIsPasswordMode) {
-    if (!input.softkeyPassphrase || input.softkeyPassphrase.length === 0) {
+    const softkeyPassphrase = input.softkeyPassphrase ?? '';
+    const passphraseError = ensurePassphrase(softkeyPassphrase, 'delete.softkey-passphrase');
+    if (passphraseError) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('PASSPHRASE_REQUIRED');
       });
-      return toError('PASSPHRASE_REQUIRED', 'delete.softkey-passphrase');
+      return passphraseError;
     }
     try {
       softkeySignature = await signChallengeWithSoftkey(
         deps.softkeyAdminStorage,
         input.uuid,
-        input.softkeyPassphrase,
+        softkeyPassphrase,
         expectedChallenge as Base64Url
       );
     } catch (_error) {
