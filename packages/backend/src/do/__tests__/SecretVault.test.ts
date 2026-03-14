@@ -1225,6 +1225,39 @@ describe('SecretVault compound/delete flow', () => {
     ).rejects.toMatchObject({ code: 'VERSION_MISMATCH' });
   });
 
+  it('rejects compound commit when intent receiverPubFpr mismatches locked receiver (M-2)', async () => {
+    const now = 1_730_001_350_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    const mismatchedFpr = asHex('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_m2_01'),
+      mismatchedFpr
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: lockedRecord.uuid,
+          assertion: createAssertionFixture(
+            (lockedRecord.adminCredential as StoredCredential).credentialId
+          ),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
+  });
+
   it('rejects compound commit with nonce replay', async () => {
     const now = 1_730_001_400_000;
     const record = createChannelRecord(CHANNEL_STATE.LOCKED);
