@@ -2,13 +2,15 @@ export interface TrustRouteState {
   returnTo: string;
 }
 
-export function createTrustRouteState(location: {
+interface TrustRouteLocation {
   pathname: string;
   search: string;
-  hash: string;
-}): TrustRouteState {
+}
+
+export function createTrustRouteState({ pathname, search }: TrustRouteLocation): TrustRouteState {
   return {
-    returnTo: `${location.pathname}${location.search}${location.hash}`,
+    // Never carry fragments through router state; share links use #k for receiver-only lock material.
+    returnTo: `${pathname}${search}`,
   };
 }
 
