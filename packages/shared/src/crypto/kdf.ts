@@ -2,6 +2,7 @@ import { argon2idAsync } from '@noble/hashes/argon2.js';
 
 import { AES_GCM, ARGON2ID, ECDSA, RSA_OAEP } from '../constants.ts';
 import type { Argon2idParams, Base64Url, WrappedPrivateKey } from '../types.ts';
+import { wipeBytes } from './aes.ts';
 
 const ARGON2_VERSION = 19 as const;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
@@ -111,13 +112,17 @@ async function deriveArgon2idAesKey({
     dkLen: ARGON2ID.HASH_LENGTH,
   });
 
-  return cryptoApi.subtle.importKey(
-    'raw',
-    toArrayBuffer(keyMaterial),
-    { name: AES_GCM.ALGORITHM_NAME },
-    false,
-    ['encrypt', 'decrypt']
-  );
+  try {
+    return await cryptoApi.subtle.importKey(
+      'raw',
+      toArrayBuffer(keyMaterial),
+      { name: AES_GCM.ALGORITHM_NAME },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  } finally {
+    wipeBytes(keyMaterial);
+  }
 }
 
 export async function wrapPrivateKey({
@@ -213,7 +218,7 @@ async function decryptPkcs8(
   decoded: DecodedWrappedKey,
   password: string,
   cryptoApi: Crypto
-): Promise<ArrayBuffer> {
+): Promise<Uint8Array> {
   const wrappingKey = await deriveArgon2idAesKey({
     password,
     salt: decoded.salt,
@@ -223,7 +228,7 @@ async function decryptPkcs8(
     version: decoded.version,
   });
 
-  return cryptoApi.subtle.decrypt(
+  const decrypted = await cryptoApi.subtle.decrypt(
     {
       name: AES_GCM.ALGORITHM_NAME,
       iv: toArrayBuffer(decoded.iv),
@@ -232,14 +237,18 @@ async function decryptPkcs8(
     wrappingKey,
     toArrayBuffer(decoded.encryptedKey)
   );
+
+  return new Uint8Array(decrypted);
 }
 
 async function importPkcs8Key(
-  pkcs8: ArrayBuffer,
+  pkcs8: Uint8Array,
   algorithm: RsaHashedImportParams | EcKeyImportParams,
   keyUsages: ReadonlyArray<KeyUsage>
 ): Promise<CryptoKey> {
-  return getCryptoApi().subtle.importKey('pkcs8', pkcs8, algorithm, true, [...keyUsages]);
+  return getCryptoApi().subtle.importKey('pkcs8', toArrayBuffer(pkcs8), algorithm, false, [
+    ...keyUsages,
+  ]);
 }
 
 export async function unwrapPrivateKey({
@@ -249,9 +258,10 @@ export async function unwrapPrivateKey({
   const cryptoApi = getCryptoApi();
   assertPassword(password);
   const decoded = validateAndDecodeWrapped(wrapped);
+  let pkcs8: Uint8Array | null = null;
 
   try {
-    const pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
+    pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
     return await importPkcs8Key(
       pkcs8,
       {
@@ -262,6 +272,11 @@ export async function unwrapPrivateKey({
     );
   } catch (error) {
     throw new Error('Private key unwrap failed', { cause: error });
+  } finally {
+    wipeBytes(decoded.salt);
+    wipeBytes(decoded.iv);
+    wipeBytes(decoded.encryptedKey);
+    wipeBytes(pkcs8);
   }
 }
 
@@ -272,9 +287,10 @@ export async function unwrapEcdsaPrivateKey({
   const cryptoApi = getCryptoApi();
   assertPassword(password);
   const decoded = validateAndDecodeWrapped(wrapped);
+  let pkcs8: Uint8Array | null = null;
 
   try {
-    const pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
+    pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
     return await importPkcs8Key(
       pkcs8,
       {
@@ -285,5 +301,10 @@ export async function unwrapEcdsaPrivateKey({
     );
   } catch (error) {
     throw new Error('ECDSA private key unwrap failed', { cause: error });
+  } finally {
+    wipeBytes(decoded.salt);
+    wipeBytes(decoded.iv);
+    wipeBytes(decoded.encryptedKey);
+    wipeBytes(pkcs8);
   }
 }

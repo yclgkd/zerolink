@@ -286,7 +286,6 @@ function mockDecryptSuccessWithStoreSideEffects(): void {
       ok: true,
       data: {
         plaintext,
-        plaintextBytes: new Uint8Array([1, 2, 3]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },
@@ -1072,7 +1071,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1096,7 +1094,6 @@ describe('SharePage', () => {
       ok: true,
       data: {
         plaintext: 'decrypted:Receiver#Pass1234',
-        plaintextBytes: new Uint8Array([1, 2, 3]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },
@@ -1127,7 +1124,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1151,7 +1147,6 @@ describe('SharePage', () => {
       ok: true,
       data: {
         plaintext: 'decrypted:second-passphrase',
-        plaintextBytes: new Uint8Array([1, 2, 3]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },
@@ -1191,7 +1186,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1245,7 +1239,6 @@ describe('SharePage', () => {
       ok: true,
       data: {
         plaintext: 'decrypted:first-passphrase',
-        plaintextBytes: new Uint8Array([1, 2, 3]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },
@@ -1357,7 +1350,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1366,7 +1358,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1425,7 +1416,6 @@ describe('SharePage', () => {
       ok: true,
       data: {
         plaintext: 'decrypted:first-passphrase',
-        plaintextBytes: new Uint8Array([1, 2, 3]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },
@@ -1441,7 +1431,6 @@ describe('SharePage', () => {
       ok: true,
       data: {
         plaintext: 'decrypted:second-passphrase',
-        plaintextBytes: new Uint8Array([4, 5, 6]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },
@@ -1481,7 +1470,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1490,7 +1478,6 @@ describe('SharePage', () => {
       ok: true;
       data: {
         plaintext: string;
-        plaintextBytes: Uint8Array;
         deliveredAt: number;
         receiverPubFpr: string;
       };
@@ -1558,7 +1545,6 @@ describe('SharePage', () => {
       ok: true,
       data: {
         plaintext: 'decrypted:second-passphrase',
-        plaintextBytes: new Uint8Array([7, 8, 9]),
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
       },

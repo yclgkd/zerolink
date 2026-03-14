@@ -23,6 +23,8 @@ export interface DecryptAesGcmParams {
   aad?: Uint8Array;
 }
 
+type WipeableBytes = ArrayBuffer | ArrayBufferView | null | undefined;
+
 function getCryptoApi(): Crypto {
   const cryptoApi = globalThis.crypto;
   if (!cryptoApi?.subtle) {
@@ -57,6 +59,17 @@ function assertIvLength(iv: Uint8Array): void {
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return Uint8Array.from(bytes).buffer;
+}
+
+function toUint8Array(value: WipeableBytes): Uint8Array | null {
+  if (!value) return null;
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
 }
 
 function buildAesGcmParams(iv: Uint8Array, aad?: Uint8Array): AesGcmParams {
@@ -107,6 +120,25 @@ export function unpadPlaintext(padded: Uint8Array): Uint8Array {
   }
 
   return padded.slice(LENGTH_PREFIX_BYTES, endOffset);
+}
+
+export async function importAesKeyFromBytes(
+  bytes: Uint8Array,
+  usages: ReadonlyArray<KeyUsage>
+): Promise<CryptoKey> {
+  return getCryptoApi().subtle.importKey(
+    'raw',
+    toArrayBuffer(bytes),
+    {
+      name: AES_GCM.ALGORITHM_NAME,
+    },
+    false,
+    [...usages]
+  );
+}
+
+export function wipeBytes(value: WipeableBytes): void {
+  toUint8Array(value)?.fill(0);
 }
 
 export async function generateAesKey(): Promise<CryptoKey> {

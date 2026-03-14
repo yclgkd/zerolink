@@ -1535,6 +1535,7 @@ describe('crypto orchestrator', () => {
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
     expect(decryptResult.data.plaintext).toBe('receiver can decrypt this');
+    expect('plaintextBytes' in decryptResult.data).toBe(false);
     expect(useDecryptStore.getState().plaintext).toBe('receiver can decrypt this');
   });
 
