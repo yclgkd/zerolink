@@ -13,6 +13,13 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-14] Trusted Types enforcement uses a zero-policy frontend hardening path
+
+**Decision**: Enable frontend CSP Trusted Types enforcement with `require-trusted-types-for 'script'` and remove the remaining explicit HTML injection sink instead of introducing a custom policy.
+**Context**: Issue #154 targets DOM XSS defense-in-depth. The frontend bootstrap fallback in `packages/frontend/src/bootstrap-entry.ts` still rendered its blocking release guard with `innerHTML`, which would violate Trusted Types once enforcement was enabled.
+**Choice**: Keep Phase 1 scoped to CSP hardening plus a DOM API rewrite of the startup failure gate. Do not add a Trusted Types policy and do not mix fragment cleanup or receiver-key lifecycle changes into this PR.
+**Reasoning**: The known violating sink was isolated to the startup failure path, so a zero-policy rewrite keeps the change small, avoids broadening the DOM trust surface, and allows strict TT enforcement without changing product behavior.
+
 ## [2026-03-13] Backend validation hardening (crypto audit findings)
 
 **Decision**: Implement 10 security fixes from crypto audit across backend and frontend.
