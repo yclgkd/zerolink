@@ -5,8 +5,10 @@ import {
   decryptAesGcm,
   encryptAesGcm,
   generateAesKey,
+  importAesKeyFromBytes,
   padPlaintext,
   unpadPlaintext,
+  wipeBytes,
 } from '../aes.ts';
 
 const encoder = new TextEncoder();
@@ -71,6 +73,15 @@ describe('unpadPlaintext', () => {
 });
 
 describe('AES-256-GCM', () => {
+  it('imports raw AES bytes as a non-extractable key', async () => {
+    const keyBytes = randomBytes(AES_GCM.KEY_LENGTH_BITS / 8);
+    const key = await importAesKeyFromBytes(keyBytes, ['encrypt', 'decrypt']);
+
+    expect(key.extractable).toBe(false);
+    expect(key.type).toBe('secret');
+    expect(key.usages).toEqual(['encrypt', 'decrypt']);
+  });
+
   it('generates a usable AES key and decrypts to original plaintext', async () => {
     const key = await generateAesKey();
     const plaintext = toBytes('sender secret payload');
@@ -244,5 +255,18 @@ describe('AES-256-GCM', () => {
       padBlock,
     });
     expect(nextBucket.ciphertext.byteLength).toBeGreaterThan(expectedLength);
+  });
+});
+
+describe('wipeBytes', () => {
+  it('zeroes Uint8Array and ArrayBuffer views in place', () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const buffer = new Uint8Array([4, 5, 6]).buffer;
+
+    wipeBytes(bytes);
+    wipeBytes(buffer);
+
+    expect(bytes).toEqual(new Uint8Array([0, 0, 0]));
+    expect(new Uint8Array(buffer)).toEqual(new Uint8Array([0, 0, 0]));
   });
 });

@@ -21,6 +21,14 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: This shortens the address-bar and history exposure window without regressing the receiver's ability to refresh, visit the Trust page, or otherwise continue the first-lock flow in the same browser session.
 **Follow-up (2026-03-14)**: Initialize the receiver lock secret synchronously from the current hash or session cache so the lock step does not depend on a post-render effect to know whether `#k` is available. Keep the Trust route helper typed to `pathname + search` only, with an explicit note that fragments must not be preserved in router state.
 
+## [2026-03-14] Phase 3 runtime key hardening uses non-extractable imports and best-effort byte wiping
+
+**Decision**: Treat Phase 3 as runtime defense-in-depth only. Keep wrapped receiver keys persisted for repeat local decrypt, but shrink the lifetime and exportability of transient key material during deliver and decrypt.
+**Context**: PR #156 already reverted the earlier L-2 behavior that deleted the wrapped receiver key after every successful decrypt. The remaining gap was runtime exposure: deliver used an extractable AES content key, unwrap helpers re-imported private keys as extractable, and decrypt returned raw plaintext bytes even though the UI only consumed strings.
+**Choice**: Import unwrapped RSA/ECDSA private keys as non-extractable, generate sender content key bytes directly and import them into a non-extractable AES key, wipe temporary PKCS8/content-key/plaintext byte arrays in `finally` blocks, and remove `plaintextBytes` from `decryptDelivered()` output.
+**Reasoning**: This tightens the in-memory attack surface without breaking re-decrypt semantics or changing user-visible flows. The wipe behavior is explicitly best-effort: it reduces exposure windows but does not claim guaranteed zeroization across browser internals.
+**Follow-up (2026-03-14)**: Pass sensitive `Uint8Array` inputs directly to WebCrypto `importKey`/`encrypt`/`decrypt` in the runtime hardening paths. Avoiding helper-level `Uint8Array -> ArrayBuffer` clones prevents extra JS copies of sender content keys, Argon2 key material, and unwrapped PKCS8 blobs from surviving until GC after the original buffers are wiped.
+
 ## [2026-03-14] Trusted Types enforcement uses a zero-policy frontend hardening path
 
 **Decision**: Enable frontend CSP Trusted Types enforcement with `require-trusted-types-for 'script'` and remove the remaining explicit HTML injection sink instead of introducing a custom policy.

@@ -50,6 +50,7 @@ describe('wrapPrivateKey', () => {
         wrapped,
         password,
       });
+      expect(unwrappedPrivateKey.extractable).toBe(false);
       const contentKey = randomBytes(32);
       const wrappedContentKey = await wrapContentKey({
         receiverPublicKey: keyPair.publicKey,
@@ -292,6 +293,7 @@ describe('unwrapEcdsaPrivateKey', () => {
         password,
       });
       const unwrapped = await unwrapEcdsaPrivateKey({ wrapped, password });
+      expect(unwrapped.extractable).toBe(false);
 
       const payload = crypto.getRandomValues(new Uint8Array(32));
       const sig = await crypto.subtle.sign(

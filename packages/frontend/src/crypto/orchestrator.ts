@@ -21,7 +21,12 @@ import {
   type UpdateIntent,
   type UUID,
 } from '@zerolink/shared';
-import { decryptAesGcm, encryptAesGcm, generateAesKey } from '@zerolink/shared/crypto/aes';
+import {
+  decryptAesGcm,
+  encryptAesGcm,
+  importAesKeyFromBytes,
+  wipeBytes,
+} from '@zerolink/shared/crypto/aes';
 import { unwrapPrivateKey, wrapPrivateKey } from '@zerolink/shared/crypto/kdf';
 import {
   exportReceiverPublicKeyToJwk,
@@ -223,7 +228,6 @@ export interface DecryptDeliveredInput {
  */
 export interface DecryptDeliveredOutput {
   plaintext: string;
-  plaintextBytes: Uint8Array;
   deliveredAt: number;
   receiverPubFpr: string;
 }
@@ -308,10 +312,6 @@ function toUtf8Bytes(input: string): Uint8Array {
   return new TextEncoder().encode(input);
 }
 
-function toArrayBuffer(value: Uint8Array): ArrayBuffer {
-  return Uint8Array.from(value).buffer;
-}
-
 function asUuid(value: string): UUID {
   return value as UUID;
 }
@@ -379,7 +379,7 @@ function toPlaintextBytes(value: string | Uint8Array): Uint8Array {
   if (typeof value === 'string') {
     return toUtf8Bytes(value);
   }
-  return value;
+  return Uint8Array.from(value);
 }
 
 function isDeliveredState(state: ChannelState): boolean {
@@ -722,54 +722,67 @@ async function buildDeliverUpdateIntent(
   input: DeliverSecretInput,
   beginData: ResolvedDeliverBeginData
 ) {
-  const plaintextBytes = toPlaintextBytes(input.plaintext);
-  const aad = toUtf8Bytes(
-    `${input.uuid}||${beginData.currentVersion}||${beginData.receiverPubFpr}`
-  );
-  const aesKey = await generateAesKey();
-  const rawContentKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
-  const encrypted = await encryptAesGcm({
-    key: aesKey,
-    plaintext: plaintextBytes,
-    aad,
-    padBlock: resolvePadBlockForProfile(input.profile),
-  });
-  const receiverPublicKey = await importReceiverPublicKeyFromJwk(beginData.receiverPubJwk);
-  const encContentKey = await wrapContentKey({
-    receiverPublicKey,
-    contentKey: rawContentKey,
-  });
-  const ciphertextHash = await computeSha256Hex(encrypted.ciphertext);
+  let plaintextBytes: Uint8Array | null = null;
+  let aad: Uint8Array | null = null;
+  let rawContentKey: Uint8Array | null = null;
+  let encrypted: Awaited<ReturnType<typeof encryptAesGcm>> | null = null;
+  let encContentKey: Uint8Array | null = null;
 
-  const cipherBundle = toCipherBundleTransport({
-    ciphertext: encrypted.ciphertext,
-    iv: encrypted.iv,
-    aad,
-    encContentKey,
-    ciphertextHash,
-    padBlock: encrypted.padBlock,
-  });
+  try {
+    plaintextBytes = toPlaintextBytes(input.plaintext);
+    aad = toUtf8Bytes(`${input.uuid}||${beginData.currentVersion}||${beginData.receiverPubFpr}`);
+    rawContentKey = deps.randomBytes(AES_GCM.KEY_LENGTH_BITS / 8);
+    const aesKey = await importAesKeyFromBytes(rawContentKey, ['encrypt', 'decrypt']);
+    encrypted = await encryptAesGcm({
+      key: aesKey,
+      plaintext: plaintextBytes,
+      aad,
+      padBlock: resolvePadBlockForProfile(input.profile),
+    });
+    const receiverPublicKey = await importReceiverPublicKeyFromJwk(beginData.receiverPubJwk);
+    encContentKey = await wrapContentKey({
+      receiverPublicKey,
+      contentKey: rawContentKey,
+    });
+    const ciphertextHash = await computeSha256Hex(encrypted.ciphertext);
 
-  const intent: UpdateIntent = {
-    op: 'update',
-    uuid: asUuid(input.uuid),
-    version: beginData.currentVersion,
-    timestamp: asUnixMs(deps.now()),
-    nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
-    receiverPubFpr: beginData.receiverPubFpr,
-    cipherBundle,
-    expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
-  };
+    const cipherBundle = toCipherBundleTransport({
+      ciphertext: encrypted.ciphertext,
+      iv: encrypted.iv,
+      aad,
+      encContentKey,
+      ciphertextHash,
+      padBlock: encrypted.padBlock,
+    });
 
-  const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
-  const expectedChallenge = await deriveExpectedCompoundChallengeB64u({
-    uuid: input.uuid,
-    challengeId: beginData.challenge.id,
-    challengeSeed: beginData.challenge.seed,
-    intentHash,
-  });
+    const intent: UpdateIntent = {
+      op: 'update',
+      uuid: asUuid(input.uuid),
+      version: beginData.currentVersion,
+      timestamp: asUnixMs(deps.now()),
+      nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
+      receiverPubFpr: beginData.receiverPubFpr,
+      cipherBundle,
+      expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
+    };
 
-  return { intent, intentHash, expectedChallenge, cipherBundle };
+    const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
+    const expectedChallenge = await deriveExpectedCompoundChallengeB64u({
+      uuid: input.uuid,
+      challengeId: beginData.challenge.id,
+      challengeSeed: beginData.challenge.seed,
+      intentHash,
+    });
+
+    return { intent, intentHash, expectedChallenge, cipherBundle };
+  } finally {
+    wipeBytes(plaintextBytes);
+    wipeBytes(aad);
+    wipeBytes(rawContentKey);
+    wipeBytes(encContentKey);
+    wipeBytes(encrypted?.iv);
+    wipeBytes(encrypted?.ciphertext);
+  }
 }
 
 /**
@@ -1039,42 +1052,56 @@ async function performDecryptionPipeline(
   passphrase: string,
   envelope: ReceiverKeyEnvelope
 ) {
-  const ciphertextBytes = decodeBase64UrlBytes(payload.cipherBundle.ciphertext);
-  const computedHash = await computeSha256Hex(ciphertextBytes);
-  if (!constantTimeHexEqual(computedHash, payload.cipherBundle.ciphertextHash)) {
-    throw new Error('INTEGRITY_MISMATCH');
-  }
+  let ciphertextBytes: Uint8Array | null = null;
+  let wrappedKeyBytes: Uint8Array | null = null;
+  let ivBytes: Uint8Array | null = null;
+  let aadBytes: Uint8Array | null = null;
+  let contentKeyBytes: Uint8Array | null = null;
+  let plaintextBytes: Uint8Array | null = null;
 
-  const receiverPrivateKey = await unwrapPrivateKey({
-    wrapped: envelope.wrappedPrivateKey,
-    password: passphrase,
-  });
-  const contentKeyBytes = await unwrapContentKey({
-    receiverPrivateKey,
-    wrappedKey: decodeBase64UrlBytes(payload.cipherBundle.encContentKey),
-  });
-  // L-4: Validate content key is exactly 32 bytes (AES-256)
-  if (contentKeyBytes.byteLength !== AES_GCM.KEY_LENGTH_BITS / 8) {
-    throw new Error('INTEGRITY_MISMATCH');
-  }
-  const contentKey = await crypto.subtle.importKey(
-    'raw',
-    toArrayBuffer(contentKeyBytes),
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
-  const plaintextBytes = await decryptAesGcm({
-    key: contentKey,
-    ciphertext: ciphertextBytes,
-    iv: decodeBase64UrlBytes(payload.cipherBundle.iv),
-    aad: decodeBase64UrlBytes(payload.cipherBundle.aad),
-  });
+  try {
+    ciphertextBytes = decodeBase64UrlBytes(payload.cipherBundle.ciphertext);
+    const computedHash = await computeSha256Hex(ciphertextBytes);
+    if (!constantTimeHexEqual(computedHash, payload.cipherBundle.ciphertextHash)) {
+      throw new Error('INTEGRITY_MISMATCH');
+    }
 
-  return {
-    plaintextBytes,
-    plaintext: new TextDecoder().decode(plaintextBytes),
-  };
+    const receiverPrivateKey = await unwrapPrivateKey({
+      wrapped: envelope.wrappedPrivateKey,
+      password: passphrase,
+    });
+    wrappedKeyBytes = decodeBase64UrlBytes(payload.cipherBundle.encContentKey);
+    contentKeyBytes = await unwrapContentKey({
+      receiverPrivateKey,
+      wrappedKey: wrappedKeyBytes,
+    });
+    // L-4: Validate content key is exactly 32 bytes (AES-256)
+    if (contentKeyBytes.byteLength !== AES_GCM.KEY_LENGTH_BITS / 8) {
+      throw new Error('INTEGRITY_MISMATCH');
+    }
+    const contentKey = await importAesKeyFromBytes(contentKeyBytes, ['decrypt']);
+    wipeBytes(contentKeyBytes);
+    contentKeyBytes = null;
+    ivBytes = decodeBase64UrlBytes(payload.cipherBundle.iv);
+    aadBytes = decodeBase64UrlBytes(payload.cipherBundle.aad);
+    plaintextBytes = await decryptAesGcm({
+      key: contentKey,
+      ciphertext: ciphertextBytes,
+      iv: ivBytes,
+      aad: aadBytes,
+    });
+
+    return {
+      plaintext: new TextDecoder().decode(plaintextBytes),
+    };
+  } finally {
+    wipeBytes(ciphertextBytes);
+    wipeBytes(wrappedKeyBytes);
+    wipeBytes(ivBytes);
+    wipeBytes(aadBytes);
+    wipeBytes(contentKeyBytes);
+    wipeBytes(plaintextBytes);
+  }
 }
 
 async function executeDecryptDelivered(
@@ -1126,11 +1153,7 @@ async function executeDecryptDelivered(
   if (!envelope) return toError('KEY_STORAGE_ERROR', 'decrypt.load-key', 'missing key');
 
   try {
-    const { plaintext, plaintextBytes } = await performDecryptionPipeline(
-      payload,
-      input.passphrase,
-      envelope
-    );
+    const { plaintext } = await performDecryptionPipeline(payload, input.passphrase, envelope);
     applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
       state.setPlaintext(plaintext);
     });
@@ -1139,7 +1162,6 @@ async function executeDecryptDelivered(
       ok: true,
       data: {
         plaintext,
-        plaintextBytes,
         deliveredAt: payload.deliveredAt,
         receiverPubFpr: payload.receiverPubFpr,
       },

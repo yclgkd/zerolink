@@ -23,6 +23,8 @@ export interface DecryptAesGcmParams {
   aad?: Uint8Array;
 }
 
+type WipeableBytes = ArrayBuffer | ArrayBufferView | null | undefined;
+
 function getCryptoApi(): Crypto {
   const cryptoApi = globalThis.crypto;
   if (!cryptoApi?.subtle) {
@@ -55,18 +57,32 @@ function assertIvLength(iv: Uint8Array): void {
   }
 }
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+export function toBufferSource(bytes: Uint8Array): BufferSource {
+  if (bytes.buffer instanceof ArrayBuffer) {
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
   return Uint8Array.from(bytes).buffer;
+}
+
+function toUint8Array(value: WipeableBytes): Uint8Array | null {
+  if (!value) return null;
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
 }
 
 function buildAesGcmParams(iv: Uint8Array, aad?: Uint8Array): AesGcmParams {
   const params: AesGcmParams = {
     name: AES_GCM.ALGORITHM_NAME,
-    iv: toArrayBuffer(iv),
+    iv: toBufferSource(iv),
     tagLength: AES_GCM.TAG_LENGTH_BITS,
   };
   if (aad) {
-    params.additionalData = toArrayBuffer(aad);
+    params.additionalData = toBufferSource(aad);
   }
   return params;
 }
@@ -109,6 +125,25 @@ export function unpadPlaintext(padded: Uint8Array): Uint8Array {
   return padded.slice(LENGTH_PREFIX_BYTES, endOffset);
 }
 
+export async function importAesKeyFromBytes(
+  bytes: Uint8Array,
+  usages: ReadonlyArray<KeyUsage>
+): Promise<CryptoKey> {
+  return getCryptoApi().subtle.importKey(
+    'raw',
+    toBufferSource(bytes),
+    {
+      name: AES_GCM.ALGORITHM_NAME,
+    },
+    false,
+    [...usages]
+  );
+}
+
+export function wipeBytes(value: WipeableBytes): void {
+  toUint8Array(value)?.fill(0);
+}
+
 export async function generateAesKey(): Promise<CryptoKey> {
   return getCryptoApi().subtle.generateKey(
     {
@@ -137,7 +172,7 @@ export async function encryptAesGcm({
   const ciphertextBuffer = await cryptoApi.subtle.encrypt(
     buildAesGcmParams(resolvedIv, aad),
     key,
-    toArrayBuffer(paddedPlaintext)
+    toBufferSource(paddedPlaintext)
   );
 
   return {
@@ -160,7 +195,7 @@ export async function decryptAesGcm({
     const plaintextBuffer = await cryptoApi.subtle.decrypt(
       buildAesGcmParams(iv, aad),
       key,
-      toArrayBuffer(ciphertext)
+      toBufferSource(ciphertext)
     );
     return unpadPlaintext(new Uint8Array(plaintextBuffer));
   } catch (error) {
