@@ -2,13 +2,16 @@ export interface TrustRouteState {
   returnTo: string;
 }
 
-export function createTrustRouteState(location: {
+export function createTrustRouteState({
+  pathname,
+  search,
+}: {
   pathname: string;
   search: string;
   hash: string;
 }): TrustRouteState {
   return {
-    returnTo: `${location.pathname}${location.search}${location.hash}`,
+    returnTo: `${pathname}${search}`,
   };
 }
 

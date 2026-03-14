@@ -75,6 +75,7 @@ const OTHER_VALID_HEX = HexStringSchema.parse(
 const VALID_B64U = Base64UrlSchema.parse('bW9ja19iYXNlNjR1cmw');
 const VALID_LOCK_SECRET = 'bW9ja19sb2NrX3NlY3JldA';
 const MOCK_TIMESTAMP = 1_700_000_000_000;
+const LOCK_SECRET_SESSION_STORAGE_KEY = `zerolink:share-lock-secret:${VALID_UUID}`;
 const RECEIVER_STORAGE_UUIDS = [
   VALID_UUID,
   'uuidaaaaaaaaaaaaaaaaa',
@@ -312,6 +313,8 @@ function getLatestChannelSyncOptions() {
   return syncHarness.latestOptions;
 }
 
+let replaceStateSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(async () => {
   await clearReceiverKeyStorage();
   Object.defineProperty(globalThis, 'fetch', {
@@ -319,6 +322,8 @@ beforeEach(async () => {
     writable: true,
     value: vi.fn(),
   });
+  window.sessionStorage.clear();
+  replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation(() => undefined);
   useLockStore.getState().resetLockStore();
   useDecryptStore.getState().resetDecryptStore();
   syncHarness.latestOptions = null;
@@ -330,6 +335,8 @@ beforeEach(async () => {
 afterEach(async () => {
   cleanup();
   await clearReceiverKeyStorage();
+  window.sessionStorage.clear();
+  replaceStateSpy.mockRestore();
 
   if (originalFetch) {
     Object.defineProperty(globalThis, 'fetch', {
@@ -450,24 +457,123 @@ describe('SharePage', () => {
     expect(callArg?.passphrase).toBe('Strong#Pass1234XYZ');
   });
 
+  it('persists a valid hash lock secret into sessionStorage and strips it from the URL', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBe(
+        VALID_LOCK_SECRET
+      );
+    });
+    expect(replaceStateSpy).toHaveBeenCalledWith(window.history.state, '', `/s/${VALID_UUID}`);
+  });
+
+  it('uses the sessionStorage lock secret when the share page reloads without a fragment', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
+
+    expect(screen.queryByTestId('share-lock-secret-warning')).toBeNull();
+    const generateButton = screen.getByTestId('share-generate-button') as HTMLButtonElement;
+    expect(generateButton.disabled).toBe(false);
+
+    fireEvent.click(generateButton);
+
+    await waitFor(() => {
+      expect(lockChannelMock).toHaveBeenCalledTimes(1);
+    });
+    expect(lockChannelMock.mock.calls[0]?.[0]?.lockSecretB64u).toBe(VALID_LOCK_SECRET);
+    expect(replaceStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the fragment in place when sessionStorage persistence fails but still locks successfully', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('sessionStorage disabled');
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+      expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('share-continue-button'));
+      fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+        target: { value: 'Strong#Pass1234XYZ' },
+      });
+      fireEvent.click(screen.getByTestId('share-generate-button'));
+
+      await waitFor(() => {
+        expect(lockChannelMock).toHaveBeenCalledTimes(1);
+      });
+      expect(lockChannelMock.mock.calls[0]?.[0]?.lockSecretB64u).toBe(VALID_LOCK_SECRET);
+      expect(replaceStateSpy).not.toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+      setItemSpy.mockRestore();
+    }
+  });
+
+  it('clears the sessionStorage lock secret immediately after a successful lock', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Strong#Pass1234XYZ' },
+    });
+    fireEvent.click(screen.getByTestId('share-generate-button'));
+
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBeNull();
+    });
+  });
+
   it('disables back/generate while lock request is pending then restores controls', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
 
-    const deferred = createDeferred<{
-      ok: true;
-      data: {
-        receiverPubJwk: {
-          kty: 'RSA';
-          alg: 'RSA-OAEP-256';
-          n: string;
-          e: string;
-          ext: true;
-          key_ops: ['encrypt'];
-        };
-        receiverPubFpr: string;
-      };
-    }>();
+    const deferred = createDeferred<
+      | {
+          ok: true;
+          data: {
+            receiverPubJwk: {
+              kty: 'RSA';
+              alg: 'RSA-OAEP-256';
+              n: string;
+              e: string;
+              ext: true;
+              key_ops: ['encrypt'];
+            };
+            receiverPubFpr: string;
+          };
+        }
+      | {
+          ok: false;
+          error: {
+            ok: false;
+            code: string;
+            stage: string;
+          };
+        }
+    >();
     lockChannelMock.mockReturnValueOnce(deferred.promise);
 
     renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
@@ -490,17 +596,11 @@ describe('SharePage', () => {
     expect(busyContainer?.getAttribute('aria-busy')).toBe('true');
 
     deferred.resolve({
-      ok: true,
-      data: {
-        receiverPubJwk: {
-          kty: 'RSA',
-          alg: 'RSA-OAEP-256',
-          n: VALID_B64U,
-          e: 'AQAB',
-          ext: true,
-          key_ops: ['encrypt'],
-        },
-        receiverPubFpr: VALID_HEX,
+      ok: false,
+      error: {
+        ok: false,
+        code: 'NETWORK_ERROR',
+        stage: 'lock.commit',
       },
     });
 
@@ -1773,6 +1873,19 @@ describe('SharePage', () => {
     ).toBeTruthy();
   });
 
+  it('clears the stored lock secret when /api/public/:uuid returns 404', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicNotFound(fetchSpy);
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBeNull();
+    });
+  });
+
   it('cleans up the local receiver key when /api/public/:uuid returns 404', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicNotFound(fetchSpy);
@@ -1812,6 +1925,22 @@ describe('SharePage', () => {
   it.each([
     'deleted',
     'expired',
+  ] as const)('clears the stored lock secret when /api/public/:uuid returns legacy %s', async (state) => {
+    const fetchSpy = getFetchSpy();
+    mockLegacyTerminalPublicState(fetchSpy, state);
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBeNull();
+    });
+  });
+
+  it.each([
+    'deleted',
+    'expired',
   ] as const)('cleans up the local receiver key when /api/public/:uuid returns legacy %s', async (state) => {
     const fetchSpy = getFetchSpy();
     mockLegacyTerminalPublicState(fetchSpy, state);
@@ -1830,6 +1959,27 @@ describe('SharePage', () => {
     } finally {
       storageSpy.mockRestore();
     }
+  });
+
+  it.each([
+    'locked',
+    'delivered',
+  ] as const)('clears the stored lock secret when public state resolves to %s', async (state) => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, state);
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    if (state === 'locked') {
+      expect(await screen.findByTestId('share-step-locked')).toBeTruthy();
+    } else {
+      expect(await screen.findByTestId('share-step-delivered')).toBeTruthy();
+    }
+
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBeNull();
+    });
   });
 
   it('cleans up the local receiver key when realtime state changes to a terminal state', async () => {
@@ -1863,6 +2013,29 @@ describe('SharePage', () => {
     }
   });
 
+  it('clears the stored lock secret when realtime state changes to a terminal state', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'expired',
+        version: 1,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+      });
+    });
+
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBeNull();
+    });
+  });
+
   it('cleans up the local receiver key when realtime close is received', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
@@ -1887,6 +2060,24 @@ describe('SharePage', () => {
     } finally {
       storageSpy.mockRestore();
     }
+  });
+
+  it('clears the stored lock secret when realtime close is received', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    window.sessionStorage.setItem(LOCK_SECRET_SESSION_STORAGE_KEY, VALID_LOCK_SECRET);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onChannelClosed('expired');
+    });
+
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem(LOCK_SECRET_SESSION_STORAGE_KEY)).toBeNull();
+    });
   });
 
   it.each([

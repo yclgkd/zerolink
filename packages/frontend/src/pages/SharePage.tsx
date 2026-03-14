@@ -1,5 +1,5 @@
 import { CHANNEL_STATE } from '@zerolink/shared';
-import { type ReactElement, useMemo } from 'react';
+import { type ReactElement, useEffect, useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
 import { PageCard, PageCardContent, StateNotice } from '../components/layout';
@@ -52,7 +52,8 @@ export function SharePage(): ReactElement {
   const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);
   const publicState = usePublicShareState(uuid, receiverKeyStorage);
   const isUnavailable = !publicState.isPublicStatusLoading && publicState.isUnavailable;
-  const lockLogic = useSharePageLockLogic(uuid, location.hash);
+  const lockLogic = useSharePageLockLogic(uuid, location.pathname, location.search, location.hash);
+  const { clearLockSecretCache } = lockLogic;
   const isDeliveredState =
     !publicState.isPublicStatusLoading && publicState.channelState === CHANNEL_STATE.DELIVERED;
   const decryptLogic = useSharePageDecryptLogic(uuid, isDeliveredState);
@@ -65,6 +66,23 @@ export function SharePage(): ReactElement {
   });
   const isPageBusy =
     publicState.isPublicStatusLoading || lockLogic.lockPending || decryptLogic.decryptPending;
+
+  useEffect(() => {
+    if (!uuid || publicState.isPublicStatusLoading) return;
+    if (publicState.isUnavailable) {
+      clearLockSecretCache('public-state:unavailable');
+      return;
+    }
+    if (publicState.channelState !== CHANNEL_STATE.WAITING) {
+      clearLockSecretCache(`public-state:${publicState.channelState}`);
+    }
+  }, [
+    uuid,
+    publicState.isPublicStatusLoading,
+    publicState.isUnavailable,
+    publicState.channelState,
+    clearLockSecretCache,
+  ]);
 
   return (
     <PageCard data-testid="page-share" tone="cyan">

@@ -1,4 +1,5 @@
 import {
+  type Base64Url,
   CHANNEL_STATE,
   type ChannelState,
   ErrorResponseSchema,
@@ -91,6 +92,49 @@ export interface ReceiverSafetyCodeState {
   display: SafetyCodeDisplay | null;
   status: ReceiverSafetyCodeStatus;
   canDecryptLocally: boolean;
+}
+
+const LOCK_SECRET_SESSION_STORAGE_PREFIX = 'zerolink:share-lock-secret:';
+
+function getLockSecretSessionStorageKey(uuid: string): string {
+  return `${LOCK_SECRET_SESSION_STORAGE_PREFIX}${uuid}`;
+}
+
+function readStoredLockSecret(uuid: string): Base64Url | null {
+  try {
+    const value = window.sessionStorage.getItem(getLockSecretSessionStorageKey(uuid));
+    if (!value) return null;
+    return extractLockSecretFromHash(`#k=${value}`);
+  } catch {
+    return null;
+  }
+}
+
+function persistLockSecret(uuid: string, lockSecretB64u: Base64Url): boolean {
+  try {
+    window.sessionStorage.setItem(getLockSecretSessionStorageKey(uuid), lockSecretB64u);
+    return true;
+  } catch (error: unknown) {
+    // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging share-link fragment persistence failures
+    console.error('[useSharePageLockLogic] Failed to persist lock secret to sessionStorage', {
+      uuid,
+      error,
+    });
+    return false;
+  }
+}
+
+function clearStoredLockSecret(uuid: string, source: string): void {
+  try {
+    window.sessionStorage.removeItem(getLockSecretSessionStorageKey(uuid));
+  } catch (error: unknown) {
+    // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging share-link fragment cleanup failures
+    console.error('[useSharePageLockLogic] Failed to clear lock secret from sessionStorage', {
+      uuid,
+      source,
+      error,
+    });
+  }
 }
 
 function cleanupReceiverKeyBestEffort(
@@ -262,11 +306,17 @@ export function usePublicShareState(
   };
 }
 
-export function useSharePageLockLogic(uuid?: string, hash?: string) {
+export function useSharePageLockLogic(
+  uuid?: string,
+  pathname: string = '',
+  search: string = '',
+  hash?: string
+) {
   const store = useLockStore();
   const [lockError, setLockError] = useState<string | null>(null);
   const [isLockPassphraseInvalid, setIsLockPassphraseInvalid] = useState(false);
   const [isLockSubmitting, setIsLockSubmitting] = useState(false);
+  const [lockSecretB64u, setLockSecretB64u] = useState<Base64Url | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -275,14 +325,26 @@ export function useSharePageLockLogic(uuid?: string, hash?: string) {
     };
   }, []);
 
-  const lockSecretB64u = extractLockSecretFromHash(hash ?? '');
   const lockSecretWarning = lockSecretB64u
     ? null
     : 'This share link is missing a lock secret fragment (#k=...).';
 
+  const clearLockSecretCache = useCallback(
+    (source: string) => {
+      if (!uuid) {
+        setLockSecretB64u(null);
+        return;
+      }
+      clearStoredLockSecret(uuid, source);
+      setLockSecretB64u(null);
+    },
+    [uuid]
+  );
+
   useEffect(() => {
     if (!uuid) {
       useLockStore.getState().setLockUuid(null);
+      setLockSecretB64u(null);
       setLockError(null);
       setIsLockPassphraseInvalid(false);
       return;
@@ -292,6 +354,25 @@ export function useSharePageLockLogic(uuid?: string, hash?: string) {
     setLockError(null);
     setIsLockPassphraseInvalid(false);
   }, [uuid]);
+
+  useEffect(() => {
+    if (!uuid) {
+      setLockSecretB64u(null);
+      return;
+    }
+
+    const hashLockSecret = extractLockSecretFromHash(hash ?? '');
+    if (hashLockSecret) {
+      setLockSecretB64u(hashLockSecret);
+      const persisted = persistLockSecret(uuid, hashLockSecret);
+      if (persisted) {
+        window.history.replaceState(window.history.state, '', `${pathname}${search}`);
+      }
+      return;
+    }
+
+    setLockSecretB64u(readStoredLockSecret(uuid));
+  }, [uuid, pathname, search, hash]);
 
   useEffect(() => {
     return () => useLockStore.getState().resetLockStore();
@@ -348,6 +429,7 @@ export function useSharePageLockLogic(uuid?: string, hash?: string) {
     if (!mountedRef.current) return;
     setIsLockSubmitting(false);
     if (!result.ok) return setLockErrorFromCode(result.error.code);
+    clearLockSecretCache('lock-success');
     clearLockError();
   }
 
@@ -359,6 +441,7 @@ export function useSharePageLockLogic(uuid?: string, hash?: string) {
     lockPending,
     canGenerate,
     lockSecretWarning,
+    clearLockSecretCache,
     handlePassphraseChange,
     handleGenerate,
   };
