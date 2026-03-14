@@ -1130,13 +1130,6 @@ async function executeDecryptDelivered(
       state.setPlaintext(plaintext);
     });
 
-    // L-2: Clean up wrapped private key from IndexedDB after successful decryption
-    try {
-      await deps.receiverKeyStorage.remove(input.uuid);
-    } catch {
-      // Best-effort cleanup — decryption already succeeded
-    }
-
     return {
       ok: true,
       data: {

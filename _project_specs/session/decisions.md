@@ -29,6 +29,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 - **L-4**: Validate content key length is exactly 32 bytes (AES-256) before import.
 - **L-5**: Enforce minimum 8-character passphrase length.
 **Reasoning**: Defense-in-depth — prevent protocol downgrade attacks, ensure cryptographic binding invariants are server-enforced, reduce local key material exposure.
+**Follow-up (2026-03-14)**: Reverted the frontend portion of L-2 that deleted the wrapped receiver private key immediately after every successful decrypt. Receiver key cleanup now happens only when the Share page confirms a terminal channel state (`NOT_FOUND`, `deleted`, `expired`, or realtime close), preserving local-burn re-decrypt semantics while still performing best-effort IndexedDB cleanup once the channel is no longer usable.
 
 ## [2026-03-13] Strengthen AAD binding to match documented spec
 

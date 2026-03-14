@@ -1794,7 +1794,7 @@ describe('crypto orchestrator', () => {
     });
   });
 
-  it('cleans up receiver key from storage after successful decryption (L-2)', async () => {
+  it('preserves receiver key storage after successful decryption so re-decrypt stays available', async () => {
     const storage = createIndexedDbReceiverKeyStorage({
       dbName: 'test-orchestrator-decrypt-cleanup',
       storeName: 'receiver-keys',
@@ -1890,13 +1890,19 @@ describe('crypto orchestrator', () => {
     });
 
     removeSpy.mockClear();
-    const decryptResult = await orchestrator.decryptDelivered({
+    const firstDecryptResult = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+    const secondDecryptResult = await orchestrator.decryptDelivered({
       uuid: VALID_UUID,
       passphrase: 'Strong#Pass1234',
     });
 
-    expect(decryptResult.ok).toBe(true);
-    expect(removeSpy).toHaveBeenCalledWith(VALID_UUID);
+    expect(firstDecryptResult.ok).toBe(true);
+    expect(secondDecryptResult.ok).toBe(true);
+    expect(removeSpy).not.toHaveBeenCalled();
+    await expect(storage.load(VALID_UUID)).resolves.not.toBeNull();
   });
 
   it('returns INTEGRITY_MISMATCH when content key length is invalid (L-4)', async () => {

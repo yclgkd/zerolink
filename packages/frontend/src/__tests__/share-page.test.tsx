@@ -55,7 +55,11 @@ vi.mock('../sync/use-channel-sync.ts', async () => {
 });
 
 import * as storageModule from '../crypto/storage';
-import { createIndexedDbReceiverKeyStorage, type ReceiverKeyEnvelope } from '../crypto/storage';
+import {
+  createIndexedDbReceiverKeyStorage,
+  type ReceiverKeyEnvelope,
+  type ReceiverKeyStorage,
+} from '../crypto/storage';
 import { SharePage } from '../pages/SharePage';
 import { useDecryptStore } from '../stores/decrypt-store';
 import { useLockStore } from '../stores/lock-store';
@@ -202,6 +206,16 @@ async function clearReceiverKeyStorage(): Promise<void> {
       `Failed to clear receiver key storage for test isolation:\n${failures.join('\n')}`
     );
   }
+}
+
+function createMockReceiverKeyStorage(
+  overrides: Partial<ReceiverKeyStorage> = {}
+): ReceiverKeyStorage {
+  return {
+    load: overrides.load ?? (() => Promise.resolve(null)),
+    save: overrides.save ?? (() => Promise.resolve()),
+    remove: overrides.remove ?? (() => Promise.resolve()),
+  };
 }
 
 function mockLegacyTerminalPublicState(
@@ -1759,6 +1773,26 @@ describe('SharePage', () => {
     ).toBeTruthy();
   });
 
+  it('cleans up the local receiver key when /api/public/:uuid returns 404', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicNotFound(fetchSpy);
+    const remove = vi.fn(() => Promise.resolve());
+    const storageSpy = vi
+      .spyOn(storageModule, 'createIndexedDbReceiverKeyStorage')
+      .mockReturnValue(createMockReceiverKeyStorage({ remove }));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    try {
+      expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+      await waitFor(() => {
+        expect(remove).toHaveBeenCalledWith(VALID_UUID);
+      });
+    } finally {
+      storageSpy.mockRestore();
+    }
+  });
+
   it.each([
     'deleted',
     'expired',
@@ -1776,6 +1810,86 @@ describe('SharePage', () => {
   });
 
   it.each([
+    'deleted',
+    'expired',
+  ] as const)('cleans up the local receiver key when /api/public/:uuid returns legacy %s', async (state) => {
+    const fetchSpy = getFetchSpy();
+    mockLegacyTerminalPublicState(fetchSpy, state);
+    const remove = vi.fn(() => Promise.resolve());
+    const storageSpy = vi
+      .spyOn(storageModule, 'createIndexedDbReceiverKeyStorage')
+      .mockReturnValue(createMockReceiverKeyStorage({ remove }));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    try {
+      expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+      await waitFor(() => {
+        expect(remove).toHaveBeenCalledWith(VALID_UUID);
+      });
+    } finally {
+      storageSpy.mockRestore();
+    }
+  });
+
+  it('cleans up the local receiver key when realtime state changes to a terminal state', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    const remove = vi.fn(() => Promise.resolve());
+    const storageSpy = vi
+      .spyOn(storageModule, 'createIndexedDbReceiverKeyStorage')
+      .mockReturnValue(createMockReceiverKeyStorage({ remove }));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    try {
+      expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+      act(() => {
+        getLatestChannelSyncOptions().onStateChange({
+          state: 'expired',
+          version: 1,
+          adminMode: 'webauthn',
+          securityProfile: SECURITY_PROFILE.SECURE,
+        });
+      });
+
+      expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+      await waitFor(() => {
+        expect(remove).toHaveBeenCalledWith(VALID_UUID);
+      });
+    } finally {
+      storageSpy.mockRestore();
+    }
+  });
+
+  it('cleans up the local receiver key when realtime close is received', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    const remove = vi.fn(() => Promise.resolve());
+    const storageSpy = vi
+      .spyOn(storageModule, 'createIndexedDbReceiverKeyStorage')
+      .mockReturnValue(createMockReceiverKeyStorage({ remove }));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    try {
+      expect(await screen.findByTestId('share-step-onboarding')).toBeTruthy();
+
+      act(() => {
+        getLatestChannelSyncOptions().onChannelClosed('expired');
+      });
+
+      expect(await screen.findByTestId('share-step-unavailable')).toBeTruthy();
+      await waitFor(() => {
+        expect(remove).toHaveBeenCalledWith(VALID_UUID);
+      });
+    } finally {
+      storageSpy.mockRestore();
+    }
+  });
+
+  it.each([
     429, 500, 503,
   ] as const)('shows public-status error notice when /api/public/:uuid returns HTTP %i', async (status) => {
     const fetchSpy = getFetchSpy();
@@ -1788,6 +1902,26 @@ describe('SharePage', () => {
       screen.getByText('Unable to load channel state right now. Showing safe default state.')
     ).toBeTruthy();
     expect(screen.queryByTestId('share-step-unavailable')).toBeNull();
+  });
+
+  it.each([
+    429, 500, 503,
+  ] as const)('does not clean up the local receiver key when /api/public/:uuid returns HTTP %i', async (status) => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ ok: false, code: 'ERROR' }, status));
+    const remove = vi.fn(() => Promise.resolve());
+    const storageSpy = vi
+      .spyOn(storageModule, 'createIndexedDbReceiverKeyStorage')
+      .mockReturnValue(createMockReceiverKeyStorage({ remove }));
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    try {
+      expect(await screen.findByTestId('share-public-status-error')).toBeTruthy();
+      expect(remove).not.toHaveBeenCalled();
+    } finally {
+      storageSpy.mockRestore();
+    }
   });
 
   it('shows uuid and receiver role badge', async () => {

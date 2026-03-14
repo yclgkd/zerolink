@@ -7,11 +7,11 @@ import {
   type SafetyCodeDisplay,
   UUIDSchema,
 } from '@zerolink/shared';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { extractLockSecretFromHash } from '../../crypto/protocol-utils';
 import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
-import { createIndexedDbReceiverKeyStorage } from '../../crypto/storage';
+import type { ReceiverKeyStorage } from '../../crypto/storage';
 import { useDecryptStore } from '../../stores/decrypt-store';
 import { useLockStore } from '../../stores/lock-store';
 import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
@@ -93,12 +93,41 @@ export interface ReceiverSafetyCodeState {
   canDecryptLocally: boolean;
 }
 
-export function usePublicShareState(uuid?: string) {
+function cleanupReceiverKeyBestEffort(
+  receiverKeyStorage: ReceiverKeyStorage,
+  uuid: string,
+  source: string
+): void {
+  void receiverKeyStorage.remove(uuid).catch((error: unknown) => {
+    // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging terminal cleanup failures
+    console.error('[usePublicShareState] Failed to clean up receiver key after terminal state', {
+      uuid,
+      source,
+      error,
+    });
+  });
+}
+
+export function usePublicShareState(
+  uuid: string | undefined,
+  receiverKeyStorage: ReceiverKeyStorage
+) {
   const [channelState, setChannelState] = useState<ChannelState>(CHANNEL_STATE.WAITING);
   const [receiverPubFpr, setReceiverPubFpr] = useState<HexString | null>(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [isPublicStatusLoading, setIsPublicStatusLoading] = useState(() => Boolean(uuid));
   const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
+  const markTerminalUnavailable = useCallback(
+    (currentUuid: string, source: string) => {
+      setChannelState(CHANNEL_STATE.WAITING);
+      setReceiverPubFpr(null);
+      setIsUnavailable(true);
+      setIsPublicStatusLoading(false);
+      setPublicStatusError(null);
+      cleanupReceiverKeyBestEffort(receiverKeyStorage, currentUuid, source);
+    },
+    [receiverKeyStorage]
+  );
 
   useEffect(() => {
     if (!uuid) {
@@ -130,11 +159,7 @@ export function usePublicShareState(uuid?: string) {
           response.status === 404 ||
           (parsedError.success && parsedError.data.code === 'NOT_FOUND')
         ) {
-          setChannelState(CHANNEL_STATE.WAITING);
-          setReceiverPubFpr(null);
-          setIsUnavailable(true);
-          setIsPublicStatusLoading(false);
-          setPublicStatusError(null);
+          markTerminalUnavailable(currentUuid, 'public-status:not-found');
           return;
         }
 
@@ -161,11 +186,7 @@ export function usePublicShareState(uuid?: string) {
         }
 
         if (isTerminalPublicState(parsedPayload.data.state)) {
-          setChannelState(CHANNEL_STATE.WAITING);
-          setReceiverPubFpr(null);
-          setIsUnavailable(true);
-          setIsPublicStatusLoading(false);
-          setPublicStatusError(null);
+          markTerminalUnavailable(currentUuid, `public-status:${parsedPayload.data.state}`);
           return;
         }
 
@@ -196,30 +217,40 @@ export function usePublicShareState(uuid?: string) {
     return () => {
       cancelled = true;
     };
-  }, [uuid]);
+  }, [markTerminalUnavailable, uuid]);
 
   // Real-time sync: auto-update when sender delivers or channel state changes
   useChannelSync(uuid, {
-    onStateChange: useCallback((update) => {
-      if (isTerminalPublicState(update.state)) {
+    onStateChange: useCallback(
+      (update) => {
+        if (isTerminalPublicState(update.state)) {
+          if (uuid) {
+            markTerminalUnavailable(uuid, `realtime-state:${update.state}`);
+          }
+          return;
+        }
+        setChannelState(update.state);
+        setReceiverPubFpr(update.receiverPubFpr ?? null);
+        setIsUnavailable(false);
+        setIsPublicStatusLoading(false);
+        setPublicStatusError(null);
+      },
+      [markTerminalUnavailable, uuid]
+    ),
+    onChannelClosed: useCallback(
+      (reason: ChannelClosedReason) => {
+        if (uuid) {
+          markTerminalUnavailable(uuid, `realtime-close:${reason}`);
+          return;
+        }
         setChannelState(CHANNEL_STATE.WAITING);
         setReceiverPubFpr(null);
         setIsUnavailable(true);
-        return;
-      }
-      setChannelState(update.state);
-      setReceiverPubFpr(update.receiverPubFpr ?? null);
-      setIsUnavailable(false);
-      setIsPublicStatusLoading(false);
-      setPublicStatusError(null);
-    }, []),
-    onChannelClosed: useCallback((_reason: ChannelClosedReason) => {
-      setChannelState(CHANNEL_STATE.WAITING);
-      setReceiverPubFpr(null);
-      setIsUnavailable(true);
-      setIsPublicStatusLoading(false);
-      setPublicStatusError(null);
-    }, []),
+        setIsPublicStatusLoading(false);
+        setPublicStatusError(null);
+      },
+      [markTerminalUnavailable, uuid]
+    ),
   });
 
   return {
@@ -338,17 +369,17 @@ export function useReceiverSafetyCodeState({
   channelState,
   publicReceiverPubFpr,
   localSafetyCode,
+  receiverKeyStorage,
 }: {
   uuid: string | undefined;
   channelState: ChannelState;
   publicReceiverPubFpr: HexString | null;
   localSafetyCode: SafetyCodeDisplay | null;
+  receiverKeyStorage: ReceiverKeyStorage;
 }): ReceiverSafetyCodeState {
   const [storedReceiverPubFpr, setStoredReceiverPubFpr] = useState<HexString | null>(null);
   const [isCheckingLocalKey, setIsCheckingLocalKey] = useState(false);
   const [hasStorageError, setHasStorageError] = useState(false);
-
-  const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);
 
   const isReceiverVerificationState =
     channelState === CHANNEL_STATE.LOCKED || channelState === CHANNEL_STATE.DELIVERED;
