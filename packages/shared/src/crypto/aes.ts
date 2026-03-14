@@ -57,7 +57,10 @@ function assertIvLength(iv: Uint8Array): void {
   }
 }
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+export function toBufferSource(bytes: Uint8Array): BufferSource {
+  if (bytes.buffer instanceof ArrayBuffer) {
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
   return Uint8Array.from(bytes).buffer;
 }
 
@@ -75,11 +78,11 @@ function toUint8Array(value: WipeableBytes): Uint8Array | null {
 function buildAesGcmParams(iv: Uint8Array, aad?: Uint8Array): AesGcmParams {
   const params: AesGcmParams = {
     name: AES_GCM.ALGORITHM_NAME,
-    iv: toArrayBuffer(iv),
+    iv: toBufferSource(iv),
     tagLength: AES_GCM.TAG_LENGTH_BITS,
   };
   if (aad) {
-    params.additionalData = toArrayBuffer(aad);
+    params.additionalData = toBufferSource(aad);
   }
   return params;
 }
@@ -128,7 +131,7 @@ export async function importAesKeyFromBytes(
 ): Promise<CryptoKey> {
   return getCryptoApi().subtle.importKey(
     'raw',
-    toArrayBuffer(bytes),
+    toBufferSource(bytes),
     {
       name: AES_GCM.ALGORITHM_NAME,
     },
@@ -169,7 +172,7 @@ export async function encryptAesGcm({
   const ciphertextBuffer = await cryptoApi.subtle.encrypt(
     buildAesGcmParams(resolvedIv, aad),
     key,
-    toArrayBuffer(paddedPlaintext)
+    toBufferSource(paddedPlaintext)
   );
 
   return {
@@ -192,7 +195,7 @@ export async function decryptAesGcm({
     const plaintextBuffer = await cryptoApi.subtle.decrypt(
       buildAesGcmParams(iv, aad),
       key,
-      toArrayBuffer(ciphertext)
+      toBufferSource(ciphertext)
     );
     return unpadPlaintext(new Uint8Array(plaintextBuffer));
   } catch (error) {

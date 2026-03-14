@@ -2,7 +2,7 @@ import { argon2idAsync } from '@noble/hashes/argon2.js';
 
 import { AES_GCM, ARGON2ID, ECDSA, RSA_OAEP } from '../constants.ts';
 import type { Argon2idParams, Base64Url, WrappedPrivateKey } from '../types.ts';
-import { wipeBytes } from './aes.ts';
+import { toBufferSource, wipeBytes } from './aes.ts';
 
 const ARGON2_VERSION = 19 as const;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
@@ -50,10 +50,6 @@ function assertSaltLength(salt: Uint8Array): void {
   if (salt.byteLength !== ARGON2ID.SALT_LENGTH) {
     throw new Error('invalid wrapped private key salt length');
   }
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return Uint8Array.from(bytes).buffer;
 }
 
 function bytesToBinary(bytes: Uint8Array): string {
@@ -115,7 +111,7 @@ async function deriveArgon2idAesKey({
   try {
     return await cryptoApi.subtle.importKey(
       'raw',
-      toArrayBuffer(keyMaterial),
+      toBufferSource(keyMaterial),
       { name: AES_GCM.ALGORITHM_NAME },
       false,
       ['encrypt', 'decrypt']
@@ -147,7 +143,7 @@ export async function wrapPrivateKey({
     const encrypted = await cryptoApi.subtle.encrypt(
       {
         name: AES_GCM.ALGORITHM_NAME,
-        iv: toArrayBuffer(iv),
+        iv: toBufferSource(iv),
         tagLength: AES_GCM.TAG_LENGTH_BITS,
       },
       wrappingKey,
@@ -231,11 +227,11 @@ async function decryptPkcs8(
   const decrypted = await cryptoApi.subtle.decrypt(
     {
       name: AES_GCM.ALGORITHM_NAME,
-      iv: toArrayBuffer(decoded.iv),
+      iv: toBufferSource(decoded.iv),
       tagLength: AES_GCM.TAG_LENGTH_BITS,
     },
     wrappingKey,
-    toArrayBuffer(decoded.encryptedKey)
+    toBufferSource(decoded.encryptedKey)
   );
 
   return new Uint8Array(decrypted);
@@ -246,7 +242,7 @@ async function importPkcs8Key(
   algorithm: RsaHashedImportParams | EcKeyImportParams,
   keyUsages: ReadonlyArray<KeyUsage>
 ): Promise<CryptoKey> {
-  return getCryptoApi().subtle.importKey('pkcs8', toArrayBuffer(pkcs8), algorithm, false, [
+  return getCryptoApi().subtle.importKey('pkcs8', toBufferSource(pkcs8), algorithm, false, [
     ...keyUsages,
   ]);
 }

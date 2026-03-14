@@ -1,5 +1,6 @@
 import { RSA_OAEP } from '../constants.ts';
 import type { RSAPublicKeyJWK } from '../types.ts';
+import { toBufferSource } from './aes.ts';
 
 const PUBLIC_KEY_USAGES = [...RSA_OAEP.KEY_USAGES_PUBLIC];
 const PRIVATE_KEY_USAGES = [...RSA_OAEP.KEY_USAGES_PRIVATE];
@@ -10,10 +11,6 @@ function getCryptoApi(): Crypto {
     throw new Error('WebCrypto is not available');
   }
   return cryptoApi;
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return Uint8Array.from(bytes).buffer;
 }
 
 function assertNonEmptyContentKey(contentKey: Uint8Array): void {
@@ -85,7 +82,7 @@ export async function wrapContentKey({
     const wrapped = await getCryptoApi().subtle.encrypt(
       { name: RSA_OAEP.ALGORITHM_NAME },
       receiverPublicKey,
-      toArrayBuffer(contentKey)
+      toBufferSource(contentKey)
     );
     return new Uint8Array(wrapped);
   } catch (error) {
@@ -106,7 +103,7 @@ export async function unwrapContentKey({
     const unwrapped = await getCryptoApi().subtle.decrypt(
       { name: RSA_OAEP.ALGORITHM_NAME },
       receiverPrivateKey,
-      toArrayBuffer(wrappedKey)
+      toBufferSource(wrappedKey)
     );
     return new Uint8Array(unwrapped);
   } catch (error) {
