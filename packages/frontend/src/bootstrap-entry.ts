@@ -53,7 +53,9 @@ void bootstrapApp({
     renderApp();
   },
   search: window.location.search,
-}).catch(() => {
+}).catch((error: unknown) => {
+  // biome-ignore lint/suspicious/noConsole: last-resort error logging when bootstrap fails before app mounts
+  console.error('[ZeroLink] bootstrap failed:', error);
   const root = document.getElementById('root');
   if (root) {
     renderStartupFailureGate(root);

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { bootstrapAppMock } = vi.hoisted(() => ({
@@ -11,16 +10,32 @@ vi.mock('../bootstrap', () => ({
   bootstrapApp: bootstrapAppMock,
 }));
 
+function resetRootElement(): void {
+  const existing = document.getElementById('root');
+  if (existing) {
+    existing.remove();
+  }
+  const root = document.createElement('div');
+  root.id = 'root';
+  document.body.appendChild(root);
+}
+
+function clearBody(): void {
+  while (document.body.firstChild) {
+    document.body.removeChild(document.body.firstChild);
+  }
+}
+
 describe('bootstrap-entry', () => {
   beforeEach(() => {
     vi.resetModules();
     bootstrapAppMock.mockReset();
-    document.body.innerHTML = '<div id="root"></div>';
+    resetRootElement();
     document.body.style.cssText = '';
   });
 
   afterEach(() => {
-    document.body.innerHTML = '';
+    clearBody();
     document.body.style.cssText = '';
   });
 
@@ -29,17 +44,17 @@ describe('bootstrap-entry', () => {
 
     await import('../bootstrap-entry');
 
-    await waitFor(() => {
-      expect(screen.getByTestId('release-verification-gate')).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-testid="release-verification-gate"]')).toBeTruthy();
     });
 
-    expect(screen.getByText('Release Guard')).toBeTruthy();
-    expect(screen.getByText('Verification Unavailable')).toBeTruthy();
-    expect(
-      screen.getByText('ZeroLink could not complete release verification before startup.')
-    ).toBeTruthy();
-    expect(
-      screen.getByText('Do not enter passwords, API keys, or private messages on this page.')
-    ).toBeTruthy();
+    expect(document.body.textContent).toContain('Release Guard');
+    expect(document.body.textContent).toContain('Verification Unavailable');
+    expect(document.body.textContent).toContain(
+      'ZeroLink could not complete release verification before startup.'
+    );
+    expect(document.body.textContent).toContain(
+      'Do not enter passwords, API keys, or private messages on this page.'
+    );
   });
 });
