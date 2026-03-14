@@ -127,6 +127,13 @@ interface RateLimitWindow {
   windowStart: number;
 }
 
+type LockChallengeStorageLocation = 'fixed' | 'legacy';
+
+interface ResolvedLockChallenge {
+  challenge: StoredLockChallenge;
+  location: LockChallengeStorageLocation;
+}
+
 const RATE_LIMITS: Record<RateLimitedEndpoint, { maxRequests: number; windowMs: number }> = {
   lock_begin: { maxRequests: 3, windowMs: 60_000 },
   lock_commit: { maxRequests: 5, windowMs: 60_000 },
@@ -480,8 +487,6 @@ export class SecretVault {
     adminMode: ChannelRecord['adminMode'];
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      this.enforceRateLimit('compound_begin', now);
-
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, uuid);
 
@@ -496,6 +501,8 @@ export class SecretVault {
       let challenge = activeChallenge;
 
       if (!challenge) {
+        this.enforceRateLimit('compound_begin', now);
+
         const cryptoApi = getCryptoApi();
         const id = encodeBase64Url(
           cryptoApi.getRandomValues(new Uint8Array(COMPOUND_CHALLENGE_ID_BYTES))
@@ -550,8 +557,6 @@ export class SecretVault {
 
   async commitCompound(params: CompoundCommitParams, now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      this.enforceRateLimit('compound_commit', now);
-
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, params.uuid);
 
@@ -614,6 +619,8 @@ export class SecretVault {
         await this.ctx.storage.delete(COMPOUND_CHALLENGE_KEY);
         throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge expired');
       }
+
+      this.enforceRateLimit('compound_commit', now);
 
       const expectedChallengeBytes = await sha256Bytes([
         toUtf8Bytes(DOMAIN.CHALLENGE),
@@ -726,8 +733,6 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<import('@zerolink/shared').LockChallenge> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      this.enforceRateLimit('lock_begin', now);
-
       const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
@@ -747,6 +752,8 @@ export class SecretVault {
           expiresAt: activeChallenge.expiresAt,
         };
       }
+
+      this.enforceRateLimit('lock_begin', now);
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
@@ -777,26 +784,25 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
-      this.enforceRateLimit('lock_commit', now);
-
       const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
 
-      const challenge = await this.loadLockChallenge();
-      if (!challenge) {
+      const resolvedChallenge = await this.resolveLockChallenge(lockChallengeId);
+      if (!resolvedChallenge) {
         throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge not found');
       }
+
+      const { challenge, location } = resolvedChallenge;
       if (challenge.expiresAt <= now) {
-        await this.deleteLockChallenge();
+        await this.deleteResolvedLockChallenge(resolvedChallenge);
         throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge expired');
-      }
-      if (challenge.id !== lockChallengeId) {
-        throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge not found');
       }
       if (challenge.consumedAt !== undefined) {
         throw new StateTransitionError('CHALLENGE_CONSUMED', 'lock challenge already consumed');
       }
+
+      this.enforceRateLimit('lock_commit', now);
 
       const expectedProof = await sha256Hex([
         toUtf8Bytes(DOMAIN.LOCK_PROOF),
@@ -834,9 +840,12 @@ export class SecretVault {
         );
       }
 
-      await this.saveLockChallenge({
-        ...challenge,
-        consumedAt: asUnixMs(now),
+      await this.saveResolvedLockChallenge({
+        location,
+        challenge: {
+          ...challenge,
+          consumedAt: asUnixMs(now),
+        },
       });
       const nextRecord = new SecretVaultStateMachine(record).commitLock({
         receiverPubJwk,
@@ -1099,6 +1108,56 @@ export class SecretVault {
 
   private async deleteLockChallenge(): Promise<void> {
     await this.ctx.storage.delete(LOCK_CHALLENGE_KEY);
+  }
+
+  private getLegacyLockChallengeStorageKey(id: Base64Url): string {
+    return `${LEGACY_LOCK_CHALLENGE_KEY_PREFIX}${id}`;
+  }
+
+  private async resolveLockChallenge(id: Base64Url): Promise<ResolvedLockChallenge | undefined> {
+    const fixedChallenge = await this.loadLockChallenge();
+    if (fixedChallenge && fixedChallenge.id === id) {
+      return {
+        challenge: fixedChallenge,
+        location: 'fixed',
+      };
+    }
+
+    const legacyChallenge = await this.ctx.storage.get<StoredLockChallenge>(
+      this.getLegacyLockChallengeStorageKey(id)
+    );
+    if (!legacyChallenge) {
+      return undefined;
+    }
+
+    return {
+      challenge: legacyChallenge,
+      location: 'legacy',
+    };
+  }
+
+  private async saveResolvedLockChallenge({
+    challenge,
+    location,
+  }: ResolvedLockChallenge): Promise<void> {
+    if (location === 'fixed') {
+      await this.saveLockChallenge(challenge);
+      return;
+    }
+
+    await this.ctx.storage.put(this.getLegacyLockChallengeStorageKey(challenge.id), challenge);
+  }
+
+  private async deleteResolvedLockChallenge({
+    challenge,
+    location,
+  }: ResolvedLockChallenge): Promise<void> {
+    if (location === 'fixed') {
+      await this.deleteLockChallenge();
+      return;
+    }
+
+    await this.ctx.storage.delete(this.getLegacyLockChallengeStorageKey(challenge.id));
   }
 
   private async handleCreateBegin(request: Request): Promise<Response> {
