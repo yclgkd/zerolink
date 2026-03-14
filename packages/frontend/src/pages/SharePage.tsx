@@ -1,5 +1,5 @@
 import { CHANNEL_STATE } from '@zerolink/shared';
-import type { ReactElement } from 'react';
+import { type ReactElement, useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 
 import { PageCard, PageCardContent, StateNotice } from '../components/layout';
@@ -13,6 +13,7 @@ import {
   StepIndicator,
   UnavailableStep,
 } from '../components/share/share-steps';
+import { createIndexedDbReceiverKeyStorage } from '../crypto/storage';
 import {
   usePublicShareState,
   useReceiverSafetyCodeState,
@@ -48,7 +49,8 @@ const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
 export function SharePage(): ReactElement {
   const { uuid } = useParams<{ uuid: string }>();
   const location = useLocation();
-  const publicState = usePublicShareState(uuid);
+  const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);
+  const publicState = usePublicShareState(uuid, receiverKeyStorage);
   const isUnavailable = !publicState.isPublicStatusLoading && publicState.isUnavailable;
   const lockLogic = useSharePageLockLogic(uuid, location.hash);
   const isDeliveredState =
@@ -59,6 +61,7 @@ export function SharePage(): ReactElement {
     channelState: publicState.channelState,
     publicReceiverPubFpr: publicState.receiverPubFpr,
     localSafetyCode: lockLogic.store.safetyCode,
+    receiverKeyStorage,
   });
   const isPageBusy =
     publicState.isPublicStatusLoading || lockLogic.lockPending || decryptLogic.decryptPending;

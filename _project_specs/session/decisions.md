@@ -13,6 +13,25 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-13] Backend validation hardening (crypto audit findings)
+
+**Decision**: Implement 10 security fixes from crypto audit across backend and frontend.
+**Context**: Comprehensive cryptographic protocol and implementation audit identified 12 findings (2 High, 5 Medium, 5 Low). Two architectural issues (H-2 XSS Trusted Types, M-5 rate limiting) filed as issues #154 and #155.
+**Changes**:
+- **H-1**: Enforce securityProfile → adminMode binding in `commitCreate()` — secure/strict/hardware_only profiles now require webauthn.
+- **M-1**: Validate `SHA256(SPKI(receiverPubJwk)) === receiverPubFpr` in `commitLockChallenge()`.
+- **M-2**: Cross-validate `intent.receiverPubFpr` against stored `record.receiver.pubFpr` in `commitCompound()`.
+- **M-3**: Reject `beginCompoundChallenge()` when an active unconsumed challenge exists.
+- **M-4**: Reject unverified attestation (`verified: false`) for secure/strict/hardware_only profiles.
+- **L-1**: Use constant-time comparison for ciphertext hash in `performDecryptionPipeline()`.
+- **L-2**: Clean up wrapped receiver private key from IndexedDB after successful decryption.
+- **L-3**: Validate RP_ID and RP_ORIGIN format at SecretVault construction time.
+- **L-4**: Validate content key length is exactly 32 bytes (AES-256) before import.
+- **L-5**: Enforce minimum 8-character passphrase length.
+**Reasoning**: Defense-in-depth — prevent protocol downgrade attacks, ensure cryptographic binding invariants are server-enforced, reduce local key material exposure.
+**Follow-up (2026-03-14)**: Reverted the frontend portion of L-2 that deleted the wrapped receiver private key immediately after every successful decrypt. Receiver key cleanup now happens only when the Share page confirms a terminal channel state (`NOT_FOUND`, `deleted`, `expired`, or realtime close), preserving local-burn re-decrypt semantics while still performing best-effort IndexedDB cleanup once the channel is no longer usable.
+**Follow-up (2026-03-14)**: Tightened L-5 so Quick Share / password-managed softkey flows now enforce the same 8-character minimum on create, deliver, and delete, with Create/Manage UI gating using the same frontend helper as the orchestrator. Adjusted M-3 from a hard rejection to an idempotent `compound_begin`: when an active challenge already exists, the DO returns the existing challenge instead of overwriting it or blocking sender retries until TTL expiry.
+
 ## [2026-03-13] Strengthen AAD binding to match documented spec
 
 **Decision**: Change AES-GCM AAD from `uuid` alone to `uuid||version||receiver_pub_fpr`.

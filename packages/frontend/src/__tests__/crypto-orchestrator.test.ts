@@ -1758,4 +1758,345 @@ describe('crypto orchestrator', () => {
       },
     });
   });
+
+  it('returns PASSPHRASE_REQUIRED when passphrase is shorter than 8 characters (L-5)', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+    const createResult = await orchestrator.createChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.QUICK,
+      useCompatibilityMode: true,
+      softkeyPassphrase: 'short',
+    });
+
+    expect(createResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'create.softkey-passphrase',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+    expect(vi.mocked(apiClient.createBegin)).not.toHaveBeenCalled();
+
+    const lockResult = await orchestrator.lockChannel({
+      uuid: VALID_UUID,
+      lockSecretB64u: VALID_LOCK_SECRET,
+      passphrase: 'short',
+    });
+
+    expect(lockResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'lock.validate',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.QUICK,
+        adminMode: 'password',
+      },
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.QUICK,
+      plaintext: 'hello from sender',
+      softkeyPassphrase: '1234567',
+    });
+
+    expect(deliverResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'deliver.softkey-passphrase',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+    expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
+
+    const deleteResult = await orchestrator.deleteChannel({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.QUICK,
+      softkeyPassphrase: '1234567',
+    });
+
+    expect(deleteResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'delete.softkey-passphrase',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+    expect(vi.mocked(apiClient.deleteCommit)).not.toHaveBeenCalled();
+
+    const decryptResult = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: '1234567',
+    });
+
+    expect(decryptResult).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'PASSPHRASE_REQUIRED',
+        stage: 'decrypt.validate',
+        message: 'passphrase must be at least 8 characters',
+      },
+    });
+  });
+
+  it('preserves receiver key storage after successful decryption so re-decrypt stays available', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-cleanup',
+      storeName: 'receiver-keys',
+    });
+    const removeSpy = vi.spyOn(storage, 'remove');
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+
+    vi.mocked(apiClient.lockBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        lockChallenge: {
+          id: VALID_B64U,
+          challenge: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+      },
+    });
+    vi.mocked(apiClient.lockCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+    const lockResult = await orchestrator.lockChannel({
+      uuid: VALID_UUID,
+      lockSecretB64u: VALID_LOCK_SECRET,
+      passphrase: 'Strong#Pass1234',
+    });
+    expect(lockResult.ok).toBe(true);
+    if (!lockResult.ok) return;
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+      if (input.intent.op === 'update') {
+        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      }
+      return { ok: true, status: 200, data: { ok: true } };
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'cleanup test payload',
+    });
+    expect(deliverResult.ok).toBe(true);
+    expect(committedCipherBundle).not.toBeNull();
+    if (!committedCipherBundle) return;
+
+    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: committedCipherBundle as DecryptFetchResponse['cipherBundle'],
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    removeSpy.mockClear();
+    const firstDecryptResult = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+    const secondDecryptResult = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(firstDecryptResult.ok).toBe(true);
+    expect(secondDecryptResult.ok).toBe(true);
+    expect(removeSpy).not.toHaveBeenCalled();
+    await expect(storage.load(VALID_UUID)).resolves.not.toBeNull();
+  });
+
+  it('returns INTEGRITY_MISMATCH when content key length is invalid (L-4)', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-key-length',
+      storeName: 'receiver-keys',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+
+    vi.mocked(apiClient.lockBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        lockChallenge: {
+          id: VALID_B64U,
+          challenge: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+      },
+    });
+    vi.mocked(apiClient.lockCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+    const lockResult = await orchestrator.lockChannel({
+      uuid: VALID_UUID,
+      lockSecretB64u: VALID_LOCK_SECRET,
+      passphrase: 'Strong#Pass1234',
+    });
+    expect(lockResult.ok).toBe(true);
+    if (!lockResult.ok) return;
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+      if (input.intent.op === 'update') {
+        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      }
+      return { ok: true, status: 200, data: { ok: true } };
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'key length test payload',
+    });
+    expect(deliverResult.ok).toBe(true);
+    expect(committedCipherBundle).not.toBeNull();
+    if (!committedCipherBundle) return;
+    const deliveredCipherBundle = committedCipherBundle as DecryptFetchResponse['cipherBundle'];
+
+    const tamperedBundle: DecryptFetchResponse['cipherBundle'] = {
+      ...deliveredCipherBundle,
+      ciphertextHash: deliveredCipherBundle.ciphertextHash,
+      encContentKey: Base64UrlSchema.parse('dG9vc2hvcnQ'),
+    };
+
+    const ciphertextBytes = Uint8Array.from(
+      atob(deliveredCipherBundle.ciphertext.replace(/-/g, '+').replace(/_/g, '/')),
+      (c) => c.charCodeAt(0)
+    );
+    const hashBuffer = await crypto.subtle.digest('SHA-256', ciphertextBytes);
+    const correctHash = HexStringSchema.parse(
+      Array.from(new Uint8Array(hashBuffer), (b) => b.toString(16).padStart(2, '0')).join('')
+    );
+    tamperedBundle.ciphertextHash = correctHash;
+
+    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: tamperedBundle,
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const decryptResult = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(decryptResult.ok).toBe(false);
+    if (decryptResult.ok) return;
+    expect(decryptResult.error.code).toMatch(/INTEGRITY_MISMATCH|CRYPTO_ERROR/u);
+  });
 });

@@ -16,6 +16,10 @@ import { PassphraseInput } from '../components/lock/passphrase-input';
 import { Button } from '../components/ui/button';
 import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
+import {
+  getPassphraseLengthMessage,
+  hasRequiredPassphraseLength,
+} from '../crypto/passphrase-policy';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
 import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
@@ -43,7 +47,7 @@ function mapCreateError(code: string): string {
     case 'PROFILE_BLOCKED':
       return 'Secure Share requires WebAuthn support in your environment.';
     case 'PASSPHRASE_REQUIRED':
-      return 'Please enter a password for Quick Share.';
+      return getPassphraseLengthMessage('Quick Share password');
     case 'NOT_ALLOWED':
       return 'Passkey prompt was cancelled or denied. Please try again.';
     case 'NETWORK_ERROR':
@@ -452,7 +456,9 @@ function useCreatePageLogic() {
   const isQuickMode = store.selectedProfile === SECURITY_PROFILE.QUICK;
   const isSubmitting =
     store.createBegin.status === 'loading' || store.createFinish.status === 'loading';
-  const canSubmit = isQuickMode ? quickPassword.trim().length > 0 : store.webAuthnSupported;
+  const canSubmit = isQuickMode
+    ? hasRequiredPassphraseLength(quickPassword)
+    : store.webAuthnSupported;
 
   function clearLocalFeedback(): void {
     setSubmitError(null);

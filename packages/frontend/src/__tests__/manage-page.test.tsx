@@ -204,6 +204,8 @@ beforeEach(() => {
   syncHarness.latestOptions = null;
 
   vi.clearAllMocks();
+  deliverSecretMock.mockReset();
+  deleteChannelMock.mockReset();
   mockDeliverSuccessWithStoreSideEffects();
   mockDeleteSuccessWithStoreSideEffects();
 });
@@ -444,8 +446,36 @@ describe('ManagePage integration', () => {
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
     expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
-      'A channel password is required for this action.'
+      'Channel password must be at least 8 characters'
     );
+  });
+
+  it('blocks password-managed delivery locally when the channel password is shorter than 8 characters', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'top secret payload' },
+    });
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'short' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
+      'Channel password must be at least 8 characters'
+    );
+    expect(deliverSecretMock).not.toHaveBeenCalled();
   });
 
   it('calls deliverSecret with quick profile for softkey-managed channels', async () => {
@@ -467,6 +497,11 @@ describe('ManagePage integration', () => {
     });
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Compat#Manage123' },
+    });
+    await waitFor(() => {
+      expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe(
+        'Compat#Manage123'
+      );
     });
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
@@ -862,6 +897,9 @@ describe('ManagePage integration', () => {
 
     await screen.findByTestId('manage-state-waiting');
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Quick#Manage123' },
+    });
     fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
     await waitFor(() => {
@@ -869,6 +907,33 @@ describe('ManagePage integration', () => {
     });
 
     expect(deleteChannelMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.QUICK);
+    expect(deleteChannelMock.mock.calls[0]?.[0]?.softkeyPassphrase).toBe('Quick#Manage123');
+  });
+
+  it('blocks password-managed delete locally when the channel password is shorter than 8 characters', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'short' },
+    });
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
+      'Channel password must be at least 8 characters'
+    );
+    expect(deleteChannelMock).not.toHaveBeenCalled();
   });
 
   it('shows unavailable state after remounting a locally deleted channel', async () => {
