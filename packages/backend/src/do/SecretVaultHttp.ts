@@ -6,7 +6,7 @@ import type {
   MethodNotAllowedResponse,
   StateTransitionErrorCode,
 } from './SecretVaultTypes.ts';
-import { StateTransitionError } from './SecretVaultTypes.ts';
+import { RateLimitError, StateTransitionError } from './SecretVaultTypes.ts';
 
 interface ErrorLogContext {
   appEnv: string;
@@ -167,8 +167,8 @@ export function jsonResponse<T extends object>(
   });
 }
 
-export function jsonError(code: string, status: number): Response {
-  return jsonResponse<ErrorResponse>({ ok: false, code }, status);
+export function jsonError(code: string, status: number, extraHeaders?: HeadersInit): Response {
+  return jsonResponse<ErrorResponse>({ ok: false, code }, status, extraHeaders);
 }
 
 export function methodNotAllowed(): Response {
@@ -219,6 +219,12 @@ export function normalizeAssertion(assertion: LooseAssertionJson): AssertionJSON
 export function mapError(error: unknown, context: ErrorLogContext): Response {
   if (error instanceof StateTransitionError) {
     return mapStateTransitionError(error);
+  }
+
+  if (error instanceof RateLimitError) {
+    return jsonError('RATE_LIMITED', 429, {
+      'Retry-After': String(error.retryAfterSeconds),
+    });
   }
 
   // Production logs keep only whitelisted metadata; staging retains raw details for debugging.

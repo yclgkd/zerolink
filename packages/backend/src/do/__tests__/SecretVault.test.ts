@@ -36,14 +36,16 @@ import {
   type CommitLockChallengeParams,
   type CommitLockParams,
   CREATION_CHALLENGE_KEY,
-  LOCK_CHALLENGE_KEY_PREFIX,
+  LOCK_CHALLENGE_KEY,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
+  RateLimitError,
   SecretVault,
   type SecretVaultEnv,
   SecretVaultStateMachine,
   StateTransitionError,
   type StoredCompoundChallenge,
+  type StoredLockChallenge,
   type StoredTerminalTombstone,
   TERMINAL_TOMBSTONE_KEY,
 } from '../SecretVault.ts';
@@ -613,13 +615,64 @@ describe('SecretVault lock challenge flow', () => {
     const vault = new SecretVault(state, env);
 
     const challenge = await vault.beginLockChallenge(record.uuid, now);
-    const storedChallenge = snapshot.get(
-      `${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`
-    ) as LockChallenge;
+    const storedChallenge = snapshot.get(LOCK_CHALLENGE_KEY) as LockChallenge;
 
     expect(challenge.expiresAt).toBe(asUnixMs(now + CHALLENGE_TTL_MS));
     expect(storedChallenge.id).toBe(challenge.id);
     expect(decodeBase64Url(challenge.challenge).byteLength).toBe(32);
+  });
+
+  it('returns the existing active lock challenge without overwriting it', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    const firstChallenge = await vault.beginLockChallenge(record.uuid, now);
+    const secondChallenge = await vault.beginLockChallenge(record.uuid, now + 1_000);
+
+    expect(secondChallenge).toEqual(firstChallenge);
+    expect(snapshot.get(LOCK_CHALLENGE_KEY)).toMatchObject({
+      id: firstChallenge.id,
+      challenge: firstChallenge.challenge,
+      expiresAt: firstChallenge.expiresAt,
+    });
+  });
+
+  it('issues a new lock challenge after the previous one is consumed', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    const firstChallenge = await vault.beginLockChallenge(record.uuid, now);
+    snapshot.set(LOCK_CHALLENGE_KEY, {
+      ...(snapshot.get(LOCK_CHALLENGE_KEY) as StoredLockChallenge),
+      consumedAt: asUnixMs(now + 500),
+    });
+
+    const secondChallenge = await vault.beginLockChallenge(record.uuid, now + 1_000);
+
+    expect(secondChallenge.id).not.toBe(firstChallenge.id);
+    expect(secondChallenge.challenge).not.toBe(firstChallenge.challenge);
+  });
+
+  it('issues a new lock challenge after the previous one expires', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    const firstChallenge = await vault.beginLockChallenge(record.uuid, now);
+    snapshot.set(LOCK_CHALLENGE_KEY, {
+      ...(snapshot.get(LOCK_CHALLENGE_KEY) as StoredLockChallenge),
+      expiresAt: asUnixMs(now + 500),
+    });
+
+    const secondChallenge = await vault.beginLockChallenge(record.uuid, now + CHALLENGE_TTL_MS + 1);
+
+    expect(secondChallenge.id).not.toBe(firstChallenge.id);
+    expect(secondChallenge.challenge).not.toBe(firstChallenge.challenge);
   });
 
   it('commits lock challenge successfully and transitions waiting to locked', async () => {
@@ -642,7 +695,7 @@ describe('SecretVault lock challenge flow', () => {
     await vault.commitLockChallenge(commitParams, now + 1_000);
 
     const updated = await vault.getRecord();
-    const storedChallenge = snapshot.get(`${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`) as {
+    const storedChallenge = snapshot.get(LOCK_CHALLENGE_KEY) as {
       consumedAt?: UnixMs;
     };
     expect(updated.state).toBe(CHANNEL_STATE.LOCKED);
@@ -690,7 +743,31 @@ describe('SecretVault lock challenge flow', () => {
         now + CHALLENGE_TTL_MS + 1
       )
     ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
-    expect(snapshot.get(`${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`)).toBeUndefined();
+    expect(snapshot.get(LOCK_CHALLENGE_KEY)).toBeUndefined();
+  });
+
+  it('rejects commit when request id does not match the active challenge id', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const lockProof = await computeLockProof(record.uuid, challenge, record.lockKey);
+
+    await expect(
+      vault.commitLockChallenge(
+        {
+          uuid: record.uuid,
+          lockChallengeId: asBase64Url('different-id'),
+          lockProof,
+          receiverPubJwk: lockParams.receiverPubJwk,
+          receiverPubFpr: lockParams.receiverPubFpr,
+          lockedAt: lockParams.lockedAt,
+        },
+        now + 1_000
+      )
+    ).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
   });
 
   it('rejects replay commit for consumed challenge', async () => {
@@ -710,13 +787,12 @@ describe('SecretVault lock challenge flow', () => {
       lockedAt: lockParams.lockedAt,
     };
 
-    const challengeKey = `${LOCK_CHALLENGE_KEY_PREFIX}${challenge.id}`;
-    const storedChallenge = snapshot.get(challengeKey) as {
+    const storedChallenge = snapshot.get(LOCK_CHALLENGE_KEY) as {
       id: Base64Url;
       challenge: Base64Url;
       expiresAt: UnixMs;
     };
-    snapshot.set(challengeKey, {
+    snapshot.set(LOCK_CHALLENGE_KEY, {
       ...storedChallenge,
       consumedAt: asUnixMs(now + 500),
     });
@@ -812,6 +888,166 @@ describe('SecretVault lock challenge flow', () => {
         now + 1_000
       )
     ).rejects.toThrow('receiverPubFpr does not match');
+  });
+
+  it('rate limits lock_begin and resets after the window elapses', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    await vault.beginLockChallenge(record.uuid, now);
+    await vault.beginLockChallenge(record.uuid, now + 1_000);
+    await vault.beginLockChallenge(record.uuid, now + 2_000);
+
+    const error = await vault
+      .beginLockChallenge(record.uuid, now + 3_000)
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).retryAfterSeconds).toBeGreaterThanOrEqual(1);
+
+    await expect(vault.beginLockChallenge(record.uuid, now + 60_001)).resolves.toMatchObject({
+      expiresAt: asUnixMs(now + 60_001 + CHALLENGE_TTL_MS),
+    });
+  });
+
+  it('rate limits lock_commit and resets after the window elapses', async () => {
+    const now = 1_730_000_100_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const lockParams = createCommitLockParams();
+    const { state } = createMockState(record);
+    const vault = new SecretVault(state, env);
+    const challenge = await vault.beginLockChallenge(record.uuid, now);
+    const baseParams: CommitLockChallengeParams = {
+      uuid: record.uuid,
+      lockChallengeId: challenge.id,
+      lockProof: asHex('00'),
+      receiverPubJwk: lockParams.receiverPubJwk,
+      receiverPubFpr: lockParams.receiverPubFpr,
+      lockedAt: lockParams.lockedAt,
+    };
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(vault.commitLockChallenge(baseParams, now + attempt + 1)).rejects.toMatchObject({
+        code: 'LOCK_FORBIDDEN',
+      });
+    }
+
+    const error = await vault
+      .commitLockChallenge(baseParams, now + 6_000)
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).retryAfterSeconds).toBeGreaterThanOrEqual(1);
+
+    const nextChallenge = await vault.beginLockChallenge(record.uuid, now + 60_001);
+    await expect(
+      vault.commitLockChallenge(
+        {
+          ...baseParams,
+          lockChallengeId: nextChallenge.id,
+        },
+        now + 60_002
+      )
+    ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
+  });
+
+  it('rate limits compound_begin and resets after the window elapses', async () => {
+    const now = 1_730_001_000_000;
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(createCommitLockParams());
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now + 1_000);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now + 2_000);
+
+    const error = await vault
+      .beginCompoundChallenge(lockedRecord.uuid, now + 3_000)
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).retryAfterSeconds).toBeGreaterThanOrEqual(1);
+
+    await expect(
+      vault.beginCompoundChallenge(lockedRecord.uuid, now + 60_001)
+    ).resolves.toMatchObject({
+      currentVersion: lockedRecord.version,
+    });
+  });
+
+  it('rate limits compound_commit and resets after the window elapses', async () => {
+    const now = 1_730_001_900_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING, 'softkey')
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    const verifySoftkeySignatureMock = vi.mocked(softkeyCrypto.verifySoftkeySignature);
+    verifySoftkeySignatureMock.mockResolvedValue({
+      ok: false,
+      error: 'bad softkey signature',
+    });
+
+    const firstBegin = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const firstIntent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now + 1_000),
+      asBase64Url('nonce_rate_limit_01'),
+      lockParams.receiverPubFpr
+    );
+    const firstIntentHash = await computeIntentHash(toRecord(firstIntent));
+    const baseParams = {
+      adminMode: 'softkey' as const,
+      uuid: lockedRecord.uuid,
+      softkeySignature: asHex(
+        'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef'
+      ),
+      intentHash: firstIntentHash,
+      intent: firstIntent,
+    };
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await expect(vault.commitCompound(baseParams, now + attempt + 1)).rejects.toMatchObject({
+        code: 'ASSERTION_INVALID',
+      });
+    }
+
+    const error = await vault.commitCompound(baseParams, now + 11_000).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).retryAfterSeconds).toBeGreaterThanOrEqual(1);
+
+    const nextBegin = await vault.beginCompoundChallenge(lockedRecord.uuid, now + 60_001);
+    const nextIntent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now + 61_000),
+      asBase64Url('nonce_rate_limit_02'),
+      lockParams.receiverPubFpr
+    );
+    const nextIntentHash = await computeIntentHash(toRecord(nextIntent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          adminMode: 'softkey',
+          uuid: lockedRecord.uuid,
+          softkeySignature: baseParams.softkeySignature,
+          intentHash: nextIntentHash,
+          intent: nextIntent,
+        },
+        now + 61_000
+      )
+    ).rejects.toMatchObject({ code: 'ASSERTION_INVALID' });
+
+    expect(firstBegin.challenge.id).not.toBe(nextBegin.challenge.id);
+    verifySoftkeySignatureMock.mockReset();
   });
 
   it('returns 405 for non-POST method in fetch', async () => {

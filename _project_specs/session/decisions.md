@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-14] Durable Object abuse controls use in-memory per-channel limits plus single active lock challenge
+
+**Decision**: Implement issue #155 with best-effort in-memory rate limiting inside `SecretVault` and reuse a single active lock challenge record per channel instead of storing one lock challenge row per `lock_begin` request.
+**Context**: The backend had no explicit application-layer throttling on `lock_begin`, `lock_commit`, `compound_begin`, or `compound_commit`. `lock_begin` also wrote a new `lock_challenge:{id}` record on every call, which increased Durable Object storage churn under repeated retries or abuse.
+**Choice**: Add per-channel, per-endpoint in-memory windows in the DO (`lock_begin` 3/60s, `lock_commit` 5/60s, `compound_begin` 3/60s, `compound_commit` 10/60s), return `429 RATE_LIMITED` with `Retry-After`, and store only one active lock challenge under a fixed key that is reused until consumed or expired. Preserve `get_public_state` and `get_decrypt_payload` behavior without DO-side throttling.
+**Reasoning**: Once a request reaches the DO, free-tier request quota is already spent, so the backend-side goal is to reduce storage churn and make abuse more expensive rather than to replace edge rate limiting. A fixed-key lock challenge model aligns `lock_begin` with the existing idempotent `compound_begin` pattern and prevents repeated writes from extending challenge lifetime.
+**Trade-offs**: In-memory counters reset when a DO instance is evicted or restarted, so this is defense-in-depth rather than a durable quota system. Edge/global rules remain the primary control for `create_begin` or cross-channel floods.
+
 ## [2026-03-14] Share links clear `#k` after session-scoped handoff
 
 **Decision**: Remove the receiver share-link `#k` fragment from the address bar after it is copied into `sessionStorage`, and keep it there only until the channel no longer needs an initial lock.

@@ -156,7 +156,13 @@ async function forwardToSecretVault(
       return errorResponse('INTERNAL_ERROR', 500);
     }
 
-    return jsonApiResponse(jsonBody, vaultResponse.status);
+    const responseHeaders = buildApiHeaders();
+    const retryAfter = vaultResponse.headers.get('Retry-After');
+    if (retryAfter) {
+      responseHeaders.set('Retry-After', retryAfter);
+    }
+
+    return jsonApiResponse(jsonBody, vaultResponse.status, responseHeaders);
   } catch {
     return errorResponse('INTERNAL_ERROR', 500);
   }

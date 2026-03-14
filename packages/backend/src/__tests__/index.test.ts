@@ -291,6 +291,26 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls[0]?.method).toBe('POST');
   });
 
+  it('preserves Retry-After when SecretVault returns a forwarded 429', async () => {
+    const { env } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: false, code: 'RATE_LIMITED' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Retry-After': '17',
+        },
+      });
+    });
+
+    const response = await dispatch(env, `/api/lock_begin/${VALID_UUID}`, 'POST', {
+      uuid: VALID_UUID,
+    });
+
+    await expect(response.json()).resolves.toEqual({ ok: false, code: 'RATE_LIMITED' });
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('17');
+  });
+
   it('forwards create_begin request to SecretVault DO', async () => {
     const creationOptions = { publicKey: { challenge: 'abc' } };
     const { env, calls } = createMockEnv(async () => {

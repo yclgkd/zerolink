@@ -83,12 +83,12 @@ export {
   CHANNEL_RECORD_KEY,
   COMPOUND_CHALLENGE_KEY,
   CREATION_CHALLENGE_KEY,
-  LOCK_CHALLENGE_KEY_PREFIX,
-  lockChallengeStorageKey,
+  LOCK_CHALLENGE_KEY,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
   nonceIndexStorageKey,
   nonceStorageKey,
+  RateLimitError,
   StateTransitionError,
   TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
@@ -110,19 +110,36 @@ import {
   COMPOUND_CHALLENGE_KEY,
   CREATION_CHALLENGE_KEY,
   LOCK_CHALLENGE_ID_BYTES,
-  LOCK_CHALLENGE_KEY_PREFIX,
-  lockChallengeStorageKey,
+  LOCK_CHALLENGE_KEY,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
   nonceIndexStorageKey,
   nonceStorageKey,
+  RateLimitError,
   StateTransitionError,
   TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
 
+type RateLimitedEndpoint = 'lock_begin' | 'lock_commit' | 'compound_begin' | 'compound_commit';
+
+interface RateLimitWindow {
+  count: number;
+  windowStart: number;
+}
+
+const RATE_LIMITS: Record<RateLimitedEndpoint, { maxRequests: number; windowMs: number }> = {
+  lock_begin: { maxRequests: 3, windowMs: 60_000 },
+  lock_commit: { maxRequests: 5, windowMs: 60_000 },
+  compound_begin: { maxRequests: 3, windowMs: 60_000 },
+  compound_commit: { maxRequests: 10, windowMs: 60_000 },
+};
+
+const LEGACY_LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
+
 export class SecretVault {
   private readonly ctx: DurableObjectState;
   private readonly env: SecretVaultEnv;
+  private readonly rateLimitWindows = new Map<RateLimitedEndpoint, RateLimitWindow>();
 
   constructor(ctx: DurableObjectState, env: SecretVaultEnv) {
     this.ctx = ctx;
@@ -137,6 +154,23 @@ export class SecretVault {
         'RP_ORIGIN environment variable is missing or malformed (must start with http)'
       );
     }
+  }
+
+  private enforceRateLimit(endpoint: RateLimitedEndpoint, now: number): void {
+    const { maxRequests, windowMs } = RATE_LIMITS[endpoint];
+    const existing = this.rateLimitWindows.get(endpoint);
+
+    if (!existing || now - existing.windowStart >= windowMs) {
+      this.rateLimitWindows.set(endpoint, { count: 1, windowStart: now });
+      return;
+    }
+
+    if (existing.count >= maxRequests) {
+      const retryAfterSeconds = (existing.windowStart + windowMs - now) / 1000;
+      throw new RateLimitError(retryAfterSeconds, `${endpoint} rate limit exceeded`);
+    }
+
+    existing.count += 1;
   }
 
   // ─── Hibernation API WebSocket handlers ───────────────────────────────────
@@ -446,6 +480,8 @@ export class SecretVault {
     adminMode: ChannelRecord['adminMode'];
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
+      this.enforceRateLimit('compound_begin', now);
+
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, uuid);
 
@@ -514,6 +550,8 @@ export class SecretVault {
 
   async commitCompound(params: CompoundCommitParams, now: number = Date.now()): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
+      this.enforceRateLimit('compound_commit', now);
+
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, params.uuid);
 
@@ -688,9 +726,27 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<import('@zerolink/shared').LockChallenge> {
     return this.ctx.blockConcurrencyWhile(async () => {
+      this.enforceRateLimit('lock_begin', now);
+
       const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
+
+      const existingChallenge = await this.loadLockChallenge();
+      const activeChallenge =
+        existingChallenge &&
+        existingChallenge.consumedAt === undefined &&
+        existingChallenge.expiresAt > now
+          ? existingChallenge
+          : null;
+
+      if (activeChallenge) {
+        return {
+          id: activeChallenge.id,
+          challenge: activeChallenge.challenge,
+          expiresAt: activeChallenge.expiresAt,
+        };
+      }
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
@@ -721,20 +777,25 @@ export class SecretVault {
     now: number = Date.now()
   ): Promise<void> {
     await this.ctx.blockConcurrencyWhile(async () => {
+      this.enforceRateLimit('lock_commit', now);
+
       const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
 
-      const challenge = await this.loadLockChallenge(lockChallengeId);
+      const challenge = await this.loadLockChallenge();
       if (!challenge) {
+        throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge not found');
+      }
+      if (challenge.expiresAt <= now) {
+        await this.deleteLockChallenge();
+        throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge expired');
+      }
+      if (challenge.id !== lockChallengeId) {
         throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge not found');
       }
       if (challenge.consumedAt !== undefined) {
         throw new StateTransitionError('CHALLENGE_CONSUMED', 'lock challenge already consumed');
-      }
-      if (challenge.expiresAt <= now) {
-        await this.deleteLockChallenge(lockChallengeId);
-        throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge expired');
       }
 
       const expectedProof = await sha256Hex([
@@ -919,8 +980,8 @@ export class SecretVault {
   }
 
   private async listPurgeKeys(): Promise<string[]> {
-    const [lockChallengeKeys, nonceKeys, nonceIndexKeys] = await Promise.all([
-      this.listKeysWithPrefix(LOCK_CHALLENGE_KEY_PREFIX),
+    const [legacyLockChallengeKeys, nonceKeys, nonceIndexKeys] = await Promise.all([
+      this.listKeysWithPrefix(LEGACY_LOCK_CHALLENGE_KEY_PREFIX),
       this.listKeysWithPrefix(NONCE_KEY_PREFIX),
       this.listKeysWithPrefix(NONCE_INDEX_KEY_PREFIX),
     ]);
@@ -928,8 +989,9 @@ export class SecretVault {
     return [
       CHANNEL_RECORD_KEY,
       CREATION_CHALLENGE_KEY,
+      LOCK_CHALLENGE_KEY,
       COMPOUND_CHALLENGE_KEY,
-      ...lockChallengeKeys,
+      ...legacyLockChallengeKeys,
       ...nonceKeys,
       ...nonceIndexKeys,
     ];
@@ -1027,16 +1089,16 @@ export class SecretVault {
     return Math.min(left, right);
   }
 
-  private async loadLockChallenge(id: Base64Url): Promise<StoredLockChallenge | undefined> {
-    return this.ctx.storage.get<StoredLockChallenge>(lockChallengeStorageKey(id));
+  private async loadLockChallenge(): Promise<StoredLockChallenge | undefined> {
+    return this.ctx.storage.get<StoredLockChallenge>(LOCK_CHALLENGE_KEY);
   }
 
   private async saveLockChallenge(challenge: StoredLockChallenge): Promise<void> {
-    await this.ctx.storage.put(lockChallengeStorageKey(challenge.id), challenge);
+    await this.ctx.storage.put(LOCK_CHALLENGE_KEY, challenge);
   }
 
-  private async deleteLockChallenge(id: Base64Url): Promise<void> {
-    await this.ctx.storage.delete(lockChallengeStorageKey(id));
+  private async deleteLockChallenge(): Promise<void> {
+    await this.ctx.storage.delete(LOCK_CHALLENGE_KEY);
   }
 
   private async handleCreateBegin(request: Request): Promise<Response> {
