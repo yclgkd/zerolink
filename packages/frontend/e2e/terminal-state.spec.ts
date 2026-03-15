@@ -19,14 +19,24 @@ test.describe('terminal state semantics', () => {
       await expect(page.getByTestId('create-submit-button')).toBeEnabled();
       await page.getByTestId('create-submit-button').click();
 
-      const shareUrl = await page.getByTestId('create-success-share-link').getAttribute('href');
-      const manageUrl = await page.getByTestId('create-success-manage-link').getAttribute('href');
+      const shareLinkLocator = page.getByTestId('create-success-share-link');
+      const manageLinkLocator = page.getByTestId('create-success-manage-link');
+      await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
+      await expect(manageLinkLocator).toBeVisible({ timeout: 15_000 });
+
+      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const manageUrl = await manageLinkLocator.getAttribute('href');
 
       expect(shareUrl, 'share link should exist').toBeTruthy();
       expect(manageUrl, 'manage link should exist').toBeTruthy();
 
-      const shareMatch = shareUrl?.match(/^\/s\/([A-Za-z0-9_-]{21})#k=([A-Za-z0-9_-]+)$/u);
-      expect(shareMatch, 'share link should contain uuid and lock secret fragment').toBeTruthy();
+      const shareMatch = shareUrl?.match(
+        /^\/s\/([A-Za-z0-9_-]{21})#k=([A-Za-z0-9_-]+)&af=([0-9a-f]{64})$/u
+      );
+      expect(
+        shareMatch,
+        'share link should contain uuid, lock secret fragment, and sender auth fingerprint'
+      ).toBeTruthy();
       const uuid = shareMatch?.[1] ?? '';
 
       await page.goto(manageUrl ?? '/');

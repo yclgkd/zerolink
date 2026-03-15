@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import {
+  buildCipherBundleAadBytes,
   CHANNEL_STATE,
   type ChannelState,
   CompoundBeginRequestSchema,
@@ -10,6 +12,7 @@ import {
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
   DecryptFetchResponseSchema,
+  extractCredentialPublicKeyFromAttestation,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
   LockCommitRequestSchema,
@@ -18,6 +21,7 @@ import {
   ROUTE_PATTERN,
   SECURITY_PROFILE,
   type SecurityProfile,
+  SoftkeyCompoundCommitRequestSchema,
   UUIDSchema,
 } from '@zerolink/shared';
 import type { z } from 'zod';
@@ -27,6 +31,8 @@ interface ChannelRuntimeState {
   securityProfile: SecurityProfile;
   adminMode: z.output<typeof CreateFinishRequestSchema>['adminMode'];
   credentialId?: string;
+  credentialPublicKey?: string;
+  softkeyPubJwk?: z.output<typeof CreateFinishRequestSchema>['softkeyPubJwk'];
   version: number;
   lockChallenge?: {
     id: string;
@@ -38,17 +44,32 @@ interface ChannelRuntimeState {
   lockedAt?: number;
   delivery?: {
     cipherBundle: Extract<
-      z.output<typeof CompoundCommitRequestSchema>['intent'],
+      z.output<
+        typeof CompoundCommitRequestSchema | typeof SoftkeyCompoundCommitRequestSchema
+      >['intent'],
       { op: 'update' }
     >['cipherBundle'];
     receiverPubFpr: string;
     cipherVersion: number;
+    deliveryAuth?: z.output<typeof DecryptFetchResponseSchema>['deliveryAuth'];
     deliveredAt: number;
   };
 }
 
 function b64u(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+function bytesToB64u(value: Uint8Array): string {
+  return Buffer.from(value).toString('base64url');
+}
+
+function b64uToBytes(value: string): Uint8Array {
+  return Uint8Array.from(Buffer.from(value, 'base64url'));
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 function parseJsonBody(route: Route): Record<string, unknown> | null {
@@ -188,6 +209,18 @@ export async function installStatefulApiMock(
       channel.adminMode = parsedBody.data.adminMode;
       if (parsedBody.data.adminMode === 'webauthn') {
         channel.credentialId = parsedBody.data.attestation.rawId;
+        try {
+          channel.credentialPublicKey = await extractCredentialPublicKeyFromAttestation(
+            parsedBody.data.attestation.response.attestationObject
+          );
+        } catch {
+          return badRequest(route);
+        }
+        channel.softkeyPubJwk = undefined;
+      } else {
+        channel.softkeyPubJwk = parsedBody.data.softkeyPubJwk;
+        channel.credentialId = undefined;
+        channel.credentialPublicKey = undefined;
       }
       const payload = {
         ok: true,
@@ -313,7 +346,9 @@ export async function installStatefulApiMock(
     if (method === 'POST' && compoundCommitMatch) {
       const pathUuid = compoundCommitMatch[1];
       const body = parseJsonBody(route);
-      const parsedBody = CompoundCommitRequestSchema.safeParse(body);
+      const parsedWebAuthnBody = CompoundCommitRequestSchema.safeParse(body);
+      const parsedSoftkeyBody = SoftkeyCompoundCommitRequestSchema.safeParse(body);
+      const parsedBody = parsedWebAuthnBody.success ? parsedWebAuthnBody : parsedSoftkeyBody;
       const parsedUuid = UUIDSchema.safeParse(pathUuid);
       if (
         !parsedBody.success ||
@@ -329,10 +364,63 @@ export async function installStatefulApiMock(
       if (!channel) {
         return notFound(route);
       }
+      const deliveryMeta = {
+        version: parsedBody.data.intent.version,
+        timestamp: parsedBody.data.intent.timestamp,
+        nonce: parsedBody.data.intent.nonce,
+        expireAt: parsedBody.data.intent.expireAt,
+      };
+      const deliveryAuth =
+        'softkeySignature' in parsedBody.data
+          ? channel.softkeyPubJwk
+            ? {
+                adminMode: parsedBody.data.adminMode,
+                meta: deliveryMeta,
+                signer: {
+                  softkeyPubJwk: channel.softkeyPubJwk,
+                },
+                proof: {
+                  softkeySignature: parsedBody.data.softkeySignature,
+                },
+              }
+            : undefined
+          : channel.credentialId && channel.credentialPublicKey
+            ? {
+                adminMode: 'webauthn' as const,
+                meta: deliveryMeta,
+                signer: {
+                  credentialId: channel.credentialId,
+                  publicKey: channel.credentialPublicKey,
+                },
+                proof: {
+                  clientDataJSON: parsedBody.data.assertion.response.clientDataJSON,
+                  authenticatorData: parsedBody.data.assertion.response.authenticatorData,
+                  signature: parsedBody.data.assertion.response.signature,
+                },
+              }
+            : undefined;
+
+      if (!deliveryAuth) {
+        return badRequest(route);
+      }
+
+      const normalizedCipherBundle = {
+        ...parsedBody.data.intent.cipherBundle,
+        aad: bytesToB64u(
+          buildCipherBundleAadBytes({
+            uuid: parsedUuid.data,
+            version: parsedBody.data.intent.version,
+            receiverPubFpr: parsedBody.data.intent.receiverPubFpr,
+          })
+        ),
+        ciphertextHash: sha256Hex(b64uToBytes(parsedBody.data.intent.cipherBundle.ciphertext)),
+      };
+
       channel.delivery = {
-        cipherBundle: parsedBody.data.intent.cipherBundle,
+        cipherBundle: normalizedCipherBundle,
         receiverPubFpr: parsedBody.data.intent.receiverPubFpr,
         cipherVersion: parsedBody.data.intent.version,
+        deliveryAuth,
         deliveredAt: now,
       };
       channel.version = parsedBody.data.intent.version + 1;
@@ -424,6 +512,7 @@ export async function installStatefulApiMock(
         cipherBundle: channel.delivery.cipherBundle,
         receiverPubFpr: channel.delivery.receiverPubFpr,
         cipherVersion: channel.delivery.cipherVersion,
+        ...(channel.delivery.deliveryAuth ? { deliveryAuth: channel.delivery.deliveryAuth } : {}),
         deliveredAt: channel.delivery.deliveredAt,
       };
       const parsedPayload = DecryptFetchResponseSchema.safeParse(payload);

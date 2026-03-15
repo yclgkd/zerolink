@@ -511,3 +511,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Only show the complete share link once, immediately after channel creation.
 **Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
 **Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
+## [2026-03-15] E2E harness mirrors anchored delivery semantics
+
+**Decision**: Persist the Playwright WebAuthn emulator per tab via `sessionStorage` and normalize mocked delivered payloads to include anchored `deliveryAuth`.
+**Context**: PR161 added sender-auth pinning, deterministic delivery proofs, and stricter decrypt-side integrity checks. The existing E2E harness still regenerated fake WebAuthn credentials on every navigation and returned legacy decrypt payloads, which broke secure create/deliver/decrypt flows without exercising the new protocol guarantees.
+**Options Considered**: Switch all secure E2E coverage to Quick Share, rely on Chromium's virtual authenticator directly, or upgrade the in-page emulator and stateful API mock to follow the anchored protocol.
+**Choice**: Keep secure E2E coverage and upgrade the harness.
+**Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
+**Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.

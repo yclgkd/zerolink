@@ -201,12 +201,13 @@ test.describe('Real-time sync via polling fallback', () => {
       });
       await senderPage.getByTestId('create-submit-button').click();
 
-      const shareUrl = await senderPage
-        .getByTestId('create-success-share-link')
-        .getAttribute('href');
-      const manageUrl = await senderPage
-        .getByTestId('create-success-manage-link')
-        .getAttribute('href');
+      const shareLinkLocator = senderPage.getByTestId('create-success-share-link');
+      const manageLinkLocator = senderPage.getByTestId('create-success-manage-link');
+      await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
+      await expect(manageLinkLocator).toBeVisible({ timeout: 15_000 });
+
+      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const manageUrl = await manageLinkLocator.getAttribute('href');
 
       if (!shareUrl || !manageUrl) throw new Error('Missing share or manage URL');
 

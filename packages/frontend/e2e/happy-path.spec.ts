@@ -41,8 +41,13 @@ test.describe('ZL-032 e2e happy path', () => {
       expect(shareUrl, 'share link should exist').toBeTruthy();
       expect(manageUrl, 'manage link should exist').toBeTruthy();
 
-      const shareMatch = shareUrl?.match(/^\/s\/([A-Za-z0-9_-]{21})#k=([A-Za-z0-9_-]+)$/u);
-      expect(shareMatch, 'share link should contain uuid and lock secret fragment').toBeTruthy();
+      const shareMatch = shareUrl?.match(
+        /^\/s\/([A-Za-z0-9_-]{21})#k=([A-Za-z0-9_-]+)&af=([0-9a-f]{64})$/u
+      );
+      expect(
+        shareMatch,
+        'share link should contain uuid, lock secret fragment, and sender auth fingerprint'
+      ).toBeTruthy();
 
       const uuid = shareMatch?.[1] ?? '';
       expect(manageUrl).toBe(`/m/${uuid}`);
