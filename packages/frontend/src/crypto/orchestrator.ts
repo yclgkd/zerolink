@@ -916,7 +916,14 @@ async function resolveCipherVersionForDecrypt(
     throw new Error('INTEGRITY_MISMATCH');
   }
 
-  if (envelope.senderAuthFpr) {
+  const hasPinnedSenderAuth = Boolean(envelope.senderAuthFpr);
+  const hasDeliveryAuth = payload.deliveryAuth !== undefined;
+
+  if (hasPinnedSenderAuth || hasDeliveryAuth) {
+    if (!hasPinnedSenderAuth || !hasDeliveryAuth) {
+      throw new Error('INTEGRITY_MISMATCH');
+    }
+
     return resolveAnchoredCipherVersion(payload, envelope, uuid);
   }
 

@@ -1851,6 +1851,54 @@ describe('crypto orchestrator', () => {
     });
   });
 
+  it('returns INTEGRITY_MISMATCH when deliveryAuth exists but the local sender pin is missing', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const savedEnvelope = (await prepared.receiverKeyStorage.load(
+      VALID_UUID
+    )) as ReceiverKeyEnvelope;
+    const { senderAuthFpr: _senderAuthFpr, ...legacyEnvelope } = savedEnvelope;
+    await prepared.receiverKeyStorage.save({
+      ...legacyEnvelope,
+    });
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: prepared.deliveryAuth,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload signer fingerprint mismatches', async () => {
     const prepared = await prepareAnchoredSoftkeyDelivery();
     const alternateKeyPair = await generateSoftkeyPair();
