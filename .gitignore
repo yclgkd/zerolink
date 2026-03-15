@@ -60,3 +60,4 @@ keys/*.key
 # OS
 .DS_Store
 Thumbs.db
+.worktrees/
