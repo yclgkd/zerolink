@@ -18,6 +18,7 @@ import {
   CreateBeginResponseSchema,
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
+  DecryptFetchResponseSchema,
   DeleteIntentSchema,
   ECDSAPublicKeyJWKSchema,
   ErrorResponseSchema,
@@ -1026,6 +1027,32 @@ describe('CompoundCommitResponseSchema', () => {
     expect(CompoundCommitResponseSchema.parse({ ok: true })).toEqual({
       ok: true,
     });
+  });
+});
+
+describe('DecryptFetchResponseSchema', () => {
+  it('accepts decrypt payloads with cipherVersion', () => {
+    const result = DecryptFetchResponseSchema.parse({
+      ok: true,
+      cipherBundle: validCipherBundle,
+      receiverPubFpr: hex,
+      cipherVersion: 3,
+      deliveredAt: 1_730_000_000_000,
+    });
+
+    expect(result.cipherVersion).toBe(3);
+  });
+
+  it('rejects negative cipherVersion', () => {
+    expect(() =>
+      DecryptFetchResponseSchema.parse({
+        ok: true,
+        cipherBundle: validCipherBundle,
+        receiverPubFpr: hex,
+        cipherVersion: -1,
+        deliveredAt: 1_730_000_000_000,
+      })
+    ).toThrow();
   });
 });
 

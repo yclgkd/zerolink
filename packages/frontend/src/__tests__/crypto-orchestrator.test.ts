@@ -6,7 +6,9 @@ import {
   AES_GCM,
   type AssertionJSON,
   type AttestationJSON,
+  type Base64Url,
   Base64UrlSchema,
+  buildCipherBundleAadBytes,
   CHANNEL_STATE,
   type CreateBeginResponse,
   type DecryptFetchResponse,
@@ -61,6 +63,29 @@ const NOW = UnixMsSchema.parse(1_700_000_000_000);
 const CHALLENGE_EXPIRES_AT = UnixMsSchema.parse(Number(NOW) + 60_000);
 const VALID_UUID_BRANDED = UUIDSchema.parse(VALID_UUID);
 const NEXT_UUID_BRANDED = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/u, '');
+}
+
+function buildExpectedCipherAad(
+  uuid: string,
+  version: number,
+  receiverPubFpr: HexString
+): Base64Url {
+  return Base64UrlSchema.parse(
+    encodeBase64Url(
+      buildCipherBundleAadBytes({
+        uuid: UUIDSchema.parse(uuid),
+        version,
+        receiverPubFpr,
+      })
+    )
+  );
+}
 
 function toMutableReceiverJwk(jwk: RSAPublicKeyJWK): {
   kty: 'RSA';
@@ -1523,6 +1548,7 @@ describe('crypto orchestrator', () => {
         ok: true,
         cipherBundle: deliveredCipherBundle,
         receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });
@@ -1622,6 +1648,7 @@ describe('crypto orchestrator', () => {
         ok: true,
         cipherBundle: committedCipherBundle,
         receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });
@@ -1733,7 +1760,7 @@ describe('crypto orchestrator', () => {
         cipherBundle: {
           ciphertext: VALID_B64U,
           iv: VALID_B64U,
-          aad: VALID_B64U,
+          aad: buildExpectedCipherAad(VALID_UUID, 0, VALID_HEX),
           encContentKey: VALID_B64U,
           ciphertextHash: HexStringSchema.parse(
             'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
@@ -1741,8 +1768,235 @@ describe('crypto orchestrator', () => {
           padBlock: 4096,
         },
         receiverPubFpr: VALID_HEX,
+        cipherVersion: 0,
         deliveredAt: NOW,
       },
+    });
+
+    const result = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when decrypt payload receiver fingerprint mismatches local key', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-receiver-mismatch',
+      storeName: 'receiver-keys',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+
+    vi.mocked(apiClient.lockBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        lockChallenge: {
+          id: VALID_B64U,
+          challenge: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+      },
+    });
+    vi.mocked(apiClient.lockCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+    const lockResult = await orchestrator.lockChannel({
+      uuid: VALID_UUID,
+      lockSecretB64u: VALID_LOCK_SECRET,
+      passphrase: 'Strong#Pass1234',
+    });
+    expect(lockResult.ok).toBe(true);
+    if (!lockResult.ok) return;
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+      if (input.intent.op === 'update') {
+        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      }
+      return { ok: true, status: 200, data: { ok: true } };
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'fingerprint mismatch payload',
+    });
+    expect(deliverResult.ok).toBe(true);
+    expect(committedCipherBundle).not.toBeNull();
+    if (!committedCipherBundle) return;
+
+    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: committedCipherBundle,
+        receiverPubFpr: HexStringSchema.parse(
+          'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+        ),
+        cipherVersion: 0,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when decrypt payload aad does not match uuid/version/fingerprint', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-aad-mismatch',
+      storeName: 'receiver-keys',
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+
+    vi.mocked(apiClient.lockBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        lockChallenge: {
+          id: VALID_B64U,
+          challenge: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+      },
+    });
+    vi.mocked(apiClient.lockCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+    const lockResult = await orchestrator.lockChannel({
+      uuid: VALID_UUID,
+      lockSecretB64u: VALID_LOCK_SECRET,
+      passphrase: 'Strong#Pass1234',
+    });
+    expect(lockResult.ok).toBe(true);
+    if (!lockResult.ok) return;
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+      if (input.intent.op === 'update') {
+        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      }
+      return { ok: true, status: 200, data: { ok: true } };
+    });
+
+    const deliverResult = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.STANDARD,
+      plaintext: 'aad mismatch payload',
+    });
+    expect(deliverResult.ok).toBe(true);
+    expect(committedCipherBundle).not.toBeNull();
+    if (!committedCipherBundle) return;
+    const deliveredCipherBundle = committedCipherBundle as DecryptFetchResponse['cipherBundle'];
+
+    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: {
+          ...deliveredCipherBundle,
+          aad: Base64UrlSchema.parse('dGFtcGVyZWQtYWFk'),
+        },
+        receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherVersion: 0,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
     });
 
     const result = await orchestrator.decryptDelivered({
@@ -1960,6 +2214,7 @@ describe('crypto orchestrator', () => {
         ok: true,
         cipherBundle: committedCipherBundle as DecryptFetchResponse['cipherBundle'],
         receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });
@@ -2087,6 +2342,7 @@ describe('crypto orchestrator', () => {
         ok: true,
         cipherBundle: tamperedBundle,
         receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });

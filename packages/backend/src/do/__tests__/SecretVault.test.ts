@@ -15,6 +15,7 @@ import type {
   UUID,
 } from '@zerolink/shared';
 import {
+  buildCipherBundleAadBytes,
   CHALLENGE_TTL_MS,
   CHANNEL_STATE,
   CHANNEL_TTL_MS,
@@ -159,6 +160,10 @@ function createLockKey(): Base64Url {
 // Real RSA key pair generated in beforeAll for fingerprint validation tests
 let realReceiverJwk: RSAPublicKeyJWK;
 let realReceiverPubFpr: HexString;
+const FIXTURE_CIPHERTEXT = asBase64Url('ciphertext');
+const FIXTURE_CIPHERTEXT_HASH = asHex(
+  '897dab5b0127d49c794f0f3f39cbb6aefb2ef22184ee0540a8c9f46909b9c90d'
+);
 
 beforeAll(async () => {
   const keyPair = await crypto.subtle.generateKey(
@@ -188,14 +193,26 @@ function createReceiverJwk(): RSAPublicKeyJWK {
   return realReceiverJwk;
 }
 
-function createCipherBundle(): CipherBundle {
+function createCipherBundle(
+  uuid: UUID = asUuid('abcdefghijklmnopqrstu'),
+  version: number = 0,
+  receiverPubFpr: HexString = realReceiverPubFpr,
+  overrides: Partial<CipherBundle> = {}
+): CipherBundle {
   return {
-    ciphertext: asBase64Url('ciphertext'),
+    ciphertext: FIXTURE_CIPHERTEXT,
     iv: asBase64Url('iv1234567890'),
-    aad: asBase64Url('aad-value'),
+    aad: encodeBase64Url(
+      buildCipherBundleAadBytes({
+        uuid,
+        version,
+        receiverPubFpr,
+      })
+    ),
     encContentKey: asBase64Url('enc-content-key'),
-    ciphertextHash: asHex('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+    ciphertextHash: FIXTURE_CIPHERTEXT_HASH,
     padBlock: 4096,
+    ...overrides,
   };
 }
 
@@ -228,7 +245,7 @@ function createUpdateIntent(
     timestamp,
     nonce,
     receiverPubFpr,
-    cipherBundle: createCipherBundle(),
+    cipherBundle: createCipherBundle(uuid, version, receiverPubFpr),
     expireAt: null,
   };
 }
@@ -2154,6 +2171,51 @@ describe('SecretVault compound/delete flow', () => {
     expect(getAlarm()).toBe(Number(expectedNonceExpiry));
   });
 
+  it('returns decrypt payload with cipherVersion derived from the delivered record version', async () => {
+    const now = 1_730_001_150_000;
+    const lockParams = createCommitLockParams();
+    const deliveredRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const intent = createUpdateIntent(
+      deliveredRecord.uuid,
+      deliveredRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_payload_01'),
+      lockParams.receiverPubFpr
+    );
+    const updatedRecord = new SecretVaultStateMachine(deliveredRecord).commitDelivery({
+      cipherBundle: intent.cipherBundle,
+      deliveredAt: intent.timestamp,
+    });
+    const { state } = createMockState(updatedRecord);
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/get_decrypt_payload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const payload = (await response.json()) as {
+      ok: true;
+      cipherBundle: CipherBundle;
+      receiverPubFpr: HexString;
+      cipherVersion: number;
+      deliveredAt: UnixMs;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      ok: true,
+      cipherBundle: intent.cipherBundle,
+      receiverPubFpr: lockParams.receiverPubFpr,
+      cipherVersion: intent.version,
+      deliveredAt: intent.timestamp,
+    });
+  });
+
   it('commits delete intent and physically purges channel storage', async () => {
     const now = 1_730_001_200_000;
     const record = createChannelRecord(CHANNEL_STATE.WAITING);
@@ -2286,17 +2348,174 @@ describe('SecretVault compound/delete flow', () => {
     ).rejects.toMatchObject({ code: 'LOCK_FORBIDDEN' });
   });
 
+  it('rejects compound commit when ciphertextHash does not match ciphertext', async () => {
+    const now = 1_730_001_360_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_bundle_hash_01'),
+      lockParams.receiverPubFpr
+    );
+    intent.cipherBundle = createCipherBundle(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      lockParams.receiverPubFpr,
+      {
+        ciphertextHash: asHex('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
+      }
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: lockedRecord.uuid,
+          assertion: createAssertionFixture(
+            (lockedRecord.adminCredential as StoredCredential).credentialId
+          ),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'CIPHER_BUNDLE_INVALID' });
+  });
+
+  it('rejects compound commit when aad version does not match intent.version', async () => {
+    const now = 1_730_001_370_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_bundle_aad_version_01'),
+      lockParams.receiverPubFpr
+    );
+    intent.cipherBundle = createCipherBundle(
+      lockedRecord.uuid,
+      lockedRecord.version + 1,
+      lockParams.receiverPubFpr
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: lockedRecord.uuid,
+          assertion: createAssertionFixture(
+            (lockedRecord.adminCredential as StoredCredential).credentialId
+          ),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'CIPHER_BUNDLE_INVALID' });
+  });
+
+  it('rejects compound commit when aad receiver fingerprint does not match locked receiver', async () => {
+    const now = 1_730_001_380_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_bundle_aad_fpr_01'),
+      lockParams.receiverPubFpr
+    );
+    intent.cipherBundle = createCipherBundle(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asHex('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: lockedRecord.uuid,
+          assertion: createAssertionFixture(
+            (lockedRecord.adminCredential as StoredCredential).credentialId
+          ),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'CIPHER_BUNDLE_INVALID' });
+  });
+
+  it('rejects compound commit when ciphertext is not valid base64url', async () => {
+    const now = 1_730_001_390_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_bundle_b64_01'),
+      lockParams.receiverPubFpr
+    );
+    intent.cipherBundle = {
+      ...createCipherBundle(lockedRecord.uuid, lockedRecord.version, lockParams.receiverPubFpr),
+      ciphertext: 'invalid+/ciphertext' as Base64Url,
+    };
+    const intentHash = await computeIntentHash(toRecord(intent));
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: lockedRecord.uuid,
+          assertion: createAssertionFixture(
+            (lockedRecord.adminCredential as StoredCredential).credentialId
+          ),
+          intentHash,
+          intent,
+        },
+        now
+      )
+    ).rejects.toMatchObject({ code: 'CIPHER_BUNDLE_INVALID' });
+  });
+
   it('rejects compound commit with nonce replay', async () => {
     const now = 1_730_001_400_000;
-    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
-    const { state, snapshot } = createMockState(record);
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
     const intent = createUpdateIntent(
-      record.uuid,
-      record.version,
+      lockedRecord.uuid,
+      lockedRecord.version,
       asUnixMs(now),
       asBase64Url('nonce_replay_01'),
-      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+      lockParams.receiverPubFpr
     );
     const intentHash = await computeIntentHash(toRecord(intent));
     snapshot.set(`${NONCE_KEY_PREFIX}${intent.nonce}`, {
@@ -2308,9 +2527,9 @@ describe('SecretVault compound/delete flow', () => {
     await expect(
       vault.commitCompound(
         {
-          uuid: record.uuid,
+          uuid: lockedRecord.uuid,
           assertion: createAssertionFixture(
-            (record.adminCredential as StoredCredential).credentialId
+            (lockedRecord.adminCredential as StoredCredential).credentialId
           ),
           intentHash,
           intent,
@@ -2519,24 +2738,27 @@ describe('SecretVault compound/delete flow', () => {
 
   it('rejects compound commit with timestamp out of allowed skew', async () => {
     const now = 1_730_001_500_000;
-    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
-    const { state } = createMockState(record);
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
     const intent = createUpdateIntent(
-      record.uuid,
-      record.version,
+      lockedRecord.uuid,
+      lockedRecord.version,
       asUnixMs(now + TIMESTAMP_SKEW_MS + 1),
       asBase64Url('nonce_time_01'),
-      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+      lockParams.receiverPubFpr
     );
     const intentHash = await computeIntentHash(toRecord(intent));
 
     await expect(
       vault.commitCompound(
         {
-          uuid: record.uuid,
+          uuid: lockedRecord.uuid,
           assertion: createAssertionFixture(
-            (record.adminCredential as StoredCredential).credentialId
+            (lockedRecord.adminCredential as StoredCredential).credentialId
           ),
           intentHash,
           intent,
@@ -2548,23 +2770,26 @@ describe('SecretVault compound/delete flow', () => {
 
   it('rejects compound commit when intent hash mismatches', async () => {
     const now = 1_730_001_600_000;
-    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
-    const { state } = createMockState(record);
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
     const intent = createUpdateIntent(
-      record.uuid,
-      record.version,
+      lockedRecord.uuid,
+      lockedRecord.version,
       asUnixMs(now),
       asBase64Url('nonce_hash_01'),
-      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+      lockParams.receiverPubFpr
     );
 
     await expect(
       vault.commitCompound(
         {
-          uuid: record.uuid,
+          uuid: lockedRecord.uuid,
           assertion: createAssertionFixture(
-            (record.adminCredential as StoredCredential).credentialId
+            (lockedRecord.adminCredential as StoredCredential).credentialId
           ),
           intentHash: asHex('00'),
           intent,
@@ -2576,24 +2801,27 @@ describe('SecretVault compound/delete flow', () => {
 
   it('rejects compound commit when challenge is missing', async () => {
     const now = 1_730_001_700_000;
-    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
-    const { state } = createMockState(record);
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
     const intent = createUpdateIntent(
-      record.uuid,
-      record.version,
+      lockedRecord.uuid,
+      lockedRecord.version,
       asUnixMs(now),
       asBase64Url('nonce_missing_01'),
-      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+      lockParams.receiverPubFpr
     );
     const intentHash = await computeIntentHash(toRecord(intent));
 
     await expect(
       vault.commitCompound(
         {
-          uuid: record.uuid,
+          uuid: lockedRecord.uuid,
           assertion: createAssertionFixture(
-            (record.adminCredential as StoredCredential).credentialId
+            (lockedRecord.adminCredential as StoredCredential).credentialId
           ),
           intentHash,
           intent,
@@ -2605,26 +2833,29 @@ describe('SecretVault compound/delete flow', () => {
 
   it('rejects compound commit when assertion is invalid', async () => {
     const now = 1_730_001_800_000;
-    const record = createChannelRecord(CHANNEL_STATE.LOCKED);
-    const { state } = createMockState(record);
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
-    const begin = await vault.beginCompoundChallenge(record.uuid, now);
+    const begin = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
     const intent = createUpdateIntent(
-      record.uuid,
-      record.version,
+      lockedRecord.uuid,
+      lockedRecord.version,
       asUnixMs(now + 1_000),
       asBase64Url('nonce_assert_01'),
-      asHex('abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+      lockParams.receiverPubFpr
     );
     const intentHash = await computeIntentHash(toRecord(intent));
     const wrongChallenge = await computeCompoundChallengeValue(
-      record.uuid,
+      lockedRecord.uuid,
       begin.challenge.id,
       intentHash,
       begin.challenge.seed
     );
     const assertionFixture = await createMockAssertion({
-      credentialId: (record.adminCredential as StoredCredential).credentialId,
+      credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
       rpId: RP_ID,
       rpOrigin: RP_ORIGIN,
       challenge: wrongChallenge,
@@ -2634,7 +2865,7 @@ describe('SecretVault compound/delete flow', () => {
     await expect(
       vault.commitCompound(
         {
-          uuid: record.uuid,
+          uuid: lockedRecord.uuid,
           assertion: createAssertionFixture(assertionFixture.assertion.id),
           intentHash,
           intent,

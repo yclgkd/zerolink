@@ -1,6 +1,7 @@
 import {
   type AttestationJSON,
   type Base64Url,
+  buildCipherBundleAadBytes,
   CHALLENGE_BYTES,
   CHALLENGE_TTL_MS,
   CHANNEL_STATE,
@@ -25,6 +26,7 @@ import {
   type StoredCredential,
   TIMESTAMP_SKEW_MS,
   type UnixMs,
+  type UpdateIntent,
   type UUID,
   WS_CLOSE_CHANNEL_GONE,
 } from '@zerolink/shared';
@@ -743,6 +745,17 @@ export class SecretVault {
         callerKey: context.callerKey,
         commitToken: context.commitToken,
       });
+
+      if (intent.op === 'update') {
+        if (!record.receiver) {
+          throw new StateTransitionError(
+            'INVALID_TRANSITION',
+            'delivery requires a locked receiver identity'
+          );
+        }
+
+        await this.validateCipherBundle(intent, record.receiver.pubFpr);
+      }
 
       this.enforceRateLimit('compound_commit', now, tokenHash);
 
@@ -1536,6 +1549,40 @@ export class SecretVault {
     return hashCommitToken(commitToken);
   }
 
+  private async validateCipherBundle(intent: UpdateIntent, lockedReceiverPubFpr: HexString) {
+    let ciphertextBytes: Uint8Array;
+    try {
+      ciphertextBytes = decodeBase64Url(intent.cipherBundle.ciphertext);
+    } catch {
+      throw new StateTransitionError(
+        'CIPHER_BUNDLE_INVALID',
+        'cipherBundle.ciphertext is not valid base64url'
+      );
+    }
+
+    const computedHash = await sha256Hex([ciphertextBytes]);
+    if (!constantTimeEqual(computedHash, intent.cipherBundle.ciphertextHash)) {
+      throw new StateTransitionError(
+        'CIPHER_BUNDLE_INVALID',
+        'cipherBundle.ciphertextHash does not match ciphertext'
+      );
+    }
+
+    const expectedAad = encodeBase64Url(
+      buildCipherBundleAadBytes({
+        uuid: intent.uuid,
+        version: intent.version,
+        receiverPubFpr: lockedReceiverPubFpr,
+      })
+    );
+    if (!constantTimeEqual(intent.cipherBundle.aad, expectedAad)) {
+      throw new StateTransitionError(
+        'CIPHER_BUNDLE_INVALID',
+        'cipherBundle.aad does not match the expected binding'
+      );
+    }
+  }
+
   private async handleCreateBegin(request: Request): Promise<Response> {
     const body = await readJsonBody(request);
     if (body === null) {
@@ -1765,7 +1812,8 @@ export class SecretVault {
         record.state !== CHANNEL_STATE.DELIVERED ||
         !record.cipherBundle ||
         !record.receiver ||
-        record.deliveredAt == null
+        record.deliveredAt == null ||
+        record.version < 1
       ) {
         return jsonError('CHANNEL_NOT_DELIVERED', 409);
       }
@@ -1774,6 +1822,7 @@ export class SecretVault {
           ok: true,
           cipherBundle: record.cipherBundle,
           receiverPubFpr: record.receiver.pubFpr,
+          cipherVersion: record.version - 1,
           deliveredAt: record.deliveredAt,
         },
         200

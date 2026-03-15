@@ -129,6 +129,7 @@ export type StateTransitionErrorCode =
   | 'TIMESTAMP_OUT_OF_RANGE'
   | 'ASSERTION_INVALID'
   | 'INTENT_HASH_MISMATCH'
+  | 'CIPHER_BUNDLE_INVALID'
   | 'ATTESTATION_UNVERIFIABLE';
 
 export class StateTransitionError extends Error {

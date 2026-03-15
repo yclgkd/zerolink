@@ -1,6 +1,5 @@
 import {
   CHANNEL_STATE,
-  CipherBundleSchema,
   CompoundBeginRequestSchema,
   CompoundBeginResponseSchema,
   CompoundCommitRequestSchema,
@@ -9,6 +8,7 @@ import {
   CreateBeginResponseSchema,
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
+  DecryptFetchResponseSchema,
   HexStringSchema,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
@@ -158,10 +158,11 @@ export const handlers = [
         padBlock: 4096,
       },
       receiverPubFpr: MOCK_HEX,
+      cipherVersion: 0,
       deliveredAt: MOCK_TIMESTAMP,
     };
     if (
-      !CipherBundleSchema.safeParse(payload.cipherBundle).success ||
+      !DecryptFetchResponseSchema.safeParse(payload).success ||
       !HexStringSchema.safeParse(payload.receiverPubFpr).success ||
       !UnixMsSchema.safeParse(payload.deliveredAt).success
     ) {

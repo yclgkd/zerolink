@@ -35,6 +35,7 @@ function buildDecryptFetchResponse() {
       padBlock: 4096,
     },
     receiverPubFpr: VALID_HEX,
+    cipherVersion: 0,
     deliveredAt: 1_700_000_000_000,
   });
 }

@@ -32,6 +32,7 @@ describe('mock handlers: decrypt fetch contract', () => {
       ok: true;
       cipherBundle: unknown;
       receiverPubFpr: unknown;
+      cipherVersion: unknown;
       deliveredAt: unknown;
     };
 
@@ -39,6 +40,7 @@ describe('mock handlers: decrypt fetch contract', () => {
     expect(payload.ok).toBe(true);
     expect(CipherBundleSchema.safeParse(payload.cipherBundle).success).toBe(true);
     expect(HexStringSchema.safeParse(payload.receiverPubFpr).success).toBe(true);
+    expect(payload.cipherVersion).toBe(0);
     expect(UnixMsSchema.safeParse(payload.deliveredAt).success).toBe(true);
   });
 

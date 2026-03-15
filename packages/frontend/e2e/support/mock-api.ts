@@ -42,6 +42,7 @@ interface ChannelRuntimeState {
       { op: 'update' }
     >['cipherBundle'];
     receiverPubFpr: string;
+    cipherVersion: number;
     deliveredAt: number;
   };
 }
@@ -331,6 +332,7 @@ export async function installStatefulApiMock(
       channel.delivery = {
         cipherBundle: parsedBody.data.intent.cipherBundle,
         receiverPubFpr: parsedBody.data.intent.receiverPubFpr,
+        cipherVersion: parsedBody.data.intent.version,
         deliveredAt: now,
       };
       channel.version = parsedBody.data.intent.version + 1;
@@ -421,6 +423,7 @@ export async function installStatefulApiMock(
         ok: true,
         cipherBundle: channel.delivery.cipherBundle,
         receiverPubFpr: channel.delivery.receiverPubFpr,
+        cipherVersion: channel.delivery.cipherVersion,
         deliveredAt: channel.delivery.deliveredAt,
       };
       const parsedPayload = DecryptFetchResponseSchema.safeParse(payload);

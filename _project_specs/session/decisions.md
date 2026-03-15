@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-15] Enforce cipher bundle metadata binding on both commit and decrypt
+
+**Decision**: Make `cipherBundle` metadata binding a protocol invariant enforced by both the backend commit path and the frontend decrypt path.
+**Context**: The sender already constructed AES-GCM AAD as `uuid||version||receiverPubFpr`, but the backend still accepted any schema-valid `cipherBundle` and the frontend decrypt path trusted the returned `aad` bytes instead of rebuilding the expected binding locally. `ciphertextHash` was also only checked by the receiver, despite the shared contract documenting it as server-verifiable integrity metadata.
+**Choice**: Add shared helpers for the canonical AAD bytes/string, validate `SHA-256(ciphertext) === ciphertextHash` plus exact AAD binding inside `compound_commit` for `update` intents, return a new `cipherVersion` field from `get_decrypt_payload`, and require the frontend decrypt flow to reject payloads whose `receiverPubFpr` or AAD does not match the locally expected `{ uuid, cipherVersion, receiverPubFpr }`.
+**Reasoning**: This closes the gap where metadata binding depended on a well-behaved sender implementation, turns the documented protocol rule into an enforced contract, and gives the receiver an independent local check before attempting AES-GCM decryption.
+**Trade-offs**: Strict frontend AAD validation intentionally breaks compatibility with older delivered payloads written before the March 13 AAD-strengthening change; because channel TTL is at most seven days, that incompatibility is bounded to the existing retention window and no migration path is added.
+
 ## [2026-03-14] Durable Object abuse controls use in-memory per-channel limits plus single active lock challenge
 
 **Decision**: Implement issue #155 with best-effort in-memory rate limiting inside `SecretVault` and reuse a single active lock challenge record per channel instead of storing one lock challenge row per `lock_begin` request.

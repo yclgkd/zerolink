@@ -446,6 +446,7 @@ export const DecryptFetchResponseSchema = z.object({
   ok: z.literal(true),
   cipherBundle: CipherBundleSchema,
   receiverPubFpr: HexStringSchema,
+  cipherVersion: z.number().int().nonnegative(),
   deliveredAt: UnixMsSchema,
 });
 

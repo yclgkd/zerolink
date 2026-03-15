@@ -882,6 +882,7 @@ describe('backend worker routing + lock/compound forwarding', () => {
       { status: 409, code: 'NONCE_REPLAY' },
       { status: 400, code: 'TIMESTAMP_OUT_OF_RANGE' },
       { status: 400, code: 'INTENT_HASH_MISMATCH' },
+      { status: 400, code: 'CIPHER_BUNDLE_INVALID' },
       { status: 403, code: 'ASSERTION_INVALID' },
     ] as const;
 
