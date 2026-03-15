@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  computeCallerKey,
+  INTERNAL_CALLER_KEY_HEADER,
+  INTERNAL_COMMIT_COOKIE_ACTION_HEADER,
+  INTERNAL_COMMIT_COOKIE_EXP_HEADER,
+  INTERNAL_COMMIT_COOKIE_KIND_HEADER,
+  INTERNAL_COMMIT_COOKIE_TOKEN_HEADER,
+  INTERNAL_COMMIT_TOKEN_HEADER,
+} from '../commitTokens.ts';
 import worker, { type Env } from '../index.ts';
 
 interface ApiErrorResponse {
@@ -11,6 +20,7 @@ interface VaultCall {
   pathname: string;
   method: string;
   body: string | null;
+  headers: Record<string, string>;
 }
 
 const ctx = {
@@ -138,6 +148,7 @@ function createMockEnv(responder: (request: Request) => Promise<Response> | Resp
         pathname: new URL(request.url).pathname,
         method: request.method,
         body,
+        headers: Object.fromEntries(request.headers.entries()),
       });
 
       return responder(request);
@@ -158,11 +169,22 @@ function createMockEnv(responder: (request: Request) => Promise<Response> | Resp
       SECRET_VAULT: namespace,
       SECRETS_KV: {} as KVNamespace,
       APP_ENV: 'test',
+      COMMIT_TOKEN_SECRET: 'commit-token-secret',
       RP_ID: 'zerolink.test',
       RP_ORIGIN: 'https://zerolink.test',
     },
     calls,
   };
+}
+
+function getSetCookieHeaders(response: Response): string[] {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === 'function') {
+    return headers.getSetCookie();
+  }
+
+  const single = response.headers.get('Set-Cookie');
+  return single ? [single] : [];
 }
 
 async function dispatch(
@@ -291,6 +313,46 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls[0]?.method).toBe('POST');
   });
 
+  it('forwards an HMAC caller key on protected begin routes', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          lockChallenge: {
+            id: 'challenge-id',
+            challenge: 'challenge-token',
+            expiresAt: 1_730_000_123_000,
+          },
+        }),
+        { status: 200 }
+      );
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/lock_begin/${VALID_UUID}`,
+      'POST',
+      { uuid: VALID_UUID },
+      false,
+      {
+        'CF-Connecting-IP': '198.51.100.42',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36',
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers['cookie']).toBeUndefined();
+    expect(calls[0]?.headers[INTERNAL_CALLER_KEY_HEADER.toLowerCase()]).toBe(
+      await computeCallerKey(
+        env.COMMIT_TOKEN_SECRET,
+        '198.51.100.42',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36'
+      )
+    );
+  });
+
   it('preserves Retry-After when SecretVault returns a forwarded 429', async () => {
     const { env } = createMockEnv(async () => {
       return new Response(JSON.stringify({ ok: false, code: 'RATE_LIMITED' }), {
@@ -377,6 +439,31 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls[0]?.method).toBe('POST');
   });
 
+  it('forwards only the target commit token cookie on protected commit routes', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/lock_commit/${VALID_UUID}`,
+      'POST',
+      VALID_LOCK_COMMIT_BODY,
+      false,
+      {
+        'CF-Connecting-IP': '198.51.100.43',
+        'User-Agent': 'curl/8.7.1',
+        Cookie: 'session_id=abc; zl-lock-commit=lock-token-123; ignored=value',
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers['cookie']).toBeUndefined();
+    expect(calls[0]?.headers[INTERNAL_COMMIT_TOKEN_HEADER.toLowerCase()]).toBe('lock-token-123');
+    expect(calls[0]?.headers[INTERNAL_CALLER_KEY_HEADER.toLowerCase()]).toBeDefined();
+  });
+
   it('forwards compound_begin request to SecretVault DO and returns challenge response', async () => {
     const compoundBeginResponse = {
       ok: true,
@@ -409,6 +496,108 @@ describe('backend worker routing + lock/compound forwarding', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.pathname).toBe('/compound_begin');
     expect(calls[0]?.method).toBe('POST');
+  });
+
+  it('translates internal lock cookie signals into external Set-Cookie headers', async () => {
+    const { env } = createMockEnv(async () => {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          lockChallenge: {
+            id: 'challenge-id',
+            challenge: 'challenge-token',
+            expiresAt: 1_730_000_123_000,
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            [INTERNAL_COMMIT_COOKIE_ACTION_HEADER]: 'set',
+            [INTERNAL_COMMIT_COOKIE_KIND_HEADER]: 'lock',
+            [INTERNAL_COMMIT_COOKIE_TOKEN_HEADER]: 'lock-token-abc',
+            [INTERNAL_COMMIT_COOKIE_EXP_HEADER]: '1730000123000',
+          },
+        }
+      );
+    });
+
+    const response = await dispatch(env, `/api/lock_begin/${VALID_UUID}`, 'POST', {
+      uuid: VALID_UUID,
+    });
+
+    expect(response.status).toBe(200);
+    const cookies = getSetCookieHeaders(response);
+    expect(cookies).toHaveLength(1);
+    expect(cookies[0]).toContain('zl-lock-commit=lock-token-abc');
+    expect(cookies[0]).toContain(`Path=/api/lock_commit/${VALID_UUID}`);
+    expect(cookies[0]).toContain('HttpOnly');
+    expect(cookies[0]).toContain('SameSite=Strict');
+  });
+
+  it('sets both compound cookie paths from internal begin signals', async () => {
+    const { env } = createMockEnv(async () => {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          challenge: {
+            id: 'compound-id',
+            seed: 'compound-seed',
+            expiresAt: 1_730_000_123_000,
+          },
+          currentVersion: 1,
+          securityProfile: 'standard',
+          adminMode: 'webauthn',
+        }),
+        {
+          status: 200,
+          headers: {
+            [INTERNAL_COMMIT_COOKIE_ACTION_HEADER]: 'set',
+            [INTERNAL_COMMIT_COOKIE_KIND_HEADER]: 'compound',
+            [INTERNAL_COMMIT_COOKIE_TOKEN_HEADER]: 'compound-token-abc',
+            [INTERNAL_COMMIT_COOKIE_EXP_HEADER]: '1730000123000',
+          },
+        }
+      );
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/manage/compound_begin/${VALID_UUID}`,
+      'POST',
+      VALID_COMPOUND_BEGIN_BODY
+    );
+
+    const cookies = getSetCookieHeaders(response);
+    expect(cookies).toHaveLength(2);
+    expect(cookies[0]).toContain('zl-compound-commit=compound-token-abc');
+    expect(cookies[0]).toContain(`Path=/api/manage/compound_commit/${VALID_UUID}`);
+    expect(cookies[1]).toContain(`Path=/api/delete_commit/${VALID_UUID}`);
+  });
+
+  it('clears both compound cookie paths from internal commit signals', async () => {
+    const { env } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          [INTERNAL_COMMIT_COOKIE_ACTION_HEADER]: 'clear',
+          [INTERNAL_COMMIT_COOKIE_KIND_HEADER]: 'compound',
+        },
+      });
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/delete_commit/${VALID_UUID}`,
+      'POST',
+      VALID_COMPOUND_COMMIT_DELETE_BODY
+    );
+
+    const cookies = getSetCookieHeaders(response);
+    expect(cookies).toHaveLength(2);
+    expect(cookies[0]).toContain('zl-compound-commit=');
+    expect(cookies[0]).toContain('Max-Age=0');
+    expect(cookies[0]).toContain(`Path=/api/manage/compound_commit/${VALID_UUID}`);
+    expect(cookies[1]).toContain(`Path=/api/delete_commit/${VALID_UUID}`);
   });
 
   it('forwards compound_commit request to SecretVault DO and returns ok response', async () => {

@@ -16,6 +16,7 @@ export interface SecretVaultEnv {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
   APP_ENV: string;
+  COMMIT_TOKEN_SECRET: string;
   RP_ID: string;
   RP_ORIGIN: string;
 }
@@ -65,15 +66,19 @@ export type CompoundCommitParams = WebAuthnCompoundCommitParams | SoftkeyCompoun
 export interface StoredLockChallenge {
   id: Base64Url;
   challenge: Base64Url;
+  issuedAt?: UnixMs;
   expiresAt: UnixMs;
   consumedAt?: UnixMs;
+  commitTokenMode?: 'caller-cookie-v1';
 }
 
 export interface StoredCompoundChallenge {
   id: Base64Url;
   seed: Base64Url;
+  issuedAt?: UnixMs;
   expiresAt: UnixMs;
   consumedAt?: UnixMs;
+  commitTokenMode?: 'caller-cookie-v1';
 }
 
 export interface StoredTerminalTombstone {
