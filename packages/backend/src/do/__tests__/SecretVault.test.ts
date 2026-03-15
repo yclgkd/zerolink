@@ -30,14 +30,12 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
 import {
-  COMMIT_TOKEN_MODE,
   createCommitToken,
   INTERNAL_CALLER_KEY_HEADER,
   INTERNAL_COMMIT_COOKIE_ACTION_HEADER,
   INTERNAL_COMMIT_COOKIE_EXP_HEADER,
   INTERNAL_COMMIT_COOKIE_KIND_HEADER,
   INTERNAL_COMMIT_COOKIE_TOKEN_HEADER,
-  INTERNAL_COMMIT_TOKEN_HEADER,
 } from '../../commitTokens.ts';
 import { verifyAttestation } from '../../crypto/attestation.ts';
 import * as softkeyCrypto from '../../crypto/softkey.ts';

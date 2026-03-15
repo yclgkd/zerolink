@@ -112,10 +112,7 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
     }
 
     function encodeCborMap(entries: readonly [Uint8Array, Uint8Array][]): Uint8Array {
-      return concatBytes([
-        encodeCborLength(5, entries.length),
-        ...entries.flatMap(([key, value]) => [key, value]),
-      ]);
+      return concatBytes([encodeCborLength(5, entries.length), ...entries.flat()]);
     }
 
     function encodeUint16(value: number): Uint8Array {

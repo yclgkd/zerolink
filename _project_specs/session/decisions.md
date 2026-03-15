@@ -519,3 +519,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Keep secure E2E coverage and upgrade the harness.
 **Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
 **Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.
+## [2026-03-15] Lint cleanup keeps index-signature strictness intact
+
+**Decision**: Resolve biome literal-key findings with local destructuring instead of dot-access on index-signature objects.
+**Context**: Repo lint flagged bracket access like `value['uuid']`, but the backend also enforces `noPropertyAccessFromIndexSignature`, so blindly applying biome's literal-key suggestions would break TypeScript typecheck.
+**Options Considered**: Accept lint noise, disable the rule, or refactor the affected code to destructure once and reuse typed locals.
+**Choice**: Destructure the checked values into locals.
+**Reasoning**: This clears the lint findings, preserves strict index-signature typing, and keeps parsing/test logic behavior unchanged.
+**Trade-offs**: A few helpers and tests now use small local bindings purely to satisfy both static-analysis rules.
