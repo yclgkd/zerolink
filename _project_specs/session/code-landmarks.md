@@ -58,6 +58,13 @@ UPDATE WHEN:
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `.github/workflows/deploy.yml` | Post-merge CI/CD: test → deploy Worker → build → generate/sign/verify manifest → deploy Pages |
 
+## File Size Rule
+
+- **Target:** 200–400 lines. **Hard limit:** 800 lines — split before merging.
+- Test files follow the same limit; split by describe block / feature domain.
+- Extract shared test helpers to `__tests__/helpers/`; keep `vi.mock()` in each file (Vitest hoisting).
+- See `.ai/coding-standards.md` § File Size for full details.
+
 ## Key Patterns
 | Pattern | Example Location | Notes |
 |---------|-----------------|-------|
