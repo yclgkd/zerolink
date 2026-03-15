@@ -1,6 +1,28 @@
+import type { Base64Url, UnixMs } from '@zerolink/shared';
 import { describe, expect, it } from 'vitest';
 
-import { computeCallerKey, normalizeUserAgentFamily } from '../commitTokens.ts';
+import {
+  computeCallerKey,
+  createCommitToken,
+  hashCommitToken,
+  normalizeUserAgentFamily,
+  verifyCommitToken,
+} from '../commitTokens.ts';
+
+function tamperTokenSignature(token: string): string {
+  const separator = token.lastIndexOf('.');
+  const signature = token.slice(separator + 1);
+  const replacement = signature.endsWith('A') ? 'B' : 'A';
+  return `${token.slice(0, separator + 1)}${signature.slice(0, -1)}${replacement}`;
+}
+
+function asBase64Url(value: string): Base64Url {
+  return value as Base64Url;
+}
+
+function asUnixMs(value: number): UnixMs {
+  return value as UnixMs;
+}
 
 describe('commit token helpers', () => {
   it.each([
@@ -47,5 +69,68 @@ describe('commit token helpers', () => {
     expect(chromiumA).toBe(chromiumB);
     expect(chromiumA).not.toBe(curl);
     expect(chromiumA).not.toContain(ip);
+  });
+
+  it('round-trips commit tokens through create and verify', async () => {
+    const payload = {
+      kind: 'lock' as const,
+      uuid: 'channel-uuid',
+      challengeId: asBase64Url('challenge-id'),
+      callerKey: asBase64Url('caller-key'),
+      iat: asUnixMs(1_730_000_000_000),
+      exp: asUnixMs(1_730_000_060_000),
+    };
+    const token = await createCommitToken('commit-token-secret', payload);
+
+    await expect(verifyCommitToken('commit-token-secret', token)).resolves.toEqual({
+      v: '1',
+      ...payload,
+    });
+  });
+
+  it('rejects commit tokens whose signature was tampered with', async () => {
+    const token = await createCommitToken('commit-token-secret', {
+      kind: 'compound',
+      uuid: 'channel-uuid',
+      challengeId: asBase64Url('challenge-id'),
+      callerKey: asBase64Url('caller-key'),
+      iat: asUnixMs(1_730_000_000_000),
+      exp: asUnixMs(1_730_000_060_000),
+    });
+
+    await expect(
+      verifyCommitToken('commit-token-secret', tamperTokenSignature(token))
+    ).resolves.toBeNull();
+  });
+
+  it.each([
+    '',
+    'no-dot-token',
+    'a.b.c',
+    '%%%invalid%%%.signature',
+  ])('rejects malformed commit token %s', async (token) => {
+    await expect(verifyCommitToken('commit-token-secret', token)).resolves.toBeNull();
+  });
+
+  it('hashes commit tokens deterministically and distinguishes different inputs', async () => {
+    const tokenA = await createCommitToken('commit-token-secret', {
+      kind: 'lock',
+      uuid: 'channel-uuid',
+      challengeId: asBase64Url('challenge-id-a'),
+      callerKey: asBase64Url('caller-key'),
+      iat: asUnixMs(1_730_000_000_000),
+      exp: asUnixMs(1_730_000_060_000),
+    });
+    const tokenB = await createCommitToken('commit-token-secret', {
+      kind: 'lock',
+      uuid: 'channel-uuid',
+      challengeId: asBase64Url('challenge-id-b'),
+      callerKey: asBase64Url('caller-key'),
+      iat: asUnixMs(1_730_000_000_000),
+      exp: asUnixMs(1_730_000_060_000),
+    });
+
+    await expect(hashCommitToken(tokenA)).resolves.toBe(await hashCommitToken(tokenA));
+    await expect(hashCommitToken(tokenA)).resolves.not.toBe(await hashCommitToken(tokenB));
   });
 });
