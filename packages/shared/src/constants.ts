@@ -151,11 +151,13 @@ export const NONCE_BYTES = 24 as const;
  *   lock_key   = SHA256(DOMAIN.LOCK_KEY   || uuid || lock_secret)
  *   lock_proof = SHA256(DOMAIN.LOCK_PROOF || uuid || cid || challenge || lock_key)
  *   challenge  = SHA256(DOMAIN.CHALLENGE  || uuid || cid || intent_hash || seed)
+ *   delivery   = SHA256(DOMAIN.DELIVERY_PROOF || uuid || intent_hash)
  */
 export const DOMAIN = {
   LOCK_KEY: 'GL-lockkey',
   LOCK_PROOF: 'GL-lock',
   CHALLENGE: 'GLv2.5',
+  DELIVERY_PROOF: 'GL-delivery-proof',
 } as const;
 
 // ─── Argon2id (KDF) ──────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ import {
   CHANNEL_TTL_MS,
   computeIntentHash,
   DOMAIN,
+  deriveUpdateProofChallengeB64u,
   NONCE_TTL_MS,
   SECURITY_PROFILE,
   TIMESTAMP_SKEW_MS,
@@ -2104,7 +2105,7 @@ describe('SecretVault compound/delete flow', () => {
     ).commitLock(lockParams);
     const { state, snapshot, getAlarm } = createMockState(lockedRecord);
     const vault = new SecretVault(state, env);
-    const begin = await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
     const intent = createUpdateIntent(
       lockedRecord.uuid,
       lockedRecord.version,
@@ -2113,12 +2114,10 @@ describe('SecretVault compound/delete flow', () => {
       lockParams.receiverPubFpr
     );
     const intentHash = await computeIntentHash(toRecord(intent));
-    const expectedChallenge = await computeCompoundChallengeValue(
-      lockedRecord.uuid,
-      begin.challenge.id,
+    const expectedChallenge = await deriveUpdateProofChallengeB64u({
+      uuid: lockedRecord.uuid,
       intentHash,
-      begin.challenge.seed
-    );
+    });
     const assertionFixture = await createMockAssertion({
       credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
       rpId: RP_ID,
@@ -2164,6 +2163,20 @@ describe('SecretVault compound/delete flow', () => {
     expect(updated.version).toBe(lockedRecord.version + 1);
     expect(updated.cipherBundle).toEqual(intent.cipherBundle);
     expect(updated.deliveredAt).toBe(intent.timestamp);
+    expect(updated.updateDeliveryProof).toEqual({
+      adminMode: 'webauthn',
+      meta: {
+        version: intent.version,
+        timestamp: intent.timestamp,
+        nonce: intent.nonce,
+        expireAt: intent.expireAt,
+      },
+      proof: {
+        clientDataJSON: assertionFixture.assertion.response.clientDataJSON,
+        authenticatorData: assertionFixture.assertion.response.authenticatorData,
+        signature: assertionFixture.assertion.response.signature,
+      },
+    });
     expect((updated.adminCredential as StoredCredential).signCount).toBe(7);
     expect(nonceRecord.expiresAt).toBe(expectedNonceExpiry);
     expect(nonceIndexKey).toBe(createNonceIndexKey(expectedNonceExpiry, intent.nonce));
@@ -2213,6 +2226,100 @@ describe('SecretVault compound/delete flow', () => {
       receiverPubFpr: lockParams.receiverPubFpr,
       cipherVersion: intent.version,
       deliveredAt: intent.timestamp,
+    });
+  });
+
+  it('returns deliveryAuth for delivered records with stored update proofs', async () => {
+    const now = 1_730_001_175_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_delivery_auth_01'),
+      lockParams.receiverPubFpr
+    );
+    const assertionFixture = await createMockAssertion({
+      credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: await deriveUpdateProofChallengeB64u({
+        uuid: lockedRecord.uuid,
+        intentHash: await computeIntentHash(toRecord(intent)),
+      }),
+      signCount: 11,
+    });
+    const updatedRecord = new SecretVaultStateMachine({
+      ...lockedRecord,
+      adminCredential: {
+        ...(lockedRecord.adminCredential as StoredCredential),
+        publicKey: assertionFixture.publicKeyCose,
+      },
+    }).commitDelivery({
+      cipherBundle: intent.cipherBundle,
+      deliveredAt: intent.timestamp,
+      updateDeliveryProof: {
+        adminMode: 'webauthn',
+        meta: {
+          version: intent.version,
+          timestamp: intent.timestamp,
+          nonce: intent.nonce,
+          expireAt: intent.expireAt,
+        },
+        proof: {
+          clientDataJSON: assertionFixture.assertion.response.clientDataJSON,
+          authenticatorData: assertionFixture.assertion.response.authenticatorData,
+          signature: assertionFixture.assertion.response.signature,
+        },
+      },
+    });
+    const { state } = createMockState(updatedRecord);
+    const vault = new SecretVault(state, env);
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/get_decrypt_payload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const payload = (await response.json()) as {
+      ok: true;
+      cipherBundle: CipherBundle;
+      receiverPubFpr: HexString;
+      cipherVersion: number;
+      deliveredAt: UnixMs;
+      deliveryAuth: unknown;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      ok: true,
+      cipherBundle: intent.cipherBundle,
+      receiverPubFpr: lockParams.receiverPubFpr,
+      cipherVersion: intent.version,
+      deliveredAt: intent.timestamp,
+      deliveryAuth: {
+        adminMode: 'webauthn',
+        meta: {
+          version: intent.version,
+          timestamp: intent.timestamp,
+          nonce: intent.nonce,
+          expireAt: intent.expireAt,
+        },
+        signer: {
+          credentialId: (updatedRecord.adminCredential as StoredCredential).credentialId,
+          publicKey: assertionFixture.publicKeyCose,
+        },
+        proof: {
+          clientDataJSON: assertionFixture.assertion.response.clientDataJSON,
+          authenticatorData: assertionFixture.assertion.response.authenticatorData,
+          signature: assertionFixture.assertion.response.signature,
+        },
+      },
     });
   });
 
@@ -2917,6 +3024,32 @@ describe('SecretVault compound/delete flow', () => {
     expect(updated.version).toBe(lockedRecord.version + 1);
     expect(updated.adminMode).toBe('softkey');
     expect(verifySoftkeySignatureMock).toHaveBeenCalledTimes(1);
+    expect(verifySoftkeySignatureMock).toHaveBeenCalledWith({
+      softkeyPubJwk: (lockedRecord.adminCredential as { softkeyPubJwk: unknown }).softkeyPubJwk,
+      payload: decodeBase64Url(
+        await deriveUpdateProofChallengeB64u({
+          uuid: lockedRecord.uuid,
+          intentHash,
+        })
+      ),
+      signatureHex: asHex(
+        'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef'
+      ),
+    });
+    expect(updated.updateDeliveryProof).toEqual({
+      adminMode: 'softkey',
+      meta: {
+        version: intent.version,
+        timestamp: intent.timestamp,
+        nonce: intent.nonce,
+        expireAt: intent.expireAt,
+      },
+      proof: {
+        softkeySignature: asHex(
+          'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef'
+        ),
+      },
+    });
 
     verifySoftkeySignatureMock.mockReset();
   });

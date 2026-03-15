@@ -8,9 +8,14 @@ import {
   type ChannelState,
   type CipherBundle,
   type CompoundBeginResponse,
+  computeCredentialPublicKeyFingerprint,
   computeIntentHash,
+  computeSenderAuthFingerprintFromAttestation,
+  computeSoftkeyPublicKeyFingerprint,
   type DecryptFetchResponse,
   type DeleteIntent,
+  decodeBase64Url,
+  deriveUpdateProofChallengeB64u,
   type ECDSAPublicKeyJWK,
   type HexString,
   type LockBeginResponse,
@@ -21,6 +26,8 @@ import {
   type UnixMs,
   type UpdateIntent,
   type UUID,
+  verifySoftkeyDeliveryProof,
+  verifyWebAuthnDeliveryProof,
 } from '@zerolink/shared';
 import {
   decryptAesGcm,
@@ -165,6 +172,7 @@ export interface LockChannelInput {
   uuid: string;
   lockSecretB64u: string;
   passphrase: string;
+  senderAuthFpr?: HexString;
 }
 
 /**
@@ -333,6 +341,14 @@ function constantTimeHexEqual(a: string, b: string): boolean {
 async function computeReceiverPubFingerprint(publicKey: CryptoKey): Promise<HexString> {
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', publicKey));
   return (await computeSha256Hex(spki)) as HexString;
+}
+
+function resolveRpOrigin(): string {
+  return globalThis.location.origin;
+}
+
+function resolveRpId(): string {
+  return globalThis.location.hostname;
 }
 
 function parseLockSecret(lockSecretB64u: string): CryptoOrchestratorResult<never> | null {
@@ -508,9 +524,11 @@ async function executeCreateChannel(
   if (input.useCompatibilityMode) {
     const softkeyPassphrase = input.softkeyPassphrase ?? '';
     let softkeyPubJwk: ECDSAPublicKeyJWK;
+    let senderAuthFpr: HexString;
     try {
       const keypair = await generateSoftkeyPair();
       softkeyPubJwk = await exportSoftkeyPublicJwk(keypair.publicKey);
+      senderAuthFpr = await computeSoftkeyPublicKeyFingerprint(softkeyPubJwk);
       const wrappedPrivateKey = await wrapSoftkeyPrivateKey(keypair.privateKey, softkeyPassphrase);
       await deps.softkeyAdminStorage.save({
         uuid: input.uuid,
@@ -559,7 +577,11 @@ async function executeCreateChannel(
       data: {
         shareUrl: finishRes.data.shareUrl,
         manageUrl: finishRes.data.manageUrl,
-        shareUrlWithFragment: buildShareUrlWithFragment(finishRes.data.shareUrl, lockSecretB64u),
+        shareUrlWithFragment: buildShareUrlWithFragment(
+          finishRes.data.shareUrl,
+          lockSecretB64u,
+          senderAuthFpr
+        ),
         lockSecretB64u,
         lockKeyB64u,
       },
@@ -573,6 +595,16 @@ async function executeCreateChannel(
   if (!regRes.ok) {
     state.failCreateFinish(regRes.error.code);
     return mapWebAuthnError(regRes.error.code, 'create.register');
+  }
+
+  let senderAuthFpr: HexString;
+  try {
+    senderAuthFpr = await computeSenderAuthFingerprintFromAttestation(
+      regRes.data as AttestationJSON
+    );
+  } catch {
+    state.failCreateFinish('CRYPTO_ERROR');
+    return toError('CRYPTO_ERROR', 'create.sender-auth');
   }
 
   state.startCreateFinish();
@@ -596,7 +628,11 @@ async function executeCreateChannel(
     data: {
       shareUrl: finishRes.data.shareUrl,
       manageUrl: finishRes.data.manageUrl,
-      shareUrlWithFragment: buildShareUrlWithFragment(finishRes.data.shareUrl, lockSecretB64u),
+      shareUrlWithFragment: buildShareUrlWithFragment(
+        finishRes.data.shareUrl,
+        lockSecretB64u,
+        senderAuthFpr
+      ),
       lockSecretB64u,
       lockKeyB64u,
     },
@@ -609,7 +645,8 @@ async function prepareLockCryptography(
   passphrase: string,
   lockChallengeId: string,
   lockChallenge: string,
-  nowMs: number
+  nowMs: number,
+  senderAuthFpr?: HexString
 ) {
   const receiverKeyPair = await generateReceiverKeyPair();
   const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
@@ -635,6 +672,7 @@ async function prepareLockCryptography(
     envelope: {
       uuid: asUuid(uuid),
       receiverPubFpr,
+      ...(senderAuthFpr ? { senderAuthFpr } : {}),
       wrappedPrivateKey,
       updatedAt: nowMs,
     },
@@ -673,7 +711,8 @@ async function executeLockChannel(
       input.passphrase,
       challenge.id,
       challenge.challenge,
-      nowMs
+      nowMs,
+      input.senderAuthFpr
     );
   } catch {
     return toError('CRYPTO_ERROR', 'lock.crypto');
@@ -772,10 +811,8 @@ async function buildDeliverUpdateIntent(
     };
 
     const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
-    const expectedChallenge = await deriveExpectedCompoundChallengeB64u({
+    const expectedChallenge = await deriveUpdateProofChallengeB64u({
       uuid: input.uuid,
-      challengeId: beginData.challenge.id,
-      challengeSeed: beginData.challenge.seed,
       intentHash,
     });
 
@@ -805,6 +842,107 @@ async function signChallengeWithSoftkey(
   if (!envelope) throw new Error('missing softkey');
   const privateKey = await unwrapSoftkeyPrivateKey(envelope.wrappedPrivateKey, passphrase);
   return softkeySign(privateKey, decodeBase64UrlBytes(expectedChallengeB64u));
+}
+
+async function resolveAnchoredCipherVersion(
+  payload: DecryptFetchResponse,
+  envelope: ReceiverKeyEnvelope,
+  uuid: string
+): Promise<number> {
+  try {
+    if (!payload.deliveryAuth) {
+      throw new Error('missing delivery auth');
+    }
+
+    const senderAuthFpr =
+      payload.deliveryAuth.adminMode === 'webauthn'
+        ? await computeCredentialPublicKeyFingerprint(payload.deliveryAuth.signer.publicKey)
+        : await computeSoftkeyPublicKeyFingerprint(payload.deliveryAuth.signer.softkeyPubJwk);
+
+    if (!constantTimeHexEqual(senderAuthFpr, envelope.senderAuthFpr ?? '')) {
+      throw new Error('sender auth mismatch');
+    }
+
+    if (payload.cipherVersion !== payload.deliveryAuth.meta.version) {
+      throw new Error('cipher version mismatch');
+    }
+
+    const signedIntent: UpdateIntent = {
+      op: 'update',
+      uuid: asUuid(uuid),
+      version: payload.deliveryAuth.meta.version,
+      timestamp: payload.deliveryAuth.meta.timestamp,
+      nonce: payload.deliveryAuth.meta.nonce,
+      receiverPubFpr: payload.receiverPubFpr,
+      cipherBundle: payload.cipherBundle,
+      expireAt: payload.deliveryAuth.meta.expireAt,
+    };
+    const intentHash = await computeIntentHash(signedIntent as unknown as Record<string, unknown>);
+    const expectedChallenge = await deriveUpdateProofChallengeB64u({
+      uuid,
+      intentHash,
+    });
+
+    const proofValid =
+      payload.deliveryAuth.adminMode === 'webauthn'
+        ? await verifyWebAuthnDeliveryProof({
+            deliveryAuth: payload.deliveryAuth,
+            expectedChallenge,
+            rpId: resolveRpId(),
+            rpOrigin: resolveRpOrigin(),
+          })
+        : await verifySoftkeyDeliveryProof({
+            softkeyPubJwk: payload.deliveryAuth.signer.softkeyPubJwk,
+            signatureHex: payload.deliveryAuth.proof.softkeySignature,
+            expectedChallengeBytes: decodeBase64Url(expectedChallenge),
+          });
+
+    if (!proofValid) {
+      throw new Error('invalid delivery proof');
+    }
+
+    return payload.deliveryAuth.meta.version;
+  } catch {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+}
+
+async function resolveCipherVersionForDecrypt(
+  payload: DecryptFetchResponse,
+  envelope: ReceiverKeyEnvelope,
+  uuid: string
+): Promise<number> {
+  if (!constantTimeHexEqual(payload.receiverPubFpr, envelope.receiverPubFpr)) {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+
+  if (envelope.senderAuthFpr) {
+    return resolveAnchoredCipherVersion(payload, envelope, uuid);
+  }
+
+  return payload.cipherVersion;
+}
+
+function assertMonotonicDeliveryState(
+  envelope: ReceiverKeyEnvelope,
+  version: number,
+  ciphertextHash: string
+): void {
+  const lastAccepted = envelope.lastAcceptedDelivery;
+  if (!lastAccepted) {
+    return;
+  }
+
+  if (version < lastAccepted.version) {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+
+  if (
+    version === lastAccepted.version &&
+    !constantTimeHexEqual(ciphertextHash, lastAccepted.ciphertextHash)
+  ) {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
 }
 
 async function executeDeliverSecret(
@@ -1056,7 +1194,8 @@ async function performDecryptionPipeline(
   payload: DecryptFetchResponse,
   passphrase: string,
   envelope: ReceiverKeyEnvelope,
-  uuid: string
+  uuid: string,
+  cipherVersion: number
 ) {
   let ciphertextBytes: Uint8Array | null = null;
   let wrappedKeyBytes: Uint8Array | null = null;
@@ -1066,13 +1205,9 @@ async function performDecryptionPipeline(
   let plaintextBytes: Uint8Array | null = null;
 
   try {
-    if (!constantTimeHexEqual(payload.receiverPubFpr, envelope.receiverPubFpr)) {
-      throw new Error('INTEGRITY_MISMATCH');
-    }
-
     aadBytes = buildCipherBundleAadBytes({
       uuid: asUuid(uuid),
-      version: payload.cipherVersion,
+      version: cipherVersion,
       receiverPubFpr: envelope.receiverPubFpr,
     });
     const expectedAad = encodeBase64UrlBytes(aadBytes);
@@ -1172,12 +1307,29 @@ async function executeDecryptDelivered(
   if (!envelope) return toError('KEY_STORAGE_ERROR', 'decrypt.load-key', 'missing key');
 
   try {
+    const cipherVersion = await resolveCipherVersionForDecrypt(payload, envelope, input.uuid);
+    assertMonotonicDeliveryState(envelope, cipherVersion, payload.cipherBundle.ciphertextHash);
+
     const { plaintext } = await performDecryptionPipeline(
       payload,
       input.passphrase,
       envelope,
-      input.uuid
+      input.uuid,
+      cipherVersion
     );
+    try {
+      await deps.receiverKeyStorage.save({
+        ...envelope,
+        lastAcceptedDelivery: {
+          version: cipherVersion,
+          ciphertextHash: payload.cipherBundle.ciphertextHash,
+          acceptedAt: deps.now(),
+        },
+        updatedAt: deps.now(),
+      });
+    } catch (error) {
+      return toError(toStorageErrorCode(error), 'decrypt.persist-state');
+    }
     applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
       state.setPlaintext(plaintext);
     });

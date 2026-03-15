@@ -5,6 +5,7 @@ import type {
   HexString,
   ManageIntent,
   RSAPublicKeyJWK,
+  StoredUpdateDeliveryProof,
   UnixMs,
 } from '@zerolink/shared';
 
@@ -29,6 +30,7 @@ export interface CommitLockParams {
 
 export interface CommitDeliveryParams {
   cipherBundle: CipherBundle;
+  updateDeliveryProof?: StoredUpdateDeliveryProof;
   deliveredAt: UnixMs;
 }
 

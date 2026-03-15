@@ -1043,6 +1043,40 @@ describe('DecryptFetchResponseSchema', () => {
     expect(result.cipherVersion).toBe(3);
   });
 
+  it('accepts decrypt payloads with deliveryAuth', () => {
+    const result = DecryptFetchResponseSchema.parse({
+      ok: true,
+      cipherBundle: validCipherBundle,
+      receiverPubFpr: hex,
+      cipherVersion: 3,
+      deliveredAt: 1_730_000_000_000,
+      deliveryAuth: {
+        adminMode: 'password',
+        meta: {
+          version: 3,
+          timestamp: 1_730_000_000_000,
+          nonce: b64,
+          expireAt: null,
+        },
+        signer: {
+          softkeyPubJwk: {
+            kty: 'EC',
+            crv: 'P-256',
+            x: b64,
+            y: b64,
+            ext: true,
+            key_ops: ['verify'],
+          },
+        },
+        proof: {
+          softkeySignature: `${hex}${hex}`,
+        },
+      },
+    });
+
+    expect(result.deliveryAuth?.meta.version).toBe(3);
+  });
+
   it('rejects negative cipherVersion', () => {
     expect(() =>
       DecryptFetchResponseSchema.parse({

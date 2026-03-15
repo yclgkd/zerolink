@@ -6,6 +6,7 @@ import {
   deriveLockKeyB64u,
   deriveLockProofHex,
   extractLockSecretFromHash,
+  extractSenderAuthFprFromHash,
   generateLockSecretB64u,
 } from '../crypto/protocol-utils';
 
@@ -15,6 +16,7 @@ const VALID_CHALLENGE_ID = 'bW9ja19jaGFsbGVuZ2VfaWQ';
 const VALID_CHALLENGE = 'Y2hhbGxlbmdlX2RhdGFfZm9yX3Rlc3Rpbmc';
 const VALID_SEED = 'c2VlZF9mb3JfY29tcG91bmRfY2hhbGxlbmdl';
 const VALID_INTENT_HASH = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const VALID_SENDER_AUTH_FPR = '7568ef3cbdb5a90f89bc6ecdd08f7ba7730d943ca80d8756f44991bf34624eb5';
 
 describe('protocol-utils', () => {
   it('derives lock key b64u from uuid and lock secret using domain-separated hash', async () => {
@@ -56,15 +58,35 @@ describe('protocol-utils', () => {
     );
   });
 
+  it('includes sender auth fingerprints when building share fragments', () => {
+    expect(
+      buildShareUrlWithFragment(
+        '/s/aaaaaaaaaaaaaaaaaaaaa',
+        VALID_LOCK_SECRET,
+        VALID_SENDER_AUTH_FPR
+      )
+    ).toBe(`/s/aaaaaaaaaaaaaaaaaaaaa#k=${VALID_LOCK_SECRET}&af=${VALID_SENDER_AUTH_FPR}`);
+  });
+
   it('extracts lock secret from hash payload', () => {
     expect(extractLockSecretFromHash('#k=bW9ja19zZWNyZXQ')).toBe('bW9ja19zZWNyZXQ');
     expect(extractLockSecretFromHash('k=bW9ja19zZWNyZXQ')).toBe('bW9ja19zZWNyZXQ');
+  });
+
+  it('extracts sender auth fingerprints from hash payload', () => {
+    expect(extractSenderAuthFprFromHash(`#af=${VALID_SENDER_AUTH_FPR}`)).toBe(
+      VALID_SENDER_AUTH_FPR
+    );
+    expect(extractSenderAuthFprFromHash(`#k=bW9ja19zZWNyZXQ&af=${VALID_SENDER_AUTH_FPR}`)).toBe(
+      VALID_SENDER_AUTH_FPR
+    );
   });
 
   it('returns null for invalid lock secret hash payload', () => {
     expect(extractLockSecretFromHash('#k=invalid+base64')).toBeNull();
     expect(extractLockSecretFromHash('#missing=value')).toBeNull();
     expect(extractLockSecretFromHash('')).toBeNull();
+    expect(extractSenderAuthFprFromHash('#af=not-hex')).toBeNull();
   });
 
   it('generates base64url lock secrets with fixed byte length', () => {

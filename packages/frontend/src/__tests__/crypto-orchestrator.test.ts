@@ -11,7 +11,10 @@ import {
   buildCipherBundleAadBytes,
   CHANNEL_STATE,
   type CreateBeginResponse,
+  computeSenderAuthFingerprintFromAttestation,
   type DecryptFetchResponse,
+  type DecryptFetchSoftkeyDeliveryAuth,
+  deriveUpdateProofChallengeB64u,
   type HexString,
   HexStringSchema,
   type LockBeginResponse,
@@ -20,6 +23,7 @@ import {
   SECURITY_PROFILE,
   type SecurityProfile,
   UnixMsSchema,
+  type UpdateIntent,
   UUIDSchema,
 } from '@zerolink/shared';
 import { exportReceiverPublicKeyToJwk, generateReceiverKeyPair } from '@zerolink/shared/crypto/rsa';
@@ -40,10 +44,13 @@ import {
   type CryptoOrchestratorDeps,
   createCryptoOrchestrator,
 } from '../crypto/orchestrator';
+import { exportSoftkeyPublicJwk, generateSoftkeyPair } from '../crypto/softkey';
 import {
   createIndexedDbPendingSoftkeyCleanupStorage,
   createIndexedDbReceiverKeyStorage,
   createIndexedDbSoftkeyAdminStorage,
+  type ReceiverKeyEnvelope,
+  type ReceiverKeyStorage,
   type SoftkeyAdminEnvelope,
 } from '../crypto/storage';
 import {
@@ -63,6 +70,9 @@ const NOW = UnixMsSchema.parse(1_700_000_000_000);
 const CHALLENGE_EXPIRES_AT = UnixMsSchema.parse(Number(NOW) + 60_000);
 const VALID_UUID_BRANDED = UUIDSchema.parse(VALID_UUID);
 const NEXT_UUID_BRANDED = UUIDSchema.parse('bbbbbbbbbbbbbbbbbbbbb');
+const VALID_SENDER_AUTH_FPR = HexStringSchema.parse(
+  '7568ef3cbdb5a90f89bc6ecdd08f7ba7730d943ca80d8756f44991bf34624eb5'
+);
 
 function encodeBase64Url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -114,8 +124,10 @@ const VALID_ATTESTATION: AttestationJSON = {
   rawId: VALID_B64U,
   type: 'public-key',
   response: {
-    clientDataJSON: VALID_B64U,
-    attestationObject: VALID_B64U,
+    clientDataJSON:
+      'eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiYlc5amExOWlZWE5sTmpSMWNtdyIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3QiLCJjcm9zc09yaWdpbiI6ZmFsc2V9' as Base64Url,
+    attestationObject:
+      'o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YViUSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NBAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAECAwQFBgcICQoLDA0ODxClAQIDJiABIVggwN2WqXica_0qtqGeuM8kDWKc7iQHUv5al40k5wQaXbYiWCBFdcj8lLRlDMuel7RsWomcebixZmqAGjntoJMCcIPtKg' as Base64Url,
     transports: ['internal'],
   },
 };
@@ -225,6 +237,185 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve };
+}
+
+function extractSenderAuthFprFromShareUrl(shareUrlWithFragment: string): HexString {
+  const url = new URL(shareUrlWithFragment, 'https://zerolink.test');
+  const senderAuthFpr = new URLSearchParams(url.hash.slice(1)).get('af');
+  if (!senderAuthFpr) {
+    throw new Error('missing sender auth fingerprint');
+  }
+  return HexStringSchema.parse(senderAuthFpr);
+}
+
+async function prepareAnchoredSoftkeyDelivery(
+  params: {
+    receiverKeyStorage?: ReceiverKeyStorage;
+    uuid?: string;
+    plaintext?: string;
+    passphrase?: string;
+  } = {}
+): Promise<{
+  apiClient: ApiClient;
+  orchestrator: CryptoOrchestrator;
+  receiverKeyStorage: ReceiverKeyStorage;
+  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  deliveryAuth: DecryptFetchSoftkeyDeliveryAuth;
+  receiverPubFpr: HexString;
+  senderAuthFpr: HexString;
+}> {
+  const receiverKeyStorage =
+    params.receiverKeyStorage ??
+    createIndexedDbReceiverKeyStorage({
+      dbName: `test-orchestrator-anchored-${Math.random().toString(16).slice(2)}`,
+      storeName: 'receiver-keys',
+    });
+  const softkeyAdminStorage = createIndexedDbSoftkeyAdminStorage({
+    dbName: `test-orchestrator-anchored-softkey-${Math.random().toString(16).slice(2)}`,
+    storeName: 'softkey-admin',
+  });
+  const { orchestrator, apiClient } = createOrchestrator({
+    receiverKeyStorage,
+    softkeyAdminStorage,
+  });
+  const uuid = params.uuid ?? VALID_UUID;
+  const passphrase = params.passphrase ?? 'Compat#Pass123';
+
+  vi.mocked(apiClient.createBegin).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      creationOptions: {},
+    },
+  });
+  vi.mocked(apiClient.createFinish).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      shareUrl: `/s/${uuid}`,
+      manageUrl: `/m/${uuid}`,
+    },
+  });
+
+  const createResult = await orchestrator.createChannel({
+    uuid,
+    profile: SECURITY_PROFILE.STANDARD,
+    useCompatibilityMode: true,
+    softkeyPassphrase: passphrase,
+  });
+  expect(createResult.ok).toBe(true);
+  if (!createResult.ok) {
+    throw new Error('expected compatibility create to succeed');
+  }
+
+  const senderAuthFpr = extractSenderAuthFprFromShareUrl(createResult.data.shareUrlWithFragment);
+
+  vi.mocked(apiClient.lockBegin).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      lockChallenge: {
+        id: VALID_B64U,
+        challenge: VALID_B64U,
+        expiresAt: CHALLENGE_EXPIRES_AT,
+      },
+    },
+  });
+  vi.mocked(apiClient.lockCommit).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: { ok: true },
+  });
+  const lockResult = await orchestrator.lockChannel({
+    uuid,
+    lockSecretB64u: createResult.data.lockSecretB64u,
+    passphrase: 'Strong#Pass1234',
+    senderAuthFpr,
+  });
+  expect(lockResult.ok).toBe(true);
+  if (!lockResult.ok) {
+    throw new Error('expected lock to succeed');
+  }
+
+  vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      challenge: {
+        id: VALID_B64U,
+        seed: VALID_B64U,
+        expiresAt: CHALLENGE_EXPIRES_AT,
+      },
+      receiverPubFpr: lockResult.data.receiverPubFpr,
+      receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+      currentVersion: 0,
+      securityProfile: SECURITY_PROFILE.STANDARD,
+      adminMode: 'password',
+    },
+  });
+
+  let committed: {
+    intent: UpdateIntent;
+    softkeySignature: HexString;
+  } | null = null;
+  vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+    if (input.intent.op === 'update' && 'softkeySignature' in input) {
+      committed = {
+        intent: input.intent as UpdateIntent,
+        softkeySignature: input.softkeySignature as HexString,
+      };
+    }
+    return { ok: true, status: 200, data: { ok: true } };
+  });
+
+  const deliverResult = await orchestrator.deliverSecret({
+    uuid,
+    profile: SECURITY_PROFILE.STANDARD,
+    plaintext: params.plaintext ?? 'anchored softkey plaintext',
+    softkeyPassphrase: passphrase,
+  });
+  expect(deliverResult.ok).toBe(true);
+  expect(committed).not.toBeNull();
+  if (committed === null) {
+    throw new Error('expected a captured softkey delivery intent');
+  }
+  const capturedCommit = committed as {
+    intent: UpdateIntent;
+    softkeySignature: HexString;
+  };
+
+  const softkeyEnvelope = await softkeyAdminStorage.load(uuid);
+  if (!softkeyEnvelope) {
+    throw new Error('missing softkey admin envelope');
+  }
+
+  return {
+    apiClient,
+    orchestrator,
+    receiverKeyStorage,
+    cipherBundle: capturedCommit.intent.cipherBundle,
+    deliveryAuth: {
+      adminMode: 'password',
+      meta: {
+        version: capturedCommit.intent.version,
+        timestamp: capturedCommit.intent.timestamp,
+        nonce: capturedCommit.intent.nonce,
+        expireAt: capturedCommit.intent.expireAt,
+      },
+      signer: {
+        softkeyPubJwk: softkeyEnvelope.softkeyPubJwk,
+      },
+      proof: {
+        softkeySignature: capturedCommit.softkeySignature,
+      },
+    },
+    receiverPubFpr: lockResult.data.receiverPubFpr,
+    senderAuthFpr,
+  };
 }
 
 async function deliverAndCaptureCipherBundle(
@@ -339,7 +530,13 @@ describe('crypto orchestrator', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
+    const senderAuthFpr = extractSenderAuthFprFromShareUrl(result.data.shareUrlWithFragment);
     expect(result.data.shareUrlWithFragment).toContain('#k=');
+    expect(result.data.shareUrlWithFragment).toContain('&af=');
+    await expect(computeSenderAuthFingerprintFromAttestation(VALID_ATTESTATION)).resolves.toBe(
+      VALID_SENDER_AUTH_FPR
+    );
+    expect(senderAuthFpr).toBe(VALID_SENDER_AUTH_FPR);
     expect(result.data.lockKeyB64u).toMatch(/^[A-Za-z0-9_-]+$/u);
     expect(vi.mocked(apiClient.createBegin)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(apiClient.createFinish)).toHaveBeenCalledTimes(1);
@@ -1022,6 +1219,7 @@ describe('crypto orchestrator', () => {
       uuid: VALID_UUID,
       lockSecretB64u: VALID_LOCK_SECRET,
       passphrase: 'Strong#Pass1234',
+      senderAuthFpr: VALID_SENDER_AUTH_FPR,
     });
 
     expect(result.ok).toBe(true);
@@ -1030,6 +1228,7 @@ describe('crypto orchestrator', () => {
     const savedEnvelope = await storage.load(VALID_UUID);
     expect(savedEnvelope).not.toBeNull();
     expect(savedEnvelope?.receiverPubFpr).toBe(result.data.receiverPubFpr);
+    expect(savedEnvelope?.senderAuthFpr).toBe(VALID_SENDER_AUTH_FPR);
     expect(useLockStore.getState().step).toBe('locked');
     expect(useLockStore.getState().passphrase).toBe('');
     expect(useLockStore.getState().safetyCode).not.toBeNull();
@@ -1150,6 +1349,10 @@ describe('crypto orchestrator', () => {
       requestOptions: {
         publicKey: expect.objectContaining({
           allowCredentials: VALID_ALLOW_CREDENTIALS,
+          challenge: await deriveUpdateProofChallengeB64u({
+            uuid: VALID_UUID_BRANDED,
+            intentHash: result.data.intentHash,
+          }),
         }),
       },
     });
@@ -1563,6 +1766,292 @@ describe('crypto orchestrator', () => {
     expect(decryptResult.data.plaintext).toBe('receiver can decrypt this');
     expect('plaintextBytes' in decryptResult.data).toBe(false);
     expect(useDecryptStore.getState().plaintext).toBe('receiver can decrypt this');
+  });
+
+  it('verifies anchored softkey delivery proofs and persists replay state after decrypt', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: prepared.deliveryAuth,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const decryptResult = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(decryptResult.ok).toBe(true);
+    if (!decryptResult.ok) return;
+    expect(decryptResult.data.plaintext).toBe('anchored softkey plaintext');
+    await expect(prepared.receiverKeyStorage.load(VALID_UUID)).resolves.toMatchObject({
+      senderAuthFpr: prepared.senderAuthFpr,
+      lastAcceptedDelivery: {
+        version: prepared.deliveryAuth.meta.version,
+        ciphertextHash: prepared.cipherBundle.ciphertextHash,
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when anchored decrypt payload is missing deliveryAuth', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when anchored decrypt payload signer fingerprint mismatches', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const alternateKeyPair = await generateSoftkeyPair();
+    const alternateSoftkeyPubJwk = await exportSoftkeyPublicJwk(alternateKeyPair.publicKey);
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: {
+          ...prepared.deliveryAuth,
+          signer: {
+            softkeyPubJwk: alternateSoftkeyPubJwk,
+          },
+        },
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when anchored decrypt payload proof is invalid', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const invalidSoftkeySignature = HexStringSchema.parse(
+      `${prepared.deliveryAuth.proof.softkeySignature[0] === 'f' ? 'e' : 'f'}${prepared.deliveryAuth.proof.softkeySignature.slice(1)}`
+    );
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: {
+          ...prepared.deliveryAuth,
+          proof: {
+            softkeySignature: invalidSoftkeySignature,
+          },
+        },
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when anchored decrypt payload version rolls back', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const savedEnvelope = (await prepared.receiverKeyStorage.load(
+      VALID_UUID
+    )) as ReceiverKeyEnvelope;
+    await prepared.receiverKeyStorage.save({
+      ...savedEnvelope,
+      lastAcceptedDelivery: {
+        version: prepared.deliveryAuth.meta.version + 1,
+        ciphertextHash: prepared.cipherBundle.ciphertextHash,
+        acceptedAt: Number(NOW) - 1,
+      },
+    });
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: prepared.deliveryAuth,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
+  it('returns INTEGRITY_MISMATCH when anchored decrypt payload reuses a version with a different hash', async () => {
+    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const savedEnvelope = (await prepared.receiverKeyStorage.load(
+      VALID_UUID
+    )) as ReceiverKeyEnvelope;
+    await prepared.receiverKeyStorage.save({
+      ...savedEnvelope,
+      lastAcceptedDelivery: {
+        version: prepared.deliveryAuth.meta.version,
+        ciphertextHash: HexStringSchema.parse(
+          'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+        ),
+        acceptedAt: Number(NOW) - 1,
+      },
+    });
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: prepared.deliveryAuth,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
   });
 
   it('does not apply decrypt store updates when uuid changes mid-flow', async () => {
@@ -2014,6 +2503,85 @@ describe('crypto orchestrator', () => {
     });
   });
 
+  it('returns INTEGRITY_MISMATCH when a legacy decrypt payload rolls back below the stored version', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-legacy-rollback',
+      storeName: 'receiver-keys',
+    });
+    await storage.save({
+      uuid: VALID_UUID,
+      receiverPubFpr: VALID_HEX,
+      wrappedPrivateKey: {
+        encryptedKey: VALID_B64U,
+        iv: VALID_B64U,
+        kdf: {
+          kdfType: 'argon2id',
+          version: 19,
+          m: 65536,
+          t: 3,
+          p: 4,
+          salt: VALID_B64U,
+        },
+      },
+      lastAcceptedDelivery: {
+        version: 1,
+        ciphertextHash: HexStringSchema.parse(
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        ),
+        acceptedAt: Number(NOW) - 1,
+      },
+      updatedAt: Number(NOW),
+    });
+    const { orchestrator, apiClient } = createOrchestrator({
+      receiverKeyStorage: storage,
+    });
+
+    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: {
+          ciphertext: VALID_B64U,
+          iv: VALID_B64U,
+          aad: buildExpectedCipherAad(VALID_UUID, 0, VALID_HEX),
+          encContentKey: VALID_B64U,
+          ciphertextHash: HexStringSchema.parse(
+            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+          ),
+          padBlock: 4096,
+        },
+        receiverPubFpr: VALID_HEX,
+        cipherVersion: 0,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
   it('returns PASSPHRASE_REQUIRED when passphrase is shorter than 8 characters (L-5)', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     const receiverKeyPair = await generateReceiverKeyPair();
@@ -2232,7 +2800,71 @@ describe('crypto orchestrator', () => {
     expect(firstDecryptResult.ok).toBe(true);
     expect(secondDecryptResult.ok).toBe(true);
     expect(removeSpy).not.toHaveBeenCalled();
-    await expect(storage.load(VALID_UUID)).resolves.not.toBeNull();
+    await expect(storage.load(VALID_UUID)).resolves.toMatchObject({
+      lastAcceptedDelivery: {
+        version: 0,
+        ciphertextHash: (committedCipherBundle as DecryptFetchResponse['cipherBundle'])
+          .ciphertextHash,
+      },
+    });
+  });
+
+  it('returns KEY_STORAGE_ERROR when replay-state persistence fails after anchored decrypt', async () => {
+    const backingStorage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-persist-failure',
+      storeName: 'receiver-keys',
+    });
+    const receiverKeyStorage = {
+      load: vi.fn((uuid: string) => backingStorage.load(uuid)),
+      remove: vi.fn((uuid: string) => backingStorage.remove(uuid)),
+      save: vi.fn(async (envelope: ReceiverKeyEnvelope) => {
+        if (envelope.lastAcceptedDelivery) {
+          throw Object.assign(new Error('persist failed'), { code: 'KEY_STORAGE_ERROR' });
+        }
+        return backingStorage.save(envelope);
+      }),
+    };
+    const prepared = await prepareAnchoredSoftkeyDelivery({
+      receiverKeyStorage,
+    });
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.STANDARD,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: prepared.deliveryAuth,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'KEY_STORAGE_ERROR',
+        stage: 'decrypt.persist-state',
+      },
+    });
+    expect(useDecryptStore.getState().plaintext).toBeNull();
   });
 
   it('returns INTEGRITY_MISMATCH when content key length is invalid (L-4)', async () => {

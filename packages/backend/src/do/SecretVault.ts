@@ -13,7 +13,9 @@ import {
   CreateBeginRequestSchema,
   CreateFinishRequestSchema,
   computeIntentHash,
+  type DecryptFetchDeliveryAuth,
   DOMAIN,
+  deriveUpdateProofChallengeB64u,
   type ECDSAPublicKeyJWK,
   type HexString,
   LockBeginRequestSchema,
@@ -24,6 +26,7 @@ import {
   SoftkeyCompoundCommitRequestSchema,
   type SoftkeyCredential,
   type StoredCredential,
+  type StoredUpdateDeliveryProof,
   TIMESTAMP_SKEW_MS,
   type UnixMs,
   type UpdateIntent,
@@ -759,15 +762,25 @@ export class SecretVault {
 
       this.enforceRateLimit('compound_commit', now, tokenHash);
 
-      const expectedChallengeBytes = await sha256Bytes([
-        toUtf8Bytes(DOMAIN.CHALLENGE),
-        toUtf8Bytes(record.uuid),
-        decodeBase64Url(challenge.id),
-        toUtf8Bytes(params.intentHash),
-        decodeBase64Url(challenge.seed),
-      ]);
+      const expectedChallenge =
+        intent.op === 'update'
+          ? await deriveUpdateProofChallengeB64u({
+              uuid: record.uuid,
+              intentHash: params.intentHash,
+            })
+          : encodeBase64Url(
+              await sha256Bytes([
+                toUtf8Bytes(DOMAIN.CHALLENGE),
+                toUtf8Bytes(record.uuid),
+                decodeBase64Url(challenge.id),
+                toUtf8Bytes(params.intentHash),
+                decodeBase64Url(challenge.seed),
+              ])
+            );
+      const expectedChallengeBytes = decodeBase64Url(expectedChallenge);
 
       let verifiedWebAuthnSignCount: number | null = null;
+      let updateDeliveryProof: StoredUpdateDeliveryProof | undefined;
 
       const isPasswordMode = record.adminMode === 'password' || record.adminMode === 'softkey';
 
@@ -805,7 +818,7 @@ export class SecretVault {
         const verifyResult = await verifyAssertion({
           // biome-ignore lint/suspicious/noExplicitAny: narrowing union after password/softkey guard
           assertion: (params as any).assertion,
-          expectedChallenge: encodeBase64Url(expectedChallengeBytes),
+          expectedChallenge,
           storedCredential: record.adminCredential as StoredCredential,
           rpId: this.env.RP_ID,
           rpOrigin: this.env.RP_ORIGIN,
@@ -814,6 +827,10 @@ export class SecretVault {
           throw new StateTransitionError('ASSERTION_INVALID', verifyResult.error);
         }
         verifiedWebAuthnSignCount = verifyResult.newSignCount;
+      }
+
+      if (intent.op === 'update') {
+        updateDeliveryProof = this.buildUpdateDeliveryProof(intent, params);
       }
 
       if (intent.op === 'delete') {
@@ -827,6 +844,7 @@ export class SecretVault {
 
       const nextRecord = new SecretVaultStateMachine(record).commitDelivery({
         cipherBundle: intent.cipherBundle,
+        ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
         deliveredAt: intent.timestamp,
       });
       const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
@@ -1583,6 +1601,69 @@ export class SecretVault {
     }
   }
 
+  private buildUpdateDeliveryProof(
+    intent: UpdateIntent,
+    params: CompoundCommitParams
+  ): StoredUpdateDeliveryProof {
+    const meta = {
+      version: intent.version,
+      timestamp: intent.timestamp,
+      nonce: intent.nonce,
+      expireAt: intent.expireAt,
+    };
+
+    if ('softkeySignature' in params) {
+      return {
+        adminMode: params.adminMode,
+        meta,
+        proof: {
+          softkeySignature: params.softkeySignature,
+        },
+      };
+    }
+
+    return {
+      adminMode: 'webauthn',
+      meta,
+      proof: {
+        clientDataJSON: params.assertion.response.clientDataJSON,
+        authenticatorData: params.assertion.response.authenticatorData,
+        signature: params.assertion.response.signature,
+      },
+    };
+  }
+
+  private buildDecryptFetchDeliveryAuth(
+    record: ChannelRecord
+  ): DecryptFetchDeliveryAuth | undefined {
+    if (!record.updateDeliveryProof) {
+      return undefined;
+    }
+
+    if (record.updateDeliveryProof.adminMode === 'webauthn') {
+      const adminCredential = record.adminCredential as StoredCredential;
+      return {
+        adminMode: 'webauthn',
+        meta: record.updateDeliveryProof.meta,
+        signer: {
+          credentialId: adminCredential.credentialId,
+          publicKey: adminCredential.publicKey,
+        },
+        proof: record.updateDeliveryProof.proof,
+      };
+    }
+
+    const adminCredential = record.adminCredential as SoftkeyCredential;
+    return {
+      adminMode: record.updateDeliveryProof.adminMode,
+      meta: record.updateDeliveryProof.meta,
+      signer: {
+        softkeyPubJwk: adminCredential.softkeyPubJwk,
+      },
+      proof: record.updateDeliveryProof.proof,
+    };
+  }
+
   private async handleCreateBegin(request: Request): Promise<Response> {
     const body = await readJsonBody(request);
     if (body === null) {
@@ -1823,6 +1904,9 @@ export class SecretVault {
           cipherBundle: record.cipherBundle,
           receiverPubFpr: record.receiver.pubFpr,
           cipherVersion: record.version - 1,
+          ...(record.updateDeliveryProof
+            ? { deliveryAuth: this.buildDecryptFetchDeliveryAuth(record) }
+            : {}),
           deliveredAt: record.deliveredAt,
         },
         200
