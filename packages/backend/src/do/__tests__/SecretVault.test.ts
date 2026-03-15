@@ -3,13 +3,10 @@ import type {
   Base64Url,
   ChannelRecord,
   CipherBundle,
-  DeleteIntent,
   HexString,
   LockChallenge,
   StoredCredential,
   UnixMs,
-  UpdateIntent,
-  UUID,
 } from '@zerolink/shared';
 import {
   CHALLENGE_TTL_MS,
@@ -36,9 +33,7 @@ import * as softkeyCrypto from '../../crypto/softkey.ts';
 import {
   CHANNEL_RECORD_KEY,
   COMPOUND_CHALLENGE_KEY,
-  type CommitDeliveryParams,
   type CommitLockChallengeParams,
-  type CommitLockParams,
   CREATION_CHALLENGE_KEY,
   LOCK_CHALLENGE_KEY,
   NONCE_INDEX_KEY_PREFIX,
@@ -47,7 +42,6 @@ import {
   SecretVault,
   type SecretVaultEnv,
   SecretVaultStateMachine,
-  StateTransitionError,
   type StoredCompoundChallenge,
   type StoredLockChallenge,
   type StoredTerminalTombstone,
@@ -77,15 +71,12 @@ import {
   encodeBase64Url,
   env,
   expectStateTransitionError,
-  hexToBytes,
   legacyLockChallengeStorageKey,
   RP_ID,
   RP_ORIGIN,
   readTerminalTombstone,
   setupRealReceiverKey,
-  sha256Hex,
   toRecord,
-  toUtf8Bytes,
 } from './helpers/vault-fixtures.ts';
 
 vi.mock('../../crypto/softkey.ts', () => ({

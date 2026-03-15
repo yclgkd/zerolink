@@ -144,6 +144,7 @@ export function legacyLockChallengeStorageKey(id: Base64Url): string {
 // RSA receiver key — populated by setupRealReceiverKey()
 // ---------------------------------------------------------------------------
 
+// Must be populated by calling setupRealReceiverKey() in beforeAll before use.
 export let realReceiverJwk: RSAPublicKeyJWK;
 export let realReceiverPubFpr: HexString;
 
