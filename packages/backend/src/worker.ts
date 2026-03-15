@@ -7,11 +7,22 @@ import {
   LockCommitRequestSchema,
   SoftkeyCompoundCommitRequestSchema,
 } from '@zerolink/shared';
+import {
+  buildCommitSetCookieHeaders,
+  type CommitCookieKind,
+  computeCallerKey,
+  extractCookieValue,
+  getCommitCookieName,
+  INTERNAL_CALLER_KEY_HEADER,
+  INTERNAL_COMMIT_TOKEN_HEADER,
+  readInternalCommitCookieSignal,
+} from './commitTokens.ts';
 
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
   APP_ENV: string;
+  COMMIT_TOKEN_SECRET: string;
   RP_ID: string;
   RP_ORIGIN: string;
 }
@@ -126,6 +137,7 @@ function toJsonObject(value: unknown): Record<string, unknown> | null {
 
 async function forwardToSecretVault(
   env: Env,
+  sourceRequest: Request,
   uuid: string,
   path:
     | '/lock_begin'
@@ -141,11 +153,33 @@ async function forwardToSecretVault(
   try {
     const durableObjectId = env.SECRET_VAULT.idFromName(uuid);
     const stub = env.SECRET_VAULT.get(durableObjectId);
+    const requestHeaders = new Headers({
+      'Content-Type': 'application/json; charset=utf-8',
+    });
+    const commitCookieKind = resolveCommitCookieKind(path);
+
+    if (shouldAttachCallerKey(path)) {
+      const callerKey = await computeCallerKey(
+        env.COMMIT_TOKEN_SECRET,
+        sourceRequest.headers.get('CF-Connecting-IP'),
+        sourceRequest.headers.get('User-Agent')
+      );
+      requestHeaders.set(INTERNAL_CALLER_KEY_HEADER, callerKey);
+    }
+
+    if (commitCookieKind) {
+      const token = extractCookieValue(
+        sourceRequest.headers.get('Cookie'),
+        getCommitCookieName(commitCookieKind)
+      );
+      if (token) {
+        requestHeaders.set(INTERNAL_COMMIT_TOKEN_HEADER, token);
+      }
+    }
+
     const vaultResponse = await stub.fetch(`https://secret-vault.internal${path}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-      },
+      headers: requestHeaders,
       body: JSON.stringify(payload),
     });
     const bodyText = await vaultResponse.text();
@@ -156,10 +190,64 @@ async function forwardToSecretVault(
       return errorResponse('INTERNAL_ERROR', 500);
     }
 
-    return jsonApiResponse(jsonBody, vaultResponse.status);
+    const responseHeaders = buildApiHeaders();
+    const retryAfter = vaultResponse.headers.get('Retry-After');
+    if (retryAfter) {
+      responseHeaders.set('Retry-After', retryAfter);
+    }
+    const cookieSignal = readInternalCommitCookieSignal(vaultResponse.headers);
+    if (cookieSignal) {
+      const secure = new URL(sourceRequest.url).protocol === 'https:';
+      for (const cookie of buildCommitSetCookieHeaders(cookieSignal, uuid, secure)) {
+        responseHeaders.append('Set-Cookie', cookie);
+      }
+    }
+
+    return jsonApiResponse(jsonBody, vaultResponse.status, responseHeaders);
   } catch {
     return errorResponse('INTERNAL_ERROR', 500);
   }
+}
+
+function shouldAttachCallerKey(
+  path:
+    | '/lock_begin'
+    | '/lock_commit'
+    | '/compound_begin'
+    | '/compound_commit'
+    | '/create_begin'
+    | '/create_finish'
+    | '/get_public_state'
+    | '/get_decrypt_payload'
+): boolean {
+  return (
+    path === '/lock_begin' ||
+    path === '/lock_commit' ||
+    path === '/compound_begin' ||
+    path === '/compound_commit'
+  );
+}
+
+function resolveCommitCookieKind(
+  path:
+    | '/lock_begin'
+    | '/lock_commit'
+    | '/compound_begin'
+    | '/compound_commit'
+    | '/create_begin'
+    | '/create_finish'
+    | '/get_public_state'
+    | '/get_decrypt_payload'
+): CommitCookieKind | null {
+  if (path === '/lock_commit') {
+    return 'lock';
+  }
+
+  if (path === '/compound_commit') {
+    return 'compound';
+  }
+
+  return null;
 }
 
 async function handleLockBegin(
@@ -181,7 +269,7 @@ async function handleLockBegin(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/lock_begin', parsed.data);
+  return forwardToSecretVault(env, request, pathnameUuid, '/lock_begin', parsed.data);
 }
 
 async function handleLockCommit(
@@ -203,7 +291,7 @@ async function handleLockCommit(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/lock_commit', parsed.data);
+  return forwardToSecretVault(env, request, pathnameUuid, '/lock_commit', parsed.data);
 }
 
 async function handleCreateBegin(
@@ -225,7 +313,7 @@ async function handleCreateBegin(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/create_begin', parsed.data);
+  return forwardToSecretVault(env, request, pathnameUuid, '/create_begin', parsed.data);
 }
 
 async function handleCreateFinish(
@@ -247,7 +335,7 @@ async function handleCreateFinish(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/create_finish', parsed.data);
+  return forwardToSecretVault(env, request, pathnameUuid, '/create_finish', parsed.data);
 }
 
 async function handleCompoundBegin(
@@ -269,7 +357,7 @@ async function handleCompoundBegin(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/compound_begin', parsed.data);
+  return forwardToSecretVault(env, request, pathnameUuid, '/compound_begin', parsed.data);
 }
 
 async function handleCompoundCommit(
@@ -302,7 +390,7 @@ async function handleCompoundCommit(
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  return forwardToSecretVault(env, pathnameUuid, '/compound_commit', parsedData);
+  return forwardToSecretVault(env, request, pathnameUuid, '/compound_commit', parsedData);
 }
 
 async function forwardWebSocketUpgrade(
@@ -393,7 +481,7 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     if (request.method !== 'GET') return methodNotAllowed('GET');
     const uuid = publicStatusMatch[1] ?? '';
     if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
-    return forwardToSecretVault(env, uuid, '/get_public_state', {});
+    return forwardToSecretVault(env, request, uuid, '/get_public_state', {});
   }
 
   const decryptFetchMatch = pathname.match(DECRYPT_FETCH_PATH);
@@ -401,7 +489,7 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     if (request.method !== 'GET') return methodNotAllowed('GET');
     const uuid = decryptFetchMatch[1] ?? '';
     if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
-    return forwardToSecretVault(env, uuid, '/get_decrypt_payload', {});
+    return forwardToSecretVault(env, request, uuid, '/get_decrypt_payload', {});
   }
 
   const route = API_ROUTES.find((candidate) => candidate.pattern.test(pathname));

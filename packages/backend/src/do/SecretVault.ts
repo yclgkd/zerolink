@@ -28,6 +28,17 @@ import {
   type UUID,
   WS_CLOSE_CHANNEL_GONE,
 } from '@zerolink/shared';
+import {
+  appendInternalCommitCookieSignal,
+  COMMIT_TOKEN_MODE,
+  type CommitCookieKind,
+  type CommitCookieSignal,
+  createCommitToken,
+  hashCommitToken,
+  INTERNAL_CALLER_KEY_HEADER,
+  INTERNAL_COMMIT_TOKEN_HEADER,
+  verifyCommitToken,
+} from '../commitTokens.ts';
 import { type AttestationVerificationResult, verifyAttestation } from '../crypto/attestation.ts';
 import {
   asUnixMs,
@@ -83,12 +94,12 @@ export {
   CHANNEL_RECORD_KEY,
   COMPOUND_CHALLENGE_KEY,
   CREATION_CHALLENGE_KEY,
-  LOCK_CHALLENGE_KEY_PREFIX,
-  lockChallengeStorageKey,
+  LOCK_CHALLENGE_KEY,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
   nonceIndexStorageKey,
   nonceStorageKey,
+  RateLimitError,
   StateTransitionError,
   TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
@@ -110,19 +121,65 @@ import {
   COMPOUND_CHALLENGE_KEY,
   CREATION_CHALLENGE_KEY,
   LOCK_CHALLENGE_ID_BYTES,
-  LOCK_CHALLENGE_KEY_PREFIX,
-  lockChallengeStorageKey,
+  LOCK_CHALLENGE_KEY,
   NONCE_INDEX_KEY_PREFIX,
   NONCE_KEY_PREFIX,
   nonceIndexStorageKey,
   nonceStorageKey,
+  RateLimitError,
   StateTransitionError,
   TERMINAL_TOMBSTONE_KEY,
 } from './SecretVaultTypes.ts';
 
+type RateLimitedEndpoint = 'lock_begin' | 'lock_commit' | 'compound_begin' | 'compound_commit';
+
+interface RateLimitWindow {
+  count: number;
+  windowStart: number;
+}
+
+interface BeginRequestContext {
+  callerKey: Base64Url | undefined;
+}
+
+interface CommitRequestContext extends BeginRequestContext {
+  commitToken: string | undefined;
+}
+
+type LockChallengeStorageLocation = 'fixed' | 'legacy';
+
+interface ResolvedLockChallenge {
+  challenge: StoredLockChallenge;
+  location: LockChallengeStorageLocation;
+}
+
+class CommitCookieStateTransitionError extends StateTransitionError {
+  readonly commitCookieSignal: CommitCookieSignal;
+
+  constructor(
+    code: StateTransitionError['code'],
+    message: string,
+    commitCookieSignal: CommitCookieSignal
+  ) {
+    super(code, message);
+    this.name = 'CommitCookieStateTransitionError';
+    this.commitCookieSignal = commitCookieSignal;
+  }
+}
+
+const RATE_LIMITS: Record<RateLimitedEndpoint, { maxRequests: number; windowMs: number }> = {
+  lock_begin: { maxRequests: 3, windowMs: 60_000 },
+  lock_commit: { maxRequests: 5, windowMs: 60_000 },
+  compound_begin: { maxRequests: 3, windowMs: 60_000 },
+  compound_commit: { maxRequests: 10, windowMs: 60_000 },
+};
+
+const LEGACY_LOCK_CHALLENGE_KEY_PREFIX = 'lock_challenge:' as const;
+
 export class SecretVault {
   private readonly ctx: DurableObjectState;
   private readonly env: SecretVaultEnv;
+  private readonly rateLimitWindows = new Map<string, RateLimitWindow>();
 
   constructor(ctx: DurableObjectState, env: SecretVaultEnv) {
     this.ctx = ctx;
@@ -137,6 +194,31 @@ export class SecretVault {
         'RP_ORIGIN environment variable is missing or malformed (must start with http)'
       );
     }
+    if (!env.COMMIT_TOKEN_SECRET || typeof env.COMMIT_TOKEN_SECRET !== 'string') {
+      throw new Error('COMMIT_TOKEN_SECRET environment variable is missing or empty');
+    }
+  }
+
+  private enforceRateLimit(
+    endpoint: RateLimitedEndpoint,
+    now: number,
+    subjectKey: string = 'shared'
+  ): void {
+    const { maxRequests, windowMs } = RATE_LIMITS[endpoint];
+    const bucketKey = `${endpoint}:${subjectKey}`;
+    const existing = this.rateLimitWindows.get(bucketKey);
+
+    if (!existing || now - existing.windowStart >= windowMs) {
+      this.rateLimitWindows.set(bucketKey, { count: 1, windowStart: now });
+      return;
+    }
+
+    if (existing.count >= maxRequests) {
+      const retryAfterSeconds = (existing.windowStart + windowMs - now) / 1000;
+      throw new RateLimitError(retryAfterSeconds, `${endpoint} rate limit exceeded`);
+    }
+
+    existing.count += 1;
   }
 
   // ─── Hibernation API WebSocket handlers ───────────────────────────────────
@@ -432,7 +514,8 @@ export class SecretVault {
 
   async beginCompoundChallenge(
     uuid: string,
-    now: number = Date.now()
+    now: number = Date.now(),
+    context: BeginRequestContext = { callerKey: undefined }
   ): Promise<{
     challenge: CompoundChallenge;
     allowCredentials?: Array<{
@@ -444,6 +527,29 @@ export class SecretVault {
     currentVersion: number;
     securityProfile: ChannelRecord['securityProfile'];
     adminMode: ChannelRecord['adminMode'];
+  }> {
+    const { response } = await this.beginCompoundChallengeInternal(uuid, now, context);
+    return response;
+  }
+
+  private async beginCompoundChallengeInternal(
+    uuid: string,
+    now: number = Date.now(),
+    context: BeginRequestContext = { callerKey: undefined }
+  ): Promise<{
+    response: {
+      challenge: CompoundChallenge;
+      allowCredentials?: Array<{
+        id: Base64Url;
+        type: 'public-key';
+      }>;
+      receiverPubFpr?: HexString;
+      receiverPubJwk?: RSAPublicKeyJWK;
+      currentVersion: number;
+      securityProfile: ChannelRecord['securityProfile'];
+      adminMode: ChannelRecord['adminMode'];
+    };
+    commitCookieSignal?: CommitCookieSignal;
   }> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadActiveRecord(now);
@@ -460,13 +566,24 @@ export class SecretVault {
       let challenge = activeChallenge;
 
       if (!challenge) {
+        this.enforceRateLimit('compound_begin', now);
+
         const cryptoApi = getCryptoApi();
         const id = encodeBase64Url(
           cryptoApi.getRandomValues(new Uint8Array(COMPOUND_CHALLENGE_ID_BYTES))
         );
         const seed = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES)));
+        const issuedAt = asUnixMs(now);
         const expiresAt = asUnixMs(now + CHALLENGE_TTL_MS);
-        challenge = { id, seed, expiresAt };
+        challenge = context.callerKey
+          ? {
+              id,
+              seed,
+              issuedAt,
+              expiresAt,
+              commitTokenMode: COMMIT_TOKEN_MODE,
+            }
+          : { id, seed, expiresAt };
 
         await this.ctx.storage.put(COMPOUND_CHALLENGE_KEY, challenge);
       }
@@ -508,11 +625,33 @@ export class SecretVault {
         response.receiverPubJwk = record.receiver.pubJwk;
       }
 
-      return response;
+      const commitCookieSignal = await this.buildCommitCookieSignal(
+        'compound',
+        record.uuid,
+        challenge,
+        context.callerKey
+      );
+
+      return {
+        response,
+        ...(commitCookieSignal ? { commitCookieSignal } : {}),
+      };
     });
   }
 
-  async commitCompound(params: CompoundCommitParams, now: number = Date.now()): Promise<void> {
+  async commitCompound(
+    params: CompoundCommitParams,
+    now: number = Date.now(),
+    context: CommitRequestContext = { callerKey: undefined, commitToken: undefined }
+  ): Promise<void> {
+    await this.commitCompoundInternal(params, now, context);
+  }
+
+  private async commitCompoundInternal(
+    params: CompoundCommitParams,
+    now: number = Date.now(),
+    context: CommitRequestContext = { callerKey: undefined, commitToken: undefined }
+  ): Promise<{ commitCookieSignal?: CommitCookieSignal }> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadActiveRecord(now);
       assertUuidMatch(record.uuid, params.uuid);
@@ -567,15 +706,45 @@ export class SecretVault {
 
       const challenge = await this.ctx.storage.get<StoredCompoundChallenge>(COMPOUND_CHALLENGE_KEY);
       if (!challenge) {
-        throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge not found');
+        throw this.withCommitCookieSignalError(
+          'compound',
+          'CHALLENGE_INVALID',
+          'compound challenge not found',
+          context.commitToken ? { action: 'clear', kind: 'compound' } : undefined
+        );
       }
       if (challenge.consumedAt !== undefined) {
-        throw new StateTransitionError('CHALLENGE_CONSUMED', 'compound challenge already consumed');
+        throw this.withCommitCookieSignalError(
+          'compound',
+          'CHALLENGE_CONSUMED',
+          'compound challenge already consumed',
+          this.shouldClearCommitCookie(challenge, context.commitToken)
+            ? { action: 'clear', kind: 'compound' }
+            : undefined
+        );
       }
       if (challenge.expiresAt <= now) {
         await this.ctx.storage.delete(COMPOUND_CHALLENGE_KEY);
-        throw new StateTransitionError('CHALLENGE_INVALID', 'compound challenge expired');
+        throw this.withCommitCookieSignalError(
+          'compound',
+          'CHALLENGE_INVALID',
+          'compound challenge expired',
+          this.shouldClearCommitCookie(challenge, context.commitToken)
+            ? { action: 'clear', kind: 'compound' }
+            : undefined
+        );
       }
+
+      const tokenHash = await this.validateCommitToken({
+        kind: 'compound',
+        uuid: record.uuid,
+        challenge,
+        now,
+        callerKey: context.callerKey,
+        commitToken: context.commitToken,
+      });
+
+      this.enforceRateLimit('compound_commit', now, tokenHash);
 
       const expectedChallengeBytes = await sha256Bytes([
         toUtf8Bytes(DOMAIN.CHALLENGE),
@@ -681,30 +850,94 @@ export class SecretVault {
       // Broadcast DELIVERED state to connected clients (e.g., receiver's SharePage)
       broadcastToWebSockets(this.ctx, buildStateChangedMessage(updatedRecord));
     });
+
+    return context.commitToken !== undefined
+      ? { commitCookieSignal: { action: 'clear', kind: 'compound' } as const }
+      : {};
   }
 
   async beginLockChallenge(
     uuid: string,
-    now: number = Date.now()
+    now: number = Date.now(),
+    context: BeginRequestContext = { callerKey: undefined }
   ): Promise<import('@zerolink/shared').LockChallenge> {
+    const { lockChallenge } = await this.beginLockChallengeInternal(uuid, now, context);
+    return lockChallenge;
+  }
+
+  private async beginLockChallengeInternal(
+    uuid: string,
+    now: number = Date.now(),
+    context: BeginRequestContext = { callerKey: undefined }
+  ): Promise<{
+    lockChallenge: import('@zerolink/shared').LockChallenge;
+    commitCookieSignal?: CommitCookieSignal;
+  }> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
+
+      const existingChallenge = await this.loadLockChallenge();
+      const activeChallenge =
+        existingChallenge &&
+        existingChallenge.consumedAt === undefined &&
+        existingChallenge.expiresAt > now
+          ? existingChallenge
+          : null;
+
+      if (activeChallenge) {
+        const commitCookieSignal = await this.buildCommitCookieSignal(
+          'lock',
+          record.uuid,
+          activeChallenge,
+          context.callerKey
+        );
+
+        return {
+          lockChallenge: {
+            id: activeChallenge.id,
+            challenge: activeChallenge.challenge,
+            expiresAt: activeChallenge.expiresAt,
+          },
+          ...(commitCookieSignal ? { commitCookieSignal } : {}),
+        };
+      }
+
+      this.enforceRateLimit('lock_begin', now);
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
         cryptoApi.getRandomValues(new Uint8Array(LOCK_CHALLENGE_ID_BYTES))
       );
       const challenge = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES)));
+      const issuedAt = asUnixMs(now);
       const expiresAt = asUnixMs(now + CHALLENGE_TTL_MS);
-      const stored: StoredLockChallenge = { id, challenge, expiresAt };
+      const stored: StoredLockChallenge = context.callerKey
+        ? {
+            id,
+            challenge,
+            issuedAt,
+            expiresAt,
+            commitTokenMode: COMMIT_TOKEN_MODE,
+          }
+        : { id, challenge, expiresAt };
 
       await this.saveLockChallenge(stored);
+      const commitCookieSignal = await this.buildCommitCookieSignal(
+        'lock',
+        record.uuid,
+        stored,
+        context.callerKey
+      );
+
       return {
-        id: stored.id,
-        challenge: stored.challenge,
-        expiresAt: stored.expiresAt,
+        lockChallenge: {
+          id: stored.id,
+          challenge: stored.challenge,
+          expiresAt: stored.expiresAt,
+        },
+        ...(commitCookieSignal ? { commitCookieSignal } : {}),
       };
     });
   }
@@ -718,24 +951,83 @@ export class SecretVault {
       receiverPubFpr,
       lockedAt,
     }: CommitLockChallengeParams,
-    now: number = Date.now()
+    now: number = Date.now(),
+    context: CommitRequestContext = { callerKey: undefined, commitToken: undefined }
   ): Promise<void> {
+    await this.commitLockChallengeInternal(
+      {
+        uuid,
+        lockChallengeId,
+        lockProof,
+        receiverPubJwk,
+        receiverPubFpr,
+        lockedAt,
+      },
+      now,
+      context
+    );
+  }
+
+  private async commitLockChallengeInternal(
+    {
+      uuid,
+      lockChallengeId,
+      lockProof,
+      receiverPubJwk,
+      receiverPubFpr,
+      lockedAt,
+    }: CommitLockChallengeParams,
+    now: number = Date.now(),
+    context: CommitRequestContext = { callerKey: undefined, commitToken: undefined }
+  ): Promise<{ commitCookieSignal?: CommitCookieSignal }> {
     await this.ctx.blockConcurrencyWhile(async () => {
       const record = await this.loadActiveRecord(now);
       assertWaitingState(record);
       assertUuidMatch(record.uuid, uuid);
 
-      const challenge = await this.loadLockChallenge(lockChallengeId);
-      if (!challenge) {
-        throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge not found');
+      const resolvedChallenge = await this.resolveLockChallenge(lockChallengeId);
+      if (!resolvedChallenge) {
+        throw this.withCommitCookieSignalError(
+          'lock',
+          'CHALLENGE_INVALID',
+          'lock challenge not found',
+          context.commitToken ? { action: 'clear', kind: 'lock' } : undefined
+        );
+      }
+
+      const { challenge, location } = resolvedChallenge;
+      if (challenge.expiresAt <= now) {
+        await this.deleteResolvedLockChallenge(resolvedChallenge);
+        throw this.withCommitCookieSignalError(
+          'lock',
+          'CHALLENGE_INVALID',
+          'lock challenge expired',
+          this.shouldClearCommitCookie(challenge, context.commitToken)
+            ? { action: 'clear', kind: 'lock' }
+            : undefined
+        );
       }
       if (challenge.consumedAt !== undefined) {
-        throw new StateTransitionError('CHALLENGE_CONSUMED', 'lock challenge already consumed');
+        throw this.withCommitCookieSignalError(
+          'lock',
+          'CHALLENGE_CONSUMED',
+          'lock challenge already consumed',
+          this.shouldClearCommitCookie(challenge, context.commitToken)
+            ? { action: 'clear', kind: 'lock' }
+            : undefined
+        );
       }
-      if (challenge.expiresAt <= now) {
-        await this.deleteLockChallenge(lockChallengeId);
-        throw new StateTransitionError('CHALLENGE_INVALID', 'lock challenge expired');
-      }
+
+      const tokenHash = await this.validateCommitToken({
+        kind: 'lock',
+        uuid: record.uuid,
+        challenge,
+        now,
+        callerKey: context.callerKey,
+        commitToken: context.commitToken,
+      });
+
+      this.enforceRateLimit('lock_commit', now, tokenHash);
 
       const expectedProof = await sha256Hex([
         toUtf8Bytes(DOMAIN.LOCK_PROOF),
@@ -773,9 +1065,12 @@ export class SecretVault {
         );
       }
 
-      await this.saveLockChallenge({
-        ...challenge,
-        consumedAt: asUnixMs(now),
+      await this.saveResolvedLockChallenge({
+        location,
+        challenge: {
+          ...challenge,
+          consumedAt: asUnixMs(now),
+        },
       });
       const nextRecord = new SecretVaultStateMachine(record).commitLock({
         receiverPubJwk,
@@ -788,6 +1083,10 @@ export class SecretVault {
       // Broadcast LOCKED state to connected clients (e.g., sender's ManagePage)
       broadcastToWebSockets(this.ctx, buildStateChangedMessage(nextRecord));
     });
+
+    return context.commitToken !== undefined
+      ? { commitCookieSignal: { action: 'clear', kind: 'lock' } as const }
+      : {};
   }
 
   private async applyTransition(
@@ -919,8 +1218,8 @@ export class SecretVault {
   }
 
   private async listPurgeKeys(): Promise<string[]> {
-    const [lockChallengeKeys, nonceKeys, nonceIndexKeys] = await Promise.all([
-      this.listKeysWithPrefix(LOCK_CHALLENGE_KEY_PREFIX),
+    const [legacyLockChallengeKeys, nonceKeys, nonceIndexKeys] = await Promise.all([
+      this.listKeysWithPrefix(LEGACY_LOCK_CHALLENGE_KEY_PREFIX),
       this.listKeysWithPrefix(NONCE_KEY_PREFIX),
       this.listKeysWithPrefix(NONCE_INDEX_KEY_PREFIX),
     ]);
@@ -928,8 +1227,9 @@ export class SecretVault {
     return [
       CHANNEL_RECORD_KEY,
       CREATION_CHALLENGE_KEY,
+      LOCK_CHALLENGE_KEY,
       COMPOUND_CHALLENGE_KEY,
-      ...lockChallengeKeys,
+      ...legacyLockChallengeKeys,
       ...nonceKeys,
       ...nonceIndexKeys,
     ];
@@ -1027,16 +1327,213 @@ export class SecretVault {
     return Math.min(left, right);
   }
 
-  private async loadLockChallenge(id: Base64Url): Promise<StoredLockChallenge | undefined> {
-    return this.ctx.storage.get<StoredLockChallenge>(lockChallengeStorageKey(id));
+  private async loadLockChallenge(): Promise<StoredLockChallenge | undefined> {
+    return this.ctx.storage.get<StoredLockChallenge>(LOCK_CHALLENGE_KEY);
   }
 
   private async saveLockChallenge(challenge: StoredLockChallenge): Promise<void> {
-    await this.ctx.storage.put(lockChallengeStorageKey(challenge.id), challenge);
+    await this.ctx.storage.put(LOCK_CHALLENGE_KEY, challenge);
   }
 
-  private async deleteLockChallenge(id: Base64Url): Promise<void> {
-    await this.ctx.storage.delete(lockChallengeStorageKey(id));
+  private async deleteLockChallenge(): Promise<void> {
+    await this.ctx.storage.delete(LOCK_CHALLENGE_KEY);
+  }
+
+  private getLegacyLockChallengeStorageKey(id: Base64Url): string {
+    return `${LEGACY_LOCK_CHALLENGE_KEY_PREFIX}${id}`;
+  }
+
+  private async resolveLockChallenge(id: Base64Url): Promise<ResolvedLockChallenge | undefined> {
+    const fixedChallenge = await this.loadLockChallenge();
+    if (fixedChallenge && fixedChallenge.id === id) {
+      return {
+        challenge: fixedChallenge,
+        location: 'fixed',
+      };
+    }
+
+    const legacyChallenge = await this.ctx.storage.get<StoredLockChallenge>(
+      this.getLegacyLockChallengeStorageKey(id)
+    );
+    if (!legacyChallenge) {
+      return undefined;
+    }
+
+    return {
+      challenge: legacyChallenge,
+      location: 'legacy',
+    };
+  }
+
+  private async saveResolvedLockChallenge({
+    challenge,
+    location,
+  }: ResolvedLockChallenge): Promise<void> {
+    if (location === 'fixed') {
+      await this.saveLockChallenge(challenge);
+      return;
+    }
+
+    await this.ctx.storage.put(this.getLegacyLockChallengeStorageKey(challenge.id), challenge);
+  }
+
+  private async deleteResolvedLockChallenge({
+    challenge,
+    location,
+  }: ResolvedLockChallenge): Promise<void> {
+    if (location === 'fixed') {
+      await this.deleteLockChallenge();
+      return;
+    }
+
+    await this.ctx.storage.delete(this.getLegacyLockChallengeStorageKey(challenge.id));
+  }
+
+  private getCallerKeyFromRequest(request: Request): Base64Url | undefined {
+    const callerKey = request.headers.get(INTERNAL_CALLER_KEY_HEADER)?.trim();
+    return callerKey ? (callerKey as Base64Url) : undefined;
+  }
+
+  private getCommitTokenFromRequest(request: Request): string | undefined {
+    const commitToken = request.headers.get(INTERNAL_COMMIT_TOKEN_HEADER)?.trim();
+    return commitToken || undefined;
+  }
+
+  private withCommitCookieSignal(response: Response, signal?: CommitCookieSignal): Response {
+    if (!signal) {
+      return response;
+    }
+
+    const headers = new Headers(response.headers);
+    appendInternalCommitCookieSignal(headers, signal);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+
+  private withCommitCookieSignalFromError(error: unknown, response: Response): Response {
+    if (!(error instanceof CommitCookieStateTransitionError)) {
+      return response;
+    }
+
+    return this.withCommitCookieSignal(response, error.commitCookieSignal);
+  }
+
+  private withCommitCookieSignalError(
+    _kind: CommitCookieKind,
+    code: StateTransitionError['code'],
+    message: string,
+    signal?: CommitCookieSignal
+  ): StateTransitionError {
+    if (!signal) {
+      return new StateTransitionError(code, message);
+    }
+
+    return new CommitCookieStateTransitionError(code, message, signal);
+  }
+
+  private shouldClearCommitCookie(
+    challenge: Pick<StoredLockChallenge | StoredCompoundChallenge, 'commitTokenMode'>,
+    commitToken?: string
+  ): boolean {
+    return challenge.commitTokenMode === COMMIT_TOKEN_MODE && commitToken !== undefined;
+  }
+
+  private async buildCommitCookieSignal(
+    kind: CommitCookieKind,
+    uuid: string,
+    challenge: Pick<
+      StoredLockChallenge | StoredCompoundChallenge,
+      'id' | 'issuedAt' | 'expiresAt' | 'commitTokenMode'
+    >,
+    callerKey?: Base64Url
+  ): Promise<CommitCookieSignal | undefined> {
+    if (
+      challenge.commitTokenMode !== COMMIT_TOKEN_MODE ||
+      challenge.issuedAt === undefined ||
+      !callerKey
+    ) {
+      return undefined;
+    }
+
+    const token = await createCommitToken(this.env.COMMIT_TOKEN_SECRET, {
+      kind,
+      uuid,
+      challengeId: challenge.id,
+      callerKey,
+      iat: challenge.issuedAt,
+      exp: challenge.expiresAt,
+    });
+    return {
+      action: 'set',
+      kind,
+      token,
+      exp: challenge.expiresAt,
+    };
+  }
+
+  private async validateCommitToken({
+    kind,
+    uuid,
+    challenge,
+    now,
+    callerKey,
+    commitToken,
+  }: {
+    kind: CommitCookieKind;
+    uuid: string;
+    challenge: Pick<
+      StoredLockChallenge | StoredCompoundChallenge,
+      'id' | 'issuedAt' | 'expiresAt' | 'commitTokenMode'
+    >;
+    now: number;
+    callerKey: Base64Url | undefined;
+    commitToken: string | undefined;
+  }): Promise<string> {
+    if (challenge.commitTokenMode !== COMMIT_TOKEN_MODE) {
+      return 'shared';
+    }
+
+    if (!callerKey) {
+      throw new StateTransitionError('CHALLENGE_INVALID', 'caller key missing');
+    }
+
+    if (!commitToken) {
+      throw new StateTransitionError('CHALLENGE_INVALID', 'commit token missing');
+    }
+
+    const payload = await verifyCommitToken(this.env.COMMIT_TOKEN_SECRET, commitToken);
+    if (!payload) {
+      throw new CommitCookieStateTransitionError('CHALLENGE_INVALID', 'commit token invalid', {
+        action: 'clear',
+        kind,
+      });
+    }
+
+    if (
+      challenge.issuedAt === undefined ||
+      payload.kind !== kind ||
+      payload.uuid !== uuid ||
+      payload.challengeId !== challenge.id ||
+      payload.callerKey !== callerKey ||
+      payload.iat !== challenge.issuedAt ||
+      payload.iat > payload.exp ||
+      payload.exp > challenge.expiresAt ||
+      payload.exp <= now
+    ) {
+      throw new CommitCookieStateTransitionError(
+        'CHALLENGE_INVALID',
+        'commit token does not match active challenge',
+        {
+          action: 'clear',
+          kind,
+        }
+      );
+    }
+
+    return hashCommitToken(commitToken);
   }
 
   private async handleCreateBegin(request: Request): Promise<Response> {
@@ -1110,10 +1607,18 @@ export class SecretVault {
     }
 
     try {
-      const lockChallenge = await this.beginLockChallenge(parsed.data.uuid);
-      return jsonResponse({ ok: true, lockChallenge }, 200);
+      const result = await this.beginLockChallengeInternal(parsed.data.uuid, Date.now(), {
+        callerKey: this.getCallerKeyFromRequest(request),
+      });
+      return this.withCommitCookieSignal(
+        jsonResponse({ ok: true, lockChallenge: result.lockChallenge }, 200),
+        result.commitCookieSignal
+      );
     } catch (error) {
-      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'lock_begin' });
+      return this.withCommitCookieSignalFromError(
+        error,
+        mapError(error, { appEnv: this.env.APP_ENV, handler: 'lock_begin' })
+      );
     }
   }
 
@@ -1129,10 +1634,18 @@ export class SecretVault {
     }
 
     try {
-      const result = await this.beginCompoundChallenge(parsed.data.uuid);
-      return jsonResponse({ ok: true, ...result }, 200);
+      const result = await this.beginCompoundChallengeInternal(parsed.data.uuid, Date.now(), {
+        callerKey: this.getCallerKeyFromRequest(request),
+      });
+      return this.withCommitCookieSignal(
+        jsonResponse({ ok: true, ...result.response }, 200),
+        result.commitCookieSignal
+      );
     } catch (error) {
-      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'compound_begin' });
+      return this.withCommitCookieSignalFromError(
+        error,
+        mapError(error, { appEnv: this.env.APP_ENV, handler: 'compound_begin' })
+      );
     }
   }
 
@@ -1149,26 +1662,47 @@ export class SecretVault {
     }
 
     try {
+      let result: { commitCookieSignal?: CommitCookieSignal } | undefined;
       if (parsedSoftkey.success) {
-        await this.commitCompound({
-          adminMode: parsedSoftkey.data.adminMode,
-          uuid: parsedSoftkey.data.uuid,
-          softkeySignature: parsedSoftkey.data.softkeySignature,
-          intentHash: parsedSoftkey.data.intentHash,
-          intent: parsedSoftkey.data.intent,
-        });
+        result = await this.commitCompoundInternal(
+          {
+            adminMode: parsedSoftkey.data.adminMode,
+            uuid: parsedSoftkey.data.uuid,
+            softkeySignature: parsedSoftkey.data.softkeySignature,
+            intentHash: parsedSoftkey.data.intentHash,
+            intent: parsedSoftkey.data.intent,
+          },
+          Date.now(),
+          {
+            callerKey: this.getCallerKeyFromRequest(request),
+            commitToken: this.getCommitTokenFromRequest(request),
+          }
+        );
       } else if (parsedWebAuthn.success) {
-        await this.commitCompound({
-          uuid: parsedWebAuthn.data.uuid,
-          assertion: normalizeAssertion(parsedWebAuthn.data.assertion),
-          intentHash: parsedWebAuthn.data.intentHash,
-          intent: parsedWebAuthn.data.intent,
-        });
+        result = await this.commitCompoundInternal(
+          {
+            uuid: parsedWebAuthn.data.uuid,
+            assertion: normalizeAssertion(parsedWebAuthn.data.assertion),
+            intentHash: parsedWebAuthn.data.intentHash,
+            intent: parsedWebAuthn.data.intent,
+          },
+          Date.now(),
+          {
+            callerKey: this.getCallerKeyFromRequest(request),
+            commitToken: this.getCommitTokenFromRequest(request),
+          }
+        );
       }
 
-      return jsonResponse({ ok: true }, 200);
+      return this.withCommitCookieSignal(
+        jsonResponse({ ok: true }, 200),
+        result?.commitCookieSignal
+      );
     } catch (error) {
-      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'compound_commit' });
+      return this.withCommitCookieSignalFromError(
+        error,
+        mapError(error, { appEnv: this.env.APP_ENV, handler: 'compound_commit' })
+      );
     }
   }
 
@@ -1185,10 +1719,23 @@ export class SecretVault {
 
     try {
       // LockCommitRequest is structurally compatible with CommitLockChallengeParams
-      await this.commitLockChallenge(parsed.data as unknown as CommitLockChallengeParams);
-      return jsonResponse({ ok: true }, 200);
+      const result = await this.commitLockChallengeInternal(
+        parsed.data as unknown as CommitLockChallengeParams,
+        Date.now(),
+        {
+          callerKey: this.getCallerKeyFromRequest(request),
+          commitToken: this.getCommitTokenFromRequest(request),
+        }
+      );
+      return this.withCommitCookieSignal(
+        jsonResponse({ ok: true }, 200),
+        result.commitCookieSignal
+      );
     } catch (error) {
-      return mapError(error, { appEnv: this.env.APP_ENV, handler: 'lock_commit' });
+      return this.withCommitCookieSignalFromError(
+        error,
+        mapError(error, { appEnv: this.env.APP_ENV, handler: 'lock_commit' })
+      );
     }
   }
 

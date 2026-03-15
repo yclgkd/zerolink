@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { mapError } from '../SecretVaultHttp.ts';
-import { StateTransitionError } from '../SecretVaultTypes.ts';
+import { RateLimitError, StateTransitionError } from '../SecretVaultTypes.ts';
 
 type StructuredUnexpectedErrorLogShape = {
   stack_fingerprint?: string;
@@ -95,6 +95,20 @@ describe('mapError', () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ ok: false, code: 'LOCK_FORBIDDEN' });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('maps rate-limit errors to 429 with Retry-After', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = mapError(new RateLimitError(0.2), {
+      appEnv: 'production',
+      handler: 'lock_begin',
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('1');
+    await expect(response.json()).resolves.toEqual({ ok: false, code: 'RATE_LIMITED' });
     expect(consoleError).not.toHaveBeenCalled();
   });
 });
