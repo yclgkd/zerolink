@@ -23,5 +23,13 @@
 - Add comments only when they explain non-obvious behavior.
 - Do not add tool authorship or AI-generation notes to source code or comments.
 
+## File Size
+
+- **Target:** 200–400 lines per file.
+- **Hard limit:** 800 lines. Files exceeding this must be split before merging.
+- **Test files:** Follow the same limit. Split by describe block / feature domain.
+- **Splitting pattern:** Extract shared test helpers to `__tests__/helpers/` before splitting test files. Note that `vi.mock()` calls cannot be moved to helper files (Vitest hoisting requirement).
+- **Enforcement:** Any PR adding code that pushes a file over 800 lines should be flagged in code review.
+
 ## Project State
 - Update `_project_specs/` whenever AI-authored work changes repo behavior, workflow, or status.
