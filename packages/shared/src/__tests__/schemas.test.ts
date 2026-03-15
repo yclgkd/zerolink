@@ -46,69 +46,16 @@ import {
 } from '../schemas.ts';
 import type { Base64Url, HexString, UnixMs, UUID } from '../types.ts';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Generates a 21-character string of a single repeating character. */
-const uuid21 = (c = 'a') => c.repeat(21);
-
-/** Minimal valid base64url string. */
-const b64 = 'abc123_-ABC';
-
-/** Minimal valid lowercase hex string. */
-const hex = 'deadbeef';
-
-/** Minimal valid RSA-OAEP JWK. */
-const validJwk = {
-  kty: 'RSA' as const,
-  alg: 'RSA-OAEP-256' as const,
-  n: b64,
-  e: b64,
-  ext: true as const,
-  key_ops: ['encrypt'] as const,
-};
-
-/** Minimal valid ECDSA P-256 JWK. */
-const validEcdsaJwk = {
-  kty: 'EC' as const,
-  crv: 'P-256' as const,
-  x: b64,
-  y: b64,
-  ext: true as const,
-  key_ops: ['verify'] as const,
-};
-
-/** Minimal valid CipherBundle. */
-const validCipherBundle = {
-  ciphertext: b64,
-  iv: b64,
-  aad: b64,
-  encContentKey: b64,
-  ciphertextHash: hex,
-  padBlock: 4096,
-};
-
-/** Minimal valid AttestationJSON. */
-const validAttestation = {
-  id: b64,
-  rawId: b64,
-  type: 'public-key' as const,
-  response: {
-    clientDataJSON: b64,
-    attestationObject: b64,
-  },
-};
-
-/** Minimal valid AssertionJSON. */
-const validAssertion = {
-  id: b64,
-  rawId: b64,
-  type: 'public-key' as const,
-  response: {
-    clientDataJSON: b64,
-    authenticatorData: b64,
-    signature: b64,
-  },
-};
+import {
+  b64,
+  hex,
+  uuid21,
+  validAssertion,
+  validAttestation,
+  validCipherBundle,
+  validEcdsaJwk,
+  validJwk,
+} from './helpers/schema-fixtures.ts';
 
 // ─── Primitive Schemas ────────────────────────────────────────────────────────
 
