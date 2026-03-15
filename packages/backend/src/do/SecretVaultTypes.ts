@@ -8,6 +8,7 @@ import type {
   StoredUpdateDeliveryProof,
   UnixMs,
 } from '@zerolink/shared';
+import type { CommitCookieSignal } from '../commitTokens.ts';
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -144,6 +145,20 @@ export class StateTransitionError extends Error {
   }
 }
 
+export class CommitCookieStateTransitionError extends StateTransitionError {
+  readonly commitCookieSignal: CommitCookieSignal;
+
+  constructor(
+    code: StateTransitionError['code'],
+    message: string,
+    commitCookieSignal: CommitCookieSignal
+  ) {
+    super(code, message);
+    this.name = 'CommitCookieStateTransitionError';
+    this.commitCookieSignal = commitCookieSignal;
+  }
+}
+
 export class RateLimitError extends Error {
   readonly code = 'RATE_LIMITED' as const;
   readonly retryAfterSeconds: number;
@@ -174,6 +189,21 @@ export const COMPOUND_CHALLENGE_ID_BYTES = 16;
 // Internal sweep constants
 export const NONCE_INDEX_TIMESTAMP_WIDTH = 16;
 export const NONCE_SWEEP_BATCH_SIZE = 128;
+
+// ---------------------------------------------------------------------------
+// VaultContext — minimal interface extracted functions receive instead of `this`
+// ---------------------------------------------------------------------------
+
+export interface VaultContext {
+  readonly ctx: DurableObjectState;
+  readonly env: SecretVaultEnv;
+  readonly rateLimitWindows: Map<string, RateLimitWindow>;
+}
+
+export interface RateLimitWindow {
+  count: number;
+  windowStart: number;
+}
 
 export function nonceStorageKey(nonce: Base64Url): string {
   return `${NONCE_KEY_PREFIX}${nonce}`;
