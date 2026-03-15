@@ -277,6 +277,56 @@ export const AssertionJSONSchema = z.object({
   }),
 });
 
+export const UpdateDeliveryMetaSchema = z.object({
+  version: z.number().int().nonnegative(),
+  timestamp: UnixMsSchema,
+  nonce: Base64UrlSchema,
+  expireAt: z.union([UnixMsSchema, z.null()]),
+});
+
+export const DetachedWebAuthnDeliveryProofSchema = z.object({
+  clientDataJSON: Base64UrlSchema,
+  authenticatorData: Base64UrlSchema,
+  signature: Base64UrlSchema,
+});
+
+export const DetachedSoftkeyDeliveryProofSchema = z.object({
+  softkeySignature: HexStringSchema,
+});
+
+export const StoredUpdateDeliveryProofSchema = z.discriminatedUnion('adminMode', [
+  z.object({
+    adminMode: z.literal('webauthn'),
+    meta: UpdateDeliveryMetaSchema,
+    proof: DetachedWebAuthnDeliveryProofSchema,
+  }),
+  z.object({
+    adminMode: z.enum(['password', 'softkey']),
+    meta: UpdateDeliveryMetaSchema,
+    proof: DetachedSoftkeyDeliveryProofSchema,
+  }),
+]);
+
+export const DecryptFetchDeliveryAuthSchema = z.discriminatedUnion('adminMode', [
+  z.object({
+    adminMode: z.literal('webauthn'),
+    meta: UpdateDeliveryMetaSchema,
+    signer: z.object({
+      credentialId: Base64UrlSchema,
+      publicKey: Base64UrlSchema,
+    }),
+    proof: DetachedWebAuthnDeliveryProofSchema,
+  }),
+  z.object({
+    adminMode: z.enum(['password', 'softkey']),
+    meta: UpdateDeliveryMetaSchema,
+    signer: z.object({
+      softkeyPubJwk: ECDSAPublicKeyJWKSchema,
+    }),
+    proof: DetachedSoftkeyDeliveryProofSchema,
+  }),
+]);
+
 export const PublicKeyCredentialDescriptorJSONSchema = z.object({
   id: Base64UrlSchema,
   type: z.literal('public-key'),
@@ -446,10 +496,10 @@ export const DecryptFetchResponseSchema = z.object({
   ok: z.literal(true),
   cipherBundle: CipherBundleSchema,
   receiverPubFpr: HexStringSchema,
+  cipherVersion: z.number().int().nonnegative(),
+  deliveryAuth: DecryptFetchDeliveryAuthSchema.optional(),
   deliveredAt: UnixMsSchema,
 });
-
-export type DecryptFetchResponse = z.infer<typeof DecryptFetchResponseSchema>;
 
 export const ErrorResponseSchema = z.object({
   ok: z.literal(false),

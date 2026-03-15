@@ -10,7 +10,10 @@ import {
 } from '@zerolink/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
-import { extractLockSecretFromHash } from '../../crypto/protocol-utils';
+import {
+  extractLockSecretFromHash,
+  extractSenderAuthFprFromHash,
+} from '../../crypto/protocol-utils';
 import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
 import type { ReceiverKeyStorage } from '../../crypto/storage';
 import { useDecryptStore } from '../../stores/decrypt-store';
@@ -95,16 +98,33 @@ export interface ReceiverSafetyCodeState {
 }
 
 const LOCK_SECRET_SESSION_STORAGE_PREFIX = 'zerolink:share-lock-secret:';
+const SENDER_AUTH_SESSION_STORAGE_PREFIX = 'zerolink:share-sender-auth-fpr:';
 
 function getLockSecretSessionStorageKey(uuid: string): string {
   return `${LOCK_SECRET_SESSION_STORAGE_PREFIX}${uuid}`;
 }
 
-function resolveLockSecret(uuid?: string, hash?: string): Base64Url | null {
-  if (!uuid) return null;
+function getSenderAuthSessionStorageKey(uuid: string): string {
+  return `${SENDER_AUTH_SESSION_STORAGE_PREFIX}${uuid}`;
+}
+
+function resolveShareFragment(
+  uuid?: string,
+  hash?: string
+): {
+  lockSecretB64u: Base64Url | null;
+  senderAuthFpr: HexString | null;
+} {
+  if (!uuid) {
+    return { lockSecretB64u: null, senderAuthFpr: null };
+  }
+
   const hashLockSecret = extractLockSecretFromHash(hash ?? '');
-  if (hashLockSecret) return hashLockSecret;
-  return readStoredLockSecret(uuid);
+  const hashSenderAuthFpr = extractSenderAuthFprFromHash(hash ?? '');
+  return {
+    lockSecretB64u: hashLockSecret ?? readStoredLockSecret(uuid),
+    senderAuthFpr: hashSenderAuthFpr ?? readStoredSenderAuthFpr(uuid),
+  };
 }
 
 function readStoredLockSecret(uuid: string): Base64Url | null {
@@ -117,13 +137,32 @@ function readStoredLockSecret(uuid: string): Base64Url | null {
   }
 }
 
-function persistLockSecret(uuid: string, lockSecretB64u: Base64Url): boolean {
+function readStoredSenderAuthFpr(uuid: string): HexString | null {
+  try {
+    const value = window.sessionStorage.getItem(getSenderAuthSessionStorageKey(uuid));
+    if (!value) return null;
+    return extractSenderAuthFprFromHash(`#af=${value}`);
+  } catch {
+    return null;
+  }
+}
+
+function persistShareFragment(
+  uuid: string,
+  lockSecretB64u: Base64Url,
+  senderAuthFpr: HexString | null
+): boolean {
   try {
     window.sessionStorage.setItem(getLockSecretSessionStorageKey(uuid), lockSecretB64u);
+    if (senderAuthFpr) {
+      window.sessionStorage.setItem(getSenderAuthSessionStorageKey(uuid), senderAuthFpr);
+    } else {
+      window.sessionStorage.removeItem(getSenderAuthSessionStorageKey(uuid));
+    }
     return true;
   } catch (error: unknown) {
     // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging share-link fragment persistence failures
-    console.error('[useSharePageLockLogic] Failed to persist lock secret to sessionStorage', {
+    console.error('[useSharePageLockLogic] Failed to persist share fragment to sessionStorage', {
       uuid,
       error,
     });
@@ -131,12 +170,13 @@ function persistLockSecret(uuid: string, lockSecretB64u: Base64Url): boolean {
   }
 }
 
-function clearStoredLockSecret(uuid: string, source: string): void {
+function clearStoredShareFragment(uuid: string, source: string): void {
   try {
     window.sessionStorage.removeItem(getLockSecretSessionStorageKey(uuid));
+    window.sessionStorage.removeItem(getSenderAuthSessionStorageKey(uuid));
   } catch (error: unknown) {
     // biome-ignore lint/suspicious/noConsole: runtime error logging for debugging share-link fragment cleanup failures
-    console.error('[useSharePageLockLogic] Failed to clear lock secret from sessionStorage', {
+    console.error('[useSharePageLockLogic] Failed to clear share fragment from sessionStorage', {
       uuid,
       source,
       error,
@@ -323,8 +363,8 @@ export function useSharePageLockLogic(
   const [lockError, setLockError] = useState<string | null>(null);
   const [isLockPassphraseInvalid, setIsLockPassphraseInvalid] = useState(false);
   const [isLockSubmitting, setIsLockSubmitting] = useState(false);
-  const [lockSecretB64u, setLockSecretB64u] = useState<Base64Url | null>(() =>
-    resolveLockSecret(uuid, hash)
+  const [{ lockSecretB64u, senderAuthFpr }, setShareFragmentState] = useState(() =>
+    resolveShareFragment(uuid, hash)
   );
   const mountedRef = useRef(true);
 
@@ -341,11 +381,11 @@ export function useSharePageLockLogic(
   const clearLockSecretCache = useCallback(
     (source: string) => {
       if (!uuid) {
-        setLockSecretB64u(null);
+        setShareFragmentState({ lockSecretB64u: null, senderAuthFpr: null });
         return;
       }
-      clearStoredLockSecret(uuid, source);
-      setLockSecretB64u(null);
+      clearStoredShareFragment(uuid, source);
+      setShareFragmentState({ lockSecretB64u: null, senderAuthFpr: null });
     },
     [uuid]
   );
@@ -353,7 +393,7 @@ export function useSharePageLockLogic(
   useEffect(() => {
     if (!uuid) {
       useLockStore.getState().setLockUuid(null);
-      setLockSecretB64u(null);
+      setShareFragmentState({ lockSecretB64u: null, senderAuthFpr: null });
       setLockError(null);
       setIsLockPassphraseInvalid(false);
       return;
@@ -366,21 +406,25 @@ export function useSharePageLockLogic(
 
   useEffect(() => {
     if (!uuid) {
-      setLockSecretB64u(null);
+      setShareFragmentState({ lockSecretB64u: null, senderAuthFpr: null });
       return;
     }
 
     const hashLockSecret = extractLockSecretFromHash(hash ?? '');
+    const hashSenderAuthFpr = extractSenderAuthFprFromHash(hash ?? '');
     if (hashLockSecret) {
-      setLockSecretB64u(hashLockSecret);
-      const persisted = persistLockSecret(uuid, hashLockSecret);
+      setShareFragmentState({
+        lockSecretB64u: hashLockSecret,
+        senderAuthFpr: hashSenderAuthFpr,
+      });
+      const persisted = persistShareFragment(uuid, hashLockSecret, hashSenderAuthFpr);
       if (persisted) {
         window.history.replaceState(window.history.state, '', `${pathname}${search}`);
       }
       return;
     }
 
-    setLockSecretB64u(resolveLockSecret(uuid, hash));
+    setShareFragmentState(resolveShareFragment(uuid, hash));
   }, [uuid, pathname, search, hash]);
 
   useEffect(() => {
@@ -427,6 +471,7 @@ export function useSharePageLockLogic(
         uuid: store.uuid,
         lockSecretB64u,
         passphrase: store.passphrase,
+        ...(senderAuthFpr ? { senderAuthFpr } : {}),
       });
     } catch {
       if (!mountedRef.current) return;

@@ -39,7 +39,11 @@ export class SecretVaultStateMachine {
     };
   }
 
-  commitDelivery({ cipherBundle, deliveredAt }: CommitDeliveryParams): ChannelRecord {
+  commitDelivery({
+    cipherBundle,
+    updateDeliveryProof,
+    deliveredAt,
+  }: CommitDeliveryParams): ChannelRecord {
     if (
       this.record.state === CHANNEL_STATE.DELETED ||
       this.record.state === CHANNEL_STATE.EXPIRED
@@ -64,6 +68,7 @@ export class SecretVaultStateMachine {
       ...this.record,
       state: CHANNEL_STATE.DELIVERED,
       cipherBundle,
+      ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
       deliveredAt,
       version: this.record.version + 1,
     };

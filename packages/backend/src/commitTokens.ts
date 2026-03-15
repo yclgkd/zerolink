@@ -97,27 +97,29 @@ function parseCommitTokenPayload(value: unknown): CommitTokenPayload | null {
     return null;
   }
 
+  const { v, kind, uuid, challengeId, callerKey, iat, exp } = value;
+
   if (
-    value['v'] !== '1' ||
-    (value['kind'] !== 'lock' && value['kind'] !== 'compound') ||
-    typeof value['uuid'] !== 'string' ||
-    value['uuid'].length === 0 ||
-    !isValidBase64Url(value['challengeId']) ||
-    !isValidBase64Url(value['callerKey']) ||
-    !isValidUnixMs(value['iat']) ||
-    !isValidUnixMs(value['exp'])
+    v !== '1' ||
+    (kind !== 'lock' && kind !== 'compound') ||
+    typeof uuid !== 'string' ||
+    uuid.length === 0 ||
+    !isValidBase64Url(challengeId) ||
+    !isValidBase64Url(callerKey) ||
+    !isValidUnixMs(iat) ||
+    !isValidUnixMs(exp)
   ) {
     return null;
   }
 
   return {
     v: '1',
-    kind: value['kind'],
-    uuid: value['uuid'],
-    challengeId: value['challengeId'],
-    callerKey: value['callerKey'],
-    iat: value['iat'],
-    exp: value['exp'],
+    kind,
+    uuid,
+    challengeId,
+    callerKey,
+    iat,
+    exp,
   };
 }
 

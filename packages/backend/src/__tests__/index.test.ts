@@ -343,7 +343,8 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
     expect(response.status).toBe(200);
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.headers['cookie']).toBeUndefined();
+    const { cookie } = calls[0]?.headers ?? {};
+    expect(cookie).toBeUndefined();
     expect(calls[0]?.headers[INTERNAL_CALLER_KEY_HEADER.toLowerCase()]).toBe(
       await computeCallerKey(
         env.COMMIT_TOKEN_SECRET,
@@ -459,7 +460,8 @@ describe('backend worker routing + lock/compound forwarding', () => {
 
     expect(response.status).toBe(200);
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.headers['cookie']).toBeUndefined();
+    const { cookie } = calls[0]?.headers ?? {};
+    expect(cookie).toBeUndefined();
     expect(calls[0]?.headers[INTERNAL_COMMIT_TOKEN_HEADER.toLowerCase()]).toBe('lock-token-123');
     expect(calls[0]?.headers[INTERNAL_CALLER_KEY_HEADER.toLowerCase()]).toBeDefined();
   });
@@ -882,6 +884,7 @@ describe('backend worker routing + lock/compound forwarding', () => {
       { status: 409, code: 'NONCE_REPLAY' },
       { status: 400, code: 'TIMESTAMP_OUT_OF_RANGE' },
       { status: 400, code: 'INTENT_HASH_MISMATCH' },
+      { status: 400, code: 'CIPHER_BUNDLE_INVALID' },
       { status: 403, code: 'ASSERTION_INVALID' },
     ] as const;
 

@@ -1,4 +1,11 @@
-import { type Base64Url, DOMAIN, type HexString, LOCK_SECRET_BYTES } from '@zerolink/shared';
+import {
+  type Base64Url,
+  buildShareUrlWithFragment as buildSharedShareUrlWithFragment,
+  DOMAIN,
+  type HexString,
+  LOCK_SECRET_BYTES,
+  parseShareFragment,
+} from '@zerolink/shared';
 
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
 
@@ -152,24 +159,26 @@ export async function deriveExpectedCompoundChallengeB64u({
 /**
  * Builds share URL with lock secret in hash fragment.
  */
-export function buildShareUrlWithFragment(shareUrl: string, lockSecretB64u: string): string {
-  const hash = `k=${encodeURIComponent(lockSecretB64u)}`;
-  const hashIndex = shareUrl.indexOf('#');
-  const base = hashIndex >= 0 ? shareUrl.slice(0, hashIndex) : shareUrl;
-  return `${base}#${hash}`;
+export function buildShareUrlWithFragment(
+  shareUrl: string,
+  lockSecretB64u: string,
+  senderAuthFpr?: string
+): string {
+  return buildSharedShareUrlWithFragment(shareUrl, lockSecretB64u, senderAuthFpr);
 }
 
 /**
  * Extracts lock secret from a hash string like "#k=...".
  */
 export function extractLockSecretFromHash(hash: string): Base64Url | null {
-  const normalized = hash.startsWith('#') ? hash.slice(1) : hash;
-  const params = new URLSearchParams(normalized);
-  const value = params.get('k');
-  if (!value || !BASE64URL_PATTERN.test(value)) {
-    return null;
-  }
-  return value as Base64Url;
+  return parseShareFragment(hash).lockSecretB64u;
+}
+
+/**
+ * Extracts sender auth fingerprint from a hash string like "#af=...".
+ */
+export function extractSenderAuthFprFromHash(hash: string): HexString | null {
+  return parseShareFragment(hash).senderAuthFpr;
 }
 
 /**

@@ -414,15 +414,18 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 ### 数字签名（管理权）
 - **WebAuthn**：ES256（ECDSA P-256 + SHA-256）
 - **Quick Share / Legacy Softkey**：ECDSA P-256
+- **Update Delivery Proof**：`SHA256("GL-delivery-proof" || uuid || intent_hash)` 作为确定性 challenge；anchored channel 在接收端本地复验 proof
 
 ### 哈希（完整性/指纹）
 - **算法**：SHA-256
 - **用途**：
   - receiver_pub_fpr：SHA256(SPKI(receiver_pub))
+  - sender_auth_fpr：SHA256(SPKI(sender_admin_verify_key))
   - ciphertext_hash：SHA256(ciphertext)
   - lock_key：SHA256("GL-lockkey" || uuid || lock_secret)
   - lock_proof：SHA256("GL-lock" || ...)
   - intent_hash：SHA256(canonical_payload)
+  - delivery_proof_challenge：SHA256("GL-delivery-proof" || uuid || intent_hash)
 
 ---
 
@@ -433,6 +436,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 const DOMAIN_PREFIX = {
   LOCK_KEY: "GL-lockkey",
   LOCK_PROOF: "GL-lock",
+  DELIVERY_PROOF: "GL-delivery-proof",
   CHALLENGE: "GLv2.5",  // v2.5 专用前缀
 };
 
@@ -476,11 +480,15 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 
 ### 客户端
 - [ ] lock_secret 只在 fragment（不发送到服务器）
+- [ ] 新分享链接 fragment 额外携带 `af=sender_auth_fpr`
 - [ ] lock_key 本地计算后回传（create_finish）
 - [ ] lock_proof 包含 challenge（防重放）
 - [ ] 接收方私钥用 Argon2id 包裹
 - [ ] padding 随机安全（crypto.getRandomValues）
 - [ ] AAD 绑定 uuid/version/fpr
+- [ ] anchored channel 本地 pin `sender_auth_fpr`
+- [ ] anchored channel 本地复验 `deliveryAuth` proof
+- [ ] 本地持久化 `lastAcceptedDelivery(version,ciphertextHash)` 防回滚
 - [ ] Safety Code 从 receiver_pub_fpr 确定性生成
 - [ ] WebAuthn challenge 绑定 intent_hash
 - [ ] 敏感数据清零（用后即焚）
@@ -505,6 +513,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 3. **恶意下发 JS**：Web 架构固有问题（缓解：自托管）
 4. **弱密码风险**：无法强制用户使用强密码
 5. **模式差异**：Quick Share 更依赖密码与本地终端安全；Secure Share 更依赖 WebAuthn 生态
+6. **新鲜性边界**：anchored A+B 只能防本设备回滚和未锚定 sender proof 的伪造，仍不能单独证明“服务器没有藏起更新”；那需要未来的 witness / transparency 方案
 
 ### 未来改进
 - 🔮 **E2EE 文件分享**：大文件分片 + 流式加密

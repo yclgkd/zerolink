@@ -13,6 +13,24 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-15] Enforce cipher bundle metadata binding on both commit and decrypt
+
+**Decision**: Make `cipherBundle` metadata binding a protocol invariant enforced by both the backend commit path and the frontend decrypt path.
+**Context**: The sender already constructed AES-GCM AAD as `uuid||version||receiverPubFpr`, but the backend still accepted any schema-valid `cipherBundle` and the frontend decrypt path trusted the returned `aad` bytes instead of rebuilding the expected binding locally. `ciphertextHash` was also only checked by the receiver, despite the shared contract documenting it as server-verifiable integrity metadata.
+**Choice**: Add shared helpers for the canonical AAD bytes/string, validate `SHA-256(ciphertext) === ciphertextHash` plus exact AAD binding inside `compound_commit` for `update` intents, return a new `cipherVersion` field from `get_decrypt_payload`, and require the frontend decrypt flow to reject payloads whose `receiverPubFpr` or AAD does not match the locally expected `{ uuid, cipherVersion, receiverPubFpr }`.
+**Reasoning**: This closes the gap where metadata binding depended on a well-behaved sender implementation, turns the documented protocol rule into an enforced contract, and gives the receiver an independent local check before attempting AES-GCM decryption.
+**Trade-offs**: Strict frontend AAD validation intentionally breaks compatibility with older delivered payloads written before the March 13 AAD-strengthening change; because channel TTL is at most seven days, that incompatibility is bounded to the existing retention window and no migration path is added.
+**Follow-up (2026-03-15)**: The decrypt-side `cipherVersion` check alone was not an independent trust root because `cipherVersion` still came from the backend. The anchored A+B follow-up below supersedes that part of the reasoning for new channels by pinning a sender-auth fingerprint from the share link and persisting local monotonic replay state. Legacy channels without that pin remain A-only.
+
+## [2026-03-15] Anchor anti-rollback checks to sender proof plus local monotonic state
+
+**Decision**: Extend PR161 from plain metadata binding to anchored anti-rollback for new channels, using a pinned sender-auth fingerprint plus locally persisted accepted-delivery state.
+**Context**: After adding `cipherVersion`, the receiver still rebuilt expected AAD from backend-supplied version data. That caught malformed payloads but did not stop an untrusted backend from replaying an older self-consistent `{ cipherBundle, receiverPubFpr, cipherVersion }` tuple.
+**Choice**: Add `af=sha256(spki(sender admin verify key))` to new share-link fragments, persist that fingerprint in the receiver envelope after lock, derive update delivery proof challenges as `sha256("GL-delivery-proof" || uuid || intentHash)`, store only `{ meta, detached proof }` on delivered records, reconstruct signer material at `get_decrypt_payload` time, verify the delivery proof locally on anchored channels, and persist `lastAcceptedDelivery { version, ciphertextHash }` locally to reject rollback or same-version hash swaps.
+**Reasoning**: This gives the receiver two trust anchors the backend cannot fabricate on demand: a sender key fingerprint pinned from the original out-of-band share link and a local monotonic record of what this device has already accepted. Minimal proof storage keeps the backend contract small and avoids duplicating signer keys or full intents inside Durable Object state.
+**Trade-offs**: Legacy channels or pre-change delivered records without `af`/`deliveryAuth` remain A-only: they still get backend-enforced AAD/hash validation plus local replay-state checks, but not sender-anchored proof verification. This improves device-local rollback resistance, not global freshness; preventing a malicious backend from hiding newer valid updates still requires a future C-class witness/log design.
+**Follow-up (2026-03-15)**: Anchored decrypt now fails closed on partial anchor state. If either side of the anchored contract is missing locally or remotely (`senderAuthFpr` without `deliveryAuth`, or `deliveryAuth` without `senderAuthFpr`), the client rejects decrypt with `INTEGRITY_MISMATCH` instead of silently downgrading to legacy A-only.
+
 ## [2026-03-14] Durable Object abuse controls use in-memory per-channel limits plus single active lock challenge
 
 **Decision**: Implement issue #155 with best-effort in-memory rate limiting inside `SecretVault` and reuse a single active lock challenge record per channel instead of storing one lock challenge row per `lock_begin` request.
@@ -493,3 +511,19 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Only show the complete share link once, immediately after channel creation.
 **Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
 **Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
+## [2026-03-15] E2E harness mirrors anchored delivery semantics
+
+**Decision**: Persist the Playwright WebAuthn emulator per tab via `sessionStorage` and normalize mocked delivered payloads to include anchored `deliveryAuth`.
+**Context**: PR161 added sender-auth pinning, deterministic delivery proofs, and stricter decrypt-side integrity checks. The existing E2E harness still regenerated fake WebAuthn credentials on every navigation and returned legacy decrypt payloads, which broke secure create/deliver/decrypt flows without exercising the new protocol guarantees.
+**Options Considered**: Switch all secure E2E coverage to Quick Share, rely on Chromium's virtual authenticator directly, or upgrade the in-page emulator and stateful API mock to follow the anchored protocol.
+**Choice**: Keep secure E2E coverage and upgrade the harness.
+**Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
+**Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.
+## [2026-03-15] Lint cleanup keeps index-signature strictness intact
+
+**Decision**: Resolve biome literal-key findings with local destructuring instead of dot-access on index-signature objects.
+**Context**: Repo lint flagged bracket access like `value['uuid']`, but the backend also enforces `noPropertyAccessFromIndexSignature`, so blindly applying biome's literal-key suggestions would break TypeScript typecheck.
+**Options Considered**: Accept lint noise, disable the rule, or refactor the affected code to destructure once and reuse typed locals.
+**Choice**: Destructure the checked values into locals.
+**Reasoning**: This clears the lint findings, preserves strict index-signature typing, and keeps parsing/test logic behavior unchanged.
+**Trade-offs**: A few helpers and tests now use small local bindings purely to satisfy both static-analysis rules.

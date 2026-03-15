@@ -86,6 +86,8 @@ export interface ChannelRecord {
 
   /** Encrypted secret payload. Set after a successful compound_commit update. */
   cipherBundle?: CipherBundle;
+  /** Detached sender proof for the delivered update intent. */
+  updateDeliveryProof?: StoredUpdateDeliveryProof;
 
   deliveredAt?: UnixMs;
 
@@ -268,7 +270,7 @@ export type AuthenticatorTransport = 'usb' | 'nfc' | 'ble' | 'internal' | 'hybri
  */
 export interface StoredCredential {
   credentialId: Base64Url;
-  /** SPKI-encoded P-256 public key (base64url). */
+  /** COSE CBOR-encoded P-256 public key (base64url). */
   publicKey: Base64Url;
   /** Authenticator signature counter; used to detect cloned authenticators. */
   signCount: number;
@@ -385,6 +387,62 @@ export interface AssertionJSON {
     userHandle?: Base64Url | null;
   };
 }
+
+export interface UpdateDeliveryMeta {
+  version: number;
+  timestamp: UnixMs;
+  nonce: Base64Url;
+  expireAt: UnixMs | null;
+}
+
+export interface DetachedWebAuthnDeliveryProof {
+  clientDataJSON: Base64Url;
+  authenticatorData: Base64Url;
+  signature: Base64Url;
+}
+
+export interface DetachedSoftkeyDeliveryProof {
+  softkeySignature: HexString;
+}
+
+export interface StoredWebAuthnUpdateDeliveryProof {
+  adminMode: 'webauthn';
+  meta: UpdateDeliveryMeta;
+  proof: DetachedWebAuthnDeliveryProof;
+}
+
+export interface StoredSoftkeyUpdateDeliveryProof {
+  adminMode: 'password' | 'softkey';
+  meta: UpdateDeliveryMeta;
+  proof: DetachedSoftkeyDeliveryProof;
+}
+
+export type StoredUpdateDeliveryProof =
+  | StoredWebAuthnUpdateDeliveryProof
+  | StoredSoftkeyUpdateDeliveryProof;
+
+export interface DecryptFetchWebAuthnDeliveryAuth {
+  adminMode: 'webauthn';
+  meta: UpdateDeliveryMeta;
+  signer: {
+    credentialId: Base64Url;
+    publicKey: Base64Url;
+  };
+  proof: DetachedWebAuthnDeliveryProof;
+}
+
+export interface DecryptFetchSoftkeyDeliveryAuth {
+  adminMode: 'password' | 'softkey';
+  meta: UpdateDeliveryMeta;
+  signer: {
+    softkeyPubJwk: ECDSAPublicKeyJWK;
+  };
+  proof: DetachedSoftkeyDeliveryProof;
+}
+
+export type DecryptFetchDeliveryAuth =
+  | DecryptFetchWebAuthnDeliveryAuth
+  | DecryptFetchSoftkeyDeliveryAuth;
 
 /**
  * JSON-serializable credential descriptor used in WebAuthn allowCredentials.
@@ -568,6 +626,15 @@ export interface PublicStatusResponse {
   adminMode: AdminMode;
   securityProfile: SecurityProfile;
   receiverPubFpr?: HexString | undefined;
+}
+
+export interface DecryptFetchResponse {
+  ok: true;
+  cipherBundle: CipherBundle;
+  receiverPubFpr: HexString;
+  cipherVersion: number;
+  deliveryAuth?: DecryptFetchDeliveryAuth | undefined;
+  deliveredAt: UnixMs;
 }
 
 /** Standard error envelope for all 4xx / 5xx API responses. */

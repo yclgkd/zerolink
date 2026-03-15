@@ -5,6 +5,7 @@ import type {
   HexString,
   ManageIntent,
   RSAPublicKeyJWK,
+  StoredUpdateDeliveryProof,
   UnixMs,
 } from '@zerolink/shared';
 
@@ -29,6 +30,7 @@ export interface CommitLockParams {
 
 export interface CommitDeliveryParams {
   cipherBundle: CipherBundle;
+  updateDeliveryProof?: StoredUpdateDeliveryProof;
   deliveredAt: UnixMs;
 }
 
@@ -129,6 +131,7 @@ export type StateTransitionErrorCode =
   | 'TIMESTAMP_OUT_OF_RANGE'
   | 'ASSERTION_INVALID'
   | 'INTENT_HASH_MISMATCH'
+  | 'CIPHER_BUNDLE_INVALID'
   | 'ATTESTATION_UNVERIFIABLE';
 
 export class StateTransitionError extends Error {

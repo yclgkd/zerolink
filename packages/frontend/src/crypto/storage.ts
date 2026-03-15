@@ -1,11 +1,19 @@
 import type { ECDSAPublicKeyJWK, HexString, UUID, WrappedPrivateKey } from '@zerolink/shared';
 
+export interface LastAcceptedDelivery {
+  version: number;
+  ciphertextHash: HexString | string;
+  acceptedAt: number;
+}
+
 /**
  * Encapsulates the encrypted private key and receiver identity for a specific channel.
  */
 export interface ReceiverKeyEnvelope {
   uuid: UUID | string;
   receiverPubFpr: HexString | string;
+  senderAuthFpr?: HexString | string;
+  lastAcceptedDelivery?: LastAcceptedDelivery;
   wrappedPrivateKey: WrappedPrivateKey;
   updatedAt: number;
 }
