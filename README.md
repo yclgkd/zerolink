@@ -58,6 +58,19 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - Cloudflare Workers + Durable Objects（提供免费层，支持 SQLite 后端）+ KV
 - 可选：Docker Compose 自托管
 
+## 浏览器兼容性
+
+| 浏览器 | 最低版本 | 发布时间 |
+|--------|----------|----------|
+| Chrome / Edge | 90+ | 2021 年 4 月 |
+| Firefox | 85+ | 2021 年 1 月 |
+| Safari | 14.1+ | 2021 年 4 月 |
+
+**说明**：
+- WebAuthn（硬件密钥）需要 HTTPS，本地开发使用 `localhost` 即可
+- Ed25519 签名验证：Chrome 113+ / Safari 16.4+ 使用原生 WebCrypto；旧版本自动降级到纯 JS 实现（`@noble/ed25519`）
+- 不提供 polyfill，不支持 Internet Explorer
+
 ## 安全特性
 
 ### v3.0 当前重点
