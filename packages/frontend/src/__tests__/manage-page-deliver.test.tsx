@@ -558,6 +558,26 @@ describe('ManagePage – deliver actions', () => {
     });
   });
 
+  it('keeps safety code visible after successful deliver transitions state from locked to delivered', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'my secret payload' },
+    });
+    await waitForManageActionsEnabled();
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await screen.findByTestId('manage-state-delivered');
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
+  });
+
   it('shows action error on deliver failure and keeps non-delivered state', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');

@@ -104,12 +104,29 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.DELIVERED) {
     return (
-      <section className="space-y-2" data-testid="manage-state-delivered">
-        <h3 className="text-base font-semibold text-foreground">Delivery Completed</h3>
-        <p className="text-xs text-muted-foreground">
-          Ciphertext has been delivered to the receiver flow. Receiver-side decrypt happens locally
-          and does not send confirmation back here.
-        </p>
+      <section className="space-y-4" data-testid="manage-state-delivered">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold text-foreground">Delivery Completed</h3>
+          <p className="text-xs text-muted-foreground">
+            Ciphertext has been delivered to the receiver flow. Receiver-side decrypt happens
+            locally and does not send confirmation back here.
+          </p>
+        </div>
+
+        {safetyCode ? (
+          <SafetyCode display={safetyCode} />
+        ) : (
+          <StateNotice
+            data-testid="manage-safety-unavailable"
+            title="Safety Code unavailable right now."
+            tone="warning"
+          >
+            <p className="mt-1 text-xs text-neon-orange">
+              Receiver fingerprint is missing from the current channel state, so the Safety Code
+              cannot be shown.
+            </p>
+          </StateNotice>
+        )}
       </section>
     );
   }
