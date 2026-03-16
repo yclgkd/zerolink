@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-16] Ed25519 pure-JS fallback via @noble/ed25519
+
+**Decision**: Add `@noble/ed25519` as a lazily-loaded fallback verifier when native WebCrypto Ed25519 is unavailable.
+**Context**: `verifyManifestSignature` in `release/crypto.ts` previously depended solely on `crypto.subtle.importKey('spki', …, { name: 'Ed25519' })`. Firefox < 130 and Safari < 17 do not support this algorithm, causing startup verification to return `crypto_unavailable` and blocking the app entirely on those browsers.
+**Choice**: Probe native Ed25519 support once via `importKey` using the actual SPKI bytes from the first call, memoize the result, and fall back to `@noble/ed25519 verifyAsync` when the probe fails. The raw 32-byte public key is extracted from SPKI using `spkiToRawEd25519` (validates the fixed 12-byte OID header). Malformed-input errors (wrong sig/key length) are normalized to `return false` via pre-validation. Import errors for the noble module propagate so that callers still surface `crypto_unavailable`.
+**Reasoning**: Probe-then-choose is more explicit than per-call try/catch and avoids misclassifying transient errors as compatibility failures. Lazy-loading noble avoids bundle size cost on browsers that support native Ed25519 (Chrome 113+, Firefox 130+, Safari 17+). Both the `signature-only` (tiered) and `full` verification paths share the same `verifyManifestSignature` entry point, so both benefit without additional changes.
+**Trade-offs**: Noble v3 uses `crypto.subtle.digest('SHA-512')` by default; in a genuine non-secure HTTP context where `crypto.subtle` is undefined, both the native and noble paths fail → `crypto_unavailable`. This is acceptable because release verification is only enforced in production (HTTPS). The probe is memoized across calls in the same page load; a browser that transiently fails the probe will use noble for the remainder of the session.
+
 ## [2026-03-15] Enforce cipher bundle metadata binding on both commit and decrypt
 
 **Decision**: Make `cipherBundle` metadata binding a protocol invariant enforced by both the backend commit path and the frontend decrypt path.

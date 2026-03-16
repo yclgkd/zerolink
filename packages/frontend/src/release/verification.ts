@@ -113,7 +113,7 @@ export async function verifyRelease(
     }
   } catch {
     return {
-      detail: 'This browser cannot import the embedded publisher key for Ed25519 verification.',
+      detail: 'Ed25519 signature verification is unavailable in this environment.',
       reason: 'crypto_unavailable',
       status: 'unavailable',
     };

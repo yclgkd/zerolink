@@ -14,6 +14,7 @@
   "dependencies": {
     "@fontsource-variable/sora": "^5.2.8",
     "@github/webauthn-json": "^2.1.1",
+    "@noble/ed25519": "^3.0.0",
     "@noble/hashes": "^2.0.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@zerolink/shared": "workspace:*",
