@@ -170,22 +170,26 @@ function ModeSelectorGrid({
 const HOW_IT_WORKS_STEPS = [
   {
     number: '01',
+    numberClass: 'text-neon-cyan',
     title: 'Create',
     description: 'Choose a mode and create the encrypted channel.',
   },
   {
     number: '02',
+    numberClass: 'text-neon-magenta',
     title: 'Share',
     description: 'Send the share link to your receiver.',
   },
   {
     number: '03',
+    numberClass: 'text-neon-orange',
     title: 'Verify Safety Code',
     description: 'After receiver locks, compare the Safety Code over a separate channel.',
     isKeyStep: true,
   },
   {
     number: '04',
+    numberClass: 'text-neon-green',
     title: 'Deliver',
     description: 'Deliver the encrypted secret to the locked receiver.',
   },
@@ -209,7 +213,7 @@ function HowItWorks() {
                 step.isKeyStep ? 'text-neon-orange' : 'text-foreground'
               )}
             >
-              <span className="mr-1.5 text-xs text-muted-foreground">{step.number}</span>
+              <span className={cn('mr-1.5 text-xs', step.numberClass)}>{step.number}</span>
               {step.title}
             </p>
             <p className="text-xs text-muted-foreground">{step.description}</p>
