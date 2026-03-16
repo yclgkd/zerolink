@@ -1,3 +1,5 @@
+import * as fallbackVerifier from './ed25519-fallback';
+
 function decodeBase64(base64: string): Uint8Array {
   const normalized = atob(base64);
   return Uint8Array.from(normalized, (char) => char.charCodeAt(0));
@@ -47,30 +49,36 @@ export async function sha256Hex(input: Uint8Array): Promise<string> {
 
 // ─── Probe & Memoization ──────────────────────────────────────────────────────
 
-let cachedProbe: Promise<boolean> | null = null;
+type VerifierMode = 'native' | 'fallback';
 
-async function probeNativeEd25519(spkiBytes: Uint8Array): Promise<boolean> {
-  if (typeof crypto === 'undefined' || !crypto.subtle) return false;
+let cachedVerifierMode: Promise<VerifierMode> | null = null;
+
+async function probeVerifierMode(spkiBytes: Uint8Array): Promise<VerifierMode> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) return 'fallback';
   try {
     await crypto.subtle.importKey('spki', toArrayBuffer(spkiBytes), { name: 'Ed25519' }, false, [
       'verify',
     ]);
-    return true;
+    return 'native';
   } catch {
-    return false;
+    return 'fallback';
   }
 }
 
-function getOrProbeNativeSupport(spkiBytes: Uint8Array): Promise<boolean> {
-  if (cachedProbe === null) {
-    cachedProbe = probeNativeEd25519(spkiBytes);
+function getOrProbeVerifierMode(spkiBytes: Uint8Array): Promise<VerifierMode> {
+  if (cachedVerifierMode === null) {
+    cachedVerifierMode = probeVerifierMode(spkiBytes);
   }
-  return cachedProbe;
+  return cachedVerifierMode;
 }
 
-/** Resets the Ed25519 capability probe cache. Call in afterEach for test isolation. */
+function forceFallbackMode(): void {
+  cachedVerifierMode = Promise.resolve('fallback');
+}
+
+/** Resets the Ed25519 verifier-mode cache. Call in afterEach for test isolation. */
 export function resetProbeCache(): void {
-  cachedProbe = null;
+  cachedVerifierMode = null;
 }
 
 // ─── Noble fallback ───────────────────────────────────────────────────────────
@@ -80,15 +88,32 @@ async function verifyWithNoble(
   signatureBytes: Uint8Array,
   rawPublicKeyBytes: Uint8Array
 ): Promise<boolean> {
-  // Pre-validate lengths to normalize malformed-input errors to `false` rather than throwing.
-  // Noble's verifyAsync throws for wrong-length inputs (abytes validation outside its try-catch).
-  // Other throws (e.g. "crypto.subtle must be defined") are allowed to propagate so that
-  // verification.ts can surface them as `crypto_unavailable`.
-  if (signatureBytes.byteLength !== 64 || rawPublicKeyBytes.byteLength !== 32) {
-    return false;
-  }
-  const { verifyAsync } = await import('@noble/ed25519');
-  return verifyAsync(signatureBytes, manifestBytes, rawPublicKeyBytes);
+  return fallbackVerifier.verifyEd25519Signature({
+    manifestBytes,
+    rawPublicKeyBytes,
+    signatureBytes,
+  });
+}
+
+async function verifyWithNative(
+  manifestBytes: Uint8Array,
+  signatureBytes: Uint8Array,
+  spkiBytes: Uint8Array
+): Promise<boolean> {
+  const publicKey = await crypto.subtle.importKey(
+    'spki',
+    toArrayBuffer(spkiBytes),
+    { name: 'Ed25519' },
+    false,
+    ['verify']
+  );
+
+  return crypto.subtle.verify(
+    { name: 'Ed25519' },
+    publicKey,
+    toArrayBuffer(signatureBytes),
+    toArrayBuffer(manifestBytes)
+  );
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -101,32 +126,17 @@ export async function verifyManifestSignature(opts: {
   const { manifestBytes, publicKeyPem, signatureBase64Url } = opts;
   const spkiBytes = pemToSpkiBytes(publicKeyPem);
   const signatureBytes = base64UrlToBytes(signatureBase64Url);
-  const isNative = await getOrProbeNativeSupport(spkiBytes);
+  const rawPublicKey = spkiToRawEd25519(spkiBytes);
+  const verifierMode = await getOrProbeVerifierMode(spkiBytes);
 
-  if (isNative) {
+  if (verifierMode === 'native') {
     try {
-      const publicKey = await crypto.subtle.importKey(
-        'spki',
-        toArrayBuffer(spkiBytes),
-        { name: 'Ed25519' },
-        false,
-        ['verify']
-      );
-      return await crypto.subtle.verify(
-        { name: 'Ed25519' },
-        publicKey,
-        toArrayBuffer(signatureBytes),
-        toArrayBuffer(manifestBytes)
-      );
+      return await verifyWithNative(manifestBytes, signatureBytes, spkiBytes);
     } catch {
-      // Unexpected failure after the probe succeeded. Normalize to false so that
-      // callers see `signature_invalid` rather than an unhandled rejection.
-      return false;
+      forceFallbackMode();
     }
   }
 
-  // Noble fallback: extract raw public key from SPKI and verify using pure JS.
-  const rawPublicKey = spkiToRawEd25519(spkiBytes);
   return verifyWithNoble(manifestBytes, signatureBytes, rawPublicKey);
 }
 

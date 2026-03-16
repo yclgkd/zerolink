@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   pemToSpkiBytes,
   resetProbeCache,
   spkiToRawEd25519,
   verifyManifestSignature,
 } from '../release/crypto';
+import * as fallbackModule from '../release/ed25519-fallback';
 import { verifyRelease } from '../release/verification';
 import { createFetchStub, createSignedManifestFixture } from './release-verification-test-helpers';
 
@@ -83,6 +83,67 @@ describe('verifyManifestSignature – native WebCrypto path', () => {
     // Without memoization: 2 probes + 2 verifies = 4 importKey calls
     // With memoization:    1 probe  + 2 verifies = 3 importKey calls
     expect(importKeySpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('falls back immediately when native verify throws after a successful probe', async () => {
+    const { publicPem, manifestJson, signature } = createSignedManifestFixture();
+    const verifySpy = vi
+      .spyOn(crypto.subtle, 'verify')
+      .mockRejectedValueOnce(new Error('native verify failed'));
+    const fallbackSpy = vi
+      .spyOn(fallbackModule, 'verifyEd25519Signature')
+      .mockResolvedValueOnce(true);
+
+    const result = await verifyManifestSignature({
+      manifestBytes: new TextEncoder().encode(manifestJson),
+      publicKeyPem: publicPem,
+      signatureBase64Url: signature,
+    });
+
+    expect(result).toBe(true);
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+    expect(fallbackSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('pins the session to fallback after a native runtime failure', async () => {
+    const { publicPem, manifestJson, signature } = createSignedManifestFixture();
+    const importKeySpy = vi.spyOn(crypto.subtle, 'importKey');
+    const verifySpy = vi
+      .spyOn(crypto.subtle, 'verify')
+      .mockRejectedValueOnce(new Error('native verify failed'));
+    const fallbackSpy = vi.spyOn(fallbackModule, 'verifyEd25519Signature').mockResolvedValue(true);
+
+    const manifestBytes = new TextEncoder().encode(manifestJson);
+    await verifyManifestSignature({
+      manifestBytes,
+      publicKeyPem: publicPem,
+      signatureBase64Url: signature,
+    });
+    await verifyManifestSignature({
+      manifestBytes,
+      publicKeyPem: publicPem,
+      signatureBase64Url: signature,
+    });
+
+    expect(importKeySpy).toHaveBeenCalledTimes(2);
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+    expect(fallbackSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('rethrows when both native and fallback verification paths are unavailable', async () => {
+    const { publicPem, manifestJson, signature } = createSignedManifestFixture();
+    vi.spyOn(crypto.subtle, 'verify').mockRejectedValueOnce(new Error('native verify failed'));
+    vi.spyOn(fallbackModule, 'verifyEd25519Signature').mockRejectedValueOnce(
+      new Error('noble unavailable')
+    );
+
+    await expect(
+      verifyManifestSignature({
+        manifestBytes: new TextEncoder().encode(manifestJson),
+        publicKeyPem: publicPem,
+        signatureBase64Url: signature,
+      })
+    ).rejects.toThrow(/noble unavailable/u);
   });
 });
 

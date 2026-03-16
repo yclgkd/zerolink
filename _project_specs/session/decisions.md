@@ -13,6 +13,22 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-16] Release guard fallback verifier must ship inside the trusted bootstrap
+
+**Decision**: Keep the `@noble/ed25519` fallback verifier in the trusted bootstrap bundle instead of loading it via a pre-verification dynamic import.
+**Context**: The first Ed25519 fallback implementation lazy-loaded noble from `release/crypto.ts`. In production builds, Vite emitted a separate JS chunk for that code, and unsupported browsers had to fetch and execute it before the signed manifest had been verified.
+**Choice**: Move the noble call behind a thin local adapter that is statically imported by `release/crypto.ts`, and add a build-level regression test that inspects the verification build output to ensure the bootstrap entry keeps only the existing app/main and mock-worker dynamic imports.
+**Reasoning**: The release guard exists specifically to verify code before the app mounts. Allowing an additional verifier chunk to execute beforehand enlarged the trusted computing base on exactly the compatibility path the fallback was meant to protect.
+**Trade-offs**: The bootstrap bundle grows modestly on all verification-enabled builds because noble is now always present, but that cost is acceptable compared with weakening the pre-verification trust boundary.
+
+## [2026-03-16] Native Ed25519 runtime failures pin the current session to JS fallback
+
+**Decision**: Treat native Ed25519 runtime exceptions as implementation unavailability, immediately retry with the JS fallback, and keep the current page session on fallback afterward.
+**Context**: The first fallback implementation probed native Ed25519 once, but if a later `importKey()` or `verify()` call threw after a successful probe it normalized the exception to `false`, which `verifyRelease()` exposed as `signature_invalid`.
+**Choice**: Cache verifier mode as `'native' | 'fallback'` instead of a boolean capability flag, downgrade the mode to `'fallback'` on any native runtime exception, retry the current verification through noble, and only surface `signature_invalid` when a verifier explicitly returns `false`.
+**Reasoning**: This preserves the original security semantics: invalid signatures remain distinct from unavailable verification implementations, and flaky browser-native Ed25519 support does not permanently block startup if the JS verifier still works.
+**Trade-offs**: A browser that throws once on the native path will keep using noble for the rest of the page session, even if later native calls might have succeeded.
+
 ## [2026-03-16] Ed25519 pure-JS fallback via @noble/ed25519
 
 **Decision**: Add `@noble/ed25519` as a lazily-loaded fallback verifier when native WebCrypto Ed25519 is unavailable.
@@ -20,6 +36,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Probe native Ed25519 support once via `importKey` using the actual SPKI bytes from the first call, memoize the result, and fall back to `@noble/ed25519 verifyAsync` when the probe fails. The raw 32-byte public key is extracted from SPKI using `spkiToRawEd25519` (validates the fixed 12-byte OID header). Malformed-input errors (wrong sig/key length) are normalized to `return false` via pre-validation. Import errors for the noble module propagate so that callers still surface `crypto_unavailable`.
 **Reasoning**: Probe-then-choose is more explicit than per-call try/catch and avoids misclassifying transient errors as compatibility failures. Lazy-loading noble avoids bundle size cost on browsers that support native Ed25519 (Chrome 113+, Firefox 130+, Safari 17+). Both the `signature-only` (tiered) and `full` verification paths share the same `verifyManifestSignature` entry point, so both benefit without additional changes.
 **Trade-offs**: Noble v3 uses `crypto.subtle.digest('SHA-512')` by default; in a genuine non-secure HTTP context where `crypto.subtle` is undefined, both the native and noble paths fail → `crypto_unavailable`. This is acceptable because release verification is only enforced in production (HTTPS). The probe is memoized across calls in the same page load; a browser that transiently fails the probe will use noble for the remainder of the session.
+**Follow-up (2026-03-16)**: The lazy-loaded part of this decision was superseded later the same day. The fallback still uses `@noble/ed25519`, but it now ships inside the trusted bootstrap bundle so unsupported browsers do not execute an extra pre-verification chunk.
 
 ## [2026-03-15] Enforce cipher bundle metadata binding on both commit and decrypt
 
