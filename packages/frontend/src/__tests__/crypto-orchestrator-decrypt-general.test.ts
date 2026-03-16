@@ -158,6 +158,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
     expect(decryptResult.data.plaintext).toBe('receiver can decrypt this');
+    expect(decryptResult.data.cipherVersion).toBe(0);
     expect('plaintextBytes' in decryptResult.data).toBe(false);
     expect(useDecryptStore.getState().plaintext).toBe('receiver can decrypt this');
   });

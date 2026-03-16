@@ -613,6 +613,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   const [decryptError, setDecryptError] = useState<string | null>(null);
   const [isDecryptPassphraseInvalid, setIsDecryptPassphraseInvalid] = useState(false);
   const [isDecryptSubmitting, setIsDecryptSubmitting] = useState(false);
+  const [deliveredAt, setDeliveredAt] = useState<number | null>(null);
+  const [cipherVersion, setCipherVersion] = useState<number | null>(null);
   const mountedRef = useRef(true);
   const decryptActionScopeRef = useRef(0);
   const decryptRequestIdRef = useRef(0);
@@ -642,6 +644,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     setPassphrase('');
     setDecryptError(null);
     setIsDecryptPassphraseInvalid(false);
+    setDeliveredAt(null);
+    setCipherVersion(null);
   }, [uuid]);
 
   useEffect(() => {
@@ -657,6 +661,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     setPassphrase('');
     setDecryptError(null);
     setIsDecryptPassphraseInvalid(false);
+    setDeliveredAt(null);
+    setCipherVersion(null);
     useDecryptStore.getState().setPlaintext(null);
   }, [enabled]);
 
@@ -722,6 +728,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
       return;
     }
 
+    setDeliveredAt(result.data.deliveredAt);
+    setCipherVersion(result.data.cipherVersion);
     clearDecryptError();
   }
 
@@ -741,6 +749,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     decryptPending: isDecryptSubmitting,
     canDecrypt,
     canBurn,
+    deliveredAt,
+    cipherVersion,
     handlePassphraseChange: (value: string) => {
       setPassphrase(value);
       if (decryptError || isDecryptPassphraseInvalid) {
