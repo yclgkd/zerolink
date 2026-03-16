@@ -23,6 +23,7 @@ export function LanguageSwitcher() {
     right: 0,
   });
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
@@ -36,7 +37,10 @@ export function LanguageSwitcher() {
   useEffect(() => {
     if (!open) return;
     function handleClose(event: MouseEvent) {
-      if (triggerRef.current && !triggerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideTrigger = triggerRef.current?.contains(target) ?? false;
+      const insideDropdown = dropdownRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insideDropdown) {
         setOpen(false);
       }
     }
@@ -63,6 +67,7 @@ export function LanguageSwitcher() {
         ? createPortal(
             <div
               className="fixed z-[9999] min-w-[7rem] overflow-hidden rounded-xl border border-border/60 bg-slate-900/95 py-1 shadow-xl shadow-black/40 backdrop-blur-sm"
+              ref={dropdownRef}
               role="menu"
               style={{ top: dropdownStyle.top, right: dropdownStyle.right }}
             >
