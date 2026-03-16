@@ -25,6 +25,8 @@ export function mapActionError(code: string): string {
     case 'NOT_ALLOWED':
     case 'ABORTED':
       return 'WebAuthn verification was not completed.';
+    case 'CRYPTO_ERROR':
+      return 'Incorrect channel password. Please try again.';
     case 'INTERNAL_ERROR':
       return 'Unexpected internal error. Please retry.';
     default:
