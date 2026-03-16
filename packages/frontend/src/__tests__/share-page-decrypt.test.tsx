@@ -220,7 +220,7 @@ function mockLockSuccessWithStoreSideEffects(): void {
   });
 }
 
-function mockDecryptSuccessWithStoreSideEffects(): void {
+function mockDecryptSuccessWithStoreSideEffects(cipherVersion = 0): void {
   decryptDeliveredMock.mockImplementation(async ({ passphrase }: { passphrase: string }) => {
     const plaintext = `decrypted:${passphrase}`;
     useDecryptStore.getState().setPlaintext(plaintext);
@@ -230,6 +230,7 @@ function mockDecryptSuccessWithStoreSideEffects(): void {
         plaintext,
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
+        cipherVersion,
       },
     };
   });
@@ -387,6 +388,7 @@ describe('SharePage – decryptDelivered action', () => {
         plaintext: string;
         deliveredAt: number;
         receiverPubFpr: string;
+        cipherVersion: number;
       };
     }>();
     decryptDeliveredMock.mockReturnValueOnce(deferred.promise);
@@ -410,6 +412,7 @@ describe('SharePage – decryptDelivered action', () => {
         plaintext: 'decrypted:Receiver#Pass1234',
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
+        cipherVersion: 0,
       },
     });
 
@@ -440,6 +443,7 @@ describe('SharePage – decryptDelivered action', () => {
         plaintext: string;
         deliveredAt: number;
         receiverPubFpr: string;
+        cipherVersion: number;
       };
     }>();
     decryptDeliveredMock.mockReturnValueOnce(deferred.promise);
@@ -463,6 +467,7 @@ describe('SharePage – decryptDelivered action', () => {
         plaintext: 'decrypted:second-passphrase',
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
+        cipherVersion: 0,
       },
     });
   });
@@ -629,5 +634,62 @@ describe('SharePage – decryptDelivered action', () => {
     });
     expect(screen.queryByTestId('share-decrypt-burned')).toBeNull();
     expect(await screen.findByTestId('share-decrypt-plaintext')).toBeTruthy();
+  });
+
+  it('shows delivery timestamp after successful decrypt', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    const el = await screen.findByTestId('share-delivery-timestamp');
+    // Prefix is fixed; year "2023" is present in any locale for MOCK_TIMESTAMP (Nov 2023)
+    expect(el.textContent).toMatch(/^Delivered:/);
+    expect(el.textContent).toContain('2023');
+  });
+
+  it('shows updated badge when cipherVersion is 1 or more', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+    mockDecryptSuccessWithStoreSideEffects(1);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    const badge = await screen.findByTestId('share-delivery-updated-badge');
+    // cipherVersion=1 → user-facing v2 (0-based internal → 1-based display)
+    expect(badge.textContent).toContain('Updated (v2)');
+    // <output> has implicit role="status" semantics without a role attribute
+    expect(badge.tagName.toLowerCase()).toBe('output');
+  });
+
+  it('does not show updated badge when cipherVersion is 0 (first delivery)', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    await screen.findByTestId('share-decrypt-plaintext');
+    expect(screen.queryByTestId('share-delivery-updated-badge')).toBeNull();
   });
 });

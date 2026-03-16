@@ -292,6 +292,7 @@ export async function executeDecryptDelivered(
         plaintext,
         deliveredAt: payload.deliveredAt,
         receiverPubFpr: payload.receiverPubFpr,
+        cipherVersion,
       },
     };
   } catch (error) {

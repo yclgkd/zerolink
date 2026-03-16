@@ -162,8 +162,10 @@ export function SharePage(): ReactElement {
             canBurn={decryptLogic.canBurn}
             canDecrypt={decryptLogic.canDecrypt}
             canDecryptLocally={receiverSafetyCode.canDecryptLocally}
+            cipherVersion={decryptLogic.cipherVersion}
             decryptError={decryptLogic.decryptError}
             decryptPending={decryptLogic.decryptPending}
+            deliveredAt={decryptLogic.deliveredAt}
             isDecryptPassphraseInvalid={decryptLogic.isDecryptPassphraseInvalid}
             localPlaintextBurned={decryptLogic.store.localPlaintextBurned}
             onBurn={decryptLogic.handleBurn}

@@ -177,6 +177,7 @@ export interface DecryptDeliveredOutput {
   plaintext: string;
   deliveredAt: number;
   receiverPubFpr: string;
+  cipherVersion: number;
 }
 
 /**

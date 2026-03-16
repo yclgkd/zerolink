@@ -353,6 +353,10 @@ export function DecryptErrorPanel({ error }: { error: string }) {
   );
 }
 
+function formatDeliveredAt(ts: number): string {
+  return new Date(ts).toLocaleString();
+}
+
 export function DeliveredStep({
   safetyCodeAvailable,
   safetyCodeStatus,
@@ -365,6 +369,8 @@ export function DeliveredStep({
   localPlaintextBurned,
   canDecrypt,
   canBurn,
+  deliveredAt,
+  cipherVersion,
   onPassphraseChange,
   onDecrypt,
   onBurn,
@@ -380,6 +386,8 @@ export function DeliveredStep({
   localPlaintextBurned: boolean;
   canDecrypt: boolean;
   canBurn: boolean;
+  deliveredAt: number | null;
+  cipherVersion: number | null;
   onPassphraseChange: (value: string) => void;
   onDecrypt: () => void;
   onBurn: () => void;
@@ -393,6 +401,23 @@ export function DeliveredStep({
           the receiver lock.
         </p>
       </div>
+
+      {deliveredAt !== null ? (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground" data-testid="share-delivery-timestamp">
+            Delivered: {formatDeliveredAt(deliveredAt)}
+          </p>
+          {cipherVersion !== null && cipherVersion >= 1 ? (
+            <output
+              className="block text-xs font-medium text-neon-orange"
+              data-testid="share-delivery-updated-badge"
+            >
+              Updated (v{cipherVersion + 1}) · The sender may have revised this content. The latest
+              version is shown.
+            </output>
+          ) : null}
+        </div>
+      ) : null}
 
       <SafetyCodeSection
         safetyCodeAvailable={safetyCodeAvailable}
