@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 
-import './helpers/i18n-test-setup';
-
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';

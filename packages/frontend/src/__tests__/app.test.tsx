@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 
-import './helpers/i18n-test-setup';
-
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

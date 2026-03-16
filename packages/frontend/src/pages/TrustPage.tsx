@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { type ReactElement, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -19,38 +19,41 @@ export function TrustPage(): ReactElement {
   const navigate = useNavigate();
   const canReturnToPreviousRoute = hasTrustRouteReturnTo(location.state);
 
-  const trustSections = [
-    {
-      title: t('trust.section1Title'),
-      body: t('trust.section1Body'),
-      accentClass: 'text-neon-cyan',
-    },
-    {
-      title: t('trust.section2Title'),
-      body: t('trust.section2Body'),
-      accentClass: 'text-neon-magenta',
-    },
-    {
-      title: t('trust.section3Title'),
-      body: t('trust.section3Body'),
-      accentClass: 'text-neon-green',
-    },
-    {
-      title: t('trust.section4Title'),
-      body: t('trust.section4Body'),
-      accentClass: 'text-neon-orange',
-    },
-    {
-      title: t('trust.section5Title'),
-      body: t('trust.section5Body'),
-      accentClass: 'text-neon-cyan',
-    },
-    {
-      title: t('trust.section6Title'),
-      body: t('trust.section6Body'),
-      accentClass: 'text-neon-orange',
-    },
-  ];
+  const trustSections = useMemo(
+    () => [
+      {
+        title: t('trust.section1Title'),
+        body: t('trust.section1Body'),
+        accentClass: 'text-neon-cyan',
+      },
+      {
+        title: t('trust.section2Title'),
+        body: t('trust.section2Body'),
+        accentClass: 'text-neon-magenta',
+      },
+      {
+        title: t('trust.section3Title'),
+        body: t('trust.section3Body'),
+        accentClass: 'text-neon-green',
+      },
+      {
+        title: t('trust.section4Title'),
+        body: t('trust.section4Body'),
+        accentClass: 'text-neon-orange',
+      },
+      {
+        title: t('trust.section5Title'),
+        body: t('trust.section5Body'),
+        accentClass: 'text-neon-cyan',
+      },
+      {
+        title: t('trust.section6Title'),
+        body: t('trust.section6Body'),
+        accentClass: 'text-neon-orange',
+      },
+    ],
+    [t]
+  );
 
   return (
     <PageCard data-testid="page-trust" tone="cyan">

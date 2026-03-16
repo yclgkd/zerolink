@@ -48,11 +48,10 @@ const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
  */
 export function SharePage(): ReactElement {
   const { t } = useTranslation();
-  const LOCK_FLOW_STEPS = [
-    t('share.stepIntro'),
-    t('share.stepPassphrase'),
-    t('share.stepReady'),
-  ] as const;
+  const LOCK_FLOW_STEPS = useMemo(
+    () => [t('share.stepIntro'), t('share.stepPassphrase'), t('share.stepReady')] as const,
+    [t]
+  );
   const { uuid } = useParams<{ uuid: string }>();
   const location = useLocation();
   const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);

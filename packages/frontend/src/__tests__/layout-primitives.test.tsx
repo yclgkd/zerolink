@@ -1,5 +1,3 @@
-import './helpers/i18n-test-setup';
-
 import type { ChannelState } from '@zerolink/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

@@ -1,5 +1,6 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
@@ -44,6 +45,48 @@ export function StepIndicator({
   );
 }
 
+type NoticeCopy = { tone: 'info' | 'warning' | 'error'; title: string; body: string };
+
+function getSafetyCodeCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>,
+  t: ReturnType<typeof useTranslation>['t']
+): NoticeCopy {
+  switch (status) {
+    case 'checking-local-key':
+      return {
+        tone: 'info',
+        title: t('share.safetyCheckingTitle'),
+        body: t('share.safetyCheckingBody'),
+      };
+    case 'missing-local-key':
+      return {
+        tone: 'warning',
+        title: t('share.safetyMissingTitle'),
+        body: t('share.safetyMissingBody'),
+      };
+    case 'mismatched-local-key':
+      return {
+        tone: 'error',
+        title: t('share.safetyMismatchedTitle'),
+        body: t('share.safetyMismatchedBody'),
+      };
+    case 'storage-error':
+      return {
+        tone: 'warning',
+        title: t('share.safetyStorageErrorTitle'),
+        body: t('share.safetyStorageErrorBody'),
+      };
+    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
+    case 'missing-receiver-fingerprint':
+    default:
+      return {
+        tone: 'warning',
+        title: t('share.safetyUnavailableTitle'),
+        body: t('share.safetyUnavailableBody'),
+      };
+  }
+}
+
 function SafetyCodeSection({
   safetyCodeAvailable,
   safetyCodeStatus,
@@ -62,45 +105,49 @@ function SafetyCodeSection({
       ? 'missing-receiver-fingerprint'
       : safetyCodeStatus;
 
-  let tone: 'info' | 'warning' | 'error';
-  let title: string;
-  let body: string;
-
-  switch (effectiveStatus) {
-    case 'checking-local-key':
-      tone = 'info';
-      title = t('share.safetyCheckingTitle');
-      body = t('share.safetyCheckingBody');
-      break;
-    case 'missing-local-key':
-      tone = 'warning';
-      title = t('share.safetyMissingTitle');
-      body = t('share.safetyMissingBody');
-      break;
-    case 'mismatched-local-key':
-      tone = 'error';
-      title = t('share.safetyMismatchedTitle');
-      body = t('share.safetyMismatchedBody');
-      break;
-    case 'storage-error':
-      tone = 'warning';
-      title = t('share.safetyStorageErrorTitle');
-      body = t('share.safetyStorageErrorBody');
-      break;
-    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
-    case 'missing-receiver-fingerprint':
-    default:
-      tone = 'warning';
-      title = t('share.safetyUnavailableTitle');
-      body = t('share.safetyUnavailableBody');
-      break;
-  }
+  const { tone, title, body } = getSafetyCodeCopy(effectiveStatus, t);
 
   return (
     <StateNotice data-testid="share-safety-unavailable" title={title} tone={tone}>
       <p className="mt-1 text-xs text-foreground/90">{body}</p>
     </StateNotice>
   );
+}
+
+function getDecryptUnavailableCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>,
+  t: ReturnType<typeof useTranslation>['t']
+): NoticeCopy {
+  switch (status) {
+    case 'checking-local-key':
+      return {
+        tone: 'info',
+        title: t('share.decryptCheckingTitle'),
+        body: t('share.decryptCheckingBody'),
+      };
+    case 'mismatched-local-key':
+      return {
+        tone: 'error',
+        title: t('share.decryptMismatchedTitle'),
+        body: t('share.decryptMismatchedBody'),
+      };
+    case 'storage-error':
+      return {
+        tone: 'warning',
+        title: t('share.decryptStorageErrorTitle'),
+        body: t('share.decryptStorageErrorBody'),
+      };
+    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
+    case 'missing-local-key':
+    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
+    case 'missing-receiver-fingerprint':
+    default:
+      return {
+        tone: 'warning',
+        title: t('share.decryptUnavailableTitle'),
+        body: t('share.decryptUnavailableBody'),
+      };
+  }
 }
 
 function DecryptUnavailableNotice({
@@ -115,36 +162,7 @@ function DecryptUnavailableNotice({
       ? 'missing-local-key'
       : safetyCodeStatus;
 
-  let tone: 'info' | 'warning' | 'error';
-  let title: string;
-  let body: string;
-
-  switch (effectiveStatus) {
-    case 'checking-local-key':
-      tone = 'info';
-      title = t('share.decryptCheckingTitle');
-      body = t('share.decryptCheckingBody');
-      break;
-    case 'mismatched-local-key':
-      tone = 'error';
-      title = t('share.decryptMismatchedTitle');
-      body = t('share.decryptMismatchedBody');
-      break;
-    case 'storage-error':
-      tone = 'warning';
-      title = t('share.decryptStorageErrorTitle');
-      body = t('share.decryptStorageErrorBody');
-      break;
-    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
-    case 'missing-local-key':
-    // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
-    case 'missing-receiver-fingerprint':
-    default:
-      tone = 'warning';
-      title = t('share.decryptUnavailableTitle');
-      body = t('share.decryptUnavailableBody');
-      break;
-  }
+  const { tone, title, body } = getDecryptUnavailableCopy(effectiveStatus, t);
 
   return (
     <StateNotice data-testid="share-decrypt-unavailable" title={title} tone={tone}>
@@ -156,23 +174,26 @@ function DecryptUnavailableNotice({
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   const { t } = useTranslation();
 
-  const onboardingItems = [
-    {
-      emoji: '🔐',
-      title: t('share.onboarding1Title'),
-      description: t('share.onboarding1Desc'),
-    },
-    {
-      emoji: '🗝️',
-      title: t('share.onboarding2Title'),
-      description: t('share.onboarding2Desc'),
-    },
-    {
-      emoji: '🔒',
-      title: t('share.onboarding3Title'),
-      description: t('share.onboarding3Desc'),
-    },
-  ];
+  const onboardingItems = useMemo(
+    () => [
+      {
+        emoji: '🔐',
+        title: t('share.onboarding1Title'),
+        description: t('share.onboarding1Desc'),
+      },
+      {
+        emoji: '🗝️',
+        title: t('share.onboarding2Title'),
+        description: t('share.onboarding2Desc'),
+      },
+      {
+        emoji: '🔒',
+        title: t('share.onboarding3Title'),
+        description: t('share.onboarding3Desc'),
+      },
+    ],
+    [t]
+  );
 
   return (
     <section className="space-y-4" data-testid="share-step-onboarding">
@@ -297,7 +318,10 @@ export function LockedStep({
 }) {
   const { t } = useTranslation();
 
-  const nextSteps = [t('share.nextStep1'), t('share.nextStep2'), t('share.nextStep3')];
+  const nextSteps = useMemo(
+    () => [t('share.nextStep1'), t('share.nextStep2'), t('share.nextStep3')],
+    [t]
+  );
 
   return (
     <section className="space-y-4" data-testid="share-step-locked">

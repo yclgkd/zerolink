@@ -38,7 +38,7 @@ function mapCreateError(code: string): string {
       return i18next.t('create.errorProfileBlocked');
     case 'PASSPHRASE_REQUIRED':
       return i18next.t('passphrase.lengthMessage', {
-        label: 'Quick Share password',
+        label: i18next.t('create.passwordLabel'),
         min: 8,
       });
     case 'NOT_ALLOWED':

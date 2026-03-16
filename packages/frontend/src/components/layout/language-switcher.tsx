@@ -44,8 +44,18 @@ export function LanguageSwitcher() {
         setOpen(false);
       }
     }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
     document.addEventListener('mousedown', handleClose);
-    return () => document.removeEventListener('mousedown', handleClose);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClose);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [open]);
 
   return (
