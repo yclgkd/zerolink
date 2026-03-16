@@ -35,6 +35,19 @@ export function LanguageSwitcher() {
   }, [open]);
 
   useEffect(() => {
+    if (open) {
+      requestAnimationFrame(() => {
+        if (!dropdownRef.current) return;
+        const activeItem = dropdownRef.current.querySelector(
+          '[aria-checked="true"]'
+        ) as HTMLElement | null;
+        const firstItem = dropdownRef.current.querySelector('button') as HTMLElement | null;
+        (activeItem ?? firstItem)?.focus();
+      });
+    }
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     function handleClose(event: MouseEvent) {
       const target = event.target as Node;
@@ -58,6 +71,35 @@ export function LanguageSwitcher() {
     };
   }, [open]);
 
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!dropdownRef.current) return;
+    const items = Array.from(
+      dropdownRef.current.querySelectorAll('button[role="menuitemradio"]')
+    ) as HTMLElement[];
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      // Return focus to the trigger without preventing default,
+      // allowing the browser to natively tab to the next logical DOM element (e.g. Trust Model button)
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
+
   return (
     <>
       <button
@@ -66,6 +108,12 @@ export function LanguageSwitcher() {
         className="inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-transparent px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
         data-testid="lang-switcher-trigger"
         onClick={() => setOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
         ref={triggerRef}
         type="button"
       >
@@ -77,6 +125,7 @@ export function LanguageSwitcher() {
         ? createPortal(
             <div
               className="fixed z-[9999] min-w-[7rem] overflow-hidden rounded-xl border border-border/60 bg-slate-900/95 py-1 shadow-xl shadow-black/40 backdrop-blur-sm"
+              onKeyDown={handleMenuKeyDown}
               ref={dropdownRef}
               role="menu"
               style={{ top: dropdownStyle.top, right: dropdownStyle.right }}
@@ -85,7 +134,7 @@ export function LanguageSwitcher() {
                 <button
                   aria-checked={activeLang === code}
                   className={cn(
-                    'w-full px-3 py-2 text-left text-sm transition-colors',
+                    'w-full px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:bg-white/10',
                     activeLang === code
                       ? 'font-medium text-primary'
                       : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
@@ -95,8 +144,10 @@ export function LanguageSwitcher() {
                   onClick={() => {
                     void i18n.changeLanguage(code);
                     setOpen(false);
+                    triggerRef.current?.focus();
                   }}
                   role="menuitemradio"
+                  tabIndex={-1}
                   type="button"
                 >
                   {label}

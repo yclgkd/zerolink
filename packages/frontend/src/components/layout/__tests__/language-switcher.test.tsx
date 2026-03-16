@@ -3,7 +3,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import i18next from 'i18next';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LanguageSwitcher } from '../language-switcher';
 
@@ -76,5 +76,74 @@ describe('LanguageSwitcher', () => {
 
     expect(i18next.language).toBe('zh');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('focuses the active language option when opened', async () => {
+    void i18next.changeLanguage('zh');
+    render(<LanguageSwitcher />);
+
+    // Using fake timers because requestAnimationFrame is used for focus
+    vi.useFakeTimers();
+
+    const trigger = screen.getByTestId('lang-switcher-trigger');
+    fireEvent.click(trigger);
+
+    // Fast-forward requestAnimationFrame
+    vi.runAllTimers();
+
+    const zhOption = screen.getByTestId('lang-switcher-zh');
+    expect(document.activeElement).toBe(zhOption);
+
+    vi.useRealTimers();
+  });
+
+  it('supports ArrowDown and ArrowUp navigation correctly', async () => {
+    void i18next.changeLanguage('en');
+    render(<LanguageSwitcher />);
+    vi.useFakeTimers();
+
+    const trigger = screen.getByTestId('lang-switcher-trigger');
+    fireEvent.click(trigger);
+    vi.runAllTimers();
+
+    const menu = screen.getByRole('menu');
+    const enOption = screen.getByTestId('lang-switcher-en');
+    const zhOption = screen.getByTestId('lang-switcher-zh');
+
+    // Initial focus should be EN (if language is EN)
+    expect(document.activeElement).toBe(enOption);
+
+    // Arrow down moves to ZH
+    fireEvent.keyDown(menu, { key: 'ArrowDown', code: 'ArrowDown' });
+    expect(document.activeElement).toBe(zhOption);
+
+    // Arrow down again wraps to EN
+    fireEvent.keyDown(menu, { key: 'ArrowDown', code: 'ArrowDown' });
+    expect(document.activeElement).toBe(enOption);
+
+    // Arrow up wraps to ZH
+    fireEvent.keyDown(menu, { key: 'ArrowUp', code: 'ArrowUp' });
+    expect(document.activeElement).toBe(zhOption);
+
+    vi.useRealTimers();
+  });
+
+  it('closes dropdown and focuses trigger when pressing Tab', async () => {
+    render(<LanguageSwitcher />);
+    vi.useFakeTimers();
+
+    const trigger = screen.getByTestId('lang-switcher-trigger');
+    trigger.focus();
+    fireEvent.click(trigger);
+    vi.runAllTimers();
+
+    const menu = screen.getByRole('menu');
+
+    fireEvent.keyDown(menu, { key: 'Tab', code: 'Tab' });
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+
+    vi.useRealTimers();
   });
 });
