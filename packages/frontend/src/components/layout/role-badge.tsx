@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/badge';
@@ -21,11 +22,12 @@ type RoleBadgeProps = Omit<ComponentProps<typeof Badge>, 'variant'> & {
 };
 
 function RoleBadge({ party, className, children, ...props }: RoleBadgeProps) {
+  const { t } = useTranslation();
   const config = roleConfig[party];
 
   return (
     <Badge className={cn(config.className, className)} variant="secondary" {...props}>
-      {children ?? config.label}
+      {children ?? t(`role.${party}`)}
     </Badge>
   );
 }

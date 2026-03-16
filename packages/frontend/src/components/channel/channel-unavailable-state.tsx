@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ChannelUnavailableStateProps {
   body: string;
@@ -9,9 +10,11 @@ export function ChannelUnavailableState({
   body,
   testId,
 }: ChannelUnavailableStateProps): ReactElement {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-2" data-testid={testId}>
-      <h3 className="text-base font-semibold text-foreground">Channel Unavailable</h3>
+      <h3 className="text-base font-semibold text-foreground">{t('channel.unavailableTitle')}</h3>
       <p className="text-xs text-muted-foreground">{body}</p>
     </section>
   );

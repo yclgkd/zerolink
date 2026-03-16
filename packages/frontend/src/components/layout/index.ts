@@ -1,3 +1,4 @@
+export { LanguageSwitcher } from './language-switcher';
 export {
   PageCard,
   PageCardContent,

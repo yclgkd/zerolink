@@ -1,6 +1,7 @@
 import { CHANNEL_STATE, type ChannelState } from '@zerolink/shared';
 import { PlusCircle, Send, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   PageCardDescription,
@@ -23,33 +24,33 @@ export function ManagePageHeader({
   status: ChannelState;
   unavailable: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <PageCardHeader>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <PageCardTitle asChild className="text-primary">
-            <h2>Manage / Deliver</h2>
+            <h2>{t('manage.headerTitle')}</h2>
           </PageCardTitle>
           {unavailable ? null : <StatusBadge status={status} />}
         </div>
         <RoleBadge party="sender" />
       </div>
-      <PageCardDescription>
-        Sender-side verification and delivery controls (integrated flow).
-      </PageCardDescription>
+      <PageCardDescription>{t('manage.headerDescription')}</PageCardDescription>
     </PageCardHeader>
   );
 }
 
 export function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
+  const { t } = useTranslation();
   return (
     <p className="text-xs text-muted-foreground">
-      Channel ID:{' '}
+      {t('manage.channelIdLabel')}{' '}
       <code
         className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
         data-testid="manage-uuid"
       >
-        {uuid ?? '(missing)'}
+        {uuid ?? t('manage.channelIdMissing')}
       </code>
     </p>
   );
@@ -62,14 +63,13 @@ export function StatusContent({
   status: ChannelState;
   safetyCode: ReturnType<typeof deriveSafetyCodeDisplay> | null;
 }) {
+  const { t } = useTranslation();
+
   if (status === CHANNEL_STATE.WAITING) {
     return (
       <section className="space-y-2" data-testid="manage-state-waiting">
-        <h3 className="text-base font-semibold text-foreground">Waiting for Receiver Lock</h3>
-        <p className="text-xs text-muted-foreground">
-          Receiver has not locked the channel yet. Share the link and this page will update
-          automatically once they do.
-        </p>
+        <h3 className="text-base font-semibold text-foreground">{t('manage.waitingTitle')}</h3>
+        <p className="text-xs text-muted-foreground">{t('manage.waitingBody')}</p>
       </section>
     );
   }
@@ -78,10 +78,8 @@ export function StatusContent({
     return (
       <section className="space-y-4" data-testid="manage-state-locked">
         <div className="space-y-1">
-          <h3 className="text-base font-semibold text-foreground">Receiver Locked the Channel</h3>
-          <p className="text-xs text-muted-foreground">
-            Verify the Safety Code out-of-band before delivering the secret.
-          </p>
+          <h3 className="text-base font-semibold text-foreground">{t('manage.lockedTitle')}</h3>
+          <p className="text-xs text-muted-foreground">{t('manage.lockedBody')}</p>
         </div>
 
         {safetyCode ? (
@@ -89,13 +87,10 @@ export function StatusContent({
         ) : (
           <StateNotice
             data-testid="manage-safety-unavailable"
-            title="Safety Code unavailable right now."
+            title={t('manage.safetyUnavailableTitle')}
             tone="warning"
           >
-            <p className="mt-1 text-xs text-neon-orange">
-              Receiver fingerprint is missing from the current channel state, so the Safety Code
-              cannot be shown.
-            </p>
+            <p className="mt-1 text-xs text-neon-orange">{t('manage.safetyUnavailableBody')}</p>
           </StateNotice>
         )}
       </section>
@@ -106,11 +101,8 @@ export function StatusContent({
     return (
       <section className="space-y-4" data-testid="manage-state-delivered">
         <div className="space-y-1">
-          <h3 className="text-base font-semibold text-foreground">Delivery Completed</h3>
-          <p className="text-xs text-muted-foreground">
-            Ciphertext has been delivered to the receiver flow. Receiver-side decrypt happens
-            locally and does not send confirmation back here.
-          </p>
+          <h3 className="text-base font-semibold text-foreground">{t('manage.deliveredTitle')}</h3>
+          <p className="text-xs text-muted-foreground">{t('manage.deliveredBody')}</p>
         </div>
 
         {safetyCode ? (
@@ -118,13 +110,10 @@ export function StatusContent({
         ) : (
           <StateNotice
             data-testid="manage-safety-unavailable"
-            title="Safety Code unavailable right now."
+            title={t('manage.safetyUnavailableTitle')}
             tone="warning"
           >
-            <p className="mt-1 text-xs text-neon-orange">
-              Receiver fingerprint is missing from the current channel state, so the Safety Code
-              cannot be shown.
-            </p>
+            <p className="mt-1 text-xs text-neon-orange">{t('manage.safetyUnavailableBody')}</p>
           </StateNotice>
         )}
       </section>
@@ -134,20 +123,16 @@ export function StatusContent({
   if (status === CHANNEL_STATE.DELETED) {
     return (
       <section className="space-y-2" data-testid="manage-state-deleted">
-        <h3 className="text-base font-semibold text-foreground">Channel Deleted</h3>
-        <p className="text-xs text-muted-foreground">
-          You deleted this channel. It can no longer deliver or decrypt content.
-        </p>
+        <h3 className="text-base font-semibold text-foreground">{t('manage.deletedTitle')}</h3>
+        <p className="text-xs text-muted-foreground">{t('manage.deletedBody')}</p>
       </section>
     );
   }
 
   return (
     <section className="space-y-2" data-testid="manage-state-expired">
-      <h3 className="text-base font-semibold text-foreground">Channel Expired</h3>
-      <p className="text-xs text-muted-foreground">
-        This channel expired. It can no longer be used for delivery or decryption.
-      </p>
+      <h3 className="text-base font-semibold text-foreground">{t('manage.expiredTitle')}</h3>
+      <p className="text-xs text-muted-foreground">{t('manage.expiredBody')}</p>
     </section>
   );
 }
@@ -165,13 +150,14 @@ export function SecretInput({
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
       <label
         className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
         htmlFor="manage-secret-input"
       >
-        Secret Payload
+        {t('manage.secretLabel')}
       </label>
       <textarea
         aria-describedby={ariaDescribedBy}
@@ -181,7 +167,7 @@ export function SecretInput({
         disabled={disabled}
         id="manage-secret-input"
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Enter plaintext secret to encrypt and deliver"
+        placeholder={t('manage.secretPlaceholder')}
         value={value}
       />
     </section>
@@ -197,16 +183,15 @@ export function DestroyConfirmPanel({
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="space-y-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm ring-1 ring-destructive/20"
       data-testid="manage-destroy-confirm"
     >
       <div className="space-y-1">
-        <p className="font-semibold text-destructive">Permanently delete this channel?</p>
-        <p className="text-xs text-muted-foreground">
-          This cannot be undone. All channel data will be removed from the server.
-        </p>
+        <p className="font-semibold text-destructive">{t('manage.destroyConfirmTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('manage.destroyConfirmBody')}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -217,7 +202,7 @@ export function DestroyConfirmPanel({
           type="button"
           variant="secondary"
         >
-          Cancel
+          {t('manage.destroyCancelButton')}
         </Button>
         <Button
           data-testid="manage-destroy-confirm-apply"
@@ -230,12 +215,12 @@ export function DestroyConfirmPanel({
           {pending ? (
             <>
               <Spinner aria-hidden="true" className="size-3.5" />
-              Deleting…
+              {t('manage.destroyDeletingButton')}
             </>
           ) : (
             <>
               <Trash2 aria-hidden="true" className="size-3.5" />
-              Confirm Delete
+              {t('manage.destroyConfirmButton')}
             </>
           )}
         </Button>
@@ -245,6 +230,7 @@ export function DestroyConfirmPanel({
 }
 
 export function TerminalActions(): ReactElement {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   return (
@@ -256,7 +242,7 @@ export function TerminalActions(): ReactElement {
         variant="secondary"
       >
         <PlusCircle aria-hidden="true" className="size-4" />
-        Create New Channel
+        {t('manage.createNewButton')}
       </Button>
     </section>
   );
@@ -287,6 +273,8 @@ export function ActionPanel({
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
+  const { t } = useTranslation();
+
   if (isTerminalManageState(status, unavailable)) {
     return <TerminalActions />;
   }
@@ -304,12 +292,12 @@ export function ActionPanel({
             {pending ? (
               <>
                 <Spinner aria-hidden="true" className="size-4" />
-                Delivering…
+                {t('manage.deliveringButton')}
               </>
             ) : (
               <>
                 <Send aria-hidden="true" className="size-4" />
-                Deliver
+                {t('manage.deliverButton')}
               </>
             )}
           </Button>
@@ -322,7 +310,7 @@ export function ActionPanel({
           variant="danger"
         >
           <Trash2 aria-hidden="true" className="size-4" />
-          Delete Channel
+          {t('manage.deleteChannelButton')}
         </Button>
       </div>
 

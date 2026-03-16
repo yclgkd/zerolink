@@ -1,9 +1,11 @@
 import { ROUTE_PATTERN } from '@zerolink/shared';
 import { Link2 } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { RouteObject } from 'react-router-dom';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 
+import { LanguageSwitcher } from './components/layout/language-switcher';
 import { ManifestInfo } from './components/manifest-info';
 import { Button } from './components/ui/button';
 import { Card, CardHeader, CardTitle } from './components/ui/card';
@@ -30,6 +32,7 @@ function toChildPath(routePattern: string): string {
 }
 
 function AppShellLayout(): ReactElement {
+  const { t } = useTranslation();
   const location = useLocation();
   const isTrustRoute = location.pathname === `/${TRUST_PAGE_PATH}`;
   const trustRouteState = createTrustRouteState(location);
@@ -51,24 +54,27 @@ function AppShellLayout(): ReactElement {
                   Zero<span className="text-[var(--neon-orange)]">Link</span>
                 </h1>
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Zero-Knowledge Secure Delivery</p>
+              <p className="text-xs text-muted-foreground">{t('shell.tagline')}</p>
             </div>
           </div>
-          <Button asChild className="shrink-0 self-center" size="sm" variant="outline">
-            {isTrustRoute ? (
-              <Link data-testid="app-shell-back-link" to="/">
-                Back to Create
-              </Link>
-            ) : (
-              <Link
-                data-testid="app-shell-trust-link"
-                state={trustRouteState}
-                to={`/${TRUST_PAGE_PATH}`}
-              >
-                Trust Model
-              </Link>
-            )}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2 self-center">
+            <LanguageSwitcher />
+            <Button asChild size="sm" variant="outline">
+              {isTrustRoute ? (
+                <Link data-testid="app-shell-back-link" to="/">
+                  {t('shell.backToCreate')}
+                </Link>
+              ) : (
+                <Link
+                  data-testid="app-shell-trust-link"
+                  state={trustRouteState}
+                  to={`/${TRUST_PAGE_PATH}`}
+                >
+                  {t('shell.trustModelLink')}
+                </Link>
+              )}
+            </Button>
+          </div>
         </CardHeader>
       </Card>
       <section className="mt-6 space-y-4 md:mt-8">

@@ -1,4 +1,5 @@
 import { type ReactElement, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { getVerifiedReleaseSnapshot } from '../release/runtime';
 import { Badge } from './ui/badge';
@@ -44,6 +45,7 @@ function DetailRow({
 }
 
 export function ManifestInfo(): ReactElement | null {
+  const { t } = useTranslation();
   const snapshot = getVerifiedReleaseSnapshot();
   const [expanded, setExpanded] = useState(false);
 
@@ -56,20 +58,18 @@ export function ManifestInfo(): ReactElement | null {
       <CardHeader className="py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle asChild className="text-sm font-semibold text-neon-cyan">
-            <h2>Verified Release</h2>
+            <h2>{t('manifest.title')}</h2>
           </CardTitle>
           <Badge
             className="border-neon-green/30 bg-neon-green/10 px-3 py-1 text-neon-green"
             variant="secondary"
           >
-            Verified
+            {t('manifest.verifiedBadge')}
           </Badge>
         </div>
-        <p className="text-sm text-muted-foreground">
-          This page matches an official ZeroLink release signed by our team.
-        </p>
+        <p className="text-sm text-muted-foreground">{t('manifest.body')}</p>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Release fingerprint:</span>
+          <span className="text-sm text-muted-foreground">{t('manifest.fingerprintLabel')}</span>
           <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {snapshot.manifestHash.slice(0, 16)}
           </code>
@@ -83,22 +83,25 @@ export function ManifestInfo(): ReactElement | null {
           type="button"
           variant="secondary"
         >
-          {expanded ? 'Hide verification details' : 'View verification details'}
+          {expanded ? t('manifest.hideDetails') : t('manifest.showDetails')}
         </Button>
         {expanded ? (
           <div className="grid gap-3 rounded-lg border border-border/60 bg-secondary/20 p-3 md:grid-cols-2">
-            <DetailRow label="Status" value="Verified" />
-            <DetailRow label="App version" value={snapshot.version} />
-            <DetailRow label="Build date" value={formatBuildDate(snapshot.buildTime)} />
-            <DetailRow label="Commit" value={snapshot.commitHash} />
-            <DetailRow label="Manifest hash" value={snapshot.manifestHash} code />
-            <DetailRow label="Verified files" value={`${snapshot.verifiedFileCount}`} />
+            <DetailRow label={t('manifest.statusLabel')} value={t('manifest.verifiedBadge')} />
+            <DetailRow label={t('manifest.versionLabel')} value={snapshot.version} />
             <DetailRow
-              label="Publisher key fingerprint"
+              label={t('manifest.buildDateLabel')}
+              value={formatBuildDate(snapshot.buildTime)}
+            />
+            <DetailRow label={t('manifest.commitLabel')} value={snapshot.commitHash} />
+            <DetailRow label={t('manifest.manifestHashLabel')} value={snapshot.manifestHash} code />
+            <DetailRow label={t('manifest.filesLabel')} value={`${snapshot.verifiedFileCount}`} />
+            <DetailRow
+              label={t('manifest.publisherKeyLabel')}
               value={snapshot.publicKeyFingerprint}
               code
             />
-            <DetailRow label="Signature" value={snapshot.signature} code />
+            <DetailRow label={t('manifest.signatureLabel')} value={snapshot.signature} code />
           </div>
         ) : null}
       </CardContent>

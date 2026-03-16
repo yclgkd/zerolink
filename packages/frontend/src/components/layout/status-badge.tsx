@@ -1,6 +1,7 @@
 import type { ChannelState } from '@zerolink/shared';
 import { CheckCircle, Clock, Lock, Timer, Trash2 } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/badge';
@@ -45,6 +46,7 @@ type StatusBadgeProps = Omit<ComponentProps<typeof Badge>, 'children' | 'variant
 };
 
 function StatusBadge({ status, className, ...props }: StatusBadgeProps) {
+  const { t } = useTranslation();
   const config = statusConfig[status];
   const IconComponent = config.icon;
 
@@ -60,7 +62,7 @@ function StatusBadge({ status, className, ...props }: StatusBadgeProps) {
       {...props}
     >
       <IconComponent aria-hidden="true" className="size-3.5" />
-      <span className="font-medium">{config.label}</span>
+      <span className="font-medium">{t(`status.${status}`)}</span>
     </Badge>
   );
 }

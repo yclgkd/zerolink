@@ -1,5 +1,7 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
 import { SafetyCode } from '../../components/safety/safety-code';
@@ -8,24 +10,6 @@ import { Spinner } from '../../components/ui/spinner';
 import type { ReceiverSafetyCodeStatus } from '../../features/share/share-logic';
 import { cn } from '../../lib/utils';
 import { ChannelUnavailableState } from '../channel/channel-unavailable-state';
-
-export const onboardingItems = [
-  {
-    emoji: '🔐',
-    title: 'This page is only for the receiver using the shared link.',
-    description: 'The sender already created the channel and sent you this link.',
-  },
-  {
-    emoji: '🗝️',
-    title: 'Your passphrase stays on this device',
-    description: 'It never gets sent to the server or shared with the sender.',
-  },
-  {
-    emoji: '🔒',
-    title: 'Locking creates your receiver key locally',
-    description: 'After you lock, the sender can deliver only to your receiver identity.',
-  },
-] as const;
 
 export function StepIndicator({
   current,
@@ -36,6 +20,7 @@ export function StepIndicator({
   total: number;
   labels: readonly string[];
 }) {
+  const { t } = useTranslation();
   return (
     <div aria-hidden="true" className="space-y-1.5">
       <div className="flex items-center gap-1.5">
@@ -54,57 +39,50 @@ export function StepIndicator({
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        Step {current} of {total} — {labels[current - 1]}
+        {t('share.stepIndicator', { current, total, label: labels[current - 1] })}
       </p>
     </div>
   );
 }
 
-export const nextSteps = [
-  'Coordinate with the sender over another channel.',
-  'Only confirm the Safety Code if this device shows it below.',
-  'This page updates automatically when the sender delivers the encrypted secret.',
-] as const;
+type NoticeCopy = { tone: 'info' | 'warning' | 'error'; title: string; body: string };
 
-const SAFETY_CODE_UNAVAILABLE_TITLE = 'Safety Code unavailable right now.';
-const SAFETY_CODE_UNAVAILABLE_BODY =
-  'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be verified here.';
-
-function getSafetyCodeNoticeCopy(
-  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>
-) {
+function getSafetyCodeCopy(
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>,
+  t: ReturnType<typeof useTranslation>['t']
+): NoticeCopy {
   switch (status) {
     case 'checking-local-key':
       return {
-        tone: 'info' as const,
-        title: 'Checking this device for the receiver key…',
-        body: 'ZeroLink only shows the Safety Code after confirming that this device created the current lock.',
+        tone: 'info',
+        title: t('share.safetyCheckingTitle'),
+        body: t('share.safetyCheckingBody'),
       };
     case 'missing-local-key':
       return {
-        tone: 'warning' as const,
-        title: 'This device cannot verify the Safety Code.',
-        body: 'No matching receiver key was found on this device. Do not confirm the Safety Code from here. If you expected to be the receiver, ask the sender to recreate the channel.',
+        tone: 'warning',
+        title: t('share.safetyMissingTitle'),
+        body: t('share.safetyMissingBody'),
       };
     case 'mismatched-local-key':
       return {
-        tone: 'error' as const,
-        title: 'Receiver identity mismatch detected.',
-        body: 'This device has different local receiver key material than the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.',
+        tone: 'error',
+        title: t('share.safetyMismatchedTitle'),
+        body: t('share.safetyMismatchedBody'),
       };
     case 'storage-error':
       return {
-        tone: 'warning' as const,
-        title: 'Unable to check the local receiver key.',
-        body: 'ZeroLink could not read the receiver key material stored on this device, so the Safety Code cannot be verified here.',
+        tone: 'warning',
+        title: t('share.safetyStorageErrorTitle'),
+        body: t('share.safetyStorageErrorBody'),
       };
     // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
     case 'missing-receiver-fingerprint':
     default:
       return {
-        tone: 'warning' as const,
-        title: SAFETY_CODE_UNAVAILABLE_TITLE,
-        body: SAFETY_CODE_UNAVAILABLE_BODY,
+        tone: 'warning',
+        title: t('share.safetyUnavailableTitle'),
+        body: t('share.safetyUnavailableBody'),
       };
   }
 }
@@ -116,48 +94,48 @@ function SafetyCodeSection({
   safetyCodeAvailable: SafetyCodeDisplay | null;
   safetyCodeStatus: ReceiverSafetyCodeStatus;
 }) {
+  const { t } = useTranslation();
+
   if (safetyCodeAvailable) {
     return <SafetyCode display={safetyCodeAvailable} />;
   }
 
-  const noticeCopy = getSafetyCodeNoticeCopy(
+  const effectiveStatus =
     safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
       ? 'missing-receiver-fingerprint'
-      : safetyCodeStatus
-  );
+      : safetyCodeStatus;
+
+  const { tone, title, body } = getSafetyCodeCopy(effectiveStatus, t);
 
   return (
-    <StateNotice
-      data-testid="share-safety-unavailable"
-      title={noticeCopy.title}
-      tone={noticeCopy.tone}
-    >
-      <p className="mt-1 text-xs text-foreground/90">{noticeCopy.body}</p>
+    <StateNotice data-testid="share-safety-unavailable" title={title} tone={tone}>
+      <p className="mt-1 text-xs text-foreground/90">{body}</p>
     </StateNotice>
   );
 }
 
 function getDecryptUnavailableCopy(
-  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>
-) {
+  status: Exclude<ReceiverSafetyCodeStatus, 'not-applicable' | 'verified-local-key'>,
+  t: ReturnType<typeof useTranslation>['t']
+): NoticeCopy {
   switch (status) {
     case 'checking-local-key':
       return {
-        tone: 'info' as const,
-        title: 'Checking this device before enabling decrypt…',
-        body: 'ZeroLink is verifying whether this device holds the receiver key needed for local decryption.',
+        tone: 'info',
+        title: t('share.decryptCheckingTitle'),
+        body: t('share.decryptCheckingBody'),
       };
     case 'mismatched-local-key':
       return {
-        tone: 'error' as const,
-        title: 'Decrypt blocked on this device.',
-        body: 'The receiver key stored on this device does not match the key currently locked on the channel. Treat this link as unsafe and ask the sender to recreate the channel.',
+        tone: 'error',
+        title: t('share.decryptMismatchedTitle'),
+        body: t('share.decryptMismatchedBody'),
       };
     case 'storage-error':
       return {
-        tone: 'warning' as const,
-        title: 'Unable to load the local receiver key.',
-        body: 'ZeroLink could not read the receiver key stored on this device, so local decrypt is unavailable here.',
+        tone: 'warning',
+        title: t('share.decryptStorageErrorTitle'),
+        body: t('share.decryptStorageErrorBody'),
       };
     // biome-ignore lint/complexity/noUselessSwitchCase: explicit enumeration for readability
     case 'missing-local-key':
@@ -165,9 +143,9 @@ function getDecryptUnavailableCopy(
     case 'missing-receiver-fingerprint':
     default:
       return {
-        tone: 'warning' as const,
-        title: 'Decrypt unavailable on this device.',
-        body: 'This device does not have the receiver key that locked the channel, so local decrypt is blocked here.',
+        tone: 'warning',
+        title: t('share.decryptUnavailableTitle'),
+        body: t('share.decryptUnavailableBody'),
       };
   }
 }
@@ -177,23 +155,49 @@ function DecryptUnavailableNotice({
 }: {
   safetyCodeStatus: ReceiverSafetyCodeStatus;
 }) {
-  const copy = getDecryptUnavailableCopy(
+  const { t } = useTranslation();
+
+  const effectiveStatus =
     safetyCodeStatus === 'not-applicable' || safetyCodeStatus === 'verified-local-key'
       ? 'missing-local-key'
-      : safetyCodeStatus
-  );
+      : safetyCodeStatus;
+
+  const { tone, title, body } = getDecryptUnavailableCopy(effectiveStatus, t);
 
   return (
-    <StateNotice data-testid="share-decrypt-unavailable" title={copy.title} tone={copy.tone}>
-      <p className="mt-1 text-xs text-foreground/90">{copy.body}</p>
+    <StateNotice data-testid="share-decrypt-unavailable" title={title} tone={tone}>
+      <p className="mt-1 text-xs text-foreground/90">{body}</p>
     </StateNotice>
   );
 }
 
 export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
+  const { t } = useTranslation();
+
+  const onboardingItems = useMemo(
+    () => [
+      {
+        emoji: '🔐',
+        title: t('share.onboarding1Title'),
+        description: t('share.onboarding1Desc'),
+      },
+      {
+        emoji: '🗝️',
+        title: t('share.onboarding2Title'),
+        description: t('share.onboarding2Desc'),
+      },
+      {
+        emoji: '🔒',
+        title: t('share.onboarding3Title'),
+        description: t('share.onboarding3Desc'),
+      },
+    ],
+    [t]
+  );
+
   return (
     <section className="space-y-4" data-testid="share-step-onboarding">
-      <h3 className="text-base font-semibold text-foreground">Receiver Lock Setup</h3>
+      <h3 className="text-base font-semibold text-foreground">{t('share.onboardingTitle')}</h3>
       <div className="space-y-3">
         {onboardingItems.map((item, index) => (
           <div
@@ -210,7 +214,7 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
         ))}
       </div>
       <Button data-testid="share-continue-button" onClick={onContinue} type="button">
-        Continue as receiver
+        {t('share.continueButton')}
       </Button>
     </section>
   );
@@ -237,16 +241,17 @@ export function LockStep({
   onBack: () => void;
   onGenerate: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-4" data-testid="share-step-lock">
-      <h3 className="text-base font-semibold text-foreground">Choose your passphrase</h3>
+      <h3 className="text-base font-semibold text-foreground">{t('share.lockTitle')}</h3>
       <PassphraseInput
         ariaDescribedBy={lockError && isLockPassphraseInvalid ? 'share-lock-error' : undefined}
         ariaInvalid={isLockPassphraseInvalid ? true : undefined}
         inputId="share-lock-passphrase"
-        label="Your passphrase"
+        label={t('share.lockLabel')}
         onChange={onPassphraseChange}
-        placeholder="Enter your passphrase"
+        placeholder={t('share.lockPlaceholder')}
         value={passphrase}
       />
 
@@ -279,7 +284,7 @@ export function LockStep({
           type="button"
           variant="secondary"
         >
-          Back
+          {t('share.backButton')}
         </Button>
         <Button
           data-testid="share-generate-button"
@@ -290,12 +295,12 @@ export function LockStep({
           {lockPending ? (
             <>
               <Spinner aria-hidden="true" className="size-4" />
-              Locking…
+              {t('share.lockingButton')}
             </>
           ) : (
             <>
               <KeyRound aria-hidden="true" className="size-4" />
-              Generate My Key & Lock
+              {t('share.generateButton')}
             </>
           )}
         </Button>
@@ -311,13 +316,18 @@ export function LockedStep({
   safetyCodeAvailable: SafetyCodeDisplay | null;
   safetyCodeStatus: ReceiverSafetyCodeStatus;
 }) {
+  const { t } = useTranslation();
+
+  const nextSteps = useMemo(
+    () => [t('share.nextStep1'), t('share.nextStep2'), t('share.nextStep3')],
+    [t]
+  );
+
   return (
     <section className="space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Receiver channel is locked</h3>
-        <p className="text-xs text-muted-foreground">
-          Verify the Safety Code with the sender only if this device shows it below.
-        </p>
+        <h3 className="text-base font-semibold text-foreground">{t('share.lockedTitle')}</h3>
+        <p className="text-xs text-muted-foreground">{t('share.lockedBody')}</p>
       </div>
 
       <SafetyCodeSection
@@ -329,7 +339,9 @@ export function LockedStep({
         className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
         data-testid="share-next-steps"
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-neon-cyan">Next Steps</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-neon-cyan">
+          {t('share.nextStepsLabel')}
+        </p>
         <ol className="space-y-1 text-sm text-foreground">
           {nextSteps.map((stepText) => (
             <li key={stepText}>{stepText}</li>
@@ -392,28 +404,25 @@ export function DeliveredStep({
   onDecrypt: () => void;
   onBurn: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-foreground">Channel Delivered</h3>
-        <p className="text-xs text-muted-foreground">
-          The encrypted secret has been delivered. Decryption still requires the device that created
-          the receiver lock.
-        </p>
+        <h3 className="text-base font-semibold text-foreground">{t('share.deliveredTitle')}</h3>
+        <p className="text-xs text-muted-foreground">{t('share.deliveredBody')}</p>
       </div>
 
       {deliveredAt !== null ? (
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground" data-testid="share-delivery-timestamp">
-            Delivered: {formatDeliveredAt(deliveredAt)}
+            {t('share.deliveredAtLabel')} {formatDeliveredAt(deliveredAt)}
           </p>
           {cipherVersion !== null && cipherVersion >= 1 ? (
             <output
               className="block text-xs font-medium text-neon-orange"
               data-testid="share-delivery-updated-badge"
             >
-              Updated (v{cipherVersion + 1}) · The sender may have revised this content. The latest
-              version is shown.
+              {t('share.updatedBadge', { version: cipherVersion + 1 })}
             </output>
           ) : null}
         </div>
@@ -433,9 +442,9 @@ export function DeliveredStep({
               }
               ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
               inputId="share-decrypt-passphrase"
-              label="Decrypt passphrase"
+              label={t('share.decryptLabel')}
               onChange={onPassphraseChange}
-              placeholder="Enter passphrase to decrypt"
+              placeholder={t('share.decryptPlaceholder')}
               value={passphrase}
             />
 
@@ -449,12 +458,12 @@ export function DeliveredStep({
                 {decryptPending ? (
                   <>
                     <Spinner aria-hidden="true" className="size-4" />
-                    Decrypting…
+                    {t('share.decryptingButton')}
                   </>
                 ) : (
                   <>
                     <Unlock aria-hidden="true" className="size-4" />
-                    Decrypt
+                    {t('share.decryptButton')}
                   </>
                 )}
               </Button>
@@ -465,7 +474,7 @@ export function DeliveredStep({
                 type="button"
                 variant="danger"
               >
-                Burn Local Plaintext
+                {t('share.burnButton')}
               </Button>
             </div>
           </div>
@@ -478,7 +487,7 @@ export function DeliveredStep({
               data-testid="share-decrypt-plaintext"
             >
               <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
-                Plaintext
+                {t('share.plaintextLabel')}
               </p>
               <pre className="whitespace-pre-wrap break-words text-sm text-foreground">
                 {plaintext}
@@ -489,13 +498,10 @@ export function DeliveredStep({
           {localPlaintextBurned ? (
             <StateNotice
               data-testid="share-decrypt-burned"
-              title="Local plaintext removed from this device."
+              title={t('share.burnedTitle')}
               tone="warning"
             >
-              <p className="mt-1 text-xs text-neon-orange">
-                This does not delete the channel or mark it expired. Re-enter your passphrase to
-                decrypt again.
-              </p>
+              <p className="mt-1 text-xs text-neon-orange">{t('share.burnedBody')}</p>
             </StateNotice>
           ) : null}
         </>
@@ -507,26 +513,25 @@ export function DeliveredStep({
 }
 
 export function LoadingStep() {
+  const { t } = useTranslation();
   return (
     <StateNotice
       aria-busy="true"
       data-testid="share-step-loading"
-      title="Loading Channel State"
+      title={t('share.loadingTitle')}
       tone="info"
     >
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Spinner className="size-3" />
-        Fetching secure channel status for this link.
+        {t('share.loadingBody')}
       </p>
     </StateNotice>
   );
 }
 
 export function UnavailableStep() {
+  const { t } = useTranslation();
   return (
-    <ChannelUnavailableState
-      body="This channel was destroyed, expired, or does not exist."
-      testId="share-step-unavailable"
-    />
+    <ChannelUnavailableState body={t('share.unavailableBody')} testId="share-step-unavailable" />
   );
 }

@@ -1,7 +1,9 @@
 import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
+import i18next from 'i18next';
 import { AlertTriangle, ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
   PageCard,
@@ -16,25 +18,13 @@ import { PassphraseInput } from '../components/lock/passphrase-input';
 import { Button } from '../components/ui/button';
 import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
-import {
-  getPassphraseLengthMessage,
-  hasRequiredPassphraseLength,
-} from '../crypto/passphrase-policy';
+import { hasRequiredPassphraseLength } from '../crypto/passphrase-policy';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
 import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
 import type { CreateStore } from '../stores/create-store';
 import { useCreateStore } from '../stores/create-store';
 import { createTrustRouteState } from '../trust-route-state';
-
-const profileLabelMap: Record<SecurityProfile, string> = {
-  [SECURITY_PROFILE.QUICK]: 'Quick Share',
-  [SECURITY_PROFILE.SECURE]: 'Secure Share',
-  // Legacy labels for existing channels
-  [SECURITY_PROFILE.STANDARD]: 'Standard',
-  [SECURITY_PROFILE.STRICT]: 'Strict',
-  [SECURITY_PROFILE.HARDWARE_ONLY]: 'Hardware-Only',
-};
 
 interface CreatedLinks {
   shareUrlWithFragment: string;
@@ -45,18 +35,21 @@ interface CreatedLinks {
 function mapCreateError(code: string): string {
   switch (code) {
     case 'PROFILE_BLOCKED':
-      return 'Secure Share requires WebAuthn support in your environment.';
+      return i18next.t('create.errorProfileBlocked');
     case 'PASSPHRASE_REQUIRED':
-      return getPassphraseLengthMessage('Quick Share password');
+      return i18next.t('passphrase.lengthMessage', {
+        label: i18next.t('create.passwordLabel'),
+        min: 8,
+      });
     case 'NOT_ALLOWED':
-      return 'Passkey prompt was cancelled or denied. Please try again.';
+      return i18next.t('create.errorNotAllowed');
     case 'NETWORK_ERROR':
-      return 'Network error while creating channel. Please retry.';
+      return i18next.t('create.errorNetwork');
     case 'BAD_REQUEST':
     case 'INVALID_REQUEST':
-      return 'Create request was rejected. Please retry.';
+      return i18next.t('create.errorBadRequest');
     default:
-      return 'An unexpected error occurred. Please try again.';
+      return i18next.t('create.errorDefault');
   }
 }
 
@@ -118,31 +111,32 @@ function ModeSelectorGrid({
   webAuthnSupported: boolean;
   onSelect: (profile: SecurityProfile) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-3">
-      <h3 className="text-base font-semibold text-foreground">Choose Share Mode</h3>
+      <h3 className="text-base font-semibold text-foreground">{t('create.chooseModeTitle')}</h3>
       <div className="grid gap-4 md:grid-cols-2">
         <ModeCard
           data-testid="mode-card-quick"
-          description="Password-protected — no passkey needed. Works in any browser."
+          description={t('create.quickShareDescription')}
           icon={Lock}
           onClick={() => onSelect(SECURITY_PROFILE.QUICK)}
           selected={selected === SECURITY_PROFILE.QUICK}
-          title="Quick Share"
+          title={t('create.quickShareTitle')}
         />
         <ModeCard
           data-testid="mode-card-secure"
           description={
             webAuthnSupported
-              ? 'Passkey-protected — strongest security with user verification.'
-              : 'Requires WebAuthn support (not available in this environment).'
+              ? t('create.secureShareDescriptionAvailable')
+              : t('create.secureShareDescriptionUnavailable')
           }
           icon={Shield}
           onClick={() => {
             if (webAuthnSupported) onSelect(SECURITY_PROFILE.SECURE);
           }}
           selected={selected === SECURITY_PROFILE.SECURE}
-          title="Secure Share"
+          title={t('create.secureShareTitle')}
         />
       </div>
       {selected === SECURITY_PROFILE.SECURE ? (
@@ -150,61 +144,65 @@ function ModeSelectorGrid({
           className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4 text-sm text-muted-foreground"
           data-testid="create-secure-share-hint"
         >
-          This passkey is used only for this channel. If it appears in your passkey manager, it can
-          be safely deleted after the channel expires.
+          {t('create.secureShareHint')}
         </div>
       ) : null}
       {!webAuthnSupported ? (
         <StateNotice
           data-testid="create-webauthn-blocked-warning"
-          title="WebAuthn is not available in this environment."
+          title={t('create.webauthnBlockedTitle')}
           tone="warning"
         >
-          <p className="text-neon-orange">Secure Share is disabled. Use Quick Share instead.</p>
+          <p className="text-neon-orange">{t('create.webauthnBlockedBody')}</p>
         </StateNotice>
       ) : null}
     </section>
   );
 }
 
-const HOW_IT_WORKS_STEPS = [
-  {
-    number: '01',
-    numberClass: 'text-neon-cyan',
-    title: 'Create',
-    description: 'Choose a mode and create the encrypted channel.',
-  },
-  {
-    number: '02',
-    numberClass: 'text-neon-magenta',
-    title: 'Share',
-    description: 'Send the share link to your receiver.',
-  },
-  {
-    number: '03',
-    numberClass: 'text-neon-orange',
-    title: 'Verify Safety Code',
-    description: 'After receiver locks, compare the Safety Code over a separate channel.',
-  },
-  {
-    number: '04',
-    numberClass: 'text-neon-green',
-    title: 'Deliver',
-    description: 'Deliver the encrypted secret to the locked receiver.',
-  },
-];
-
 function HowItWorks() {
+  const { t } = useTranslation();
+
+  const steps = useMemo(
+    () => [
+      {
+        number: '01',
+        numberClass: 'text-neon-cyan',
+        title: t('create.step1Title'),
+        description: t('create.step1Desc'),
+      },
+      {
+        number: '02',
+        numberClass: 'text-neon-magenta',
+        title: t('create.step2Title'),
+        description: t('create.step2Desc'),
+      },
+      {
+        number: '03',
+        numberClass: 'text-neon-orange',
+        title: t('create.step3Title'),
+        description: t('create.step3Desc'),
+      },
+      {
+        number: '04',
+        numberClass: 'text-neon-green',
+        title: t('create.step4Title'),
+        description: t('create.step4Desc'),
+      },
+    ],
+    [t]
+  );
+
   return (
     <section
       className="rounded-xl border border-border/40 bg-muted/30 p-4"
       data-testid="how-it-works"
     >
       <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        How it works
+        {t('create.howItWorksLabel')}
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {HOW_IT_WORKS_STEPS.map((step) => (
+        {steps.map((step) => (
           <div className="space-y-1" key={step.number}>
             <p className="text-sm font-medium text-foreground">
               <span className={cn('mr-1.5 text-xs', step.numberClass)}>{step.number}</span>
@@ -219,21 +217,19 @@ function HowItWorks() {
 }
 
 function TrustModelHint() {
+  const { t } = useTranslation();
   const location = useLocation();
   return (
     <section className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <p className="text-sm text-muted-foreground">
-          Need a plain-language summary of what stays local, what the sender can do, and when
-          channel data disappears?
-        </p>
+        <p className="text-sm text-muted-foreground">{t('create.trustHintBody')}</p>
         <Link
           className="text-sm font-medium text-neon-cyan underline decoration-neon-cyan/50 underline-offset-4 transition-colors hover:text-white"
           data-testid="create-trust-link"
           state={createTrustRouteState(location)}
           to="/trust"
         >
-          Read the trust model
+          {t('create.trustHintLink')}
         </Link>
       </div>
     </section>
@@ -247,21 +243,19 @@ function QuickSharePasswordPanel({
   password: string;
   onPasswordChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="space-y-3 rounded-xl border border-neon-purple/35 bg-neon-purple/10 p-4 text-sm"
       data-testid="quick-share-password-panel"
     >
-      <p className="font-medium text-foreground">Set a Quick Share Password</p>
-      <p className="text-muted-foreground">
-        This password protects your channel management key. Choose something strong — it cannot be
-        recovered if lost.
-      </p>
+      <p className="font-medium text-foreground">{t('create.passwordPanelTitle')}</p>
+      <p className="text-muted-foreground">{t('create.passwordPanelBody')}</p>
       <PassphraseInput
         inputId="create-quick-password"
-        label="Channel password"
+        label={t('create.passwordLabel')}
         onChange={onPasswordChange}
-        placeholder="Enter a strong password"
+        placeholder={t('create.passwordPlaceholder')}
         showStrength
         value={password}
       />
@@ -278,6 +272,7 @@ function ActionFooter({
   disabled: boolean;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button
@@ -289,12 +284,12 @@ function ActionFooter({
         {isLoading ? (
           <>
             <Spinner aria-hidden="true" className="size-4" />
-            Creating…
+            {t('create.submittingButton')}
           </>
         ) : (
           <>
             <Zap aria-hidden="true" className="size-4" />
-            Create Channel
+            {t('create.submitButton')}
           </>
         )}
       </Button>
@@ -336,6 +331,7 @@ function CopyableLinkRow({
   testId: string;
   copyTestId: string;
 }) {
+  const { t } = useTranslation();
   const { copied, copy } = useCopyLink(url);
   return (
     <div className="space-y-1.5">
@@ -357,12 +353,12 @@ function CopyableLinkRow({
           {copied ? (
             <>
               <ClipboardCheck aria-hidden="true" className="size-3.5 text-neon-green" />
-              Copied
+              {t('create.copiedButton')}
             </>
           ) : (
             <>
               <Copy aria-hidden="true" className="size-3.5" />
-              Copy
+              {t('create.copyButton')}
             </>
           )}
         </button>
@@ -380,6 +376,20 @@ function SuccessSummary({
   links: CreatedLinks | null;
   onCreateAnother: () => void;
 }) {
+  const { t } = useTranslation();
+
+  const profileLabelMap: Record<SecurityProfile, string> = useMemo(
+    () => ({
+      [SECURITY_PROFILE.QUICK]: t('profile.quick'),
+      [SECURITY_PROFILE.SECURE]: t('profile.secure'),
+      // Legacy labels for existing channels
+      [SECURITY_PROFILE.STANDARD]: t('profile.standard'),
+      [SECURITY_PROFILE.STRICT]: t('profile.strict'),
+      [SECURITY_PROFILE.HARDWARE_ONLY]: t('profile.hardwareOnly'),
+    }),
+    [t]
+  );
+
   if (!createdProfile || !links) return null;
 
   return (
@@ -389,16 +399,16 @@ function SuccessSummary({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5">
-          <p className="font-semibold text-neon-green">Channel created successfully</p>
+          <p className="font-semibold text-neon-green">{t('create.successTitle')}</p>
           <p className="text-xs text-muted-foreground">
-            Mode:{' '}
+            {t('create.successModeLabel')}{' '}
             <span className="font-medium text-foreground">{profileLabelMap[createdProfile]}</span>
             {links.isPasswordMode ? (
               <span
                 className="ml-2 inline-block rounded border border-neon-purple/40 bg-neon-purple/10 px-1.5 py-px text-xs font-semibold text-neon-purple"
                 data-testid="create-password-mode-badge"
               >
-                Password-protected
+                {t('create.passwordProtectedBadge')}
               </span>
             ) : null}
           </p>
@@ -410,36 +420,35 @@ function SuccessSummary({
           type="button"
         >
           <PlusCircle aria-hidden="true" className="size-3.5" />
-          Create another
+          {t('create.createAnother')}
         </button>
       </div>
 
       <div className="space-y-4">
         <CopyableLinkRow
           copyTestId="create-success-share-link-copy"
-          label="Share link — send to receiver"
+          label={t('create.shareLinkLabel')}
           testId="create-success-share-link"
           url={links.shareUrlWithFragment}
         />
         <StateNotice
           data-testid="create-success-share-link-warning"
-          title="This share link is shown only once."
+          title={t('create.shareLinkWarningTitle')}
           tone="warning"
         >
           <p className="mt-1 text-sm text-neon-orange">
             <AlertTriangle aria-hidden="true" className="mr-1 inline size-4" />
-            Save it now. After you leave this page, ZeroLink cannot recover it. If you lose it,
-            create a new channel.
+            {t('create.shareLinkWarningBody')}
           </p>
         </StateNotice>
         <CopyableLinkRow
           copyTestId="create-success-manage-link-copy"
-          label="Manage link — keep this private"
+          label={t('create.manageLinkLabel')}
           testId="create-success-manage-link"
           url={links.manageUrl}
         />
         <p className="text-xs text-muted-foreground" data-testid="create-success-expiry-hint">
-          Channel expires in 1 hour. Coordinate with the receiver before it disappears.
+          {t('create.expiryHint')}
         </p>
       </div>
     </div>
@@ -563,6 +572,7 @@ function useCreatePageLogic() {
  * Create page with Quick Share (password) and Secure Share (passkey) modes.
  */
 export function CreatePage(): ReactElement {
+  const { t } = useTranslation();
   const logic = useCreatePageLogic();
 
   return (
@@ -570,14 +580,11 @@ export function CreatePage(): ReactElement {
       <PageCardHeader>
         <div className="flex items-center justify-between gap-3">
           <PageCardTitle asChild className="text-primary">
-            <h2>Create Secure Channel</h2>
+            <h2>{t('create.title')}</h2>
           </PageCardTitle>
           <RoleBadge party="sender" />
         </div>
-        <PageCardDescription>
-          Zero-knowledge encrypted delivery. Choose Quick Share (password) or Secure Share
-          (passkey).
-        </PageCardDescription>
+        <PageCardDescription>{t('create.description')}</PageCardDescription>
       </PageCardHeader>
       <PageCardContent aria-busy={logic.isSubmitting} className="space-y-6">
         {logic.createdLinks ? (

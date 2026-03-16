@@ -44,6 +44,7 @@ export default defineConfig({
   },
   test: {
     testTimeout: 20_000,
+    setupFiles: ['./src/__tests__/helpers/i18n-test-setup.ts'],
     exclude: [...configDefaults.exclude, 'e2e/**', 'playwright.config.ts'],
     coverage: {
       provider: 'v8',
