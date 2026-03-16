@@ -206,7 +206,7 @@ function HowItWorks() {
             <p
               className={cn(
                 'text-sm font-medium',
-                step.isKeyStep ? 'text-neon-cyan' : 'text-foreground'
+                step.isKeyStep ? 'text-neon-orange' : 'text-foreground'
               )}
             >
               <span className="mr-1.5 text-xs text-muted-foreground">{step.number}</span>
