@@ -185,7 +185,6 @@ const HOW_IT_WORKS_STEPS = [
     numberClass: 'text-neon-orange',
     title: 'Verify Safety Code',
     description: 'After receiver locks, compare the Safety Code over a separate channel.',
-    isKeyStep: true,
   },
   {
     number: '04',
@@ -207,12 +206,7 @@ function HowItWorks() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {HOW_IT_WORKS_STEPS.map((step) => (
           <div className="space-y-1" key={step.number}>
-            <p
-              className={cn(
-                'text-sm font-medium',
-                step.isKeyStep ? 'text-neon-orange' : 'text-foreground'
-              )}
-            >
+            <p className="text-sm font-medium text-foreground">
               <span className={cn('mr-1.5 text-xs', step.numberClass)}>{step.number}</span>
               {step.title}
             </p>
