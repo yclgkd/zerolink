@@ -1,11 +1,13 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../lib/utils';
-import { getPassphraseStrength, type PassphraseStrength } from './passphrase-strength';
-
-const STRICT_WARNING_TEXT =
-  'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)';
+import {
+  getPassphraseStrength,
+  type PassphraseStrength,
+  type PassphraseStrengthLabel,
+} from './passphrase-strength';
 
 /**
  * Controlled passphrase input with visibility toggle and optional strength UI.
@@ -50,6 +52,12 @@ function getSegmentClass(strengthLevel: 0 | 1 | 2 | 3, segmentLevel: 1 | 2 | 3):
   return 'bg-neon-green';
 }
 
+const strengthKeyMap: Record<Exclude<PassphraseStrengthLabel, ''>, string> = {
+  Weak: 'passphrase.weak',
+  Medium: 'passphrase.medium',
+  Strong: 'passphrase.strong',
+};
+
 function PassphraseStrengthIndicator({
   strength,
   showWarning,
@@ -57,12 +65,13 @@ function PassphraseStrengthIndicator({
   strength: PassphraseStrength;
   showWarning: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">Passphrase strength</span>
+        <span className="text-xs text-muted-foreground">{t('passphrase.strengthLabel')}</span>
         <span className={cn('text-xs font-medium', getLabelClass(strength.level))}>
-          {strength.label}
+          {strength.label ? t(strengthKeyMap[strength.label]) : ''}
         </span>
       </div>
       <div className="flex gap-1.5">
@@ -79,7 +88,7 @@ function PassphraseStrengthIndicator({
       </div>
       {showWarning ? (
         <p className="rounded-lg border border-neon-amber/35 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
-          {STRICT_WARNING_TEXT}
+          {t('passphrase.strictWarning')}
         </p>
       ) : null}
     </div>
@@ -92,25 +101,28 @@ function PassphraseStrengthIndicator({
 export function PassphraseInput({
   value,
   onChange,
-  placeholder = 'Enter passphrase',
+  placeholder,
   showStrength = true,
   strictMode = false,
   className,
   inputId,
-  label = 'Passphrase',
+  label,
   ariaInvalid,
   ariaDescribedBy,
 }: PassphraseInputProps) {
+  const { t } = useTranslation();
   const [showPassphrase, setShowPassphrase] = useState(false);
   const generatedId = useId();
   const resolvedInputId = inputId ?? `passphrase-input-${generatedId.replace(/:/gu, '')}`;
+  const resolvedLabel = label ?? t('passphrase.defaultLabel');
+  const resolvedPlaceholder = placeholder ?? t('passphrase.defaultPlaceholder');
   const strength = getPassphraseStrength(value);
   const showWarning = strictMode && Boolean(value) && strength.level === 1;
 
   return (
     <div className={cn('space-y-3', className)} data-testid="passphrase-input-root">
       <label className="sr-only" htmlFor={resolvedInputId}>
-        {label}
+        {resolvedLabel}
       </label>
       <div className="relative">
         <input
@@ -127,12 +139,12 @@ export function PassphraseInput({
           data-testid="passphrase-input-field"
           id={resolvedInputId}
           onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           type={showPassphrase ? 'text' : 'password'}
           value={value}
         />
         <button
-          aria-label={showPassphrase ? 'Hide passphrase' : 'Show passphrase'}
+          aria-label={showPassphrase ? t('passphrase.hideButton') : t('passphrase.showButton')}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => setShowPassphrase((current) => !current)}
           type="button"

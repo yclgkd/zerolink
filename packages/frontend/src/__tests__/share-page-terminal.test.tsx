@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import './helpers/i18n-test-setup';
+
 import 'fake-indexeddb/auto';
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';

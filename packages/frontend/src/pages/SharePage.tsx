@@ -1,5 +1,6 @@
 import { CHANNEL_STATE } from '@zerolink/shared';
 import { type ReactElement, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router-dom';
 
 import { PageCard, PageCardContent, StateNotice } from '../components/layout';
@@ -22,20 +23,19 @@ import {
 } from '../features/share/share-logic';
 
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
+  const { t } = useTranslation();
   return (
     <p className="text-xs text-muted-foreground">
-      Channel ID:{' '}
+      {t('share.channelIdLabel')}{' '}
       <code
         className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
         data-testid="share-uuid"
       >
-        {uuid ?? '(missing)'}
+        {uuid ?? t('share.channelIdMissing')}
       </code>
     </p>
   );
 }
-
-const LOCK_FLOW_STEPS = ['Receiver intro', 'Your passphrase', 'Ready for delivery'] as const;
 
 const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
   onboarding: 1,
@@ -47,6 +47,12 @@ const LOCK_STEP_INDEX: Record<'onboarding' | 'lock' | 'locked', number> = {
  * Receiver page integrating lock flow and delivered decryption flow with orchestrator.
  */
 export function SharePage(): ReactElement {
+  const { t } = useTranslation();
+  const LOCK_FLOW_STEPS = [
+    t('share.stepIntro'),
+    t('share.stepPassphrase'),
+    t('share.stepReady'),
+  ] as const;
   const { uuid } = useParams<{ uuid: string }>();
   const location = useLocation();
   const receiverKeyStorage = useMemo(() => createIndexedDbReceiverKeyStorage(), []);

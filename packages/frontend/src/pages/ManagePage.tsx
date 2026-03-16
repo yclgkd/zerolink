@@ -1,5 +1,6 @@
 import { CHANNEL_STATE } from '@zerolink/shared';
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { ChannelUnavailableState } from '../components/channel/channel-unavailable-state';
 import { PageCard, PageCardContent, StateNotice } from '../components/layout';
@@ -18,6 +19,7 @@ import { useManagePageState } from './manage/use-manage-page-state';
  * Sender-side manage page integrated with orchestrator deliver/delete flows.
  */
 export function ManagePage(): ReactElement {
+  const { t } = useTranslation();
   const { uuid } = useParams<{ uuid: string }>();
   const state = useManagePageState(uuid);
   const usesPasswordManagedChannel =
@@ -48,7 +50,7 @@ export function ManagePage(): ReactElement {
 
         {showUnavailableState ? (
           <ChannelUnavailableState
-            body="This channel was destroyed, expired, or does not exist."
+            body={t('manage.unavailableBody')}
             testId="manage-state-unavailable"
           />
         ) : (
@@ -69,15 +71,12 @@ export function ManagePage(): ReactElement {
 
         {showPasswordSection ? (
           <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
-            <p className="text-xs text-muted-foreground">
-              This channel uses a password-protected management key. Enter the password you set when
-              creating this channel.
-            </p>
+            <p className="text-xs text-muted-foreground">{t('manage.softkeyPassphraseHint')}</p>
             <PassphraseInput
               inputId="manage-softkey-passphrase"
-              label="Channel password"
+              label={t('manage.softkeyLabel')}
               onChange={state.handleSoftkeyPassphraseChange}
-              placeholder="Enter channel password"
+              placeholder={t('manage.softkeyPlaceholder')}
               showStrength={false}
               value={state.softkeyPassphrase}
             />

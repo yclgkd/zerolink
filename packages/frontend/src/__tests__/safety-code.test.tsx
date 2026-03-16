@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import './helpers/i18n-test-setup';
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { HexString, SafetyCodeDisplay } from '@zerolink/shared';
 import { afterEach, describe, expect, it } from 'vitest';

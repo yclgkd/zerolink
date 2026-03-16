@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import {
@@ -12,59 +13,57 @@ import {
 import { Button } from '../components/ui/button';
 import { hasTrustRouteReturnTo } from '../trust-route-state';
 
-const TRUST_SECTIONS = [
-  {
-    title: 'What the server never gets',
-    body: 'The server never receives the URL fragment (#k=...), the receiver passphrase, the receiver private key, or decrypted plaintext. Those stay outside the server-side request path.',
-    accentClass: 'text-neon-cyan',
-  },
-  {
-    title: 'What the server stores at each stage',
-    body: 'At create time: channel metadata, expiry, and admin auth material. After lock: receiver public key and fingerprint. After delivery: ciphertext for the receiver to fetch.',
-    accentClass: 'text-neon-magenta',
-  },
-  {
-    title: 'What the sender can control',
-    body: 'The sender can create a channel, share the receiver link, deliver ciphertext, and delete the channel. The sender cannot read the receiver passphrase, inspect the receiver private key, or see decrypted plaintext on the receiver device.',
-    accentClass: 'text-neon-green',
-  },
-  {
-    title: 'What stays on the sender device',
-    body: 'Quick Share keeps a wrapped admin key on the sender device so the same device can later deliver or delete the channel. If you switch devices without that local material, you cannot keep managing the existing channel from the new device.',
-    accentClass: 'text-neon-orange',
-  },
-  {
-    title: 'What stays on the receiver device',
-    body: 'The receiver device keeps a wrapped receiver private key in IndexedDB for that channel. Plaintext appears only on the local device after decrypt. Channel status may surface the receiver fingerprint to the sender, but the receiver page should show a Safety Code only after this device proves it holds the matching local receiver key.',
-    accentClass: 'text-neon-cyan',
-  },
-  {
-    title: 'Delete, expiry, local burn, and Verified Release',
-    body: 'Channels expire after 1 hour. Sender delete purges ciphertext and leaves a tombstone to prevent revival. Local burn removes plaintext from this device only — the channel stays active. Verified Release means the build passed signed release verification; absence means it did not.',
-    accentClass: 'text-neon-orange',
-  },
-] as const;
-
 export function TrustPage(): ReactElement {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const canReturnToPreviousRoute = hasTrustRouteReturnTo(location.state);
 
+  const trustSections = [
+    {
+      title: t('trust.section1Title'),
+      body: t('trust.section1Body'),
+      accentClass: 'text-neon-cyan',
+    },
+    {
+      title: t('trust.section2Title'),
+      body: t('trust.section2Body'),
+      accentClass: 'text-neon-magenta',
+    },
+    {
+      title: t('trust.section3Title'),
+      body: t('trust.section3Body'),
+      accentClass: 'text-neon-green',
+    },
+    {
+      title: t('trust.section4Title'),
+      body: t('trust.section4Body'),
+      accentClass: 'text-neon-orange',
+    },
+    {
+      title: t('trust.section5Title'),
+      body: t('trust.section5Body'),
+      accentClass: 'text-neon-cyan',
+    },
+    {
+      title: t('trust.section6Title'),
+      body: t('trust.section6Body'),
+      accentClass: 'text-neon-orange',
+    },
+  ];
+
   return (
     <PageCard data-testid="page-trust" tone="cyan">
       <PageCardHeader className="gap-2">
-        <p className="text-xs uppercase tracking-[0.35em] text-neon-cyan/80">Trust Model</p>
+        <p className="text-xs uppercase tracking-[0.35em] text-neon-cyan/80">{t('trust.badge')}</p>
         <PageCardTitle asChild className="text-primary">
-          <h2>What ZeroLink Can and Cannot Know</h2>
+          <h2>{t('trust.title')}</h2>
         </PageCardTitle>
-        <PageCardDescription>
-          A compact summary of what stays on your device, what the sender can control, and when a
-          channel disappears.
-        </PageCardDescription>
+        <PageCardDescription>{t('trust.description')}</PageCardDescription>
       </PageCardHeader>
       <PageCardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {TRUST_SECTIONS.map((section, index) => (
+          {trustSections.map((section, index) => (
             <article
               className="flex flex-col rounded-2xl border border-border/60 bg-card/60 p-5 shadow-[0_18px_48px_rgb(0_0_0_/_0.2)]"
               key={section.title}
@@ -92,10 +91,10 @@ export function TrustPage(): ReactElement {
           type="button"
           variant="secondary"
         >
-          Back
+          {t('trust.backButton')}
         </Button>
         <Button asChild data-testid="trust-create-button">
-          <Link to="/">Create Secure Channel</Link>
+          <Link to="/">{t('trust.createButton')}</Link>
         </Button>
       </PageCardFooter>
     </PageCard>

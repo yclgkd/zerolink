@@ -1,12 +1,11 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../lib/utils';
 import { PageCard, PageCardContent, PageCardHeader, PageCardTitle } from '../layout';
 import { resolveSafetyCodeColors } from './safety-code-colors';
-
-const DEFAULT_VERIFY_HINT = 'Verify this code via another channel (phone, video call)';
 
 /**
  * Props for rendering Safety Code in emoji/color modes with advanced fingerprint details.
@@ -35,11 +34,12 @@ function SafetyCodeHeaderToggle({
   view: ViewType;
   setView: (view: ViewType) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <PageCardHeader className="gap-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <PageCardTitle className="text-xl">Safety Code</PageCardTitle>
+          <PageCardTitle className="text-xl">{t('safetyCode.title')}</PageCardTitle>
           <p className="text-sm text-muted-foreground">{verifyHint}</p>
         </div>
         <div className="flex gap-2">
@@ -54,7 +54,7 @@ function SafetyCodeHeaderToggle({
             onClick={() => setView('emoji')}
             type="button"
           >
-            Emoji
+            {t('safetyCode.emojiTab')}
           </button>
           <button
             aria-pressed={view === 'color'}
@@ -67,7 +67,7 @@ function SafetyCodeHeaderToggle({
             onClick={() => setView('color')}
             type="button"
           >
-            Colors
+            {t('safetyCode.colorTab')}
           </button>
         </div>
       </div>
@@ -115,6 +115,7 @@ function AdvancedFingerprintSection({
   showAdvanced: boolean;
   setShowAdvanced: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="border-t border-border/50 pt-3">
       <button
@@ -127,17 +128,17 @@ function AdvancedFingerprintSection({
           aria-hidden="true"
           className={cn('size-3.5 transition-transform', showAdvanced && 'rotate-180')}
         />
-        Advanced fingerprint
+        {t('safetyCode.advancedToggle')}
       </button>
 
       {showAdvanced ? (
         <div className="mt-3 space-y-2" data-testid="safety-code-advanced-content">
           <div>
-            <p className="text-xs text-muted-foreground">Short fingerprint</p>
+            <p className="text-xs text-muted-foreground">{t('safetyCode.shortFprLabel')}</p>
             <code className="text-xs text-neon-cyan">{display.shortFpr}</code>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Full hex fingerprint</p>
+            <p className="text-xs text-muted-foreground">{t('safetyCode.fullFprLabel')}</p>
             <code className="break-all text-xs text-neon-cyan">{display.fullFpr}</code>
           </div>
         </div>
@@ -154,10 +155,12 @@ export function SafetyCode({
   className,
   defaultView = 'color',
   palette,
-  verifyHint = DEFAULT_VERIFY_HINT,
+  verifyHint,
 }: SafetyCodeProps) {
+  const { t } = useTranslation();
   const [view, setView] = useState<ViewType>(defaultView);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const resolvedVerifyHint = verifyHint ?? t('safetyCode.verifyHint');
   const colors = resolveSafetyCodeColors(display.color.cells, palette);
 
   const emojiCells = display.emoji.emojis.map((emoji, index) => ({
@@ -178,7 +181,7 @@ export function SafetyCode({
       data-testid="safety-code-root"
       tone="magenta"
     >
-      <SafetyCodeHeaderToggle setView={setView} verifyHint={verifyHint} view={view} />
+      <SafetyCodeHeaderToggle setView={setView} verifyHint={resolvedVerifyHint} view={view} />
 
       <PageCardContent className="space-y-4">
         {view === 'emoji' ? <EmojiGrid cells={emojiCells} /> : <ColorGrid cells={colorCells} />}

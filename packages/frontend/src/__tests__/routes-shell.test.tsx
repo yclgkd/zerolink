@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import './helpers/i18n-test-setup';
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
