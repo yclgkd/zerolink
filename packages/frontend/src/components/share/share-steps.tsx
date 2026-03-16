@@ -408,13 +408,13 @@ export function DeliveredStep({
             Delivered: {formatDeliveredAt(deliveredAt)}
           </p>
           {cipherVersion !== null && cipherVersion >= 1 ? (
-            <p
-              className="text-xs font-medium text-neon-orange"
+            <output
+              className="block text-xs font-medium text-neon-orange"
               data-testid="share-delivery-updated-badge"
             >
               Updated (v{cipherVersion + 1}) · The sender may have revised this content. The latest
               version is shown.
-            </p>
+            </output>
           ) : null}
         </div>
       ) : null}

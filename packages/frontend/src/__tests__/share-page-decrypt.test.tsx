@@ -649,7 +649,10 @@ describe('SharePage – decryptDelivered action', () => {
     });
     fireEvent.click(screen.getByTestId('share-decrypt-button'));
 
-    expect(await screen.findByTestId('share-delivery-timestamp')).toBeTruthy();
+    const el = await screen.findByTestId('share-delivery-timestamp');
+    // Prefix is fixed; year "2023" is present in any locale for MOCK_TIMESTAMP (Nov 2023)
+    expect(el.textContent).toMatch(/^Delivered:/);
+    expect(el.textContent).toContain('2023');
   });
 
   it('shows updated badge when cipherVersion is 1 or more', async () => {
@@ -666,7 +669,11 @@ describe('SharePage – decryptDelivered action', () => {
     });
     fireEvent.click(screen.getByTestId('share-decrypt-button'));
 
-    expect(await screen.findByTestId('share-delivery-updated-badge')).toBeTruthy();
+    const badge = await screen.findByTestId('share-delivery-updated-badge');
+    // cipherVersion=1 → user-facing v2 (0-based internal → 1-based display)
+    expect(badge.textContent).toContain('Updated (v2)');
+    // <output> has implicit role="status" semantics without a role attribute
+    expect(badge.tagName.toLowerCase()).toBe('output');
   });
 
   it('does not show updated badge when cipherVersion is 0 (first delivery)', async () => {
