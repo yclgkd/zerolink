@@ -167,6 +167,62 @@ function ModeSelectorGrid({
   );
 }
 
+const HOW_IT_WORKS_STEPS = [
+  {
+    number: '01',
+    title: 'Create',
+    description: 'Choose a mode and create the encrypted channel.',
+    isKeyStep: false,
+  },
+  {
+    number: '02',
+    title: 'Share',
+    description: 'Send the share link to your receiver.',
+    isKeyStep: false,
+  },
+  {
+    number: '03',
+    title: 'Verify Safety Code',
+    description: 'After receiver locks, compare the Safety Code over a separate channel.',
+    isKeyStep: true,
+  },
+  {
+    number: '04',
+    title: 'Deliver',
+    description: 'Deliver the encrypted secret to the locked receiver.',
+    isKeyStep: false,
+  },
+] as const;
+
+function HowItWorks() {
+  return (
+    <section
+      className="rounded-xl border border-border/40 bg-muted/30 p-4"
+      data-testid="how-it-works"
+    >
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        How it works
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {HOW_IT_WORKS_STEPS.map((step) => (
+          <div className="space-y-1" key={step.number}>
+            <p
+              className={cn(
+                'text-sm font-medium',
+                step.isKeyStep ? 'text-neon-cyan' : 'text-foreground'
+              )}
+            >
+              <span className="mr-1.5 text-xs text-muted-foreground">{step.number}</span>
+              {step.title}
+            </p>
+            <p className="text-xs text-muted-foreground">{step.description}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function TrustModelHint() {
   const location = useLocation();
   return (
@@ -387,6 +443,9 @@ function SuccessSummary({
           testId="create-success-manage-link"
           url={links.manageUrl}
         />
+        <p className="text-xs text-muted-foreground" data-testid="create-success-expiry-hint">
+          Channel expires in 1 hour. Coordinate with the receiver before it disappears.
+        </p>
       </div>
     </div>
   );
@@ -534,6 +593,7 @@ export function CreatePage(): ReactElement {
           />
         ) : (
           <>
+            <HowItWorks />
             <ModeSelectorGrid
               onSelect={logic.handleSelectProfile}
               selected={logic.state.selectedProfile}
