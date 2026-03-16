@@ -393,4 +393,72 @@ describe('CreatePage integration', () => {
     expect(trustLink.getAttribute('href')).toBe('/trust');
     expect(trustLink.textContent?.toLowerCase()).toContain('trust model');
   });
+
+  it('renders HowItWorks with all 4 steps including Verify Safety Code', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    const howItWorks = screen.getByTestId('how-it-works');
+    expect(howItWorks).toBeTruthy();
+    expect(howItWorks.textContent).toContain('Create');
+    expect(howItWorks.textContent).toContain('Share');
+    expect(howItWorks.textContent).toContain('Verify Safety Code');
+    expect(howItWorks.textContent).toContain(
+      'After receiver locks, compare the Safety Code over a separate channel.'
+    );
+    expect(howItWorks.textContent).toContain('Deliver');
+  });
+
+  it('renders HowItWorks when WebAuthn is unavailable', () => {
+    mockWebAuthnSupport(false);
+    renderCreatePage();
+
+    expect(screen.getByTestId('how-it-works')).toBeTruthy();
+  });
+
+  it('hides HowItWorks after successful creation', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    expect(screen.getByTestId('how-it-works')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('how-it-works')).toBeNull();
+  });
+
+  it('shows expiry hint in success summary', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    const expiryHint = await screen.findByTestId('create-success-expiry-hint');
+    expect(expiryHint.textContent).toContain('Channel expires in 1 hour');
+    expect(expiryHint.textContent).toContain('Coordinate with the receiver before it disappears.');
+  });
+
+  it('shows HowItWorks again after clicking Create another', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('how-it-works')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('how-it-works')).toBeTruthy();
+    });
+  });
 });

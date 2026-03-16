@@ -167,6 +167,57 @@ function ModeSelectorGrid({
   );
 }
 
+const HOW_IT_WORKS_STEPS = [
+  {
+    number: '01',
+    numberClass: 'text-neon-cyan',
+    title: 'Create',
+    description: 'Choose a mode and create the encrypted channel.',
+  },
+  {
+    number: '02',
+    numberClass: 'text-neon-magenta',
+    title: 'Share',
+    description: 'Send the share link to your receiver.',
+  },
+  {
+    number: '03',
+    numberClass: 'text-neon-orange',
+    title: 'Verify Safety Code',
+    description: 'After receiver locks, compare the Safety Code over a separate channel.',
+  },
+  {
+    number: '04',
+    numberClass: 'text-neon-green',
+    title: 'Deliver',
+    description: 'Deliver the encrypted secret to the locked receiver.',
+  },
+];
+
+function HowItWorks() {
+  return (
+    <section
+      className="rounded-xl border border-border/40 bg-muted/30 p-4"
+      data-testid="how-it-works"
+    >
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        How it works
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {HOW_IT_WORKS_STEPS.map((step) => (
+          <div className="space-y-1" key={step.number}>
+            <p className="text-sm font-medium text-foreground">
+              <span className={cn('mr-1.5 text-xs', step.numberClass)}>{step.number}</span>
+              {step.title}
+            </p>
+            <p className="text-xs text-muted-foreground">{step.description}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function TrustModelHint() {
   const location = useLocation();
   return (
@@ -387,6 +438,9 @@ function SuccessSummary({
           testId="create-success-manage-link"
           url={links.manageUrl}
         />
+        <p className="text-xs text-muted-foreground" data-testid="create-success-expiry-hint">
+          Channel expires in 1 hour. Coordinate with the receiver before it disappears.
+        </p>
       </div>
     </div>
   );
@@ -534,6 +588,7 @@ export function CreatePage(): ReactElement {
           />
         ) : (
           <>
+            <HowItWorks />
             <ModeSelectorGrid
               onSelect={logic.handleSelectProfile}
               selected={logic.state.selectedProfile}
