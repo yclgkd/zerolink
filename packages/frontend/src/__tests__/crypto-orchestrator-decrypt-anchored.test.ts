@@ -3,7 +3,6 @@
 import 'fake-indexeddb/auto';
 
 import {
-  type AssertionJSON,
   CHANNEL_STATE,
   type DecryptFetchResponse,
   HexStringSchema,
@@ -23,12 +22,7 @@ vi.mock('../crypto/webauthn', async () => {
 import { exportSoftkeyPublicJwk, generateSoftkeyPair } from '../crypto/softkey';
 import { createIndexedDbReceiverKeyStorage, type ReceiverKeyEnvelope } from '../crypto/storage';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
-import {
-  CHALLENGE_EXPIRES_AT,
-  NOW,
-  prepareAnchoredSoftkeyDelivery,
-  VALID_UUID,
-} from './helpers/orchestrator-fixtures';
+import { NOW, prepareAnchoredSoftkeyDelivery, VALID_UUID } from './helpers/orchestrator-fixtures';
 
 beforeEach(() => {
   vi.clearAllMocks();
