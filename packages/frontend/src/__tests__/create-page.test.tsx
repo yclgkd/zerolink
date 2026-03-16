@@ -403,7 +403,17 @@ describe('CreatePage integration', () => {
     expect(howItWorks.textContent).toContain('Create');
     expect(howItWorks.textContent).toContain('Share');
     expect(howItWorks.textContent).toContain('Verify Safety Code');
+    expect(howItWorks.textContent).toContain(
+      'After receiver locks, compare the Safety Code over a separate channel.'
+    );
     expect(howItWorks.textContent).toContain('Deliver');
+  });
+
+  it('renders HowItWorks when WebAuthn is unavailable', () => {
+    mockWebAuthnSupport(false);
+    renderCreatePage();
+
+    expect(screen.getByTestId('how-it-works')).toBeTruthy();
   });
 
   it('hides HowItWorks after successful creation', async () => {
@@ -430,6 +440,7 @@ describe('CreatePage integration', () => {
 
     const expiryHint = await screen.findByTestId('create-success-expiry-hint');
     expect(expiryHint.textContent).toContain('Channel expires in 1 hour');
+    expect(expiryHint.textContent).toContain('Coordinate with the receiver before it disappears.');
   });
 
   it('shows HowItWorks again after clicking Create another', async () => {

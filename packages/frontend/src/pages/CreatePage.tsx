@@ -172,13 +172,11 @@ const HOW_IT_WORKS_STEPS = [
     number: '01',
     title: 'Create',
     description: 'Choose a mode and create the encrypted channel.',
-    isKeyStep: false,
   },
   {
     number: '02',
     title: 'Share',
     description: 'Send the share link to your receiver.',
-    isKeyStep: false,
   },
   {
     number: '03',
@@ -190,9 +188,8 @@ const HOW_IT_WORKS_STEPS = [
     number: '04',
     title: 'Deliver',
     description: 'Deliver the encrypted secret to the locked receiver.',
-    isKeyStep: false,
   },
-] as const;
+];
 
 function HowItWorks() {
   return (
