@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as cryptoModule from '../release/crypto';
 import {
   computePublicKeyFingerprint,
   pemToSpkiBytes,
@@ -138,11 +139,11 @@ describe('verifyRelease', () => {
     });
   });
 
-  it('returns unavailable when the environment cannot import an Ed25519 public key', async () => {
+  it('returns crypto_unavailable when all Ed25519 verification paths are unavailable', async () => {
     const fixture = createSignedManifestFixture();
-    const importKey = vi
-      .spyOn(crypto.subtle, 'importKey')
-      .mockRejectedValueOnce(new DOMException('Ed25519 is unsupported', 'NotSupportedError'));
+    vi.spyOn(cryptoModule, 'verifyManifestSignature').mockRejectedValue(
+      new Error('Both native and noble Ed25519 paths are unavailable')
+    );
 
     const result = await verifyRelease({
       baseUrl: 'https://zerolink.test/',
@@ -151,11 +152,8 @@ describe('verifyRelease', () => {
       publicKeyPem: fixture.publicPem,
     });
 
-    expect(importKey).toHaveBeenCalled();
-    expect(result).toEqual({
-      detail: 'This browser cannot import the embedded publisher key for Ed25519 verification.',
-      reason: 'crypto_unavailable',
-      status: 'unavailable',
-    });
+    expect(result.status).toBe('unavailable');
+    if (result.status !== 'unavailable') throw new Error('expected unavailable');
+    expect(result.reason).toBe('crypto_unavailable');
   });
 });

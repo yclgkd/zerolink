@@ -13,6 +13,31 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-16] Release guard fallback verifier must ship inside the trusted bootstrap
+
+**Decision**: Keep the `@noble/ed25519` fallback verifier in the trusted bootstrap bundle instead of loading it via a pre-verification dynamic import.
+**Context**: The first Ed25519 fallback implementation lazy-loaded noble from `release/crypto.ts`. In production builds, Vite emitted a separate JS chunk for that code, and unsupported browsers had to fetch and execute it before the signed manifest had been verified.
+**Choice**: Move the noble call behind a thin local adapter that is statically imported by `release/crypto.ts`, and add a build-level regression test that inspects the verification build output to ensure the bootstrap entry keeps only the existing app/main and mock-worker dynamic imports.
+**Reasoning**: The release guard exists specifically to verify code before the app mounts. Allowing an additional verifier chunk to execute beforehand enlarged the trusted computing base on exactly the compatibility path the fallback was meant to protect.
+**Trade-offs**: The bootstrap bundle grows modestly on all verification-enabled builds because noble is now always present, but that cost is acceptable compared with weakening the pre-verification trust boundary.
+
+## [2026-03-16] Native Ed25519 runtime failures pin the current session to JS fallback
+
+**Decision**: Treat native Ed25519 runtime exceptions as implementation unavailability, immediately retry with the JS fallback, and keep the current page session on fallback afterward.
+**Context**: The first fallback implementation probed native Ed25519 once, but if a later `importKey()` or `verify()` call threw after a successful probe it normalized the exception to `false`, which `verifyRelease()` exposed as `signature_invalid`.
+**Choice**: Cache verifier mode as `'native' | 'fallback'` instead of a boolean capability flag, downgrade the mode to `'fallback'` on any native runtime exception, retry the current verification through noble, and only surface `signature_invalid` when a verifier explicitly returns `false`.
+**Reasoning**: This preserves the original security semantics: invalid signatures remain distinct from unavailable verification implementations, and flaky browser-native Ed25519 support does not permanently block startup if the JS verifier still works.
+**Trade-offs**: A browser that throws once on the native path will keep using noble for the rest of the page session, even if later native calls might have succeeded.
+
+## [2026-03-16] Ed25519 pure-JS fallback via @noble/ed25519
+
+**Decision**: Add `@noble/ed25519` as a lazily-loaded fallback verifier when native WebCrypto Ed25519 is unavailable.
+**Context**: `verifyManifestSignature` in `release/crypto.ts` previously depended solely on `crypto.subtle.importKey('spki', …, { name: 'Ed25519' })`. Firefox < 130 and Safari < 17 do not support this algorithm, causing startup verification to return `crypto_unavailable` and blocking the app entirely on those browsers.
+**Choice**: Probe native Ed25519 support once via `importKey` using the actual SPKI bytes from the first call, memoize the result, and fall back to `@noble/ed25519 verifyAsync` when the probe fails. The raw 32-byte public key is extracted from SPKI using `spkiToRawEd25519` (validates the fixed 12-byte OID header). Malformed-input errors (wrong sig/key length) are normalized to `return false` via pre-validation. Import errors for the noble module propagate so that callers still surface `crypto_unavailable`.
+**Reasoning**: Probe-then-choose is more explicit than per-call try/catch and avoids misclassifying transient errors as compatibility failures. Lazy-loading noble avoids bundle size cost on browsers that support native Ed25519 (Chrome 113+, Firefox 130+, Safari 17+). Both the `signature-only` (tiered) and `full` verification paths share the same `verifyManifestSignature` entry point, so both benefit without additional changes.
+**Trade-offs**: Noble v3 uses `crypto.subtle.digest('SHA-512')` by default; in a genuine non-secure HTTP context where `crypto.subtle` is undefined, both the native and noble paths fail → `crypto_unavailable`. This is acceptable because release verification is only enforced in production (HTTPS). The probe is memoized across calls in the same page load; a browser that transiently fails the probe will use noble for the remainder of the session.
+**Follow-up (2026-03-16)**: The lazy-loaded part of this decision was superseded later the same day. The fallback still uses `@noble/ed25519`, but it now ships inside the trusted bootstrap bundle so unsupported browsers do not execute an extra pre-verification chunk.
+
 ## [2026-03-15] Enforce cipher bundle metadata binding on both commit and decrypt
 
 **Decision**: Make `cipherBundle` metadata binding a protocol invariant enforced by both the backend commit path and the frontend decrypt path.
@@ -30,6 +55,24 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: This gives the receiver two trust anchors the backend cannot fabricate on demand: a sender key fingerprint pinned from the original out-of-band share link and a local monotonic record of what this device has already accepted. Minimal proof storage keeps the backend contract small and avoids duplicating signer keys or full intents inside Durable Object state.
 **Trade-offs**: Legacy channels or pre-change delivered records without `af`/`deliveryAuth` remain A-only: they still get backend-enforced AAD/hash validation plus local replay-state checks, but not sender-anchored proof verification. This improves device-local rollback resistance, not global freshness; preventing a malicious backend from hiding newer valid updates still requires a future C-class witness/log design.
 **Follow-up (2026-03-15)**: Anchored decrypt now fails closed on partial anchor state. If either side of the anchored contract is missing locally or remotely (`senderAuthFpr` without `deliveryAuth`, or `deliveryAuth` without `senderAuthFpr`), the client rejects decrypt with `INTEGRITY_MISMATCH` instead of silently downgrading to legacy A-only.
+
+## [2026-03-15] E2E harness mirrors anchored delivery semantics
+
+**Decision**: Persist the Playwright WebAuthn emulator per tab via `sessionStorage` and normalize mocked delivered payloads to include anchored `deliveryAuth`.
+**Context**: PR161 added sender-auth pinning, deterministic delivery proofs, and stricter decrypt-side integrity checks. The existing E2E harness still regenerated fake WebAuthn credentials on every navigation and returned legacy decrypt payloads, which broke secure create/deliver/decrypt flows without exercising the new protocol guarantees.
+**Options Considered**: Switch all secure E2E coverage to Quick Share, rely on Chromium's virtual authenticator directly, or upgrade the in-page emulator and stateful API mock to follow the anchored protocol.
+**Choice**: Keep secure E2E coverage and upgrade the harness.
+**Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
+**Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.
+
+## [2026-03-15] Lint cleanup keeps index-signature strictness intact
+
+**Decision**: Resolve biome literal-key findings with local destructuring instead of dot-access on index-signature objects.
+**Context**: Repo lint flagged bracket access like `value['uuid']`, but the backend also enforces `noPropertyAccessFromIndexSignature`, so blindly applying biome's literal-key suggestions would break TypeScript typecheck.
+**Options Considered**: Accept lint noise, disable the rule, or refactor the affected code to destructure once and reuse typed locals.
+**Choice**: Destructure the checked values into locals.
+**Reasoning**: This clears the lint findings, preserves strict index-signature typing, and keeps parsing/test logic behavior unchanged.
+**Trade-offs**: A few helpers and tests now use small local bindings purely to satisfy both static-analysis rules.
 
 ## [2026-03-14] Durable Object abuse controls use in-memory per-channel limits plus single active lock challenge
 
@@ -130,6 +173,15 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-13)**: In tests that inspect structured log payloads, prefer a tiny explicit object shape over `Record<string, unknown>` when the assertion needs named fields such as `stack_fingerprint`. That avoids a `useLiteralKeys` vs. `noPropertyAccessFromIndexSignature` conflict without needing suppressions.
 **Follow-up (2026-03-13)**: Frontend test teardown for receiver-key IndexedDB cleanup now aggregates per-UUID delete failures and throws once cleanup completes. Test-isolation failures are treated as blocking rather than logged or silently ignored, so dirty IndexedDB state surfaces immediately and deterministically.
 
+## [2026-03-13] Share links are shown only on channel creation
+
+**Decision**: Show the receiver share link only in the create success state and remove it from `ManagePage`.
+**Context**: `ManagePage` rebuilt `/s/:uuid` without the required `#k=` fragment, producing unusable receiver links. Persisting the fragment locally would extend the lifetime of lock material on the sender device.
+**Options Considered**: Restore the fragment from same-tab storage, persist the fragment across sessions, only show the share link at creation time.
+**Choice**: Only show the complete share link once, immediately after channel creation.
+**Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
+**Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
+
 ## [2026-03-12] Receiver Safety Code and realtime copy align with public channel state
 
 **Decision**: Treat `receiverPubFpr` from `/api/public/:uuid` and websocket state updates as the source of truth for receiver-side Safety Code rendering when local lock state is unavailable, and update frontend copy to describe automatic realtime refresh instead of manual reopen/refresh steps.
@@ -153,6 +205,15 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-12)**: Production also moved to a fresh `SecretVaultProduction` class name before deleting the legacy `zerolink-api_SecretVault` namespace. The live worker keeps exporting the legacy `SecretVault` class during the cutover so Cloudflare will accept the migration, then the old namespace is removed manually after the new binding is active.
 **Follow-up (2026-03-12)**: Once production and staging were both clean, the active bindings were aligned again on a shared class name, `SecretVaultV2`, so the Cloudflare namespace list differs only by worker name instead of mixing `...Production` and `...Staging` suffixes.
 **Follow-up (2026-03-12)**: After the `SecretVaultV2` namespaces were live in both environments and the old namespaces were deleted, the worker entrypoints dropped the temporary `SecretVault`, `SecretVaultProduction`, and `SecretVaultStaging` export aliases so only the active Durable Object class remains exposed.
+
+## [2026-03-12] Disable passphrase autofill across frontend flows
+
+**Decision**: Use `autocomplete="off"` on shared passphrase inputs without vendor-specific ignore hints
+**Context**: The same passphrase field is reused for channel creation, receiver lock setup, sender delivery, receiver decryption, and password-managed delete confirmation. `autocomplete="new-password"` triggered confusing password-manager prompts in non-signup flows.
+**Options Considered**: Keep `new-password` everywhere, split autocomplete by flow, disable autofill across all passphrase prompts, disable autofill plus password-manager ignore hints
+**Choice**: Disable autofill across all passphrase prompts
+**Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
+**Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
 
 ## [2026-03-11] Durable Object fetch-level failures must use the same production redaction path
 
@@ -495,35 +556,3 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: URL fragment
 **Reasoning**: Browsers never send fragments to servers (HTTP spec); recipient copies entire URL; zero-knowledge guarantee
 **Trade-offs**: Entire link must be shared intact; no server-side logging of key material (intentional)
-## [2026-03-12] Disable passphrase autofill across frontend flows
-
-**Decision**: Use `autocomplete="off"` on shared passphrase inputs without vendor-specific ignore hints
-**Context**: The same passphrase field is reused for channel creation, receiver lock setup, sender delivery, receiver decryption, and password-managed delete confirmation. `autocomplete="new-password"` triggered confusing password-manager prompts in non-signup flows.
-**Options Considered**: Keep `new-password` everywhere, split autocomplete by flow, disable autofill across all passphrase prompts, disable autofill plus password-manager ignore hints
-**Choice**: Disable autofill across all passphrase prompts
-**Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
-**Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
-## [2026-03-13] Share links are shown only on channel creation
-
-**Decision**: Show the receiver share link only in the create success state and remove it from `ManagePage`.
-**Context**: `ManagePage` rebuilt `/s/:uuid` without the required `#k=` fragment, producing unusable receiver links. Persisting the fragment locally would extend the lifetime of lock material on the sender device.
-**Options Considered**: Restore the fragment from same-tab storage, persist the fragment across sessions, only show the share link at creation time.
-**Choice**: Only show the complete share link once, immediately after channel creation.
-**Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
-**Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
-## [2026-03-15] E2E harness mirrors anchored delivery semantics
-
-**Decision**: Persist the Playwright WebAuthn emulator per tab via `sessionStorage` and normalize mocked delivered payloads to include anchored `deliveryAuth`.
-**Context**: PR161 added sender-auth pinning, deterministic delivery proofs, and stricter decrypt-side integrity checks. The existing E2E harness still regenerated fake WebAuthn credentials on every navigation and returned legacy decrypt payloads, which broke secure create/deliver/decrypt flows without exercising the new protocol guarantees.
-**Options Considered**: Switch all secure E2E coverage to Quick Share, rely on Chromium's virtual authenticator directly, or upgrade the in-page emulator and stateful API mock to follow the anchored protocol.
-**Choice**: Keep secure E2E coverage and upgrade the harness.
-**Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
-**Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.
-## [2026-03-15] Lint cleanup keeps index-signature strictness intact
-
-**Decision**: Resolve biome literal-key findings with local destructuring instead of dot-access on index-signature objects.
-**Context**: Repo lint flagged bracket access like `value['uuid']`, but the backend also enforces `noPropertyAccessFromIndexSignature`, so blindly applying biome's literal-key suggestions would break TypeScript typecheck.
-**Options Considered**: Accept lint noise, disable the rule, or refactor the affected code to destructure once and reuse typed locals.
-**Choice**: Destructure the checked values into locals.
-**Reasoning**: This clears the lint findings, preserves strict index-signature typing, and keeps parsing/test logic behavior unchanged.
-**Trade-offs**: A few helpers and tests now use small local bindings purely to satisfy both static-analysis rules.
