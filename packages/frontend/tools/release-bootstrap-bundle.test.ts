@@ -26,6 +26,14 @@ function findBootstrapEntry(html: string): string {
   return match[1];
 }
 
+// String literals emitted by @noble/ed25519 v3 that survive Vite minification.
+// These are checked in OR so that any single match is sufficient.
+// When upgrading noble, verify that at least one marker is still present in the
+// installed index.js – the strings can drift between major versions.
+// Current markers confirmed in @noble/ed25519@3.0.0:
+//   'Point expected'    — index.js line 147 (apoint guard)
+//   'invalid wnaf'      — index.js line 626 (group law)
+//   'crypto.subtle must be defined, consider polyfill' — index.js sha512Async
 function hasNobleMarker(source: string): boolean {
   return (
     source.includes('Point expected') ||
@@ -93,6 +101,11 @@ describe.sequential('verification bootstrap bundle', () => {
       (match) => match[1]
     );
 
+    // Architectural constraint: the verification bootstrap entry must only lazy-load
+    // the app chunk (main-*) and the MSW mock-worker chunk (browser-*).
+    // Any additional dynamic import would execute before the signed manifest is verified,
+    // enlarging the trusted computing base. If a new legitimate dynamic import is added
+    // to the bootstrap path, update this count and document the reason here.
     expect(dynamicImports).toHaveLength(2);
     expect(dynamicImports.some((value) => value.startsWith('main-'))).toBe(true);
     expect(dynamicImports.some((value) => value.startsWith('browser-'))).toBe(true);

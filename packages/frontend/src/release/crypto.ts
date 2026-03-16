@@ -126,7 +126,6 @@ export async function verifyManifestSignature(opts: {
   const { manifestBytes, publicKeyPem, signatureBase64Url } = opts;
   const spkiBytes = pemToSpkiBytes(publicKeyPem);
   const signatureBytes = base64UrlToBytes(signatureBase64Url);
-  const rawPublicKey = spkiToRawEd25519(spkiBytes);
   const verifierMode = await getOrProbeVerifierMode(spkiBytes);
 
   if (verifierMode === 'native') {
@@ -137,7 +136,10 @@ export async function verifyManifestSignature(opts: {
     }
   }
 
-  return verifyWithNoble(manifestBytes, signatureBytes, rawPublicKey);
+  // Raw key extraction is deferred to the fallback path: spkiToRawEd25519 validates
+  // the Ed25519 SPKI header and would throw on unrecognised key formats, which should
+  // propagate as a caller error rather than being silently absorbed here.
+  return verifyWithNoble(manifestBytes, signatureBytes, spkiToRawEd25519(spkiBytes));
 }
 
 export async function computePublicKeyFingerprint(publicKeyPem: string): Promise<string> {
