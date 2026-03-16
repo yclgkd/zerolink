@@ -56,6 +56,24 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Trade-offs**: Legacy channels or pre-change delivered records without `af`/`deliveryAuth` remain A-only: they still get backend-enforced AAD/hash validation plus local replay-state checks, but not sender-anchored proof verification. This improves device-local rollback resistance, not global freshness; preventing a malicious backend from hiding newer valid updates still requires a future C-class witness/log design.
 **Follow-up (2026-03-15)**: Anchored decrypt now fails closed on partial anchor state. If either side of the anchored contract is missing locally or remotely (`senderAuthFpr` without `deliveryAuth`, or `deliveryAuth` without `senderAuthFpr`), the client rejects decrypt with `INTEGRITY_MISMATCH` instead of silently downgrading to legacy A-only.
 
+## [2026-03-15] E2E harness mirrors anchored delivery semantics
+
+**Decision**: Persist the Playwright WebAuthn emulator per tab via `sessionStorage` and normalize mocked delivered payloads to include anchored `deliveryAuth`.
+**Context**: PR161 added sender-auth pinning, deterministic delivery proofs, and stricter decrypt-side integrity checks. The existing E2E harness still regenerated fake WebAuthn credentials on every navigation and returned legacy decrypt payloads, which broke secure create/deliver/decrypt flows without exercising the new protocol guarantees.
+**Options Considered**: Switch all secure E2E coverage to Quick Share, rely on Chromium's virtual authenticator directly, or upgrade the in-page emulator and stateful API mock to follow the anchored protocol.
+**Choice**: Keep secure E2E coverage and upgrade the harness.
+**Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
+**Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.
+
+## [2026-03-15] Lint cleanup keeps index-signature strictness intact
+
+**Decision**: Resolve biome literal-key findings with local destructuring instead of dot-access on index-signature objects.
+**Context**: Repo lint flagged bracket access like `value['uuid']`, but the backend also enforces `noPropertyAccessFromIndexSignature`, so blindly applying biome's literal-key suggestions would break TypeScript typecheck.
+**Options Considered**: Accept lint noise, disable the rule, or refactor the affected code to destructure once and reuse typed locals.
+**Choice**: Destructure the checked values into locals.
+**Reasoning**: This clears the lint findings, preserves strict index-signature typing, and keeps parsing/test logic behavior unchanged.
+**Trade-offs**: A few helpers and tests now use small local bindings purely to satisfy both static-analysis rules.
+
 ## [2026-03-14] Durable Object abuse controls use in-memory per-channel limits plus single active lock challenge
 
 **Decision**: Implement issue #155 with best-effort in-memory rate limiting inside `SecretVault` and reuse a single active lock challenge record per channel instead of storing one lock challenge row per `lock_begin` request.
@@ -155,6 +173,15 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-13)**: In tests that inspect structured log payloads, prefer a tiny explicit object shape over `Record<string, unknown>` when the assertion needs named fields such as `stack_fingerprint`. That avoids a `useLiteralKeys` vs. `noPropertyAccessFromIndexSignature` conflict without needing suppressions.
 **Follow-up (2026-03-13)**: Frontend test teardown for receiver-key IndexedDB cleanup now aggregates per-UUID delete failures and throws once cleanup completes. Test-isolation failures are treated as blocking rather than logged or silently ignored, so dirty IndexedDB state surfaces immediately and deterministically.
 
+## [2026-03-13] Share links are shown only on channel creation
+
+**Decision**: Show the receiver share link only in the create success state and remove it from `ManagePage`.
+**Context**: `ManagePage` rebuilt `/s/:uuid` without the required `#k=` fragment, producing unusable receiver links. Persisting the fragment locally would extend the lifetime of lock material on the sender device.
+**Options Considered**: Restore the fragment from same-tab storage, persist the fragment across sessions, only show the share link at creation time.
+**Choice**: Only show the complete share link once, immediately after channel creation.
+**Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
+**Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
+
 ## [2026-03-12] Receiver Safety Code and realtime copy align with public channel state
 
 **Decision**: Treat `receiverPubFpr` from `/api/public/:uuid` and websocket state updates as the source of truth for receiver-side Safety Code rendering when local lock state is unavailable, and update frontend copy to describe automatic realtime refresh instead of manual reopen/refresh steps.
@@ -178,6 +205,15 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-12)**: Production also moved to a fresh `SecretVaultProduction` class name before deleting the legacy `zerolink-api_SecretVault` namespace. The live worker keeps exporting the legacy `SecretVault` class during the cutover so Cloudflare will accept the migration, then the old namespace is removed manually after the new binding is active.
 **Follow-up (2026-03-12)**: Once production and staging were both clean, the active bindings were aligned again on a shared class name, `SecretVaultV2`, so the Cloudflare namespace list differs only by worker name instead of mixing `...Production` and `...Staging` suffixes.
 **Follow-up (2026-03-12)**: After the `SecretVaultV2` namespaces were live in both environments and the old namespaces were deleted, the worker entrypoints dropped the temporary `SecretVault`, `SecretVaultProduction`, and `SecretVaultStaging` export aliases so only the active Durable Object class remains exposed.
+
+## [2026-03-12] Disable passphrase autofill across frontend flows
+
+**Decision**: Use `autocomplete="off"` on shared passphrase inputs without vendor-specific ignore hints
+**Context**: The same passphrase field is reused for channel creation, receiver lock setup, sender delivery, receiver decryption, and password-managed delete confirmation. `autocomplete="new-password"` triggered confusing password-manager prompts in non-signup flows.
+**Options Considered**: Keep `new-password` everywhere, split autocomplete by flow, disable autofill across all passphrase prompts, disable autofill plus password-manager ignore hints
+**Choice**: Disable autofill across all passphrase prompts
+**Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
+**Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
 
 ## [2026-03-11] Durable Object fetch-level failures must use the same production redaction path
 
@@ -520,35 +556,3 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: URL fragment
 **Reasoning**: Browsers never send fragments to servers (HTTP spec); recipient copies entire URL; zero-knowledge guarantee
 **Trade-offs**: Entire link must be shared intact; no server-side logging of key material (intentional)
-## [2026-03-12] Disable passphrase autofill across frontend flows
-
-**Decision**: Use `autocomplete="off"` on shared passphrase inputs without vendor-specific ignore hints
-**Context**: The same passphrase field is reused for channel creation, receiver lock setup, sender delivery, receiver decryption, and password-managed delete confirmation. `autocomplete="new-password"` triggered confusing password-manager prompts in non-signup flows.
-**Options Considered**: Keep `new-password` everywhere, split autocomplete by flow, disable autofill across all passphrase prompts, disable autofill plus password-manager ignore hints
-**Choice**: Disable autofill across all passphrase prompts
-**Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
-**Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
-## [2026-03-13] Share links are shown only on channel creation
-
-**Decision**: Show the receiver share link only in the create success state and remove it from `ManagePage`.
-**Context**: `ManagePage` rebuilt `/s/:uuid` without the required `#k=` fragment, producing unusable receiver links. Persisting the fragment locally would extend the lifetime of lock material on the sender device.
-**Options Considered**: Restore the fragment from same-tab storage, persist the fragment across sessions, only show the share link at creation time.
-**Choice**: Only show the complete share link once, immediately after channel creation.
-**Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
-**Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
-## [2026-03-15] E2E harness mirrors anchored delivery semantics
-
-**Decision**: Persist the Playwright WebAuthn emulator per tab via `sessionStorage` and normalize mocked delivered payloads to include anchored `deliveryAuth`.
-**Context**: PR161 added sender-auth pinning, deterministic delivery proofs, and stricter decrypt-side integrity checks. The existing E2E harness still regenerated fake WebAuthn credentials on every navigation and returned legacy decrypt payloads, which broke secure create/deliver/decrypt flows without exercising the new protocol guarantees.
-**Options Considered**: Switch all secure E2E coverage to Quick Share, rely on Chromium's virtual authenticator directly, or upgrade the in-page emulator and stateful API mock to follow the anchored protocol.
-**Choice**: Keep secure E2E coverage and upgrade the harness.
-**Reasoning**: Reusing the same fake sender credential across same-tab navigations lets create-time `af` pinning and manage-time delivery proofs stay consistent, while returning normalized `deliveryAuth`, `ciphertextHash`, and AAD from the stateful mock keeps decrypt-side validation aligned with production semantics.
-**Trade-offs**: The E2E helper now owns a small deterministic WebAuthn emulator and more protocol-aware mock logic, which is slightly more complex to maintain than the previous placeholder payloads.
-## [2026-03-15] Lint cleanup keeps index-signature strictness intact
-
-**Decision**: Resolve biome literal-key findings with local destructuring instead of dot-access on index-signature objects.
-**Context**: Repo lint flagged bracket access like `value['uuid']`, but the backend also enforces `noPropertyAccessFromIndexSignature`, so blindly applying biome's literal-key suggestions would break TypeScript typecheck.
-**Options Considered**: Accept lint noise, disable the rule, or refactor the affected code to destructure once and reuse typed locals.
-**Choice**: Destructure the checked values into locals.
-**Reasoning**: This clears the lint findings, preserves strict index-signature typing, and keeps parsing/test logic behavior unchanged.
-**Trade-offs**: A few helpers and tests now use small local bindings purely to satisfy both static-analysis rules.
