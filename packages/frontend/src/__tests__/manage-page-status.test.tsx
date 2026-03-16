@@ -408,7 +408,33 @@ describe('ManagePage – public status and waiting state', () => {
     expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
     const warning = screen.getByTestId('manage-safety-unavailable');
     expect(warning).toBeTruthy();
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByText('Safety Code unavailable right now.')).toBeTruthy();
     expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
+  it('shows safety code when realtime onStateChange pushes delivered state with receiver fingerprint', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'delivered',
+        version: 1,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+        receiverPubFpr: VALID_HEX,
+      });
+    });
+
+    expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
   it('keeps manage actions disabled until public status resolves', async () => {

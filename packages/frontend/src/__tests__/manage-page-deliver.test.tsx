@@ -575,6 +575,7 @@ describe('ManagePage – deliver actions', () => {
 
     await screen.findByTestId('manage-state-delivered');
     expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
   it('shows action error on deliver failure and keeps non-delivered state', async () => {
