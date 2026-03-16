@@ -46,8 +46,8 @@ async function buildVerificationArtifacts(): Promise<VerificationBuildArtifacts>
   const outDir = await mkdtemp(path.join(os.tmpdir(), 'zerolink-verification-build-'));
   createdDirs.push(outDir);
 
-  const previousFlag = process.env['VITE_RELEASE_VERIFICATION_REQUIRED'];
-  process.env['VITE_RELEASE_VERIFICATION_REQUIRED'] = 'true';
+  const previousFlag = process.env.VITE_RELEASE_VERIFICATION_REQUIRED;
+  process.env.VITE_RELEASE_VERIFICATION_REQUIRED = 'true';
   try {
     await build(
       mergeConfig(viteConfig, {
@@ -60,9 +60,9 @@ async function buildVerificationArtifacts(): Promise<VerificationBuildArtifacts>
     );
   } finally {
     if (previousFlag === undefined) {
-      delete process.env['VITE_RELEASE_VERIFICATION_REQUIRED'];
+      delete process.env.VITE_RELEASE_VERIFICATION_REQUIRED;
     } else {
-      process.env['VITE_RELEASE_VERIFICATION_REQUIRED'] = previousFlag;
+      process.env.VITE_RELEASE_VERIFICATION_REQUIRED = previousFlag;
     }
   }
 
