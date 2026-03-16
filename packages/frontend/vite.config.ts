@@ -29,6 +29,14 @@ function stripDevOnlyPublicAssets(): PluginOption {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), stripDevOnlyPublicAssets()],
+  build: {
+    // Minimum supported browsers (see README §浏览器兼容性):
+    //   Chrome 93 / Firefox 92 / Safari 15.4 / Edge 93  (2021-Q3 ~ 2022-Q1)
+    // Rationale: covers all required APIs (WebCrypto, WebAuthn, IndexedDB,
+    // Object.hasOwn, ES2020+) without polyfills.
+    // Ed25519 falls back to @noble/ed25519 on older WebCrypto stacks.
+    target: ['chrome93', 'firefox92', 'safari15.4', 'edge93'],
+  },
   resolve: {
     alias: {
       '@': '/src',
