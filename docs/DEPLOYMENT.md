@@ -74,7 +74,7 @@ Frontend SPA    ──→    Pages (CDN 静态托管)
 > **注意 / Note**: 一键部署完成后，仍需手动完成以下步骤：
 > After one-click deploy, you still need to manually:
 > 1. 创建 KV namespace 并更新绑定 / Create KV namespace and update binding
-> 2. 设置 `RP_ID` 和 `RP_ORIGIN` 环境变量 / Set `RP_ID` and `RP_ORIGIN` env vars
+> 2. 设置 `RP_ID`、`RP_ORIGIN`、`COMMIT_TOKEN_SECRET` 环境变量 / Set `RP_ID`, `RP_ORIGIN`, and `COMMIT_TOKEN_SECRET` env vars
 > 3. 单独部署前端到 Cloudflare Pages / Deploy frontend separately to Cloudflare Pages
 
 ---
@@ -136,7 +136,8 @@ id = "你的-kv-namespace-id"
 ```bash
 cd packages/backend
 
-# 先在 Cloudflare Dashboard 中配置 RP_ID / RP_ORIGIN
+# 先在 Cloudflare Dashboard 中配置所有必需 Secrets：
+# RP_ID, RP_ORIGIN, COMMIT_TOKEN_SECRET
 # Workers > zerolink-api > Settings > Variables and Secrets
 
 npx wrangler deploy
@@ -228,6 +229,7 @@ pnpm build
 |--------|------|------|------|
 | `RP_ID` | ✅ | WebAuthn Relying Party ID（域名，不含协议） | `zerolink.example.com` |
 | `RP_ORIGIN` | ✅ | WebAuthn Origin（完整 URL） | `https://zerolink.example.com` |
+| `COMMIT_TOKEN_SECRET` | ✅ | Commit Token HMAC 密钥，防止重放攻击（随机 32 字节 hex） | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
 ### CI/CD Secrets（GitHub Actions）
 
@@ -339,6 +341,32 @@ git push origin v1.0.0
 ---
 
 ## 故障排查 / Troubleshooting
+
+### Worker 返回 `INTERNAL_ERROR`（DO 构造函数失败）
+
+**症状**: 所有 API 请求返回 `{"ok":false,"code":"INTERNAL_ERROR"}`，`wrangler tail` 日志显示：
+```
+Error: COMMIT_TOKEN_SECRET environment variable is missing or empty
+  at new SecretVault (...)
+```
+
+**解决方案**: Cloudflare Dashboard 中缺少必需的 Secret。依次检查并补全：
+- `COMMIT_TOKEN_SECRET`（最常见的遗漏项）
+- `RP_ID`
+- `RP_ORIGIN`
+
+```bash
+# 查看当前已配置的 secrets
+npx wrangler secret list --name zerolink-api-staging
+
+# 补充缺失的 secret（以 COMMIT_TOKEN_SECRET 为例）
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
+  npx wrangler secret put COMMIT_TOKEN_SECRET --name zerolink-api-staging
+```
+
+> 这三个变量在 Worker 启动时会被校验，任何一个缺失都会导致 Durable Object 构造失败，所有请求均返回 500。
+
+---
 
 ### WebAuthn 认证失败
 
