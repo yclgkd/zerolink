@@ -388,6 +388,29 @@ describe('ManagePage – public status and waiting state', () => {
     expect(screen.getByTestId('safety-code-root')).toBeTruthy();
   });
 
+  it('renders real safety code in delivered state when public status includes receiver fingerprint', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
+    expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
+    expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
+  });
+
+  it('renders safety code unavailable warning in delivered state when receiver fingerprint is missing', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'delivered', { receiverPubFpr: null });
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
+    const warning = screen.getByTestId('manage-safety-unavailable');
+    expect(warning).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+  });
+
   it('keeps manage actions disabled until public status resolves', async () => {
     const fetchSpy = getFetchSpy();
     const publicStatus = {
