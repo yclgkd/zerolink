@@ -49,11 +49,12 @@ describe('applySecurityHeaders', () => {
     expect(response.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
   });
 
-  it('preserves original response body and status', () => {
-    const original = makeResponse('{"ok":true}', 201);
+  it('preserves original response body, status, and statusText', () => {
+    const original = new Response('{"ok":true}', { status: 201, statusText: 'Created' });
     const result = applySecurityHeaders(original, '/api/something');
 
     expect(result.status).toBe(201);
+    expect(result.statusText).toBe('Created');
   });
 
   it('preserves original Content-Type header', () => {

@@ -31,10 +31,13 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), stripDevOnlyPublicAssets()],
   server: {
     proxy: {
+      '/api/ws': {
+        target: 'ws://localhost:8787',
+        ws: true,
+      },
       '/api': {
         target: 'http://localhost:8787',
         changeOrigin: true,
-        ws: true,
       },
     },
   },
