@@ -91,18 +91,18 @@ describe('deserializeWrappedKeyCompact', () => {
     const compact = serializeWrappedKeyCompact(wk);
     const result = deserializeWrappedKeyCompact(compact);
 
-    expect(result).not.toBeNull();
-    expect(result!.encryptedKey).toBe(wk.encryptedKey);
-    expect(result!.iv).toBe(wk.iv);
-    expect(result!.kdf.salt).toBe(wk.kdf.salt);
+    if (result === null) throw new Error('expected non-null result');
+    expect(result.encryptedKey).toBe(wk.encryptedKey);
+    expect(result.iv).toBe(wk.iv);
+    expect(result.kdf.salt).toBe(wk.kdf.salt);
   });
 
   it('reconstructs hardcoded KDF params from constants', () => {
     const wk = makeWrappedKey();
     const result = deserializeWrappedKeyCompact(serializeWrappedKeyCompact(wk));
 
-    expect(result).not.toBeNull();
-    expect(result!.kdf).toEqual({
+    if (result === null) throw new Error('expected non-null result');
+    expect(result.kdf).toEqual({
       kdfType: 'argon2id',
       version: 19,
       m: ARGON2ID.MEMORY_COST_KB,
