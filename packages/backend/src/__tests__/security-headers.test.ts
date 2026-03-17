@@ -27,7 +27,11 @@ describe('applySecurityHeaders', () => {
     expect(response.headers.get('Strict-Transport-Security')).toBe(
       'max-age=63072000; includeSubDomains; preload'
     );
-    expect(response.headers.get('Content-Security-Policy')).toContain("default-src 'self'");
+    const csp = response.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("require-trusted-types-for 'script'");
   });
 
   it('sets Cache-Control: no-store for non-asset paths', () => {

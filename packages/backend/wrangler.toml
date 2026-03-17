@@ -9,7 +9,7 @@ run_worker_first = true
 not_found_handling = "single-page-application"
 
 routes = [
-  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
+  { pattern = "zerolink.dev*", zone_name = "zerolink.dev" },
 ]
 
 [vars]
@@ -50,7 +50,7 @@ id = "b8313bed33c9492885c12c9d26034420"
 name = "zerolink-api-staging"
 main = "src/index.staging.ts"
 routes = [
-  { pattern = "staging.zerolink.dev/*", zone_name = "zerolink.dev" },
+  { pattern = "staging.zerolink.dev*", zone_name = "zerolink.dev" },
 ]
 
 [env.staging.assets]
