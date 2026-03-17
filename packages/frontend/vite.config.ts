@@ -29,6 +29,15 @@ function stripDevOnlyPublicAssets(): PluginOption {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), stripDevOnlyPublicAssets()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
   build: {
     // Minimum supported browsers (see README §浏览器兼容性):
     //   Chrome 93 / Firefox 92 / Safari 15.4 / Edge 93  (2021-Q3 ~ 2022-Q1)

@@ -2,6 +2,16 @@ name = "zerolink-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
+[assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "single-page-application"
+
+routes = [
+  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
+]
+
 [vars]
 APP_ENV = "production"
 
@@ -39,6 +49,15 @@ id = "b8313bed33c9492885c12c9d26034420"
 [env.staging]
 name = "zerolink-api-staging"
 main = "src/index.staging.ts"
+routes = [
+  { pattern = "staging.zerolink.dev/*", zone_name = "zerolink.dev" },
+]
+
+[env.staging.assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "single-page-application"
 
 [env.staging.vars]
 APP_ENV = "staging"

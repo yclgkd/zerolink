@@ -17,10 +17,12 @@ import {
   INTERNAL_COMMIT_TOKEN_HEADER,
   readInternalCommitCookieSignal,
 } from './commitTokens.ts';
+import { applySecurityHeaders } from './security-headers.ts';
 
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
   SECRETS_KV: KVNamespace;
+  ASSETS: Fetcher;
   APP_ENV: string;
   COMMIT_TOKEN_SECRET: string;
   RP_ID: string;
@@ -510,7 +512,8 @@ const worker: ExportedHandler<Env> = {
       const url = new URL(request.url);
 
       if (!isApiPath(url.pathname)) {
-        return new Response('ZeroLink API', { status: 200 });
+        const assetResponse = await env.ASSETS.fetch(request);
+        return applySecurityHeaders(assetResponse, url.pathname);
       }
 
       return await handleApiRequest(request, url.pathname, env);
