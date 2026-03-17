@@ -140,6 +140,10 @@ const en = {
     lockTitle: 'Choose your passphrase',
     lockLabel: 'Your passphrase',
     lockPlaceholder: 'Enter your passphrase',
+    privateModeNoticeBody:
+      'If you are in private or incognito mode, your decryption key will only exist in this window. Closing it will permanently lose access. To switch to a regular browser, copy this link first.',
+    privateModeNoticeCopy: 'Copy link',
+    privateModeNoticeCopied: 'Copied!',
     backButton: 'Back',
     generateButton: 'Generate My Key & Lock',
     lockingButton: 'Locking\u2026',

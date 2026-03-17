@@ -131,6 +131,10 @@ const zh: Translation = {
     lockTitle: '选择你的密码短语',
     lockLabel: '你的密码短语',
     lockPlaceholder: '输入你的密码短语',
+    privateModeNoticeBody:
+      '如果你正在使用隐私/无痕模式，锁定后解密密钥仅存于本窗口。关闭窗口后将永久失去访问权限。如需切换到普通浏览器，请先复制此链接。',
+    privateModeNoticeCopy: '复制链接',
+    privateModeNoticeCopied: '已复制！',
     backButton: '返回',
     generateButton: '生成密钥并锁定',
     lockingButton: '锁定中\u2026',

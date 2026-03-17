@@ -1,6 +1,6 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
@@ -227,6 +227,7 @@ export function LockStep({
   lockSecretWarning,
   lockError,
   isLockPassphraseInvalid,
+  originalShareUrl,
   onPassphraseChange,
   onBack,
   onGenerate,
@@ -237,14 +238,41 @@ export function LockStep({
   lockSecretWarning: string | null;
   lockError: string | null;
   isLockPassphraseInvalid: boolean;
+  originalShareUrl: string | null;
   onPassphraseChange: (value: string) => void;
   onBack: () => void;
   onGenerate: () => void;
 }) {
   const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  function handleCopyLink(): void {
+    if (!originalShareUrl) return;
+    const absolute = new URL(originalShareUrl, window.location.origin).href;
+    void navigator.clipboard.writeText(absolute).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <section className="space-y-4" data-testid="share-step-lock">
       <h3 className="text-base font-semibold text-foreground">{t('share.lockTitle')}</h3>
+
+      {originalShareUrl ? (
+        <StateNotice data-testid="share-private-mode-notice" tone="warning">
+          <p className="text-xs">{t('share.privateModeNoticeBody')}</p>
+          <button
+            className="mt-2 text-xs font-medium underline underline-offset-2 hover:opacity-80"
+            data-testid="share-private-mode-copy"
+            onClick={handleCopyLink}
+            type="button"
+          >
+            {copied ? t('share.privateModeNoticeCopied') : t('share.privateModeNoticeCopy')}
+          </button>
+        </StateNotice>
+      ) : null}
+
       <PassphraseInput
         ariaDescribedBy={lockError && isLockPassphraseInvalid ? 'share-lock-error' : undefined}
         ariaInvalid={isLockPassphraseInvalid ? true : undefined}
