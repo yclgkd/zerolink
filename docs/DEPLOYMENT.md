@@ -76,10 +76,14 @@ Frontend SPA    ──→    Worker (zerolink-api)
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
-> **注意 / Note**: 一键部署完成后，仍需手动完成以下步骤：
-> After one-click deploy, you still need to manually:
-> 1. 创建 KV namespace 并更新绑定 / Create KV namespace and update binding
-> 2. 设置 `RP_ID`、`RP_ORIGIN`、`COMMIT_TOKEN_SECRET` 环境变量 / Set `RP_ID`, `RP_ORIGIN`, and `COMMIT_TOKEN_SECRET` env vars
+> **注意 / Note**: 一键部署完成后，运行交互式 setup 脚本完成剩余配置：
+>
+> ```bash
+> pnpm setup
+> ```
+>
+> 脚本会自动创建 KV namespace 并更新 `wrangler.toml`，自动生成 `COMMIT_TOKEN_SECRET`，
+> 仅需手动输入 `RP_ID` 和 `RP_ORIGIN`（域名相关，无法自动推断）。
 
 ---
 
@@ -91,27 +95,38 @@ Frontend SPA    ──→    Worker (zerolink-api)
 npx wrangler login
 ```
 
-### 第 2 步：创建 KV Namespace
+### 第 2 步：运行 setup 脚本
 
 ```bash
-# 创建生产环境 KV namespace
-npx wrangler kv:namespace create SECRETS_KV
-
-# 命令输出示例：
-# ✅ Successfully created namespace "SECRETS_KV"
-# Add the following to your wrangler.toml:
-# [[kv_namespaces]]
-# binding = "SECRETS_KV"
-# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+pnpm setup
 ```
 
-记录返回的 `id` 值，更新 `packages/backend/wrangler.toml`：
+脚本会交互式地完成以下工作：
+- 自动创建 KV namespace 并更新 `wrangler.toml`
+- 自动生成并设置 `COMMIT_TOKEN_SECRET`
+- 提示输入 `RP_ID` 和 `RP_ORIGIN`，设置为 Worker Secret
 
-```toml
-[[kv_namespaces]]
-binding = "SECRETS_KV"
-id = "你的-kv-namespace-id"  # ← 替换为实际 ID
 ```
+🚀 ZeroLink Cloudflare Setup
+
+Checking Wrangler login... ✅
+
+Environment to set up (production / staging / both) [production]: production
+
+WebAuthn configuration for production:
+  RP_ID    (domain without https://, e.g. zerolink.dev): zerolink.dev
+  RP_ORIGIN (full URL,   e.g. https://zerolink.dev): https://zerolink.dev
+
+📦 Setting up production...
+  Creating KV namespace... ✅  (b8313bed33c9492885c12c9d26034420)
+  Setting COMMIT_TOKEN_SECRET... ✅
+  Setting RP_ID... ✅
+  Setting RP_ORIGIN... ✅
+
+🎉 Setup complete!
+```
+
+> 若已有 KV namespace（重新部署场景），脚本会跳过创建步骤，只更新 Secrets。
 
 ### 第 3 步：构建前端
 
@@ -155,11 +170,6 @@ id = "你的-kv-namespace-id"
 
 ```bash
 cd packages/backend
-
-# 先在 Cloudflare Dashboard 中配置所有必需 Secrets：
-# RP_ID, RP_ORIGIN, COMMIT_TOKEN_SECRET
-# Workers > zerolink-api > Settings > Variables and Secrets
-
 npx wrangler deploy
 ```
 

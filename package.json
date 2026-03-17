@@ -17,6 +17,7 @@
     "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
     "clean": "pnpm -r exec rm -rf dist build .turbo node_modules",
     "prepare": "husky",
+    "setup": "tsx scripts/setup-cloudflare.ts",
     "manifest:generate": "tsx scripts/generate-manifest.ts",
     "manifest:sign": "tsx scripts/sign-manifest.ts",
     "manifest:verify": "tsx scripts/verify-manifest.ts"
