@@ -1,5 +1,5 @@
 import { ROUTE_PATTERN } from '@zerolink/shared';
-import { Link2, X } from 'lucide-react';
+import { AlertTriangle, Link2, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RouteObject } from 'react-router-dom';
@@ -34,13 +34,26 @@ function toChildPath(routePattern: string): string {
 
 const IN_APP_BROWSER_DISMISSED_KEY = 'zl-inapp-dismissed';
 
+const IN_APP_BROWSER_UA_PATTERN =
+  /Instagram|FBAN|FBAV|Twitter|Snapchat|TikTok|musical_ly|LinkedInApp|Line\/|Telegram|MicroMessenger/i;
+
+function isInAppBrowser(): boolean {
+  const ua = navigator.userAgent;
+  if (IN_APP_BROWSER_UA_PATTERN.test(ua)) return true;
+  // Android WebView: contains "wv" flag
+  if (/Android.*wv\b/i.test(ua)) return true;
+  // iOS UIWebView / WKWebView: AppleWebKit present but no "Safari" version token
+  if (/(iPhone|iPod|iPad).*AppleWebKit/i.test(ua) && !/Safari\//i.test(ua)) return true;
+  return false;
+}
+
 function AppShellLayout(): ReactElement {
   const { t } = useTranslation();
   const location = useLocation();
   const isTrustRoute = location.pathname === `/${TRUST_PAGE_PATH}`;
   const trustRouteState = createTrustRouteState(location);
   const [showInAppWarning, setShowInAppWarning] = useState(
-    () => sessionStorage.getItem(IN_APP_BROWSER_DISMISSED_KEY) !== '1'
+    () => isInAppBrowser() && sessionStorage.getItem(IN_APP_BROWSER_DISMISSED_KEY) !== '1'
   );
 
   const handleDismissInAppWarning = () => {
@@ -54,57 +67,56 @@ function AppShellLayout(): ReactElement {
       data-testid="app-shell"
     >
       <Toaster position="bottom-right" richColors />
+      {showInAppWarning ? (
+        <div
+          className="mb-4 flex items-start gap-3 rounded-xl border border-neon-orange/40 bg-neon-orange/10 px-4 py-3 text-xs text-neon-orange"
+          data-testid="inapp-browser-warning"
+        >
+          <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          <span className="flex-1">{t('shell.inAppBrowserWarning')}</span>
+          <button
+            aria-label="Dismiss"
+            className="mt-0.5 shrink-0 opacity-70 hover:opacity-100"
+            data-testid="inapp-browser-warning-dismiss"
+            onClick={handleDismissInAppWarning}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+      ) : null}
       <Card className="sticky top-4 z-50 border-white/8 bg-slate-900/75 backdrop-blur-2xl">
-        <CardHeader className="flex-col gap-2 py-4">
-          {showInAppWarning ? (
-            <div
-              className="flex items-start gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-300"
-              data-testid="inapp-browser-warning"
-            >
-              <span className="flex-1">{t('shell.inAppBrowserWarning')}</span>
-              <button
-                aria-label="Dismiss"
-                className="mt-0.5 shrink-0 text-yellow-400 hover:text-yellow-200"
-                data-testid="inapp-browser-warning-dismiss"
-                onClick={handleDismissInAppWarning}
-                type="button"
-              >
-                <X aria-hidden="true" className="size-3.5" />
-              </button>
+        <CardHeader className="gap-4 py-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[var(--neon-magenta)] shadow-[0_0_20px_rgb(168_85_247_/_0.45)]">
+              <Link2 aria-hidden="true" className="size-5 text-white" />
             </div>
-          ) : null}
-          <div className="flex items-center justify-between gap-4 md:flex-row">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[var(--neon-magenta)] shadow-[0_0_20px_rgb(168_85_247_/_0.45)]">
-                <Link2 aria-hidden="true" className="size-5 text-white" />
-              </div>
-              <div>
-                <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
-                  <h1>
-                    Zero<span className="text-[var(--neon-orange)]">Link</span>
-                  </h1>
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">{t('shell.tagline')}</p>
-              </div>
+            <div>
+              <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
+                <h1>
+                  Zero<span className="text-[var(--neon-orange)]">Link</span>
+                </h1>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">{t('shell.tagline')}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-2 self-center">
-              <LanguageSwitcher />
-              <Button asChild size="sm" variant="outline">
-                {isTrustRoute ? (
-                  <Link data-testid="app-shell-back-link" to="/">
-                    {t('shell.backToCreate')}
-                  </Link>
-                ) : (
-                  <Link
-                    data-testid="app-shell-trust-link"
-                    state={trustRouteState}
-                    to={`/${TRUST_PAGE_PATH}`}
-                  >
-                    {t('shell.trustModelLink')}
-                  </Link>
-                )}
-              </Button>
-            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 self-center">
+            <LanguageSwitcher />
+            <Button asChild size="sm" variant="outline">
+              {isTrustRoute ? (
+                <Link data-testid="app-shell-back-link" to="/">
+                  {t('shell.backToCreate')}
+                </Link>
+              ) : (
+                <Link
+                  data-testid="app-shell-trust-link"
+                  state={trustRouteState}
+                  to={`/${TRUST_PAGE_PATH}`}
+                >
+                  {t('shell.trustModelLink')}
+                </Link>
+              )}
+            </Button>
           </div>
         </CardHeader>
       </Card>

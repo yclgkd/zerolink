@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { APP_ROUTES } from '../routes';
 
@@ -17,6 +17,58 @@ function renderFrom(pathname: string) {
 describe('App shell routes rendering', () => {
   afterEach(() => {
     cleanup();
+  });
+
+  describe('in-app browser warning banner', () => {
+    const IN_APP_UA =
+      'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Instagram/123.0 Mobile Safari/537.36';
+    const NORMAL_UA =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+    const DISMISSED_KEY = 'zl-inapp-dismissed';
+
+    beforeEach(() => {
+      sessionStorage.clear();
+    });
+
+    it('shows the banner when UA matches an in-app browser pattern', async () => {
+      vi.stubGlobal('navigator', { ...navigator, userAgent: IN_APP_UA });
+      renderFrom('/');
+
+      expect(await screen.findByTestId('inapp-browser-warning')).toBeTruthy();
+      vi.unstubAllGlobals();
+    });
+
+    it('hides the banner and writes sessionStorage when dismiss is clicked', async () => {
+      vi.stubGlobal('navigator', { ...navigator, userAgent: IN_APP_UA });
+      renderFrom('/');
+
+      const banner = await screen.findByTestId('inapp-browser-warning');
+      expect(banner).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('inapp-browser-warning-dismiss'));
+      expect(screen.queryByTestId('inapp-browser-warning')).toBeNull();
+      expect(sessionStorage.getItem(DISMISSED_KEY)).toBe('1');
+      vi.unstubAllGlobals();
+    });
+
+    it('does not show the banner when sessionStorage already has the dismissed key', async () => {
+      sessionStorage.setItem(DISMISSED_KEY, '1');
+      vi.stubGlobal('navigator', { ...navigator, userAgent: IN_APP_UA });
+      renderFrom('/');
+
+      await screen.findByTestId('app-shell');
+      expect(screen.queryByTestId('inapp-browser-warning')).toBeNull();
+      vi.unstubAllGlobals();
+    });
+
+    it('does not show the banner for a normal desktop browser UA', async () => {
+      vi.stubGlobal('navigator', { ...navigator, userAgent: NORMAL_UA });
+      renderFrom('/');
+
+      await screen.findByTestId('app-shell');
+      expect(screen.queryByTestId('inapp-browser-warning')).toBeNull();
+      vi.unstubAllGlobals();
+    });
   });
 
   it('renders app shell and default create child route', async () => {
