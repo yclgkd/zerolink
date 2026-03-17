@@ -134,6 +134,7 @@ export function SharePage(): ReactElement {
                 lockError={lockLogic.lockError}
                 lockPending={lockLogic.lockPending}
                 lockSecretWarning={lockLogic.lockSecretWarning}
+                originalShareUrl={lockLogic.originalShareUrl}
                 onBack={() => {
                   if (lockLogic.lockPending) return;
                   lockLogic.clearLockError();

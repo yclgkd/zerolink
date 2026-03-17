@@ -378,6 +378,10 @@ export function useSharePageLockLogic(
     ? null
     : 'This share link is missing a lock secret fragment (#k=...).';
 
+  const originalShareUrl = lockSecretB64u
+    ? `${pathname}${search}#k=${lockSecretB64u}${senderAuthFpr ? `&af=${senderAuthFpr}` : ''}`
+    : null;
+
   const clearLockSecretCache = useCallback(
     (source: string) => {
       if (!uuid) {
@@ -495,6 +499,7 @@ export function useSharePageLockLogic(
     lockPending,
     canGenerate,
     lockSecretWarning,
+    originalShareUrl,
     clearLockSecretCache,
     handlePassphraseChange,
     handleGenerate,
