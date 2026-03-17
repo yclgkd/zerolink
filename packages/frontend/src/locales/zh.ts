@@ -5,6 +5,8 @@ const zh: Translation = {
     tagline: '零知识安全传递',
     trustModelLink: '信任模型',
     backToCreate: '返回创建',
+    inAppBrowserWarning:
+      '为确保最佳安全性，请在独立浏览器（Safari、Chrome、Firefox）中打开 ZeroLink，而非在 Telegram、Instagram 等应用的内置浏览器中使用。',
   },
 
   create: {
@@ -96,6 +98,7 @@ const zh: Translation = {
     destroyConfirmButton: '确认删除',
     destroyDeletingButton: '删除中\u2026',
     createNewButton: '创建新频道',
+    deliveredToast: '密钥传递成功。',
   },
 
   share: {
@@ -154,8 +157,10 @@ const zh: Translation = {
     decryptingButton: '解密中\u2026',
     burnButton: '清除本地明文',
     plaintextLabel: '明文',
+    cipherVersionNotice: '内容已更新，你将解密的是最新版本。',
     burnedTitle: '本地明文已从本设备清除。',
     burnedBody: '这不会删除频道或将其标记为已过期。重新输入密码短语可再次解密。',
+    burnedToast: '本地明文已清除。',
     safetyCheckingTitle: '正在检查本设备的接收方密钥\u2026',
     safetyCheckingBody: 'ZeroLink 仅在确认本设备创建了当前锁定后才显示安全码。',
     safetyMissingTitle: '本设备无法验证安全码。',

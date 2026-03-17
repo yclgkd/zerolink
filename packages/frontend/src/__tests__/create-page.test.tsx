@@ -461,4 +461,36 @@ describe('CreatePage integration', () => {
       expect(screen.getByTestId('how-it-works')).toBeTruthy();
     });
   });
+
+  it('share link is not a clickable anchor (prevents sender self-click)', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-share-link')).toBeTruthy();
+    });
+
+    const shareLink = screen.getByTestId('create-success-share-link');
+    expect(shareLink.tagName.toLowerCase()).not.toBe('a');
+  });
+
+  it('manage link opens in a new tab', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-manage-link')).toBeTruthy();
+    });
+
+    const manageLink = screen.getByTestId('create-success-manage-link');
+    expect(manageLink.tagName.toLowerCase()).toBe('a');
+    expect(manageLink.getAttribute('target')).toBe('_blank');
+    expect(manageLink.getAttribute('rel')).toBe('noopener noreferrer');
+  });
 });

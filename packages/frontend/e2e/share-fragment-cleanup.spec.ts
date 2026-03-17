@@ -19,7 +19,7 @@ test.describe('share link fragment cleanup', () => {
 
       const shareLinkLocator = page.getByTestId('create-success-share-link');
       await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
-      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const shareUrl = (await shareLinkLocator.textContent())?.trim() ?? null;
 
       expect(shareUrl, 'share link should exist').toBeTruthy();
       await page.goto(shareUrl ?? '/', { waitUntil: 'domcontentloaded' });

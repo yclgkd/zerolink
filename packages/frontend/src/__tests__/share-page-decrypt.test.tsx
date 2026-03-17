@@ -7,9 +7,10 @@ import { Base64UrlSchema, HexStringSchema, SECURITY_PROFILE } from '@zerolink/sh
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { lockChannelMock, decryptDeliveredMock, syncHarness } = vi.hoisted(() => ({
+const { lockChannelMock, decryptDeliveredMock, toastSuccessMock, syncHarness } = vi.hoisted(() => ({
   lockChannelMock: vi.fn(),
   decryptDeliveredMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
   syncHarness: {
     latestOptions: null as {
       onStateChange: (update: {
@@ -32,6 +33,11 @@ vi.mock('../crypto/orchestrator', async () => {
     },
   };
 });
+
+vi.mock('sonner', () => ({
+  toast: { success: toastSuccessMock },
+  Toaster: () => null,
+}));
 
 vi.mock('../sync/use-channel-sync.ts', async () => {
   return {
@@ -691,5 +697,78 @@ describe('SharePage – decryptDelivered action', () => {
 
     await screen.findByTestId('share-decrypt-plaintext');
     expect(screen.queryByTestId('share-delivery-updated-badge')).toBeNull();
+  });
+
+  it('shows cipher version notice before re-decrypt when cipherVersion >= 1 and plaintext is burned', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+    mockDecryptSuccessWithStoreSideEffects(1);
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+
+    // First decrypt returns cipherVersion=1
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+    await screen.findByTestId('share-decrypt-plaintext');
+
+    // No notice while plaintext is visible
+    expect(screen.queryByTestId('share-cipher-version-notice')).toBeNull();
+
+    // Burn plaintext
+    fireEvent.click(screen.getByTestId('share-decrypt-burn'));
+    await screen.findByTestId('share-decrypt-burned');
+
+    // Notice appears before re-decrypt
+    expect(screen.getByTestId('share-cipher-version-notice')).toBeTruthy();
+    expect(screen.getByTestId('share-cipher-version-notice').textContent).toContain(
+      'The content has been updated'
+    );
+  });
+
+  it('does not show cipher version notice when cipherVersion is 0', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+    await screen.findByTestId('share-decrypt-plaintext');
+
+    fireEvent.click(screen.getByTestId('share-decrypt-burn'));
+    await screen.findByTestId('share-decrypt-burned');
+
+    expect(screen.queryByTestId('share-cipher-version-notice')).toBeNull();
+  });
+
+  it('calls toast.success after burn', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+    await screen.findByTestId('share-decrypt-plaintext');
+
+    fireEvent.click(screen.getByTestId('share-decrypt-burn'));
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledOnce();
+    });
+    expect(toastSuccessMock).toHaveBeenCalledWith('Local plaintext removed.');
   });
 });

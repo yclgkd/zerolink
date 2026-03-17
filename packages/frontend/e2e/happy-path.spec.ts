@@ -35,7 +35,7 @@ test.describe('ZL-032 e2e happy path', () => {
         'After you leave this page, ZeroLink cannot recover it.'
       );
 
-      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const shareUrl = (await shareLinkLocator.textContent())?.trim() ?? null;
       const manageUrl = await manageLinkLocator.getAttribute('href');
 
       expect(shareUrl, 'share link should exist').toBeTruthy();

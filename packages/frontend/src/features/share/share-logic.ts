@@ -9,6 +9,8 @@ import {
   UUIDSchema,
 } from '@zerolink/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import {
   extractLockSecretFromHash,
@@ -613,6 +615,7 @@ export function useReceiverSafetyCodeState({
 }
 
 export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
+  const { t } = useTranslation();
   const store = useDecryptStore();
   const [passphrase, setPassphrase] = useState('');
   const [decryptError, setDecryptError] = useState<string | null>(null);
@@ -744,6 +747,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     store.markLocalPlaintextBurned();
     setPassphrase('');
     clearDecryptError();
+    toast.success(t('share.burnedToast'));
   }
 
   return {

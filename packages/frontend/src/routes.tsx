@@ -1,9 +1,10 @@
 import { ROUTE_PATTERN } from '@zerolink/shared';
-import { Link2 } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { AlertTriangle, Link2, X } from 'lucide-react';
+import { type ReactElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RouteObject } from 'react-router-dom';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Toaster } from 'sonner';
 
 import { LanguageSwitcher } from './components/layout/language-switcher';
 import { ManifestInfo } from './components/manifest-info';
@@ -31,17 +32,59 @@ function toChildPath(routePattern: string): string {
   return routePattern.startsWith('/') ? routePattern.slice(1) : routePattern;
 }
 
+const IN_APP_BROWSER_DISMISSED_KEY = 'zl-inapp-dismissed';
+
+const IN_APP_BROWSER_UA_PATTERN =
+  /Instagram|FBAN|FBAV|Twitter|Snapchat|TikTok|musical_ly|LinkedInApp|Line\/|Telegram|MicroMessenger/i;
+
+function isInAppBrowser(): boolean {
+  const ua = navigator.userAgent;
+  if (IN_APP_BROWSER_UA_PATTERN.test(ua)) return true;
+  // Android WebView: contains "wv" flag
+  if (/Android.*wv\b/i.test(ua)) return true;
+  // iOS UIWebView / WKWebView: AppleWebKit present but no "Safari" version token
+  if (/(iPhone|iPod|iPad).*AppleWebKit/i.test(ua) && !/Safari\//i.test(ua)) return true;
+  return false;
+}
+
 function AppShellLayout(): ReactElement {
   const { t } = useTranslation();
   const location = useLocation();
   const isTrustRoute = location.pathname === `/${TRUST_PAGE_PATH}`;
   const trustRouteState = createTrustRouteState(location);
+  const [showInAppWarning, setShowInAppWarning] = useState(
+    () => isInAppBrowser() && sessionStorage.getItem(IN_APP_BROWSER_DISMISSED_KEY) !== '1'
+  );
+
+  const handleDismissInAppWarning = () => {
+    sessionStorage.setItem(IN_APP_BROWSER_DISMISSED_KEY, '1');
+    setShowInAppWarning(false);
+  };
 
   return (
     <main
       className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-x-hidden px-4 py-8 md:px-8 md:py-10"
       data-testid="app-shell"
     >
+      <Toaster position="bottom-right" richColors />
+      {showInAppWarning ? (
+        <div
+          className="mb-4 flex items-start gap-3 rounded-xl border border-neon-orange/40 bg-neon-orange/10 px-4 py-3 text-xs text-neon-orange"
+          data-testid="inapp-browser-warning"
+        >
+          <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          <span className="flex-1">{t('shell.inAppBrowserWarning')}</span>
+          <button
+            aria-label="Dismiss"
+            className="mt-0.5 shrink-0 opacity-70 hover:opacity-100"
+            data-testid="inapp-browser-warning-dismiss"
+            onClick={handleDismissInAppWarning}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+      ) : null}
       <Card className="sticky top-4 z-50 border-white/8 bg-slate-900/75 backdrop-blur-2xl">
         <CardHeader className="gap-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
