@@ -97,9 +97,9 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
-> **注意**: 一键部署仅部署后端 Worker。部署完成后需手动创建 KV namespace、设置 `RP_ID`/`RP_ORIGIN` 环境变量，并单独部署前端。
+> **注意**: 一键部署后，运行 `pnpm setup` 完成 KV namespace 创建和 Secrets 配置（只需回答 2 个问题）。
 >
-> **Note**: One-click deploy only deploys the backend Worker. After deployment, you need to manually create the KV namespace, set `RP_ID`/`RP_ORIGIN` env vars, and deploy the frontend separately.
+> **Note**: After one-click deploy, run `pnpm setup` to finish KV namespace creation and secrets configuration (only 2 questions required).
 
 ### 前提条件 / Prerequisites
 

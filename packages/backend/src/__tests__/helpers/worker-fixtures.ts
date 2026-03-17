@@ -174,10 +174,20 @@ export function createMockEnv(responder: (request: Request) => Promise<Response>
     },
   } as unknown as DurableObjectNamespace;
 
+  const assets = {
+    async fetch(_request: Request): Promise<Response> {
+      return new Response('<html>ZeroLink</html>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
+    },
+  } as unknown as Fetcher;
+
   return {
     env: {
       SECRET_VAULT: namespace,
       SECRETS_KV: {} as KVNamespace,
+      ASSETS: assets,
       APP_ENV: 'test',
       COMMIT_TOKEN_SECRET: 'commit-token-secret',
       RP_ID: 'zerolink.test',

@@ -53,6 +53,10 @@ describe('backend worker routing — error handling (400/404/405/500 + CORS + UU
 
     expect(response.status).toBe(404);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(response.headers.get('Strict-Transport-Security')).toBe(
+      'max-age=63072000; includeSubDomains; preload'
+    );
     expect(payload).toEqual({
       ok: false,
       code: 'NOT_FOUND',
@@ -77,7 +81,7 @@ describe('backend worker routing — error handling (400/404/405/500 + CORS + UU
     });
   });
 
-  it('returns health text for non-api route', async () => {
+  it('delegates non-api route to ASSETS and applies security headers', async () => {
     const { env } = createMockEnv(async () => {
       return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
         status: 500,
@@ -87,7 +91,10 @@ describe('backend worker routing — error handling (400/404/405/500 + CORS + UU
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toBe('ZeroLink API');
+    expect(body).toBe('<html>ZeroLink</html>');
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
   });
 
   describe('UUID validation', () => {
