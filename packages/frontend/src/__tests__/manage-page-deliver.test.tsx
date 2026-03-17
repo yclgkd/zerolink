@@ -5,9 +5,10 @@ import { SECURITY_PROFILE } from '@zerolink/shared';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { deliverSecretMock, deleteChannelMock, syncHarness } = vi.hoisted(() => ({
+const { deliverSecretMock, deleteChannelMock, toastSuccessMock, syncHarness } = vi.hoisted(() => ({
   deliverSecretMock: vi.fn(),
   deleteChannelMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
   syncHarness: {
     latestOptions: null as {
       onStateChange: (update: {
@@ -30,6 +31,11 @@ vi.mock('../crypto/orchestrator', async () => {
     },
   };
 });
+
+vi.mock('sonner', () => ({
+  toast: { success: toastSuccessMock },
+  Toaster: () => null,
+}));
 
 vi.mock('../sync/use-channel-sync.ts', async () => {
   return {
@@ -611,5 +617,24 @@ describe('ManagePage – deliver actions', () => {
       )
     ).toBeNull();
     expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
+  });
+
+  it('calls toast.success after successful deliver', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'top secret payload' },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledOnce();
+    });
+    expect(toastSuccessMock).toHaveBeenCalledWith('Secret delivered successfully.');
   });
 });

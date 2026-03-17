@@ -468,6 +468,11 @@ export function DeliveredStep({
 
       {canDecryptLocally ? (
         <>
+          {cipherVersion !== null && cipherVersion >= 1 && !plaintext ? (
+            <StateNotice data-testid="share-cipher-version-notice" tone="info">
+              <p className="text-xs">{t('share.cipherVersionNotice')}</p>
+            </StateNotice>
+          ) : null}
           <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
             <PassphraseInput
               ariaDescribedBy={

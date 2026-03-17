@@ -3,6 +3,8 @@ const en = {
     tagline: 'Zero-Knowledge Secure Delivery',
     trustModelLink: 'Trust Model',
     backToCreate: 'Back to Create',
+    inAppBrowserWarning:
+      'For best security, open ZeroLink in a standalone browser (Safari, Chrome, Firefox) — not inside Telegram, Instagram, or other in-app browsers.',
   },
 
   create: {
@@ -103,6 +105,7 @@ const en = {
     destroyConfirmButton: 'Confirm Delete',
     destroyDeletingButton: 'Deleting\u2026',
     createNewButton: 'Create New Channel',
+    deliveredToast: 'Secret delivered successfully.',
   },
 
   share: {
@@ -165,9 +168,12 @@ const en = {
     decryptingButton: 'Decrypting\u2026',
     burnButton: 'Burn Local Plaintext',
     plaintextLabel: 'Plaintext',
+    cipherVersionNotice:
+      'The content has been updated. You are about to decrypt the latest version.',
     burnedTitle: 'Local plaintext removed from this device.',
     burnedBody:
       'This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt again.',
+    burnedToast: 'Local plaintext removed.',
     safetyCheckingTitle: 'Checking this device for the receiver key\u2026',
     safetyCheckingBody:
       'ZeroLink only shows the Safety Code after confirming that this device created the current lock.',

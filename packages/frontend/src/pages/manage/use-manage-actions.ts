@@ -1,5 +1,7 @@
 import { CHANNEL_STATE, type SecurityProfile, type WrappedPrivateKey } from '@zerolink/shared';
 import type { RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { useDeliverStore } from '../../stores/deliver-store';
 import {
@@ -20,6 +22,7 @@ export function useManageDeliveryLogic(
   profile: SecurityProfile | null,
   wrappedPrivateKey: WrappedPrivateKey | undefined
 ) {
+  const { t } = useTranslation();
   const store = useDeliverStore();
 
   const isActiveActionContext = (scope: number, actionUuid: string): boolean => {
@@ -83,6 +86,7 @@ export function useManageDeliveryLogic(
     store.setShowDestroyConfirm(false);
     setIsSecretInputInvalid(false);
     setActionError(null);
+    toast.success(t('manage.deliveredToast'));
   };
 
   return { handleDeliver, isActiveActionContext };
