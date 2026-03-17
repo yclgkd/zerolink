@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-17] Migrate to Workers Assets unified deployment
+
+**Decision**: Replace dual-deployment (Cloudflare Pages for frontend + standalone Cloudflare Worker for backend) with Workers Assets, serving the React SPA as static assets directly from the Worker via a single `wrangler deploy`.
+**Context**: The previous architecture required two separate deployment steps and a hidden Worker Routes configuration in the Cloudflare Dashboard to proxy `/api/*` from the Pages domain to the Worker. New deployers had no way to discover this implicit dependency from the repository alone, making the "one-click deploy" story incomplete.
+**Choice**: Add `[assets] directory = "../frontend/dist"` with `run_worker_first = true` and `not_found_handling = "single-page-application"` to `wrangler.toml`. The Worker handles `/api/*` itself; all other requests are delegated to `env.ASSETS.fetch(request)`. Security headers previously managed by Cloudflare Pages' `_headers` file are now applied in a new `security-headers.ts` Worker module wrapping every ASSETS response. The CI/CD deploy job is consolidated from two sequential jobs into one. Custom domain routes (`zerolink.dev*`, `staging.zerolink.dev*`) are declared in `wrangler.toml`.
+**Reasoning**: `run_worker_first = true` is required to allow the Worker to inject security headers (CSP, HSTS, X-Frame-Options, etc.) onto every asset response—without it the Worker never sees asset requests and `_headers` behavior cannot be replicated. Per Cloudflare's official pricing documentation, requests served from the Workers Assets bucket are free and unlimited regardless of plan, so there is no billing regression vs. Pages.
+**Trade-offs**: `run_worker_first = true` means every request, including static asset fetches, passes through the Worker JS before being handed off to the asset binding. This adds a small amount of per-request CPU but remains within the 10 ms free-tier CPU budget for the trivial header-injection code path. The Cloudflare Pages project can be retired after verifying the Worker-served deployment on the custom domains.
+
 ## [2026-03-16] Release guard fallback verifier must ship inside the trusted bootstrap
 
 **Decision**: Keep the `@noble/ed25519` fallback verifier in the trusted bootstrap bundle instead of loading it via a pre-verification dynamic import.
