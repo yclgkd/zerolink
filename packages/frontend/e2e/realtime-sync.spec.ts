@@ -43,7 +43,7 @@ test.describe('Real-time sync via polling fallback', () => {
       await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
       await expect(manageLinkLocator).toBeVisible({ timeout: 15_000 });
 
-      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const shareUrl = (await shareLinkLocator.textContent())?.trim() ?? null;
       const manageUrl = await manageLinkLocator.getAttribute('href');
       if (!shareUrl || !manageUrl) throw new Error('Missing share or manage URL');
 
@@ -122,7 +122,7 @@ test.describe('Real-time sync via polling fallback', () => {
       const manageLinkLocator = senderPage.getByTestId('create-success-manage-link');
       await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
 
-      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const shareUrl = (await shareLinkLocator.textContent())?.trim() ?? null;
       const manageUrl = await manageLinkLocator.getAttribute('href');
 
       // ── Step 2: Receiver locks ─────────────────────────────────────────
@@ -206,7 +206,7 @@ test.describe('Real-time sync via polling fallback', () => {
       await expect(shareLinkLocator).toBeVisible({ timeout: 15_000 });
       await expect(manageLinkLocator).toBeVisible({ timeout: 15_000 });
 
-      const shareUrl = await shareLinkLocator.getAttribute('href');
+      const shareUrl = (await shareLinkLocator.textContent())?.trim() ?? null;
       const manageUrl = await manageLinkLocator.getAttribute('href');
 
       if (!shareUrl || !manageUrl) throw new Error('Missing share or manage URL');
