@@ -53,6 +53,10 @@ describe('backend worker routing — error handling (400/404/405/500 + CORS + UU
 
     expect(response.status).toBe(404);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(response.headers.get('Strict-Transport-Security')).toBe(
+      'max-age=63072000; includeSubDomains; preload'
+    );
     expect(payload).toEqual({
       ok: false,
       code: 'NOT_FOUND',

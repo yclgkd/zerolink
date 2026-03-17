@@ -71,6 +71,8 @@ function buildApiHeaders(): Headers {
     'Access-Control-Allow-Headers': ALLOW_HEADERS,
     'Access-Control-Max-Age': '86400',
     'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
   });
 }
 
