@@ -1,4 +1,4 @@
-import { CHANNEL_STATE, type SecurityProfile } from '@zerolink/shared';
+import { CHANNEL_STATE, type SecurityProfile, type WrappedPrivateKey } from '@zerolink/shared';
 import type { RefObject } from 'react';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { useDeliverStore } from '../../stores/deliver-store';
@@ -17,7 +17,8 @@ export function useManageDeliveryLogic(
   setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
   softkeyPassphrase: string,
-  profile: SecurityProfile | null
+  profile: SecurityProfile | null,
+  wrappedPrivateKey: WrappedPrivateKey | undefined
 ) {
   const store = useDeliverStore();
 
@@ -63,6 +64,7 @@ export function useManageDeliveryLogic(
         profile,
         plaintext: secretInput,
         ...(needsChannelPassword ? { softkeyPassphrase } : {}),
+        ...(wrappedPrivateKey !== undefined ? { wrappedPrivateKey } : {}),
       });
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;
@@ -97,7 +99,8 @@ export function useManageDestructionLogic(
   setSoftkeyPassphrase: (value: string) => void,
   softkeyPassphrase: string,
   profile: SecurityProfile | null,
-  isActiveActionContext: (scope: number, actionUuid: string) => boolean
+  isActiveActionContext: (scope: number, actionUuid: string) => boolean,
+  wrappedPrivateKey: WrappedPrivateKey | undefined
 ) {
   const store = useDeliverStore();
 
@@ -143,6 +146,7 @@ export function useManageDestructionLogic(
         uuid: actionUuid,
         profile,
         ...(needsChannelPassword ? { softkeyPassphrase } : {}),
+        ...(wrappedPrivateKey !== undefined ? { wrappedPrivateKey } : {}),
       });
     } catch {
       if (!isActiveActionContext(actionScope, actionUuid)) return;

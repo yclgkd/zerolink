@@ -6,6 +6,7 @@ import {
   buildCipherBundleAadBytes,
   type DecryptFetchResponse,
   type DecryptFetchSoftkeyDeliveryAuth,
+  type ECDSAPublicKeyJWK,
   type HexString,
   HexStringSchema,
   type RSAPublicKeyJWK,
@@ -24,13 +25,7 @@ import {
   type CryptoOrchestratorDeps,
   createCryptoOrchestrator,
 } from '../../crypto/orchestrator';
-import {
-  createIndexedDbPendingSoftkeyCleanupStorage,
-  createIndexedDbReceiverKeyStorage,
-  createIndexedDbSoftkeyAdminStorage,
-  type ReceiverKeyStorage,
-  type SoftkeyAdminEnvelope,
-} from '../../crypto/storage';
+import { createIndexedDbReceiverKeyStorage, type ReceiverKeyStorage } from '../../crypto/storage';
 import { assertWithWebAuthn, type WebAuthnAdapterResult } from '../../crypto/webauthn';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../../stores';
 
@@ -138,33 +133,6 @@ export async function computeReceiverPubFpr(publicKey: CryptoKey): Promise<HexSt
 // Fixture builders
 // ---------------------------------------------------------------------------
 
-export function buildSoftkeyAdminEnvelope(createdAt: number): SoftkeyAdminEnvelope {
-  return {
-    uuid: VALID_UUID,
-    softkeyPubJwk: {
-      kty: 'EC',
-      crv: 'P-256',
-      x: VALID_B64U,
-      y: VALID_B64U,
-      ext: true,
-      key_ops: ['verify'],
-    },
-    wrappedPrivateKey: {
-      encryptedKey: VALID_B64U,
-      iv: VALID_B64U,
-      kdf: {
-        kdfType: 'argon2id',
-        version: 19,
-        m: 65_536,
-        t: 3,
-        p: 1,
-        salt: VALID_B64U,
-      },
-    },
-    createdAt,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Factory functions
 // ---------------------------------------------------------------------------
@@ -196,18 +164,6 @@ export function createOrchestrator(overrides: Partial<CryptoOrchestratorDeps> = 
       createIndexedDbReceiverKeyStorage({
         dbName: `test-orchestrator-db-${Math.random().toString(16).slice(2)}`,
         storeName: 'receiver-keys',
-      }),
-    softkeyAdminStorage:
-      overrides.softkeyAdminStorage ??
-      createIndexedDbSoftkeyAdminStorage({
-        dbName: `test-orchestrator-softkey-${Math.random().toString(16).slice(2)}`,
-        storeName: 'softkey-admin',
-      }),
-    pendingSoftkeyCleanupStorage:
-      overrides.pendingSoftkeyCleanupStorage ??
-      createIndexedDbPendingSoftkeyCleanupStorage({
-        dbName: `test-orchestrator-softkey-pending-${Math.random().toString(16).slice(2)}`,
-        storeName: 'pending-softkey-cleanup',
       }),
     createStore: overrides.createStore ?? useCreateStore,
     lockStore: overrides.lockStore ?? useLockStore,
@@ -270,14 +226,7 @@ export async function prepareAnchoredSoftkeyDelivery(
       dbName: `test-orchestrator-anchored-${Math.random().toString(16).slice(2)}`,
       storeName: 'receiver-keys',
     });
-  const softkeyAdminStorage = createIndexedDbSoftkeyAdminStorage({
-    dbName: `test-orchestrator-anchored-softkey-${Math.random().toString(16).slice(2)}`,
-    storeName: 'softkey-admin',
-  });
-  const { orchestrator, apiClient } = createOrchestrator({
-    receiverKeyStorage,
-    softkeyAdminStorage,
-  });
+  const { orchestrator, apiClient } = createOrchestrator({ receiverKeyStorage });
   const uuid = params.uuid ?? VALID_UUID;
   const passphrase = params.passphrase ?? 'Compat#Pass123';
 
@@ -289,14 +238,21 @@ export async function prepareAnchoredSoftkeyDelivery(
       creationOptions: {},
     },
   });
-  vi.mocked(apiClient.createFinish).mockResolvedValue({
-    ok: true,
-    status: 200,
-    data: {
+
+  let capturedSoftkeyPubJwk: ECDSAPublicKeyJWK | null = null;
+  vi.mocked(apiClient.createFinish).mockImplementation(async (input) => {
+    if ('softkeyPubJwk' in input) {
+      capturedSoftkeyPubJwk = input.softkeyPubJwk as ECDSAPublicKeyJWK;
+    }
+    return {
       ok: true,
-      shareUrl: `/s/${uuid}`,
-      manageUrl: `/m/${uuid}`,
-    },
+      status: 200,
+      data: {
+        ok: true,
+        shareUrl: `/s/${uuid}`,
+        manageUrl: `/m/${uuid}`,
+      },
+    };
   });
 
   const createResult = await orchestrator.createChannel({
@@ -372,11 +328,15 @@ export async function prepareAnchoredSoftkeyDelivery(
     return { ok: true, status: 200, data: { ok: true } };
   });
 
+  if (!createResult.data.wrappedPrivateKey) {
+    throw new Error('expected wrappedPrivateKey in createResult');
+  }
   const deliverResult = await orchestrator.deliverSecret({
     uuid,
     profile: SECURITY_PROFILE.STANDARD,
     plaintext: params.plaintext ?? 'anchored softkey plaintext',
     softkeyPassphrase: passphrase,
+    wrappedPrivateKey: createResult.data.wrappedPrivateKey,
   });
   expect(deliverResult.ok).toBe(true);
   expect(committed).not.toBeNull();
@@ -388,9 +348,8 @@ export async function prepareAnchoredSoftkeyDelivery(
     softkeySignature: HexString;
   };
 
-  const softkeyEnvelope = await softkeyAdminStorage.load(uuid);
-  if (!softkeyEnvelope) {
-    throw new Error('missing softkey admin envelope');
+  if (!capturedSoftkeyPubJwk) {
+    throw new Error('missing captured softkey pub jwk');
   }
 
   return {
@@ -407,7 +366,7 @@ export async function prepareAnchoredSoftkeyDelivery(
         expireAt: capturedCommit.intent.expireAt,
       },
       signer: {
-        softkeyPubJwk: softkeyEnvelope.softkeyPubJwk,
+        softkeyPubJwk: capturedSoftkeyPubJwk,
       },
       proof: {
         softkeySignature: capturedCommit.softkeySignature,

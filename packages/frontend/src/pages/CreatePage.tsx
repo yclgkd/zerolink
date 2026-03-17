@@ -1,4 +1,8 @@
-import { SECURITY_PROFILE, type SecurityProfile } from '@zerolink/shared';
+import {
+  buildManageUrlWithFragment,
+  SECURITY_PROFILE,
+  type SecurityProfile,
+} from '@zerolink/shared';
 import i18next from 'i18next';
 import { AlertTriangle, ClipboardCheck, Copy, Lock, PlusCircle, Shield, Zap } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -20,6 +24,7 @@ import { Spinner } from '../components/ui/spinner';
 import { cryptoOrchestrator } from '../crypto/orchestrator';
 import { hasRequiredPassphraseLength } from '../crypto/passphrase-policy';
 import { detectWebAuthnSupport } from '../crypto/webauthn';
+import { serializeWrappedKeyCompact } from '../crypto/wrapped-key-codec';
 import { generateChannelUuid } from '../lib/channel-uuid';
 import { cn } from '../lib/utils';
 import type { CreateStore } from '../stores/create-store';
@@ -496,9 +501,16 @@ async function runCreate({
 
   store.completeCreateBegin({ ok: true, creationOptions: {} });
   store.setCreatedProfile(selectedProfile);
+
+  let manageUrl = result.data.manageUrl;
+  if (selectedProfile === SECURITY_PROFILE.QUICK && result.data.wrappedPrivateKey) {
+    const compact = serializeWrappedKeyCompact(result.data.wrappedPrivateKey);
+    manageUrl = buildManageUrlWithFragment(manageUrl, compact);
+  }
+
   onSuccess({
     shareUrlWithFragment: result.data.shareUrlWithFragment,
-    manageUrl: result.data.manageUrl,
+    manageUrl,
     isPasswordMode: selectedProfile === SECURITY_PROFILE.QUICK,
   });
   if (selectedProfile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();

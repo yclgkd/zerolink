@@ -13,7 +13,7 @@ import {
   ensurePassphrase,
   mapWebAuthnError,
   randomBase64Url,
-  signChallengeWithSoftkey,
+  signChallengeWithWrappedKey,
   toError,
 } from './orchestrator-utils';
 import { deriveExpectedCompoundChallengeB64u } from './protocol-utils';
@@ -76,14 +76,19 @@ export async function executeDeleteChannel(
       });
       return passphraseError;
     }
+    if (!input.wrappedPrivateKey) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit('CRYPTO_ERROR');
+      });
+      return toError('CRYPTO_ERROR', 'delete.softkey', 'missing wrapped key in manage URL');
+    }
     try {
-      softkeySignature = await signChallengeWithSoftkey(
-        deps.softkeyAdminStorage,
-        input.uuid,
+      softkeySignature = await signChallengeWithWrappedKey(
+        input.wrappedPrivateKey,
         softkeyPassphrase,
         expectedChallenge as Base64Url
       );
-    } catch (_error) {
+    } catch {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('CRYPTO_ERROR');
       });

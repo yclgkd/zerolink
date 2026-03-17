@@ -5,13 +5,7 @@ import 'fake-indexeddb/auto';
 import { Base64UrlSchema, HexStringSchema, UUIDSchema } from '@zerolink/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  createIndexedDbPendingSoftkeyCleanupStorage,
-  createIndexedDbReceiverKeyStorage,
-  createIndexedDbSoftkeyAdminStorage,
-  type ReceiverKeyEnvelope,
-  type SoftkeyAdminEnvelope,
-} from '../crypto/storage';
+import { createIndexedDbReceiverKeyStorage, type ReceiverKeyEnvelope } from '../crypto/storage';
 
 const VALID_UUID = UUIDSchema.parse('aaaaaaaaaaaaaaaaaaaaa');
 const VALID_HEX = HexStringSchema.parse(
@@ -19,31 +13,6 @@ const VALID_HEX = HexStringSchema.parse(
 );
 const VALID_B64U = Base64UrlSchema.parse('bW9ja19iYXNlNjR1cmw');
 const NOW = 1_700_000_000_000;
-
-const SAMPLE_SOFTKEY_ENVELOPE: SoftkeyAdminEnvelope = {
-  uuid: VALID_UUID,
-  softkeyPubJwk: {
-    kty: 'EC',
-    crv: 'P-256',
-    x: VALID_B64U,
-    y: VALID_B64U,
-    ext: true,
-    key_ops: ['verify'],
-  },
-  wrappedPrivateKey: {
-    encryptedKey: VALID_B64U,
-    iv: VALID_B64U,
-    kdf: {
-      kdfType: 'argon2id',
-      version: 19,
-      m: 65_536,
-      t: 3,
-      p: 1,
-      salt: VALID_B64U,
-    },
-  },
-  createdAt: NOW,
-};
 
 const SAMPLE_ENVELOPE: ReceiverKeyEnvelope = {
   uuid: VALID_UUID,
@@ -152,131 +121,6 @@ describe('indexeddb receiver key storage', () => {
     await expect(storage.load(SAMPLE_ENVELOPE.uuid)).rejects.toMatchObject({
       code: 'KEY_STORAGE_ERROR',
       message: 'IndexedDB open failed for test-db-open-error',
-    });
-
-    Object.defineProperty(globalThis, 'indexedDB', {
-      configurable: true,
-      value: originalIndexedDb,
-    });
-  });
-});
-
-describe('indexeddb softkey admin storage', () => {
-  it('saves and loads softkey admin envelope', async () => {
-    const storage = createIndexedDbSoftkeyAdminStorage({
-      dbName: 'test-softkey-roundtrip',
-      storeName: 'softkey-store-roundtrip',
-    });
-
-    await storage.save(SAMPLE_SOFTKEY_ENVELOPE);
-    const loaded = await storage.load(SAMPLE_SOFTKEY_ENVELOPE.uuid);
-
-    expect(loaded).toEqual(SAMPLE_SOFTKEY_ENVELOPE);
-  });
-
-  it('returns null for unknown uuid', async () => {
-    const storage = createIndexedDbSoftkeyAdminStorage({
-      dbName: 'test-softkey-null',
-      storeName: 'softkey-store-null',
-    });
-
-    const result = await storage.load('bbbbbbbbbbbbbbbbbbbbb');
-    expect(result).toBeNull();
-  });
-
-  it('removes softkey admin envelope by uuid', async () => {
-    const storage = createIndexedDbSoftkeyAdminStorage({
-      dbName: 'test-softkey-remove',
-      storeName: 'softkey-store-remove',
-    });
-
-    await storage.save(SAMPLE_SOFTKEY_ENVELOPE);
-    await storage.remove(SAMPLE_SOFTKEY_ENVELOPE.uuid);
-
-    expect(await storage.load(SAMPLE_SOFTKEY_ENVELOPE.uuid)).toBeNull();
-  });
-
-  it('throws KEY_STORAGE_ERROR when indexeddb API is unavailable', async () => {
-    const originalIndexedDb = globalThis.indexedDB;
-    Object.defineProperty(globalThis, 'indexedDB', {
-      configurable: true,
-      value: undefined,
-    });
-
-    const storage = createIndexedDbSoftkeyAdminStorage({
-      dbName: 'test-softkey-missing',
-      storeName: 'softkey-store-missing',
-    });
-
-    await expect(storage.save(SAMPLE_SOFTKEY_ENVELOPE)).rejects.toMatchObject({
-      code: 'KEY_STORAGE_ERROR',
-    });
-
-    Object.defineProperty(globalThis, 'indexedDB', {
-      configurable: true,
-      value: originalIndexedDb,
-    });
-  });
-});
-
-describe('indexeddb pending softkey cleanup storage', () => {
-  it('marks and lists pending cleanup records', async () => {
-    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
-      dbName: 'test-softkey-pending-roundtrip',
-      storeName: 'pending-softkey-cleanup',
-    });
-
-    await storage.mark(VALID_UUID, NOW);
-    await storage.mark('bbbbbbbbbbbbbbbbbbbbb', NOW + 1);
-
-    const records = await storage.list();
-    const sorted = [...records].sort((a, b) => String(a.uuid).localeCompare(String(b.uuid)));
-
-    expect(sorted).toEqual([
-      { uuid: VALID_UUID, markedAt: NOW },
-      { uuid: 'bbbbbbbbbbbbbbbbbbbbb', markedAt: NOW + 1 },
-    ]);
-  });
-
-  it('upserts mark for the same uuid', async () => {
-    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
-      dbName: 'test-softkey-pending-upsert',
-      storeName: 'pending-softkey-cleanup',
-    });
-
-    await storage.mark(VALID_UUID, NOW);
-    await storage.mark(VALID_UUID, NOW + 500);
-
-    const records = await storage.list();
-    expect(records).toEqual([{ uuid: VALID_UUID, markedAt: NOW + 500 }]);
-  });
-
-  it('clears pending cleanup record by uuid', async () => {
-    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
-      dbName: 'test-softkey-pending-clear',
-      storeName: 'pending-softkey-cleanup',
-    });
-
-    await storage.mark(VALID_UUID, NOW);
-    await storage.clear(VALID_UUID);
-
-    expect(await storage.list()).toEqual([]);
-  });
-
-  it('throws KEY_STORAGE_ERROR when indexeddb API is unavailable', async () => {
-    const originalIndexedDb = globalThis.indexedDB;
-    Object.defineProperty(globalThis, 'indexedDB', {
-      configurable: true,
-      value: undefined,
-    });
-
-    const storage = createIndexedDbPendingSoftkeyCleanupStorage({
-      dbName: 'test-softkey-pending-missing',
-      storeName: 'pending-softkey-cleanup',
-    });
-
-    await expect(storage.list()).rejects.toMatchObject({
-      code: 'KEY_STORAGE_ERROR',
     });
 
     Object.defineProperty(globalThis, 'indexedDB', {

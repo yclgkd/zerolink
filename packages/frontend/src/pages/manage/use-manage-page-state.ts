@@ -1,6 +1,7 @@
-import { CHANNEL_STATE, UUIDSchema } from '@zerolink/shared';
+import { CHANNEL_STATE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
+import { deserializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { useDeliverStore } from '../../stores/deliver-store';
 import type { ChannelClosedReason, ChannelStateUpdate } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
@@ -18,6 +19,12 @@ export function useManagePageState(uuid?: string) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
+
+  const wrappedPrivateKey = useMemo(() => {
+    const { wrappedKeyCompact } = parseManageFragment(window.location.hash);
+    if (!wrappedKeyCompact) return undefined;
+    return deserializeWrappedKeyCompact(wrappedKeyCompact) ?? undefined;
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -127,7 +134,8 @@ export function useManagePageState(uuid?: string) {
     setIsSecretInputInvalid,
     secretInput,
     softkeyPassphrase,
-    profile
+    profile,
+    wrappedPrivateKey
   );
 
   const { handleDestroyConfirm, handleApplyDestroy } = useManageDestructionLogic(
@@ -141,7 +149,8 @@ export function useManagePageState(uuid?: string) {
     setSoftkeyPassphrase,
     softkeyPassphrase,
     profile,
-    isActiveActionContext
+    isActiveActionContext,
+    wrappedPrivateKey
   );
 
   return {

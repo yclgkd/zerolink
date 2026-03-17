@@ -201,6 +201,22 @@ export function buildShareUrlWithFragment(
   return `${base}#${params.toString()}`;
 }
 
+export function buildManageUrlWithFragment(manageUrl: string, wrappedKeyCompact: string): string {
+  const hashIndex = manageUrl.indexOf('#');
+  const base = hashIndex >= 0 ? manageUrl.slice(0, hashIndex) : manageUrl;
+  const params = new URLSearchParams();
+  params.set('wk', wrappedKeyCompact);
+  return `${base}#${params.toString()}`;
+}
+
+export function parseManageFragment(hash: string): { wrappedKeyCompact: string | null } {
+  const normalized = hash.startsWith('#') ? hash.slice(1) : hash;
+  if (!normalized) return { wrappedKeyCompact: null };
+  const params = new URLSearchParams(normalized);
+  const wk = params.get('wk');
+  return { wrappedKeyCompact: wk || null };
+}
+
 export function parseShareFragment(hash: string): {
   lockSecretB64u: Base64Url | null;
   senderAuthFpr: HexString | null;
