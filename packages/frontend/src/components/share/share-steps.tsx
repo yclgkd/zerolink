@@ -247,12 +247,17 @@ export function LockStep({
   const [copied, setCopied] = useState(false);
 
   function handleCopyLink(): void {
-    if (!originalShareUrl) return;
+    if (!originalShareUrl || !navigator.clipboard) return;
     const absolute = new URL(originalShareUrl, window.location.origin).href;
-    void navigator.clipboard.writeText(absolute).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    void navigator.clipboard.writeText(absolute).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      () => {
+        // Clipboard write failed (permission denied or unsupported); leave button label unchanged
+      }
+    );
   }
 
   return (

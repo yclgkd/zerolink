@@ -698,4 +698,64 @@ describe('SharePage – lock flow', () => {
     expect(errorText).toBe('Lock failed. Please try again.');
     expect(errorText).not.toContain('TOTALLY_UNKNOWN_CODE_XYZ');
   });
+
+  it('shows private mode notice with copy-link button in lock step when lock secret is present', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+    await screen.findByTestId('share-step-onboarding');
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+
+    await screen.findByTestId('share-step-lock');
+    expect(screen.getByTestId('share-private-mode-notice')).toBeTruthy();
+    expect(screen.getByTestId('share-private-mode-copy').textContent).toContain('Copy link');
+  });
+
+  it('does not show private mode notice in lock step when lock secret is missing', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+    // No #k= fragment and no sessionStorage entry
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await screen.findByTestId('share-step-onboarding');
+    fireEvent.click(screen.getByTestId('share-continue-button'));
+
+    await screen.findByTestId('share-step-lock');
+    expect(screen.queryByTestId('share-private-mode-notice')).toBeNull();
+  });
+
+  it('copy-link button writes reconstructed URL with fragment to clipboard and shows copied feedback', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+
+    try {
+      renderSharePage('/s/:uuid', `/s/${VALID_UUID}#k=${VALID_LOCK_SECRET}`);
+
+      await screen.findByTestId('share-step-onboarding');
+      fireEvent.click(screen.getByTestId('share-continue-button'));
+      await screen.findByTestId('share-step-lock');
+
+      const copyButton = screen.getByTestId('share-private-mode-copy');
+      fireEvent.click(copyButton);
+
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledTimes(1);
+      });
+      const writtenUrl: string = writeTextMock.mock.calls[0]?.[0] as string;
+      expect(writtenUrl).toContain(`#k=${VALID_LOCK_SECRET}`);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('share-private-mode-copy').textContent).toContain('Copied!');
+      });
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
 });
