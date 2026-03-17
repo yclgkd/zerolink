@@ -24,7 +24,7 @@ import {
   mapWebAuthnError,
   randomBase64Url,
   resolvePadBlockForProfile,
-  signChallengeWithSoftkey,
+  signChallengeWithWrappedKey,
   toCipherBundleTransport,
   toError,
   toPlaintextBytes,
@@ -162,10 +162,15 @@ export async function executeDeliverSecret(
       });
       return passphraseError;
     }
+    if (!input.wrappedPrivateKey) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit('CRYPTO_ERROR');
+      });
+      return toError('CRYPTO_ERROR', 'deliver.softkey', 'missing wrapped key in manage URL');
+    }
     try {
-      softkeySignature = await signChallengeWithSoftkey(
-        deps.softkeyAdminStorage,
-        input.uuid,
+      softkeySignature = await signChallengeWithWrappedKey(
+        input.wrappedPrivateKey,
         softkeyPassphrase,
         intentData.expectedChallenge as Base64Url
       );

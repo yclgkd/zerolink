@@ -7,9 +7,9 @@ import type {
   SecurityProfile,
   UnixMs,
   UUID,
+  WrappedPrivateKey,
 } from '@zerolink/shared';
 import { AES_GCM, SECURITY_PROFILE } from '@zerolink/shared';
-
 import type { ApiClient } from '../api/client';
 import type {
   CryptoOrchestratorErrorCode,
@@ -22,7 +22,6 @@ import type {
 import { getPassphraseLengthMessage, validatePassphrase } from './passphrase-policy';
 import { computeSha256Hex, decodeBase64UrlBytes, encodeBase64UrlBytes } from './protocol-utils';
 import { softkeySign, unwrapSoftkeyPrivateKey } from './softkey';
-import type { PendingSoftkeyCleanupStorage, SoftkeyAdminStorage } from './storage';
 import type { WebAuthnAdapterErrorCode } from './webauthn';
 
 // Re-export for use by flow modules that need it.
@@ -196,51 +195,16 @@ export function applyDecryptStoreUpdate(
   apply(state);
 }
 
-export async function retryPendingSoftkeyCleanup(
-  softkeyAdminStorage: SoftkeyAdminStorage,
-  pendingSoftkeyCleanupStorage: PendingSoftkeyCleanupStorage
-): Promise<void> {
-  let pendingRecords: Awaited<ReturnType<PendingSoftkeyCleanupStorage['list']>>;
-  try {
-    pendingRecords = await pendingSoftkeyCleanupStorage.list();
-  } catch {
-    return;
-  }
-
-  for (const record of pendingRecords) {
-    try {
-      const envelope = await softkeyAdminStorage.load(record.uuid);
-      if (!envelope) {
-        await pendingSoftkeyCleanupStorage.clear(record.uuid);
-        continue;
-      }
-
-      if (envelope.createdAt > record.markedAt) {
-        await pendingSoftkeyCleanupStorage.clear(record.uuid);
-        continue;
-      }
-
-      await softkeyAdminStorage.remove(record.uuid);
-      await pendingSoftkeyCleanupStorage.clear(record.uuid);
-    } catch {
-      // Keep pending record for next retry.
-    }
-  }
-}
-
 /**
- * Loads the stored softkey envelope for `uuid`, unwraps the private key with
- * `passphrase`, and signs `expectedChallengeB64u` (decoded to raw bytes).
- * Shared by executeDeliverSecret and executeDeleteChannel.
+ * Unwraps the sender's ECDSA private key directly from the provided
+ * WrappedPrivateKey (sourced from the manage URL fragment) and signs
+ * the challenge. No IndexedDB access required.
  */
-export async function signChallengeWithSoftkey(
-  softkeyAdminStorage: SoftkeyAdminStorage,
-  uuid: string,
+export async function signChallengeWithWrappedKey(
+  wrappedPrivateKey: WrappedPrivateKey,
   passphrase: string,
   expectedChallengeB64u: Base64Url
 ): Promise<HexString> {
-  const envelope = await softkeyAdminStorage.load(uuid);
-  if (!envelope) throw new Error('missing softkey');
-  const privateKey = await unwrapSoftkeyPrivateKey(envelope.wrappedPrivateKey, passphrase);
+  const privateKey = await unwrapSoftkeyPrivateKey(wrappedPrivateKey, passphrase);
   return softkeySign(privateKey, decodeBase64UrlBytes(expectedChallengeB64u));
 }

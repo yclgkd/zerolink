@@ -6,11 +6,7 @@ import { executeDeleteChannel } from './orchestrator-delete';
 import { executeDeliverSecret } from './orchestrator-deliver';
 import { executeLockChannel } from './orchestrator-lock';
 import type { ResolvedDeps } from './orchestrator-types';
-import {
-  createIndexedDbPendingSoftkeyCleanupStorage,
-  createIndexedDbReceiverKeyStorage,
-  createIndexedDbSoftkeyAdminStorage,
-} from './storage';
+import { createIndexedDbReceiverKeyStorage } from './storage';
 
 // Re-export the full public surface so existing imports from './orchestrator' continue to work.
 export type {
@@ -40,9 +36,6 @@ export function createCryptoOrchestrator(
   const resolved: ResolvedDeps = {
     client: deps.apiClient ?? defaultApiClient,
     receiverKeyStorage: deps.receiverKeyStorage ?? createIndexedDbReceiverKeyStorage(),
-    softkeyAdminStorage: deps.softkeyAdminStorage ?? createIndexedDbSoftkeyAdminStorage(),
-    pendingSoftkeyCleanupStorage:
-      deps.pendingSoftkeyCleanupStorage ?? createIndexedDbPendingSoftkeyCleanupStorage(),
     createStore: deps.createStore ?? useCreateStore,
     lockStore: deps.lockStore ?? useLockStore,
     deliverStore: deps.deliverStore ?? useDeliverStore,

@@ -1,10 +1,12 @@
 import { encode } from 'cborg';
 import { describe, expect, it } from 'vitest';
 import {
+  buildManageUrlWithFragment,
   buildShareUrlWithFragment,
   computeSenderAuthFingerprintFromAttestation,
   computeSoftkeyPublicKeyFingerprint,
   deriveUpdateProofChallengeB64u,
+  parseManageFragment,
   parseShareFragment,
   verifySoftkeyDeliveryProof,
   verifyWebAuthnDeliveryProof,
@@ -211,5 +213,64 @@ describe('sender auth helpers', () => {
         expectedChallengeBytes: new TextEncoder().encode('tampered challenge payload'),
       })
     ).resolves.toBe(false);
+  });
+});
+
+const COMPACT_WK = 'encKey123.ivValue12.saltVal12';
+
+describe('manage fragment helpers', () => {
+  describe('buildManageUrlWithFragment', () => {
+    it('appends #wk= fragment to a plain URL', () => {
+      const result = buildManageUrlWithFragment(
+        'https://zerolink.app/manage/uuid?token=abc',
+        COMPACT_WK
+      );
+      expect(result).toBe(
+        `https://zerolink.app/manage/uuid?token=abc#wk=${encodeURIComponent(COMPACT_WK)}`
+      );
+    });
+
+    it('strips an existing fragment before appending', () => {
+      const result = buildManageUrlWithFragment(
+        'https://zerolink.app/manage/uuid?token=abc#old=stuff',
+        COMPACT_WK
+      );
+      expect(result).not.toContain('#old=stuff');
+      expect(result).toContain('#wk=');
+    });
+
+    it('produces a URL that parseManageFragment can decode', () => {
+      const url = buildManageUrlWithFragment(
+        'https://zerolink.app/manage/uuid?token=abc',
+        COMPACT_WK
+      );
+      const hash = url.slice(url.indexOf('#'));
+      expect(parseManageFragment(hash).wrappedKeyCompact).toBe(COMPACT_WK);
+    });
+  });
+
+  describe('parseManageFragment', () => {
+    it('extracts wrappedKeyCompact from a valid fragment', () => {
+      const hash = `#wk=${encodeURIComponent(COMPACT_WK)}`;
+      expect(parseManageFragment(hash).wrappedKeyCompact).toBe(COMPACT_WK);
+    });
+
+    it('works with fragment string without leading #', () => {
+      const hash = `wk=${encodeURIComponent(COMPACT_WK)}`;
+      expect(parseManageFragment(hash).wrappedKeyCompact).toBe(COMPACT_WK);
+    });
+
+    it('returns null for empty fragment', () => {
+      expect(parseManageFragment('').wrappedKeyCompact).toBeNull();
+      expect(parseManageFragment('#').wrappedKeyCompact).toBeNull();
+    });
+
+    it('returns null when wk param is missing', () => {
+      expect(parseManageFragment('#k=someOtherParam').wrappedKeyCompact).toBeNull();
+    });
+
+    it('returns null when wk param is empty string', () => {
+      expect(parseManageFragment('#wk=').wrappedKeyCompact).toBeNull();
+    });
   });
 });

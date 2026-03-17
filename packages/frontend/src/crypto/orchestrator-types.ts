@@ -7,15 +7,12 @@ import type {
   RSAPublicKeyJWK,
   SecurityProfile,
   UpdateIntent,
+  WrappedPrivateKey,
 } from '@zerolink/shared';
 
 import type { ApiClient } from '../api/client';
 import type { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
-import type {
-  PendingSoftkeyCleanupStorage,
-  ReceiverKeyStorage,
-  SoftkeyAdminStorage,
-} from './storage';
+import type { ReceiverKeyStorage } from './storage';
 
 export type CreateStore = typeof useCreateStore;
 export type LockStore = typeof useLockStore;
@@ -70,8 +67,6 @@ export type CryptoOrchestratorResult<T> =
 export interface CryptoOrchestratorDeps {
   apiClient?: ApiClient;
   receiverKeyStorage?: ReceiverKeyStorage;
-  softkeyAdminStorage?: SoftkeyAdminStorage;
-  pendingSoftkeyCleanupStorage?: PendingSoftkeyCleanupStorage;
   createStore?: CreateStore;
   lockStore?: LockStore;
   deliverStore?: DeliverStore;
@@ -101,6 +96,8 @@ export interface CreateChannelOutput {
   shareUrlWithFragment: string;
   lockSecretB64u: string;
   lockKeyB64u: string;
+  /** Present when channel uses Quick Share (password/softkey) mode. Used to build the manage URL fragment. */
+  wrappedPrivateKey?: WrappedPrivateKey;
 }
 
 /**
@@ -129,8 +126,10 @@ export interface DeliverSecretInput {
   profile: SecurityProfile;
   plaintext: string | Uint8Array;
   expireAt?: number | null;
-  /** Required when the channel uses softkey compatibility mode. Must match the passphrase used at create time. */
+  /** Required when the channel uses softkey/password mode. Must match the passphrase used at create time. */
   softkeyPassphrase?: string;
+  /** The sender's wrapped ECDSA private key, sourced from the manage URL fragment. Required for password mode. */
+  wrappedPrivateKey?: WrappedPrivateKey;
 }
 
 /**
@@ -149,8 +148,10 @@ export interface DeliverSecretOutput {
 export interface DeleteChannelInput {
   uuid: string;
   profile: SecurityProfile;
-  /** Required when the channel uses softkey compatibility mode. Must match the passphrase used at create time. */
+  /** Required when the channel uses softkey/password mode. Must match the passphrase used at create time. */
   softkeyPassphrase?: string;
+  /** The sender's wrapped ECDSA private key, sourced from the manage URL fragment. Required for password mode. */
+  wrappedPrivateKey?: WrappedPrivateKey;
 }
 
 /**
@@ -205,8 +206,6 @@ export interface CryptoOrchestrator {
 export interface ResolvedDeps {
   client: ApiClient;
   receiverKeyStorage: ReceiverKeyStorage;
-  softkeyAdminStorage: SoftkeyAdminStorage;
-  pendingSoftkeyCleanupStorage: PendingSoftkeyCleanupStorage;
   createStore: CreateStore;
   lockStore: LockStore;
   deliverStore: DeliverStore;

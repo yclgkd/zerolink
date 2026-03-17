@@ -10,13 +10,7 @@ import type {
   CryptoOrchestratorResult,
   ResolvedDeps,
 } from './orchestrator-types';
-import {
-  ensurePassphrase,
-  mapWebAuthnError,
-  randomBase64Url,
-  retryPendingSoftkeyCleanup,
-  toError,
-} from './orchestrator-utils';
+import { ensurePassphrase, mapWebAuthnError, randomBase64Url, toError } from './orchestrator-utils';
 import { buildShareUrlWithFragment, deriveLockKeyB64u } from './protocol-utils';
 import { exportSoftkeyPublicJwk, generateSoftkeyPair, wrapSoftkeyPrivateKey } from './softkey';
 import { registerWithWebAuthn } from './webauthn';
@@ -25,7 +19,6 @@ export async function executeCreateChannel(
   deps: ResolvedDeps,
   input: CreateChannelInput
 ): Promise<CryptoOrchestratorResult<CreateChannelOutput>> {
-  await retryPendingSoftkeyCleanup(deps.softkeyAdminStorage, deps.pendingSoftkeyCleanupStorage);
   if (input.useCompatibilityMode) {
     const passphraseError = ensurePassphrase(
       input.softkeyPassphrase ?? '',
@@ -63,17 +56,12 @@ export async function executeCreateChannel(
     const softkeyPassphrase = input.softkeyPassphrase ?? '';
     let softkeyPubJwk: import('@zerolink/shared').ECDSAPublicKeyJWK;
     let senderAuthFpr: import('@zerolink/shared').HexString;
+    let wrappedPrivateKey: import('@zerolink/shared').WrappedPrivateKey;
     try {
       const keypair = await generateSoftkeyPair();
       softkeyPubJwk = await exportSoftkeyPublicJwk(keypair.publicKey);
       senderAuthFpr = await computeSoftkeyPublicKeyFingerprint(softkeyPubJwk);
-      const wrappedPrivateKey = await wrapSoftkeyPrivateKey(keypair.privateKey, softkeyPassphrase);
-      await deps.softkeyAdminStorage.save({
-        uuid: input.uuid,
-        softkeyPubJwk,
-        wrappedPrivateKey,
-        createdAt: deps.now(),
-      });
+      wrappedPrivateKey = await wrapSoftkeyPrivateKey(keypair.privateKey, softkeyPassphrase);
     } catch {
       state.failCreateFinish('CRYPTO_ERROR');
       return toError('CRYPTO_ERROR', 'create.softkey');
@@ -88,23 +76,8 @@ export async function executeCreateChannel(
       timestamp: deps.now(),
     });
     if (!finishRes.ok) {
-      let cleanupFailed = false;
-      try {
-        await deps.softkeyAdminStorage.remove(input.uuid);
-      } catch {
-        cleanupFailed = true;
-      }
-      if (cleanupFailed) {
-        try {
-          await deps.pendingSoftkeyCleanupStorage.mark(input.uuid, deps.now());
-        } catch {
-          // Ignore mark failure to preserve create.finish error semantics.
-        }
-      }
       state.failCreateFinish(finishRes.error.code);
-      return cleanupFailed
-        ? toError(finishRes.error.code, 'create.finish', 'cleanup failed after create.finish')
-        : toError(finishRes.error.code, 'create.finish');
+      return toError(finishRes.error.code, 'create.finish');
     }
 
     state.completeCreateFinish(finishRes.data);
@@ -122,6 +95,7 @@ export async function executeCreateChannel(
         ),
         lockSecretB64u,
         lockKeyB64u,
+        wrappedPrivateKey,
       },
     };
   }
