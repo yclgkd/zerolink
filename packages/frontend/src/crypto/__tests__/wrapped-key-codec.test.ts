@@ -161,4 +161,16 @@ describe('deserializeWrappedKeyCompact', () => {
     const tampered = ['', parts[1], parts[2]].join('.');
     expect(deserializeWrappedKeyCompact(tampered)).toBeNull();
   });
+
+  it('returns null when iv is empty', () => {
+    const wk = makeWrappedKey();
+    const parts = serializeWrappedKeyCompact(wk).split('.');
+    expect(deserializeWrappedKeyCompact([parts[0], '', parts[2]].join('.'))).toBeNull();
+  });
+
+  it('returns null when salt is empty', () => {
+    const wk = makeWrappedKey();
+    const parts = serializeWrappedKeyCompact(wk).split('.');
+    expect(deserializeWrappedKeyCompact([parts[0], parts[1], ''].join('.'))).toBeNull();
+  });
 });
