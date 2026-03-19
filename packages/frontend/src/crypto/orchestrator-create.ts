@@ -61,7 +61,11 @@ export async function executeCreateChannel(
       const keypair = await generateSoftkeyPair();
       softkeyPubJwk = await exportSoftkeyPublicJwk(keypair.publicKey);
       senderAuthFpr = await computeSoftkeyPublicKeyFingerprint(softkeyPubJwk);
-      wrappedPrivateKey = await wrapSoftkeyPrivateKey(keypair.privateKey, softkeyPassphrase);
+      wrappedPrivateKey = await wrapSoftkeyPrivateKey(
+        keypair.privateKey,
+        softkeyPassphrase,
+        deps.kdfParams
+      );
     } catch {
       state.failCreateFinish('CRYPTO_ERROR');
       return toError('CRYPTO_ERROR', 'create.softkey');

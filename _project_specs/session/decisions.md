@@ -13,6 +13,24 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-19] Keep unit-test crypto fidelity by injecting fast KDF params instead of mocking KDF
+
+**Decision**: Speed up frontend/shared crypto unit tests by adding optional internal Argon2id parameter overrides to the shared KDF helpers and threading those overrides through frontend orchestrator dependencies, while keeping runtime defaults on the production-strength constants.
+**Context**: After CI dependency/browser caching landed, the remaining unit-test bottleneck was real crypto work. `packages/shared/src/crypto/__tests__/kdf.test.ts` still spent ~53 s locally and `packages/frontend/src/__tests__/crypto-orchestrator-decrypt-anchored.test.ts` spent ~61 s, largely because many branch tests re-ran full-strength Argon2id wrapping before asserting error handling.
+**Options Considered**: Mock the KDF entirely in tests; move full-strength crypto coverage into a separate slow suite; keep the real algorithm path but inject cheaper test-only parameters and preserve a few default-parameter smoke cases.
+**Choice**: Add optional `kdfParams` plumbing for internal callers only, default it to the existing production values, and have test helpers opt into a fixed fast Argon2id config. Keep a small number of full-strength smoke tests inside the normal unit suite so PR validation still exercises the real defaults.
+**Reasoning**: This keeps the unit tests on the true crypto implementation path, avoids broad module mocks, and preserves confidence that the runtime default configuration still works. The fast-parameter path removes repeated Argon2 cost from branch/error tests without changing product behavior.
+**Trade-offs**: The shared/frontend crypto helpers now carry a small amount of internal-only injection surface. Tests that need production-strength coverage must explicitly opt out of the fast helper defaults.
+
+## [2026-03-19] Reuse immutable decrypt fixtures instead of repeating full create-lock-deliver setup per case
+
+**Decision**: Refactor the heaviest decrypt tests to build immutable base artifacts once, then seed fresh storage/orchestrator instances per case from cloned envelopes and payloads.
+**Context**: Anchored and general decrypt tests repeatedly executed the full `create -> lock -> deliver` path even when the case under test only changed replay metadata, delivery proofs, or fetch payload shape. That duplicated expensive crypto and IndexedDB setup across every case.
+**Options Considered**: Keep each test fully end-to-end and accept the runtime; share one live fixture object across cases; prepare immutable base artifacts once and clone only the mutable pieces into fresh per-test instances.
+**Choice**: Add fixture builders that compute the heavy crypto path once and return immutable artifacts (`cipherBundle`, `deliveryAuth`, `ReceiverKeyEnvelope`, fingerprints). Each test then seeds a new storage instance from cloned envelope data and mutates only its local payload/storage copies.
+**Reasoning**: This preserves test isolation while removing duplicate heavy work. Reusing live state would risk case coupling through shared IndexedDB contents or Zustand state, while immutable artifact cloning keeps the tests deterministic and cheap.
+**Trade-offs**: The test helper module is larger and more structured than before. Future tests should prefer the seeded-fixture pattern rather than reintroducing ad hoc full-flow setup in every `it(...)`.
+
 ## [2026-03-17] Migrate to Workers Assets unified deployment
 
 **Decision**: Replace dual-deployment (Cloudflare Pages for frontend + standalone Cloudflare Worker for backend) with Workers Assets, serving the React SPA as static assets directly from the Worker via a single `wrangler deploy`.

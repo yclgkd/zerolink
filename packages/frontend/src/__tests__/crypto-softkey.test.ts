@@ -10,6 +10,7 @@ import {
   unwrapSoftkeyPrivateKey,
   wrapSoftkeyPrivateKey,
 } from '../crypto/softkey';
+import { FAST_TEST_ARGON2ID_KDF_PARAMS } from './helpers/crypto-test-params';
 
 const TEST_TIMEOUT_MS = 30_000;
 const PASSPHRASE = 'test-passphrase-for-softkey';
@@ -93,7 +94,11 @@ describe('wrapSoftkeyPrivateKey / unwrapSoftkeyPrivateKey', () => {
     'unwrap fails with wrong passphrase',
     async () => {
       const keyPair = await generateSoftkeyPair();
-      const wrapped = await wrapSoftkeyPrivateKey(keyPair.privateKey, PASSPHRASE);
+      const wrapped = await wrapSoftkeyPrivateKey(
+        keyPair.privateKey,
+        PASSPHRASE,
+        FAST_TEST_ARGON2ID_KDF_PARAMS
+      );
 
       await expect(unwrapSoftkeyPrivateKey(wrapped, 'wrong-passphrase')).rejects.toThrow();
     },

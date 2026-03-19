@@ -10,6 +10,7 @@ import type {
   WrappedPrivateKey,
 } from '@zerolink/shared';
 import { AES_GCM, SECURITY_PROFILE } from '@zerolink/shared';
+import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 import type { ApiClient } from '../api/client';
 import type {
   CryptoOrchestratorErrorCode,
@@ -203,8 +204,9 @@ export function applyDecryptStoreUpdate(
 export async function signChallengeWithWrappedKey(
   wrappedPrivateKey: WrappedPrivateKey,
   passphrase: string,
-  expectedChallengeB64u: Base64Url
+  expectedChallengeB64u: Base64Url,
+  kdfParams?: Argon2idKdfParams
 ): Promise<HexString> {
-  const privateKey = await unwrapSoftkeyPrivateKey(wrappedPrivateKey, passphrase);
+  const privateKey = await unwrapSoftkeyPrivateKey(wrappedPrivateKey, passphrase, kdfParams);
   return softkeySign(privateKey, decodeBase64UrlBytes(expectedChallengeB64u));
 }

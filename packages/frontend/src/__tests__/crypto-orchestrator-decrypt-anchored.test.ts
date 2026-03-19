@@ -8,7 +8,7 @@ import {
   HexStringSchema,
   SECURITY_PROFILE,
 } from '@zerolink/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../crypto/webauthn', async () => {
   const actual = await vi.importActual<typeof import('../crypto/webauthn')>('../crypto/webauthn');
@@ -22,7 +22,12 @@ vi.mock('../crypto/webauthn', async () => {
 import { exportSoftkeyPublicJwk, generateSoftkeyPair } from '../crypto/softkey';
 import { createIndexedDbReceiverKeyStorage, type ReceiverKeyEnvelope } from '../crypto/storage';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
-import { NOW, prepareAnchoredSoftkeyDelivery, VALID_UUID } from './helpers/orchestrator-fixtures';
+import {
+  buildAnchoredSoftkeyDeliveryBase,
+  NOW,
+  prepareAnchoredSoftkeyDelivery,
+  VALID_UUID,
+} from './helpers/orchestrator-fixtures';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -37,8 +42,14 @@ afterEach(() => {
 });
 
 describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
+  let anchoredBase: Awaited<ReturnType<typeof buildAnchoredSoftkeyDeliveryBase>>;
+
+  beforeAll(async () => {
+    anchoredBase = await buildAnchoredSoftkeyDeliveryBase();
+  });
+
   it('verifies anchored softkey delivery proofs and persists replay state after decrypt', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
 
     vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
       ok: true,
@@ -81,7 +92,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload is missing deliveryAuth', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
 
     vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
       ok: true,
@@ -121,7 +132,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when deliveryAuth exists but the local sender pin is missing', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
     const savedEnvelope = (await prepared.receiverKeyStorage.load(
       VALID_UUID
     )) as ReceiverKeyEnvelope;
@@ -169,7 +180,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload signer fingerprint mismatches', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
     const alternateKeyPair = await generateSoftkeyPair();
     const alternateSoftkeyPubJwk = await exportSoftkeyPublicJwk(alternateKeyPair.publicKey);
 
@@ -217,7 +228,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload proof is invalid', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
     const invalidSoftkeySignature = HexStringSchema.parse(
       `${prepared.deliveryAuth.proof.softkeySignature[0] === 'f' ? 'e' : 'f'}${prepared.deliveryAuth.proof.softkeySignature.slice(1)}`
     );
@@ -266,7 +277,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload version rolls back', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
     const savedEnvelope = (await prepared.receiverKeyStorage.load(
       VALID_UUID
     )) as ReceiverKeyEnvelope;
@@ -318,7 +329,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   });
 
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload reuses a version with a different hash', async () => {
-    const prepared = await prepareAnchoredSoftkeyDelivery();
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
     const savedEnvelope = (await prepared.receiverKeyStorage.load(
       VALID_UUID
     )) as ReceiverKeyEnvelope;
@@ -387,6 +398,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
       }),
     };
     const prepared = await prepareAnchoredSoftkeyDelivery({
+      base: anchoredBase,
       receiverKeyStorage,
     });
 

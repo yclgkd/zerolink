@@ -12,6 +12,7 @@ import {
   verifyWebAuthnDeliveryProof,
 } from '@zerolink/shared';
 import { decryptAesGcm, importAesKeyFromBytes, wipeBytes } from '@zerolink/shared/crypto/aes';
+import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 import { unwrapPrivateKey } from '@zerolink/shared/crypto/kdf';
 import { unwrapContentKey } from '@zerolink/shared/crypto/rsa';
 import type {
@@ -147,7 +148,8 @@ async function performDecryptionPipeline(
   passphrase: string,
   envelope: ReceiverKeyEnvelope,
   uuid: string,
-  cipherVersion: number
+  cipherVersion: number,
+  kdfParams?: Argon2idKdfParams
 ) {
   let ciphertextBytes: Uint8Array | null = null;
   let wrappedKeyBytes: Uint8Array | null = null;
@@ -176,6 +178,7 @@ async function performDecryptionPipeline(
     const receiverPrivateKey = await unwrapPrivateKey({
       wrapped: envelope.wrappedPrivateKey,
       password: passphrase,
+      kdfParams,
     });
     wrappedKeyBytes = decodeBase64UrlBytes(payload.cipherBundle.encContentKey);
     contentKeyBytes = await unwrapContentKey({
@@ -267,7 +270,8 @@ export async function executeDecryptDelivered(
       input.passphrase,
       envelope,
       input.uuid,
-      cipherVersion
+      cipherVersion,
+      deps.kdfParams
     );
     try {
       await deps.receiverKeyStorage.save({

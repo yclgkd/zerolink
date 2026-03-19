@@ -43,9 +43,14 @@ describe('crypto orchestrator – lockChannel', () => {
       dbName: 'test-orchestrator-lock',
       storeName: 'receiver-keys',
     });
-    const { orchestrator, apiClient } = createOrchestrator({
-      receiverKeyStorage: storage,
-    });
+    const { orchestrator, apiClient } = createOrchestrator(
+      {
+        receiverKeyStorage: storage,
+      },
+      {
+        useFastKdf: false,
+      }
+    );
 
     const lockBeginResponse: LockBeginResponse = {
       ok: true,

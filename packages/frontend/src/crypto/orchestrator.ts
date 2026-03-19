@@ -43,6 +43,7 @@ export function createCryptoOrchestrator(
     now: deps.now ?? (() => Date.now()),
     randomBytes:
       deps.randomBytes ?? ((length: number) => crypto.getRandomValues(new Uint8Array(length))),
+    kdfParams: deps.kdfParams,
   };
 
   let createChannelQueue = Promise.resolve();

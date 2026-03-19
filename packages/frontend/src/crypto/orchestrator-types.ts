@@ -9,6 +9,7 @@ import type {
   UpdateIntent,
   WrappedPrivateKey,
 } from '@zerolink/shared';
+import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 
 import type { ApiClient } from '../api/client';
 import type { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
@@ -73,6 +74,7 @@ export interface CryptoOrchestratorDeps {
   decryptStore?: DecryptStore;
   now?: () => number;
   randomBytes?: (length: number) => Uint8Array;
+  kdfParams?: Argon2idKdfParams | undefined;
 }
 
 /**
@@ -212,6 +214,7 @@ export interface ResolvedDeps {
   decryptStore: DecryptStore;
   now: () => number;
   randomBytes: (length: number) => Uint8Array;
+  kdfParams?: Argon2idKdfParams | undefined;
 }
 
 export type ResolvedDeliverBeginData = CompoundBeginResponse & {

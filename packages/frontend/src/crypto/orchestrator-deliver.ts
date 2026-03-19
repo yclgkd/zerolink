@@ -172,7 +172,8 @@ export async function executeDeliverSecret(
       softkeySignature = await signChallengeWithWrappedKey(
         input.wrappedPrivateKey,
         softkeyPassphrase,
-        intentData.expectedChallenge as Base64Url
+        intentData.expectedChallenge as Base64Url,
+        deps.kdfParams
       );
     } catch {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
