@@ -54,9 +54,9 @@ UPDATE WHEN:
 | `pnpm-workspace.yaml` | Monorepo workspace definition |
 | `packages/frontend/public/_headers` | Cloudflare Pages cache and security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
 | `packages/frontend/public/_redirects` | SPA catch-all redirect (`/* /index.html 200`) |
-| `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, and Playwright E2E on `pull_request` / `merge_group` |
+| `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, regular Playwright E2E, and manifest-verification E2E on `pull_request` / `merge_group` |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
-| `.github/workflows/deploy.yml` | Post-merge CI/CD: test → deploy Worker → build → generate/sign/verify manifest → deploy Pages |
+| `.github/workflows/deploy.yml` | Post-merge CI/CD: typecheck, unit tests, regular E2E, verification E2E, frontend build, manifest generate/sign/verify, then Worker deploy |
 
 ## File Size Rule
 
@@ -80,7 +80,9 @@ UPDATE WHEN:
 | `packages/shared/src/**/__tests__/` | Vitest unit tests for shared schemas/crypto |
 | `packages/frontend/src/__tests__/` | React component and integration tests (Vitest + Testing Library) |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
-| `packages/frontend/e2e/` | Playwright E2E: happy-path, realtime-sync, expiration, rate-limit, manifest-verification |
+| `packages/frontend/e2e/` | Playwright E2E: happy-path, realtime-sync, expiration, rate-limit, fragment cleanup, manifest-verification |
+| `packages/frontend/playwright.config.ts` | Regular Playwright suite using a single non-verification build/server |
+| `packages/frontend/playwright.verification.config.ts` | Manifest-verification-only Playwright suite using the verification-enabled build/server |
 | `scripts/__tests__/` | Vitest unit tests for build scripts (manifest generation/verification) |
 
 ## Gotchas & Non-Obvious Behavior
