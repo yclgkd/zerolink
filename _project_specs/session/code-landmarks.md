@@ -54,9 +54,10 @@ UPDATE WHEN:
 | `pnpm-workspace.yaml` | Monorepo workspace definition |
 | `packages/frontend/public/_headers` | Cloudflare Pages cache and security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
 | `packages/frontend/public/_redirects` | SPA catch-all redirect (`/* /index.html 200`) |
-| `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, regular Playwright E2E, and manifest-verification E2E on `pull_request` / `merge_group` |
+| `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, mocked Playwright E2E, realtime WebSocket smoke E2E, and manifest-verification E2E on `pull_request` / `merge_group` |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
-| `.github/workflows/deploy.yml` | Post-merge CI/CD: typecheck, unit tests, regular E2E, verification E2E, frontend build, manifest generate/sign/verify, then Worker deploy |
+| `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
+| `.github/workflows/deploy.yml` | Post-merge CI/CD: typecheck, unit tests, mocked E2E, realtime WebSocket smoke E2E, verification E2E, frontend build, manifest generate/sign/verify, then Worker deploy |
 
 ## File Size Rule
 
@@ -81,8 +82,9 @@ UPDATE WHEN:
 | `packages/frontend/src/__tests__/` | React component and integration tests (Vitest + Testing Library) |
 | `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | Shared frontend crypto test helpers — defaults orchestrator tests to fast Argon2id params and provides seeded immutable decrypt fixtures for heavy flows |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
-| `packages/frontend/e2e/` | Playwright E2E: happy-path, realtime-sync, expiration, rate-limit, fragment cleanup, manifest-verification |
+| `packages/frontend/e2e/` | Playwright E2E: happy-path, mocked realtime fallback/cross-device coverage, realtime WebSocket smoke, expiration, rate-limit, fragment cleanup, manifest-verification |
 | `packages/frontend/playwright.config.ts` | Regular Playwright suite using a single non-verification build/server |
+| `packages/frontend/playwright.realtime.config.ts` | Realtime smoke Playwright suite that starts frontend preview plus local `wrangler dev` with test-only env vars |
 | `packages/frontend/playwright.verification.config.ts` | Manifest-verification-only Playwright suite using the verification-enabled build/server |
 | `scripts/__tests__/` | Vitest unit tests for build scripts (manifest generation/verification) |
 
@@ -100,3 +102,4 @@ UPDATE WHEN:
 | `packages/backend/src/do/SecretVault.ts` | `/ws` upgrades require an active channel record and top-level redaction | Missing or terminal channels must fail the WebSocket upgrade so dead links do not keep idle Durable Object sockets alive, and unexpected `fetch()`-level `/ws` failures must still flow through `mapError()` with handler `ws_subscribe` |
 | `packages/backend/src/do/SecretVaultHttp.ts` | Production observability intentionally omits raw exception text | `mapError()` keeps staging stacks/messages for debugging, but production emits only a structured error name + handler + fingerprint payload; `stack_fingerprint` is based on a normalized handler + error-name + frame signature, not raw stack text or bundle offsets; use `APP_ENV` from `packages/backend/wrangler.toml`, not hostnames, to reason about log detail |
 | `packages/frontend/public/_headers` | `Cache-Control: no-store` on `/*` is intentional | Changing to `no-cache` causes stale HTML replay across signed deployments and breaks the Verified Release gate — see decisions.md [2026-03-10] |
+| `packages/frontend/e2e/support/mock-api.ts` | Stateful mock E2E helper intentionally disables `window.WebSocket` before navigation | Mocked suites should exercise HTTP route mocks and the explicit polling fallback path without generating Vite proxy noise; real WebSocket transport coverage belongs in `realtime-smoke.spec.ts` |

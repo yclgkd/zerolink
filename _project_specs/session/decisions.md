@@ -13,6 +13,16 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-19] Split mocked realtime fallback E2E from real WebSocket smoke coverage
+
+**Decision**: Keep mocked Playwright coverage focused on HTTP route mocks plus one explicit polling-fallback scenario, and add a separate realtime smoke suite that starts local `wrangler dev` to exercise actual `/api/ws/:uuid` updates.
+**Context**: After the Workers Assets migration added a Vite `/api/ws -> localhost:8787` proxy, the regular E2E suite began logging repeated `[vite] ws proxy error` noise whenever mocked tests opened SharePage or ManagePage. Those tests intentionally had no WebSocket backend and only needed fallback or state assertions, while the repo still lacked any end-to-end proof that browser WebSocket subscriptions worked against the real Worker.
+**Options Considered**: Leave the mocked suite noisy and accept Vite proxy errors as expected output; replace all fallback tests with real backend coverage; split responsibilities so mock tests disable `window.WebSocket` and a small realtime smoke suite verifies the actual transport.
+**Choice**: Disable `window.WebSocket` in mocked E2E helpers before navigation, keep one polling-fallback test plus deterministic cross-device state coverage there, and add a dedicated Playwright config + CI job for two local-Wrangler realtime smoke tests (lock propagation and deliver propagation).
+**Reasoning**: This preserves fast, deterministic mock coverage for error states and fallback semantics while restoring clear test logs. A separate smoke suite gives direct confidence in the WebSocket path without forcing every mocked scenario to provision a backend.
+**Trade-offs**: Local default `pnpm test:e2e` now runs two suites instead of one, and CI has one additional E2E job. The realtime smoke suite needs a committed non-secret Wrangler env source so it can run without dashboard secrets.
+**Follow-up (2026-03-19)**: The realtime Playwright config must not reuse an already-running developer backend. It now forces a fresh `wrangler dev --env-file .env.e2e` launch on a dedicated local port and points the frontend preview proxy at that port, so local runs cannot silently bind to a developer's unrelated backend state or environment.
+
 ## [2026-03-19] Keep unit-test crypto fidelity by injecting fast KDF params instead of mocking KDF
 
 **Decision**: Speed up frontend/shared crypto unit tests by adding optional internal Argon2id parameter overrides to the shared KDF helpers and threading those overrides through frontend orchestrator dependencies, while keeping runtime defaults on the production-strength constants.

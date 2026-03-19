@@ -22,11 +22,20 @@ export const chromiumDesktopProject = {
   use: { ...devices['Desktop Chrome'] },
 };
 
-export function createPlaywrightWebServer(command: string, url: string, timeout: number) {
+type PlaywrightWebServerOptions = {
+  reuseExistingServer?: boolean;
+};
+
+export function createPlaywrightWebServer(
+  command: string,
+  url: string,
+  timeout: number,
+  options: PlaywrightWebServerOptions = {}
+) {
   return {
     command,
     url,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: options.reuseExistingServer ?? !process.env.CI,
     timeout,
   };
 }

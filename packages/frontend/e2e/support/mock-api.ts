@@ -26,6 +26,8 @@ import {
 } from '@zerolink/shared';
 import type { z } from 'zod';
 
+import { disableWebSocket } from './transport';
+
 interface ChannelRuntimeState {
   state: ChannelState;
   securityProfile: SecurityProfile;
@@ -146,6 +148,8 @@ export async function installStatefulApiMock(
   page: Page,
   sharedChannels?: ChannelMap
 ): Promise<ChannelMap> {
+  await disableWebSocket(page);
+
   const channels = sharedChannels ?? new Map<string, ChannelRuntimeState>();
 
   await page.route('**/api/**', async (route) => {
