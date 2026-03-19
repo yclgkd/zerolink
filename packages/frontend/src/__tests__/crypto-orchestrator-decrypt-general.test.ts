@@ -10,7 +10,7 @@ import {
   SECURITY_PROFILE,
 } from '@zerolink/shared';
 import { exportReceiverPublicKeyToJwk, generateReceiverKeyPair } from '@zerolink/shared/crypto/rsa';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../crypto/webauthn', async () => {
   const actual = await vi.importActual<typeof import('../crypto/webauthn')>('../crypto/webauthn');
@@ -26,12 +26,14 @@ import { createIndexedDbReceiverKeyStorage } from '../crypto/storage';
 import { assertWithWebAuthn, type WebAuthnAdapterResult } from '../crypto/webauthn';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
 import {
+  buildDeliveredDecryptFixtureBase,
   CHALLENGE_EXPIRES_AT,
   computeReceiverPubFpr,
   createDeferred,
   createOrchestrator,
   NEXT_UUID_BRANDED,
   NOW,
+  seedDeliveredDecryptFixture,
   toMutableReceiverJwk,
   VALID_ASSERTION,
   VALID_B64U,
@@ -53,82 +55,24 @@ afterEach(() => {
 });
 
 describe('crypto orchestrator – decryptDelivered (general)', () => {
+  let deliveredDecryptBase: Awaited<ReturnType<typeof buildDeliveredDecryptFixtureBase>>;
+
+  beforeAll(async () => {
+    deliveredDecryptBase = await buildDeliveredDecryptFixtureBase();
+  });
+
   it('decrypts delivered payload and sets plaintext in decrypt store', async () => {
     const storage = createIndexedDbReceiverKeyStorage({
       dbName: 'test-orchestrator-decrypt',
       storeName: 'receiver-keys',
     });
-    const { orchestrator, apiClient } = createOrchestrator({
+    const prepared = await seedDeliveredDecryptFixture(deliveredDecryptBase, {
       receiverKeyStorage: storage,
     });
 
-    vi.mocked(apiClient.lockBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        lockChallenge: {
-          id: VALID_B64U,
-          challenge: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-      },
-    });
-    vi.mocked(apiClient.lockCommit).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: { ok: true },
-    });
-    const lockResult = await orchestrator.lockChannel({
-      uuid: VALID_UUID,
-      lockSecretB64u: VALID_LOCK_SECRET,
-      passphrase: 'Strong#Pass1234',
-    });
-    expect(lockResult.ok).toBe(true);
-    if (!lockResult.ok) return;
+    expect(prepared.cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_DEFAULT);
 
-    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        challenge: {
-          id: VALID_B64U,
-          seed: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-        receiverPubFpr: lockResult.data.receiverPubFpr,
-        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
-        currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
-        adminMode: 'webauthn',
-      },
-    });
-    vi.mocked(assertWithWebAuthn).mockResolvedValue({
-      ok: true,
-      data: VALID_ASSERTION,
-    } satisfies WebAuthnAdapterResult<AssertionJSON>);
-
-    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
-    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
-      if (input.intent.op === 'update') {
-        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
-      }
-      return { ok: true, status: 200, data: { ok: true } };
-    });
-
-    const deliverResult = await orchestrator.deliverSecret({
-      uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
-      plaintext: 'receiver can decrypt this',
-    });
-    expect(deliverResult.ok).toBe(true);
-    expect(committedCipherBundle).not.toBeNull();
-    if (!committedCipherBundle) return;
-    const deliveredCipherBundle = committedCipherBundle as DecryptFetchResponse['cipherBundle'];
-    expect(deliveredCipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_DEFAULT);
-
-    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
@@ -138,29 +82,29 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         securityProfile: SECURITY_PROFILE.STANDARD,
       },
     });
-    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
         ok: true,
-        cipherBundle: deliveredCipherBundle,
-        receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
         cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });
 
-    const decryptResult = await orchestrator.decryptDelivered({
+    const decryptResult = await prepared.orchestrator.decryptDelivered({
       uuid: VALID_UUID,
       passphrase: 'Strong#Pass1234',
     });
 
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
-    expect(decryptResult.data.plaintext).toBe('receiver can decrypt this');
+    expect(decryptResult.data.plaintext).toBe(prepared.plaintext);
     expect(decryptResult.data.cipherVersion).toBe(0);
     expect('plaintextBytes' in decryptResult.data).toBe(false);
-    expect(useDecryptStore.getState().plaintext).toBe('receiver can decrypt this');
+    expect(useDecryptStore.getState().plaintext).toBe(prepared.plaintext);
   });
 
   it('does not apply decrypt store updates when uuid changes mid-flow', async () => {
@@ -168,90 +112,28 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
       dbName: 'test-orchestrator-decrypt-mid-flow-scope',
       storeName: 'receiver-keys',
     });
-    const { orchestrator, apiClient } = createOrchestrator({
+    const prepared = await seedDeliveredDecryptFixture(deliveredDecryptBase, {
       receiverKeyStorage: storage,
     });
     useDecryptStore.getState().setDecryptUuid(VALID_UUID_BRANDED);
 
-    vi.mocked(apiClient.lockBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        lockChallenge: {
-          id: VALID_B64U,
-          challenge: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-      },
-    });
-    vi.mocked(apiClient.lockCommit).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: { ok: true },
-    });
-    const lockResult = await orchestrator.lockChannel({
-      uuid: VALID_UUID,
-      lockSecretB64u: VALID_LOCK_SECRET,
-      passphrase: 'Strong#Pass1234',
-    });
-    expect(lockResult.ok).toBe(true);
-    if (!lockResult.ok) return;
-
-    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        challenge: {
-          id: VALID_B64U,
-          seed: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-        receiverPubFpr: lockResult.data.receiverPubFpr,
-        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
-        currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
-        adminMode: 'webauthn',
-      },
-    });
-    vi.mocked(assertWithWebAuthn).mockResolvedValue({
-      ok: true,
-      data: VALID_ASSERTION,
-    } satisfies WebAuthnAdapterResult<AssertionJSON>);
-
-    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
-    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
-      if (input.intent.op === 'update') {
-        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
-      }
-      return { ok: true, status: 200, data: { ok: true } };
-    });
-
-    const deliverResult = await orchestrator.deliverSecret({
-      uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
-      plaintext: 'receiver can decrypt this',
-    });
-    expect(deliverResult.ok).toBe(true);
-    expect(committedCipherBundle).not.toBeNull();
-    if (!committedCipherBundle) return;
-
     const statusDeferred = createDeferred<Awaited<ReturnType<ApiClient['publicStatus']>>>();
-    vi.mocked(apiClient.publicStatus).mockImplementation(async () => statusDeferred.promise);
-    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+    vi.mocked(prepared.apiClient.publicStatus).mockImplementation(
+      async () => statusDeferred.promise
+    );
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
         ok: true,
-        cipherBundle: committedCipherBundle,
-        receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
         cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });
 
-    const decryptPromise = orchestrator.decryptDelivered({
+    const decryptPromise = prepared.orchestrator.decryptDelivered({
       uuid: VALID_UUID,
       passphrase: 'Strong#Pass1234',
     });
@@ -274,7 +156,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
 
     const decryptResult = await decryptPromise;
     expect(decryptResult.ok).toBe(true);
-    expect(vi.mocked(apiClient.decryptFetch)).toHaveBeenCalledWith(VALID_UUID);
+    expect(vi.mocked(prepared.apiClient.decryptFetch)).toHaveBeenCalledWith(VALID_UUID);
 
     const state = useDecryptStore.getState();
     expect(state.uuid).toBe(NEXT_UUID_BRANDED);
@@ -428,75 +310,14 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
       storeName: 'receiver-keys',
     });
     const removeSpy = vi.spyOn(storage, 'remove');
-    const { orchestrator, apiClient } = createOrchestrator({
+    const base = await buildDeliveredDecryptFixtureBase({
+      plaintext: 'cleanup test payload',
+    });
+    const prepared = await seedDeliveredDecryptFixture(base, {
       receiverKeyStorage: storage,
     });
 
-    vi.mocked(apiClient.lockBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        lockChallenge: {
-          id: VALID_B64U,
-          challenge: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-      },
-    });
-    vi.mocked(apiClient.lockCommit).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: { ok: true },
-    });
-    const lockResult = await orchestrator.lockChannel({
-      uuid: VALID_UUID,
-      lockSecretB64u: VALID_LOCK_SECRET,
-      passphrase: 'Strong#Pass1234',
-    });
-    expect(lockResult.ok).toBe(true);
-    if (!lockResult.ok) return;
-
-    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        challenge: {
-          id: VALID_B64U,
-          seed: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-        receiverPubFpr: lockResult.data.receiverPubFpr,
-        receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
-        currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
-        adminMode: 'webauthn',
-      },
-    });
-    vi.mocked(assertWithWebAuthn).mockResolvedValue({
-      ok: true,
-      data: VALID_ASSERTION,
-    } satisfies WebAuthnAdapterResult<AssertionJSON>);
-
-    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
-    vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
-      if (input.intent.op === 'update') {
-        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
-      }
-      return { ok: true, status: 200, data: { ok: true } };
-    });
-
-    const deliverResult = await orchestrator.deliverSecret({
-      uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
-      plaintext: 'cleanup test payload',
-    });
-    expect(deliverResult.ok).toBe(true);
-    expect(committedCipherBundle).not.toBeNull();
-    if (!committedCipherBundle) return;
-
-    vi.mocked(apiClient.publicStatus).mockResolvedValue({
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
@@ -506,24 +327,24 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         securityProfile: SECURITY_PROFILE.STANDARD,
       },
     });
-    vi.mocked(apiClient.decryptFetch).mockResolvedValue({
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
         ok: true,
-        cipherBundle: committedCipherBundle as DecryptFetchResponse['cipherBundle'],
-        receiverPubFpr: lockResult.data.receiverPubFpr,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
         cipherVersion: 0,
         deliveredAt: NOW,
       } satisfies DecryptFetchResponse,
     });
 
     removeSpy.mockClear();
-    const firstDecryptResult = await orchestrator.decryptDelivered({
+    const firstDecryptResult = await prepared.orchestrator.decryptDelivered({
       uuid: VALID_UUID,
       passphrase: 'Strong#Pass1234',
     });
-    const secondDecryptResult = await orchestrator.decryptDelivered({
+    const secondDecryptResult = await prepared.orchestrator.decryptDelivered({
       uuid: VALID_UUID,
       passphrase: 'Strong#Pass1234',
     });
@@ -534,8 +355,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
     await expect(storage.load(VALID_UUID)).resolves.toMatchObject({
       lastAcceptedDelivery: {
         version: 0,
-        ciphertextHash: (committedCipherBundle as DecryptFetchResponse['cipherBundle'])
-          .ciphertextHash,
+        ciphertextHash: prepared.cipherBundle.ciphertextHash,
       },
     });
   });

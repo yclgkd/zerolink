@@ -2,10 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AES_GCM, ARGON2ID, ECDSA } from '../../constants.ts';
 import type { WrappedPrivateKey } from '../../types.ts';
+import type { Argon2idKdfParams } from '../kdf.ts';
 import { unwrapEcdsaPrivateKey, unwrapPrivateKey, wrapPrivateKey } from '../kdf.ts';
 import { generateReceiverKeyPair, unwrapContentKey, wrapContentKey } from '../rsa.ts';
 
 const TEST_TIMEOUT_MS = 30_000;
+const FAST_TEST_ARGON2ID_KDF_PARAMS: Argon2idKdfParams = {
+  m: 1_024,
+  t: 1,
+  p: 1,
+  version: 19,
+};
 
 function randomBytes(length: number): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(length));
@@ -15,6 +22,14 @@ function tamperBase64Url(value: string): string {
   const firstChar = value[0];
   const replacement = firstChar === 'A' ? 'B' : 'A';
   return `${replacement}${value.slice(1)}`;
+}
+
+function wrapPrivateKeyFast(privateKey: CryptoKey, password: string) {
+  return wrapPrivateKey({
+    privateKey,
+    password,
+    kdfParams: FAST_TEST_ARGON2ID_KDF_PARAMS,
+  });
 }
 
 afterEach(() => {
@@ -87,12 +102,9 @@ describe('wrapPrivateKey', () => {
     async () => {
       const keyPair = await generateReceiverKeyPair();
 
-      await expect(
-        wrapPrivateKey({
-          privateKey: keyPair.privateKey,
-          password: '',
-        })
-      ).rejects.toThrow('password must not be empty');
+      await expect(wrapPrivateKeyFast(keyPair.privateKey, '')).rejects.toThrow(
+        'password must not be empty'
+      );
     },
     TEST_TIMEOUT_MS
   );
@@ -118,10 +130,7 @@ describe('unwrapPrivateKey', () => {
     'rejects empty passwords',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
 
       await expect(unwrapPrivateKey({ wrapped, password: '' })).rejects.toThrow(
         'password must not be empty'
@@ -150,10 +159,7 @@ describe('unwrapPrivateKey', () => {
     'fails unwrap when wrapped encrypted key is tampered',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
       const tamperedWrapped: WrappedPrivateKey = {
         ...wrapped,
         encryptedKey: tamperBase64Url(wrapped.encryptedKey) as WrappedPrivateKey['encryptedKey'],
@@ -170,10 +176,7 @@ describe('unwrapPrivateKey', () => {
     'fails unwrap for unsupported kdfType',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
       const unsupportedWrapped = {
         ...wrapped,
         kdf: {
@@ -194,10 +197,7 @@ describe('unwrapPrivateKey', () => {
     'fails unwrap for invalid base64url encoding',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
       const malformedWrapped: WrappedPrivateKey = {
         ...wrapped,
         iv: 'not+valid' as WrappedPrivateKey['iv'],
@@ -214,10 +214,7 @@ describe('unwrapPrivateKey', () => {
     'fails unwrap for invalid salt and IV lengths',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
       const invalidSaltWrapped = {
         ...wrapped,
         kdf: {
@@ -244,10 +241,7 @@ describe('unwrapPrivateKey', () => {
     'throws when WebCrypto is unavailable',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
       vi.stubGlobal('crypto', undefined);
 
       await expect(unwrapPrivateKey({ wrapped, password: 'password' })).rejects.toThrow(
@@ -261,10 +255,7 @@ describe('unwrapPrivateKey', () => {
     'stores IV with AES-GCM expected length',
     async () => {
       const keyPair = await generateReceiverKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'password',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'password');
       const decodedIvLength = atob(wrapped.iv.replaceAll('-', '+').replaceAll('_', '/')).length;
 
       expect(decodedIvLength).toBe(AES_GCM.IV_LENGTH);
@@ -288,10 +279,7 @@ describe('unwrapEcdsaPrivateKey', () => {
       const password = 'softkey-passphrase';
       const keyPair = await generateEcdsaKeyPair();
 
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password,
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, password);
       const unwrapped = await unwrapEcdsaPrivateKey({ wrapped, password });
       expect(unwrapped.extractable).toBe(false);
 
@@ -317,10 +305,7 @@ describe('unwrapEcdsaPrivateKey', () => {
     'fails unwrap with wrong password',
     async () => {
       const keyPair = await generateEcdsaKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'correct',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'correct');
 
       await expect(unwrapEcdsaPrivateKey({ wrapped, password: 'wrong' })).rejects.toThrow(
         'ECDSA private key unwrap failed'
@@ -333,10 +318,7 @@ describe('unwrapEcdsaPrivateKey', () => {
     'rejects empty password',
     async () => {
       const keyPair = await generateEcdsaKeyPair();
-      const wrapped = await wrapPrivateKey({
-        privateKey: keyPair.privateKey,
-        password: 'pw',
-      });
+      const wrapped = await wrapPrivateKeyFast(keyPair.privateKey, 'pw');
 
       await expect(unwrapEcdsaPrivateKey({ wrapped, password: '' })).rejects.toThrow(
         'password must not be empty'

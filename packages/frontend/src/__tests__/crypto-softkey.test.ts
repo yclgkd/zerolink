@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Base64UrlSchema, ECDSA, WrappedPrivateKeySchema } from '@zerolink/shared';
+import { ARGON2ID, Base64UrlSchema, ECDSA, WrappedPrivateKeySchema } from '@zerolink/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -10,6 +10,7 @@ import {
   unwrapSoftkeyPrivateKey,
   wrapSoftkeyPrivateKey,
 } from '../crypto/softkey';
+import { FAST_TEST_ARGON2ID_KDF_PARAMS } from './helpers/crypto-test-params';
 
 const TEST_TIMEOUT_MS = 30_000;
 const PASSPHRASE = 'test-passphrase-for-softkey';
@@ -65,6 +66,13 @@ describe('wrapSoftkeyPrivateKey / unwrapSoftkeyPrivateKey', () => {
 
       // Wrapped output should conform to WrappedPrivateKey schema
       expect(() => WrappedPrivateKeySchema.parse(wrapped)).not.toThrow();
+      expect(wrapped.kdf).toMatchObject({
+        kdfType: 'argon2id',
+        version: 19,
+        m: ARGON2ID.MEMORY_COST_KB,
+        t: ARGON2ID.TIME_COST,
+        p: ARGON2ID.PARALLELISM,
+      });
 
       const unwrapped = await unwrapSoftkeyPrivateKey(wrapped, PASSPHRASE);
       expect(unwrapped.type).toBe('private');
@@ -93,7 +101,11 @@ describe('wrapSoftkeyPrivateKey / unwrapSoftkeyPrivateKey', () => {
     'unwrap fails with wrong passphrase',
     async () => {
       const keyPair = await generateSoftkeyPair();
-      const wrapped = await wrapSoftkeyPrivateKey(keyPair.privateKey, PASSPHRASE);
+      const wrapped = await wrapSoftkeyPrivateKey(
+        keyPair.privateKey,
+        PASSPHRASE,
+        FAST_TEST_ARGON2ID_KDF_PARAMS
+      );
 
       await expect(unwrapSoftkeyPrivateKey(wrapped, 'wrong-passphrase')).rejects.toThrow();
     },

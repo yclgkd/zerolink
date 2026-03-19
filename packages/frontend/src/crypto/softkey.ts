@@ -1,5 +1,6 @@
 import type { Base64Url, ECDSAPublicKeyJWK, HexString, WrappedPrivateKey } from '@zerolink/shared';
 import { ECDSA } from '@zerolink/shared';
+import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 import { unwrapEcdsaPrivateKey, wrapPrivateKey } from '@zerolink/shared/crypto/kdf';
 
 /**
@@ -39,9 +40,10 @@ export async function exportSoftkeyPublicJwk(publicKey: CryptoKey): Promise<ECDS
  */
 export async function wrapSoftkeyPrivateKey(
   privateKey: CryptoKey,
-  passphrase: string
+  passphrase: string,
+  kdfParams?: Argon2idKdfParams
 ): Promise<WrappedPrivateKey> {
-  return wrapPrivateKey({ privateKey, password: passphrase });
+  return wrapPrivateKey({ privateKey, password: passphrase, kdfParams });
 }
 
 /**
@@ -50,9 +52,10 @@ export async function wrapSoftkeyPrivateKey(
  */
 export async function unwrapSoftkeyPrivateKey(
   wrapped: WrappedPrivateKey,
-  passphrase: string
+  passphrase: string,
+  kdfParams?: Argon2idKdfParams
 ): Promise<CryptoKey> {
-  return unwrapEcdsaPrivateKey({ wrapped, password: passphrase });
+  return unwrapEcdsaPrivateKey({ wrapped, password: passphrase, kdfParams });
 }
 
 /**

@@ -25,9 +25,14 @@ import {
   type CryptoOrchestratorDeps,
   createCryptoOrchestrator,
 } from '../../crypto/orchestrator';
-import { createIndexedDbReceiverKeyStorage, type ReceiverKeyStorage } from '../../crypto/storage';
+import {
+  createIndexedDbReceiverKeyStorage,
+  type ReceiverKeyEnvelope,
+  type ReceiverKeyStorage,
+} from '../../crypto/storage';
 import { assertWithWebAuthn, type WebAuthnAdapterResult } from '../../crypto/webauthn';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../../stores';
+import { FAST_TEST_ARGON2ID_KDF_PARAMS } from './crypto-test-params';
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -137,6 +142,60 @@ export async function computeReceiverPubFpr(publicKey: CryptoKey): Promise<HexSt
 // Factory functions
 // ---------------------------------------------------------------------------
 
+interface CreateOrchestratorTestOptions {
+  useFastKdf?: boolean | undefined;
+}
+
+function cloneCipherBundle(
+  cipherBundle: DecryptFetchResponse['cipherBundle']
+): DecryptFetchResponse['cipherBundle'] {
+  return {
+    ...cipherBundle,
+  };
+}
+
+function cloneDeliveryAuth(
+  deliveryAuth: DecryptFetchSoftkeyDeliveryAuth
+): DecryptFetchSoftkeyDeliveryAuth {
+  return {
+    ...deliveryAuth,
+    meta: {
+      ...deliveryAuth.meta,
+    },
+    signer: {
+      ...deliveryAuth.signer,
+    },
+    proof: {
+      ...deliveryAuth.proof,
+    },
+  };
+}
+
+function cloneWrappedPrivateKey(
+  wrappedPrivateKey: ReceiverKeyEnvelope['wrappedPrivateKey']
+): ReceiverKeyEnvelope['wrappedPrivateKey'] {
+  return {
+    ...wrappedPrivateKey,
+    kdf: {
+      ...wrappedPrivateKey.kdf,
+    },
+  };
+}
+
+export function cloneReceiverKeyEnvelope(envelope: ReceiverKeyEnvelope): ReceiverKeyEnvelope {
+  return {
+    ...envelope,
+    wrappedPrivateKey: cloneWrappedPrivateKey(envelope.wrappedPrivateKey),
+    ...(envelope.lastAcceptedDelivery
+      ? {
+          lastAcceptedDelivery: {
+            ...envelope.lastAcceptedDelivery,
+          },
+        }
+      : {}),
+  };
+}
+
 export function createApiClientMock(): ApiClient {
   return {
     createBegin: vi.fn(),
@@ -151,11 +210,15 @@ export function createApiClientMock(): ApiClient {
   };
 }
 
-export function createOrchestrator(overrides: Partial<CryptoOrchestratorDeps> = {}): {
+export function createOrchestrator(
+  overrides: Partial<CryptoOrchestratorDeps> = {},
+  options: CreateOrchestratorTestOptions = {}
+): {
   orchestrator: CryptoOrchestrator;
   apiClient: ApiClient;
 } {
   const apiClient = overrides.apiClient ?? createApiClientMock();
+  const useFastKdf = options.useFastKdf ?? true;
 
   const orchestrator = createCryptoOrchestrator({
     apiClient,
@@ -177,6 +240,7 @@ export function createOrchestrator(overrides: Partial<CryptoOrchestratorDeps> = 
         for (let index = 0; index < length; index += 1) out[index] = (index + 1) % 255;
         return out;
       }),
+    kdfParams: overrides.kdfParams ?? (useFastKdf ? FAST_TEST_ARGON2ID_KDF_PARAMS : undefined),
   });
 
   return { orchestrator, apiClient };
@@ -204,29 +268,189 @@ export function extractSenderAuthFprFromShareUrl(shareUrlWithFragment: string): 
 // Async scenario helpers
 // ---------------------------------------------------------------------------
 
-export async function prepareAnchoredSoftkeyDelivery(
+export interface DeliveredDecryptFixtureBase {
+  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  receiverPubFpr: HexString;
+  receiverKeyEnvelope: ReceiverKeyEnvelope;
+  plaintext: string;
+}
+
+export async function buildDeliveredDecryptFixtureBase(
   params: {
-    receiverKeyStorage?: ReceiverKeyStorage;
-    uuid?: string;
     plaintext?: string;
-    passphrase?: string;
+    receiverKeyStorage?: ReceiverKeyStorage | undefined;
+    useFastKdf?: boolean | undefined;
+  } = {}
+): Promise<DeliveredDecryptFixtureBase> {
+  const receiverKeyStorage =
+    params.receiverKeyStorage ??
+    createIndexedDbReceiverKeyStorage({
+      dbName: `test-orchestrator-decrypt-base-${Math.random().toString(16).slice(2)}`,
+      storeName: 'receiver-keys',
+    });
+  const { orchestrator, apiClient } = createOrchestrator(
+    {
+      receiverKeyStorage,
+    },
+    {
+      useFastKdf: params.useFastKdf,
+    }
+  );
+  const plaintext = params.plaintext ?? 'receiver can decrypt this';
+
+  vi.mocked(apiClient.lockBegin).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      lockChallenge: {
+        id: VALID_B64U,
+        challenge: VALID_B64U,
+        expiresAt: CHALLENGE_EXPIRES_AT,
+      },
+    },
+  });
+  vi.mocked(apiClient.lockCommit).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: { ok: true },
+  });
+  const lockResult = await orchestrator.lockChannel({
+    uuid: VALID_UUID,
+    lockSecretB64u: VALID_LOCK_SECRET,
+    passphrase: 'Strong#Pass1234',
+  });
+  expect(lockResult.ok).toBe(true);
+  if (!lockResult.ok) {
+    throw new Error('expected lock to succeed');
+  }
+
+  vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      challenge: {
+        id: VALID_B64U,
+        seed: VALID_B64U,
+        expiresAt: CHALLENGE_EXPIRES_AT,
+      },
+      receiverPubFpr: lockResult.data.receiverPubFpr,
+      receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
+      currentVersion: 0,
+      securityProfile: SECURITY_PROFILE.STANDARD,
+      adminMode: 'webauthn',
+    },
+  });
+  vi.mocked(assertWithWebAuthn).mockResolvedValue({
+    ok: true,
+    data: VALID_ASSERTION,
+  } satisfies WebAuthnAdapterResult<AssertionJSON>);
+
+  let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+  vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
+    if (input.intent.op === 'update') {
+      committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+    }
+    return { ok: true, status: 200, data: { ok: true } };
+  });
+
+  const deliverResult = await orchestrator.deliverSecret({
+    uuid: VALID_UUID,
+    profile: SECURITY_PROFILE.STANDARD,
+    plaintext,
+  });
+  expect(deliverResult.ok).toBe(true);
+  expect(committedCipherBundle).not.toBeNull();
+  if (!committedCipherBundle) {
+    throw new Error('expected committed cipher bundle');
+  }
+
+  const receiverKeyEnvelope = await receiverKeyStorage.load(VALID_UUID);
+  expect(receiverKeyEnvelope).not.toBeNull();
+  if (!receiverKeyEnvelope) {
+    throw new Error('expected receiver key envelope');
+  }
+
+  return {
+    cipherBundle: cloneCipherBundle(committedCipherBundle),
+    receiverPubFpr: lockResult.data.receiverPubFpr,
+    receiverKeyEnvelope: cloneReceiverKeyEnvelope(receiverKeyEnvelope),
+    plaintext,
+  };
+}
+
+export async function seedDeliveredDecryptFixture(
+  base: DeliveredDecryptFixtureBase,
+  params: {
+    receiverKeyStorage?: ReceiverKeyStorage | undefined;
+    useFastKdf?: boolean | undefined;
   } = {}
 ): Promise<{
   apiClient: ApiClient;
   orchestrator: CryptoOrchestrator;
   receiverKeyStorage: ReceiverKeyStorage;
   cipherBundle: DecryptFetchResponse['cipherBundle'];
-  deliveryAuth: DecryptFetchSoftkeyDeliveryAuth;
   receiverPubFpr: HexString;
-  senderAuthFpr: HexString;
+  plaintext: string;
 }> {
   const receiverKeyStorage =
     params.receiverKeyStorage ??
     createIndexedDbReceiverKeyStorage({
-      dbName: `test-orchestrator-anchored-${Math.random().toString(16).slice(2)}`,
+      dbName: `test-orchestrator-decrypt-seeded-${Math.random().toString(16).slice(2)}`,
       storeName: 'receiver-keys',
     });
-  const { orchestrator, apiClient } = createOrchestrator({ receiverKeyStorage });
+  await receiverKeyStorage.save(cloneReceiverKeyEnvelope(base.receiverKeyEnvelope));
+  const { orchestrator, apiClient } = createOrchestrator(
+    {
+      receiverKeyStorage,
+    },
+    {
+      useFastKdf: params.useFastKdf,
+    }
+  );
+
+  return {
+    apiClient,
+    orchestrator,
+    receiverKeyStorage,
+    cipherBundle: cloneCipherBundle(base.cipherBundle),
+    receiverPubFpr: base.receiverPubFpr,
+    plaintext: base.plaintext,
+  };
+}
+
+export interface AnchoredSoftkeyDeliveryBase {
+  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  deliveryAuth: DecryptFetchSoftkeyDeliveryAuth;
+  receiverPubFpr: HexString;
+  receiverKeyEnvelope: ReceiverKeyEnvelope;
+  senderAuthFpr: HexString;
+}
+
+export async function buildAnchoredSoftkeyDeliveryBase(
+  params: {
+    receiverKeyStorage?: ReceiverKeyStorage | undefined;
+    uuid?: string;
+    plaintext?: string;
+    passphrase?: string;
+    useFastKdf?: boolean | undefined;
+  } = {}
+): Promise<AnchoredSoftkeyDeliveryBase> {
+  const receiverKeyStorage =
+    params.receiverKeyStorage ??
+    createIndexedDbReceiverKeyStorage({
+      dbName: `test-orchestrator-anchored-base-${Math.random().toString(16).slice(2)}`,
+      storeName: 'receiver-keys',
+    });
+  const { orchestrator, apiClient } = createOrchestrator(
+    {
+      receiverKeyStorage,
+    },
+    {
+      useFastKdf: params.useFastKdf,
+    }
+  );
   const uuid = params.uuid ?? VALID_UUID;
   const passphrase = params.passphrase ?? 'Compat#Pass123';
 
@@ -352,12 +576,15 @@ export async function prepareAnchoredSoftkeyDelivery(
     throw new Error('missing captured softkey pub jwk');
   }
 
+  const receiverKeyEnvelope = await receiverKeyStorage.load(uuid);
+  expect(receiverKeyEnvelope).not.toBeNull();
+  if (!receiverKeyEnvelope) {
+    throw new Error('expected receiver key envelope');
+  }
+
   return {
-    apiClient,
-    orchestrator,
-    receiverKeyStorage,
-    cipherBundle: capturedCommit.intent.cipherBundle,
-    deliveryAuth: {
+    cipherBundle: cloneCipherBundle(capturedCommit.intent.cipherBundle),
+    deliveryAuth: cloneDeliveryAuth({
       adminMode: 'password',
       meta: {
         version: capturedCommit.intent.version,
@@ -371,9 +598,58 @@ export async function prepareAnchoredSoftkeyDelivery(
       proof: {
         softkeySignature: capturedCommit.softkeySignature,
       },
-    },
+    }),
     receiverPubFpr: lockResult.data.receiverPubFpr,
     senderAuthFpr,
+    receiverKeyEnvelope: cloneReceiverKeyEnvelope(receiverKeyEnvelope),
+  };
+}
+
+export async function prepareAnchoredSoftkeyDelivery(
+  params: {
+    base?: AnchoredSoftkeyDeliveryBase;
+    receiverKeyStorage?: ReceiverKeyStorage | undefined;
+    useFastKdf?: boolean | undefined;
+  } = {}
+): Promise<{
+  apiClient: ApiClient;
+  orchestrator: CryptoOrchestrator;
+  receiverKeyStorage: ReceiverKeyStorage;
+  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  deliveryAuth: DecryptFetchSoftkeyDeliveryAuth;
+  receiverPubFpr: HexString;
+  senderAuthFpr: HexString;
+}> {
+  const base =
+    params.base ??
+    (await buildAnchoredSoftkeyDeliveryBase({
+      receiverKeyStorage: params.receiverKeyStorage,
+      useFastKdf: params.useFastKdf,
+    }));
+  const receiverKeyStorage =
+    params.receiverKeyStorage ??
+    createIndexedDbReceiverKeyStorage({
+      dbName: `test-orchestrator-anchored-seeded-${Math.random().toString(16).slice(2)}`,
+      storeName: 'receiver-keys',
+    });
+  await receiverKeyStorage.save(cloneReceiverKeyEnvelope(base.receiverKeyEnvelope));
+  const { orchestrator, apiClient } = createOrchestrator(
+    {
+      receiverKeyStorage,
+    },
+    {
+      useFastKdf: params.useFastKdf,
+    }
+  );
+
+  return {
+    apiClient,
+    orchestrator,
+    receiverKeyStorage,
+    cipherBundle: cloneCipherBundle(base.cipherBundle),
+    deliveryAuth: cloneDeliveryAuth(base.deliveryAuth),
+    receiverPubFpr: base.receiverPubFpr,
+    senderAuthFpr: base.senderAuthFpr,
   };
 }
 

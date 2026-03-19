@@ -10,11 +10,27 @@ const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
 export interface WrapPrivateKeyParams {
   privateKey: CryptoKey;
   password: string;
+  kdfParams?: Argon2idKdfParams | undefined;
 }
 
 export interface UnwrapPrivateKeyParams {
   wrapped: WrappedPrivateKey;
   password: string;
+  kdfParams?: Argon2idKdfParams | undefined;
+}
+
+export interface Argon2idKdfParams {
+  m: number;
+  t: number;
+  p: number;
+  version?: 19 | undefined;
+}
+
+interface ResolvedArgon2idKdfParams {
+  m: number;
+  t: number;
+  p: number;
+  version: 19;
 }
 
 interface DeriveArgon2idKeyParams {
@@ -24,6 +40,15 @@ interface DeriveArgon2idKeyParams {
   t: number;
   p: number;
   version: number;
+}
+
+function resolveArgon2idKdfParams(kdfParams?: Argon2idKdfParams): ResolvedArgon2idKdfParams {
+  return {
+    m: kdfParams?.m ?? ARGON2ID.MEMORY_COST_KB,
+    t: kdfParams?.t ?? ARGON2ID.TIME_COST,
+    p: kdfParams?.p ?? ARGON2ID.PARALLELISM,
+    version: kdfParams?.version ?? ARGON2_VERSION,
+  };
 }
 
 function getCryptoApi(): Crypto {
@@ -124,9 +149,11 @@ async function deriveArgon2idAesKey({
 export async function wrapPrivateKey({
   privateKey,
   password,
+  kdfParams,
 }: WrapPrivateKeyParams): Promise<WrappedPrivateKey> {
   const cryptoApi = getCryptoApi();
   assertPassword(password);
+  const resolvedKdfParams = resolveArgon2idKdfParams(kdfParams);
 
   try {
     const salt = cryptoApi.getRandomValues(new Uint8Array(ARGON2ID.SALT_LENGTH));
@@ -134,10 +161,10 @@ export async function wrapPrivateKey({
     const wrappingKey = await deriveArgon2idAesKey({
       password,
       salt,
-      m: ARGON2ID.MEMORY_COST_KB,
-      t: ARGON2ID.TIME_COST,
-      p: ARGON2ID.PARALLELISM,
-      version: ARGON2_VERSION,
+      m: resolvedKdfParams.m,
+      t: resolvedKdfParams.t,
+      p: resolvedKdfParams.p,
+      version: resolvedKdfParams.version,
     });
     const pkcs8 = await cryptoApi.subtle.exportKey('pkcs8', privateKey);
     const encrypted = await cryptoApi.subtle.encrypt(
@@ -152,10 +179,10 @@ export async function wrapPrivateKey({
 
     const kdf: Argon2idParams = {
       kdfType: 'argon2id',
-      version: ARGON2_VERSION,
-      m: ARGON2ID.MEMORY_COST_KB,
-      t: ARGON2ID.TIME_COST,
-      p: ARGON2ID.PARALLELISM,
+      version: resolvedKdfParams.version,
+      m: resolvedKdfParams.m,
+      t: resolvedKdfParams.t,
+      p: resolvedKdfParams.p,
       salt: encodeBase64Url(salt),
     };
 
@@ -176,7 +203,7 @@ interface DecodedWrappedKey {
   m: number;
   t: number;
   p: number;
-  version: number;
+  version: 19;
 }
 
 /**
@@ -213,15 +240,25 @@ function validateAndDecodeWrapped(wrapped: WrappedPrivateKey): DecodedWrappedKey
 async function decryptPkcs8(
   decoded: DecodedWrappedKey,
   password: string,
-  cryptoApi: Crypto
+  cryptoApi: Crypto,
+  kdfParams?: Argon2idKdfParams
 ): Promise<Uint8Array> {
+  const resolvedKdfParams =
+    kdfParams === undefined
+      ? {
+          m: decoded.m,
+          t: decoded.t,
+          p: decoded.p,
+          version: decoded.version,
+        }
+      : resolveArgon2idKdfParams(kdfParams);
   const wrappingKey = await deriveArgon2idAesKey({
     password,
     salt: decoded.salt,
-    m: decoded.m,
-    t: decoded.t,
-    p: decoded.p,
-    version: decoded.version,
+    m: resolvedKdfParams.m,
+    t: resolvedKdfParams.t,
+    p: resolvedKdfParams.p,
+    version: resolvedKdfParams.version,
   });
 
   const decrypted = await cryptoApi.subtle.decrypt(
@@ -250,6 +287,7 @@ async function importPkcs8Key(
 export async function unwrapPrivateKey({
   wrapped,
   password,
+  kdfParams,
 }: UnwrapPrivateKeyParams): Promise<CryptoKey> {
   const cryptoApi = getCryptoApi();
   assertPassword(password);
@@ -257,7 +295,7 @@ export async function unwrapPrivateKey({
   let pkcs8: Uint8Array | null = null;
 
   try {
-    pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
+    pkcs8 = await decryptPkcs8(decoded, password, cryptoApi, kdfParams);
     return await importPkcs8Key(
       pkcs8,
       {
@@ -279,6 +317,7 @@ export async function unwrapPrivateKey({
 export async function unwrapEcdsaPrivateKey({
   wrapped,
   password,
+  kdfParams,
 }: UnwrapPrivateKeyParams): Promise<CryptoKey> {
   const cryptoApi = getCryptoApi();
   assertPassword(password);
@@ -286,7 +325,7 @@ export async function unwrapEcdsaPrivateKey({
   let pkcs8: Uint8Array | null = null;
 
   try {
-    pkcs8 = await decryptPkcs8(decoded, password, cryptoApi);
+    pkcs8 = await decryptPkcs8(decoded, password, cryptoApi, kdfParams);
     return await importPkcs8Key(
       pkcs8,
       {

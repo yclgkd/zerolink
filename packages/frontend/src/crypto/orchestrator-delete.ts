@@ -86,7 +86,8 @@ export async function executeDeleteChannel(
       softkeySignature = await signChallengeWithWrappedKey(
         input.wrappedPrivateKey,
         softkeyPassphrase,
-        expectedChallenge as Base64Url
+        expectedChallenge as Base64Url,
+        deps.kdfParams
       );
     } catch {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {

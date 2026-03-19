@@ -79,6 +79,7 @@ UPDATE WHEN:
 |----------|---------|
 | `packages/shared/src/**/__tests__/` | Vitest unit tests for shared schemas/crypto |
 | `packages/frontend/src/__tests__/` | React component and integration tests (Vitest + Testing Library) |
+| `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | Shared frontend crypto test helpers — defaults orchestrator tests to fast Argon2id params and provides seeded immutable decrypt fixtures for heavy flows |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
 | `packages/frontend/e2e/` | Playwright E2E: happy-path, realtime-sync, expiration, rate-limit, fragment cleanup, manifest-verification |
 | `packages/frontend/playwright.config.ts` | Regular Playwright suite using a single non-verification build/server |
@@ -91,6 +92,7 @@ UPDATE WHEN:
 | URL fragments | Never sent to server | Key material lives in `window.location.hash` |
 | Durable Objects | Single-location consistency | DO must be in same region as KV for performance |
 | `@noble/hashes` | Not WebCrypto | Runs synchronously; may block UI on heavy params |
+| `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | `createOrchestrator()` defaults to fast KDF params in tests | Opt out with `{ useFastKdf: false }` when a frontend smoke test must exercise production-strength Argon2id defaults |
 | Biome | No ESLint plugins | Some rules need manual enforcement |
 | `packages/frontend/src/crypto/webauthn.ts` | `useLiteralKeys` Biome errors | Cannot auto-fix; TypeScript `noPropertyAccessFromIndexSignature` requires bracket notation in this file — do not touch |
 | `packages/frontend/src/release/verification.ts` | Verified Release covers only `dist/assets/*` | Root documents (`index.html`, `robots.txt`) are excluded from the signed manifest because Cloudflare can mutate edge responses; the executing bootstrap entry must still match `manifest.entryAssetPath` |

@@ -1,4 +1,5 @@
 import type { HexString, LockBeginResponse, UnixMs } from '@zerolink/shared';
+import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 import { wrapPrivateKey } from '@zerolink/shared/crypto/kdf';
 import { exportReceiverPublicKeyToJwk, generateReceiverKeyPair } from '@zerolink/shared/crypto/rsa';
 import type {
@@ -27,6 +28,7 @@ async function prepareLockCryptography(
   lockChallengeId: string,
   lockChallenge: string,
   nowMs: number,
+  kdfParams?: Argon2idKdfParams,
   senderAuthFpr?: HexString
 ) {
   const receiverKeyPair = await generateReceiverKeyPair();
@@ -44,6 +46,7 @@ async function prepareLockCryptography(
   const wrappedPrivateKey = await wrapPrivateKey({
     privateKey: receiverKeyPair.privateKey,
     password: passphrase,
+    kdfParams,
   });
 
   return {
@@ -93,6 +96,7 @@ export async function executeLockChannel(
       challenge.id,
       challenge.challenge,
       nowMs,
+      deps.kdfParams,
       input.senderAuthFpr
     );
   } catch {
