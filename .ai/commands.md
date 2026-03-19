@@ -6,6 +6,8 @@ pnpm dev
 pnpm build
 pnpm test
 pnpm test:e2e
+pnpm test:e2e:mock
+pnpm test:e2e:realtime
 pnpm typecheck
 pnpm lint
 pnpm manifest:generate
@@ -20,6 +22,8 @@ pnpm --filter @zerolink/frontend build
 pnpm --filter @zerolink/frontend test
 pnpm --filter @zerolink/frontend typecheck
 pnpm --filter @zerolink/frontend test:e2e
+pnpm --filter @zerolink/frontend test:e2e:mock
+pnpm --filter @zerolink/frontend test:e2e:realtime
 ```
 
 ## Backend

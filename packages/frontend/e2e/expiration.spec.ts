@@ -1,10 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+import { disableWebSocket } from './support/transport';
+
 const TEST_UUID = 'AAAAAAAAAAAAAAAAAAAAA';
 const TEST_LOCK_KEY = 'dGVzdGtleQ';
 
 test.describe('expiration flow', () => {
   test.beforeEach(async ({ page }) => {
+    await disableWebSocket(page);
     await page.route('**/api/public/**', async (route) => {
       await route.fulfill({
         status: 404,
