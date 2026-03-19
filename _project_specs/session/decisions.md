@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-19] Split verification E2E from the main Playwright suite and cache CI dependencies
+
+**Decision**: Enable lockfile-based pnpm caching in GitHub Actions, cache Playwright browser downloads in E2E jobs, and move `manifest-verification.spec.ts` onto its own Playwright config and CI job.
+**Context**: The PR and deploy workflows reinstalled dependencies in every job with package-manager caching disabled, the E2E jobs redownloaded Chromium each run, and the main Playwright config always paid for both the regular build and the verification build even though only one spec exercised the verification gate.
+**Choice**: Switch every workflow job to `actions/setup-node` cache mode for pnpm with `pnpm-lock.yaml` as the dependency key, add `actions/cache` around a fixed Playwright browser directory, introduce `build:e2e` and `build:verification:e2e` scripts that skip `tsc`, keep the existing typed build scripts for formal build validation, and create a dedicated `playwright.verification.config.ts` plus standalone CI jobs for verification-only E2E coverage.
+**Reasoning**: Caching dependencies and browser binaries is the highest-confidence CI speed win with minimal risk. Splitting the verification spec preserves the real compile-time release-verification behavior while removing the second build/server startup from the default E2E path. Keeping Playwright `workers` and `fullyParallel` unchanged avoids introducing new flake modes in the same change.
+**Trade-offs**: CI now has one additional job to surface verification failures independently, and browser caches can be invalidated by lockfile changes even when Playwright itself is unchanged. The workflows still perform per-job installs instead of artifact reuse; this change optimizes setup cost without changing job isolation.
+
 ## [2026-03-17] Migrate to Workers Assets unified deployment
 
 **Decision**: Replace dual-deployment (Cloudflare Pages for frontend + standalone Cloudflare Worker for backend) with Workers Assets, serving the React SPA as static assets directly from the Worker via a single `wrangler deploy`.

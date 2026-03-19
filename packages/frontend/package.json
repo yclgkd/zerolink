@@ -6,9 +6,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:verification": "tsc && VITE_RELEASE_VERIFICATION_REQUIRED=true vite build --outDir dist-verification",
+    "build:e2e": "vite build",
+    "build:verification:e2e": "VITE_RELEASE_VERIFICATION_REQUIRED=true vite build --outDir dist-verification",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test -c playwright.config.ts",
+    "test:e2e:verification": "playwright test -c playwright.verification.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

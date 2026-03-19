@@ -48,7 +48,8 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          package-manager-cache: false
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Resolve pnpm via Corepack
         run: |
@@ -80,7 +81,8 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          package-manager-cache: false
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Resolve pnpm via Corepack
         run: |
@@ -112,7 +114,8 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          package-manager-cache: false
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Resolve pnpm via Corepack
         run: |
@@ -138,6 +141,7 @@ jobs:
     timeout-minutes: 30
     env:
       COREPACK_HOME: /tmp/corepack
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -146,7 +150,8 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
-          package-manager-cache: false
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Resolve pnpm via Corepack
         run: |
@@ -160,9 +165,61 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
       - name: Run E2E tests
         run: pnpm --filter @zerolink/frontend test:e2e
+
+  pr-e2e-verification:
+    name: PR E2E Verification
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_HOME: /tmp/corepack
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Resolve pnpm via Corepack
+        run: |
+          mkdir -p "$COREPACK_HOME"
+          mkdir -p /tmp/corepack-bin
+          corepack enable --install-directory /tmp/corepack-bin
+          echo "/tmp/corepack-bin" >> "$GITHUB_PATH"
+          export PATH="/tmp/corepack-bin:$PATH"
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run verification E2E tests
+        run: pnpm --filter @zerolink/frontend test:e2e:verification

@@ -1,9 +1,9 @@
 /**
  * Release verification gate E2E tests.
  *
- * These tests run against a separate build served on port 4174, compiled with
- * VITE_RELEASE_VERIFICATION_REQUIRED=true.  The `verification-gate` project in
- * playwright.config.ts points to that server.
+ * These tests run against a separate verification build compiled with
+ * VITE_RELEASE_VERIFICATION_REQUIRED=true. The dedicated
+ * `playwright.verification.config.ts` file points to that server.
  *
  * Each test intercepts manifest.json and/or manifest.sig at the network layer
  * to exercise every failure branch in verifyRelease().
