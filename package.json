@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @zerolink/frontend test:e2e",
+    "test:e2e:verification": "pnpm --filter @zerolink/frontend test:e2e:verification",
     "test:coverage": "pnpm -r test -- --coverage",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",

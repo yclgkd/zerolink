@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Base64UrlSchema, ECDSA, WrappedPrivateKeySchema } from '@zerolink/shared';
+import { ARGON2ID, Base64UrlSchema, ECDSA, WrappedPrivateKeySchema } from '@zerolink/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -66,6 +66,13 @@ describe('wrapSoftkeyPrivateKey / unwrapSoftkeyPrivateKey', () => {
 
       // Wrapped output should conform to WrappedPrivateKey schema
       expect(() => WrappedPrivateKeySchema.parse(wrapped)).not.toThrow();
+      expect(wrapped.kdf).toMatchObject({
+        kdfType: 'argon2id',
+        version: 19,
+        m: ARGON2ID.MEMORY_COST_KB,
+        t: ARGON2ID.TIME_COST,
+        p: ARGON2ID.PARALLELISM,
+      });
 
       const unwrapped = await unwrapSoftkeyPrivateKey(wrapped, PASSPHRASE);
       expect(unwrapped.type).toBe('private');

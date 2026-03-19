@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Add optional `kdfParams` plumbing for internal callers only, default it to the existing production values, and have test helpers opt into a fixed fast Argon2id config. Keep a small number of full-strength smoke tests inside the normal unit suite so PR validation still exercises the real defaults.
 **Reasoning**: This keeps the unit tests on the true crypto implementation path, avoids broad module mocks, and preserves confidence that the runtime default configuration still works. The fast-parameter path removes repeated Argon2 cost from branch/error tests without changing product behavior.
 **Trade-offs**: The shared/frontend crypto helpers now carry a small amount of internal-only injection surface. Tests that need production-strength coverage must explicitly opt out of the fast helper defaults.
+**Follow-up (2026-03-19)**: Frontend smoke tests now explicitly assert the wrapped-key Argon2 metadata when `useFastKdf: false` so the helper default can stay fast without silently weakening the remaining production-parameter coverage.
 
 ## [2026-03-19] Reuse immutable decrypt fixtures instead of repeating full create-lock-deliver setup per case
 
@@ -30,6 +31,16 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Add fixture builders that compute the heavy crypto path once and return immutable artifacts (`cipherBundle`, `deliveryAuth`, `ReceiverKeyEnvelope`, fingerprints). Each test then seeds a new storage instance from cloned envelope data and mutates only its local payload/storage copies.
 **Reasoning**: This preserves test isolation while removing duplicate heavy work. Reusing live state would risk case coupling through shared IndexedDB contents or Zustand state, while immutable artifact cloning keeps the tests deterministic and cheap.
 **Trade-offs**: The test helper module is larger and more structured than before. Future tests should prefer the seeded-fixture pattern rather than reintroducing ad hoc full-flow setup in every `it(...)`.
+
+## [2026-03-19] Split verification E2E from the main Playwright suite and cache CI dependencies
+
+**Decision**: Enable lockfile-based pnpm caching in GitHub Actions, cache Playwright browser downloads in E2E jobs, and move `manifest-verification.spec.ts` onto its own Playwright config and CI job.
+**Context**: The PR and deploy workflows reinstalled dependencies in every job with package-manager caching disabled, the E2E jobs redownloaded Chromium each run, and the main Playwright config always paid for both the regular build and the verification build even though only one spec exercised the verification gate.
+**Choice**: Switch every workflow job to `actions/setup-node` cache mode for pnpm with `pnpm-lock.yaml` as the dependency key, add `actions/cache` around a fixed Playwright browser directory, introduce `build:e2e` and `build:verification:e2e` scripts that skip `tsc`, keep the existing typed build scripts for formal build validation, and create a dedicated `playwright.verification.config.ts` plus standalone CI jobs for verification-only E2E coverage.
+**Reasoning**: Caching dependencies and browser binaries is the highest-confidence CI speed win with minimal risk. Splitting the verification spec preserves the real compile-time release-verification behavior while removing the second build/server startup from the default E2E path. Keeping Playwright `workers` and `fullyParallel` unchanged avoids introducing new flake modes in the same change.
+**Trade-offs**: CI now has one additional job to surface verification failures independently, and browser caches can be invalidated by lockfile changes even when Playwright itself is unchanged. The workflows still perform per-job installs instead of artifact reuse; this change optimizes setup cost without changing job isolation.
+**Follow-up (2026-03-19)**: `actions/setup-node` cache mode resolves the selected package manager binary before later shell steps run, so pnpm must be installed before `setup-node` when using `cache: "pnpm"`. The workflows now bootstrap pnpm via `pnpm/action-setup` and drop the later Corepack-only step to keep cache initialization deterministic.
+**Follow-up (2026-03-19)**: Playwright's CI guidance does not recommend caching browser binaries on Linux because cache restore time is comparable to a fresh download and the required OS dependencies are not cacheable. The workflows now drop the shared browser cache entirely and keep `playwright install --with-deps chromium`, which removes cache save contention between the two E2E jobs and aligns the pipeline with Playwright's documented GitHub Actions path.
 
 ## [2026-03-17] Migrate to Workers Assets unified deployment
 

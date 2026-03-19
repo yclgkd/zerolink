@@ -2,7 +2,7 @@
 
 import 'fake-indexeddb/auto';
 
-import type { LockBeginResponse } from '@zerolink/shared';
+import { ARGON2ID, type LockBeginResponse } from '@zerolink/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../crypto/webauthn', async () => {
@@ -86,6 +86,13 @@ describe('crypto orchestrator – lockChannel', () => {
     expect(savedEnvelope).not.toBeNull();
     expect(savedEnvelope?.receiverPubFpr).toBe(result.data.receiverPubFpr);
     expect(savedEnvelope?.senderAuthFpr).toBe(VALID_SENDER_AUTH_FPR);
+    expect(savedEnvelope?.wrappedPrivateKey.kdf).toMatchObject({
+      kdfType: 'argon2id',
+      version: 19,
+      m: ARGON2ID.MEMORY_COST_KB,
+      t: ARGON2ID.TIME_COST,
+      p: ARGON2ID.PARALLELISM,
+    });
     expect(useLockStore.getState().step).toBe('locked');
     expect(useLockStore.getState().passphrase).toBe('');
     expect(useLockStore.getState().safetyCode).not.toBeNull();
