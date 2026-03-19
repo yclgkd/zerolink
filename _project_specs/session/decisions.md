@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Disable `window.WebSocket` in mocked E2E helpers before navigation, keep one polling-fallback test plus deterministic cross-device state coverage there, and add a dedicated Playwright config + CI job for two local-Wrangler realtime smoke tests (lock propagation and deliver propagation).
 **Reasoning**: This preserves fast, deterministic mock coverage for error states and fallback semantics while restoring clear test logs. A separate smoke suite gives direct confidence in the WebSocket path without forcing every mocked scenario to provision a backend.
 **Trade-offs**: Local default `pnpm test:e2e` now runs two suites instead of one, and CI has one additional E2E job. The realtime smoke suite needs a committed non-secret Wrangler env source so it can run without dashboard secrets.
+**Follow-up (2026-03-19)**: The realtime Playwright config must not reuse an already-running developer backend. It now forces a fresh `wrangler dev --env-file .env.e2e` launch on a dedicated local port and points the frontend preview proxy at that port, so local runs cannot silently bind to a developer's unrelated backend state or environment.
 
 ## [2026-03-19] Keep unit-test crypto fidelity by injecting fast KDF params instead of mocking KDF
 

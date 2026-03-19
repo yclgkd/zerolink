@@ -7,6 +7,19 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 import { removeDevOnlyPublicAssets } from './tools/remove-dev-public-assets';
 
+const apiProxyHost = process.env['ZEROLINK_API_PROXY_HOST'] ?? 'localhost';
+const apiProxyPort = process.env['ZEROLINK_API_PROXY_PORT'] ?? '8787';
+const apiProxyConfig = {
+  '/api/ws': {
+    target: `ws://${apiProxyHost}:${apiProxyPort}`,
+    ws: true,
+  },
+  '/api': {
+    target: `http://${apiProxyHost}:${apiProxyPort}`,
+    changeOrigin: true,
+  },
+};
+
 function stripDevOnlyPublicAssets(): PluginOption {
   let resolvedConfig: ResolvedConfig | undefined;
 
@@ -30,16 +43,10 @@ function stripDevOnlyPublicAssets(): PluginOption {
 export default defineConfig({
   plugins: [react(), tailwindcss(), stripDevOnlyPublicAssets()],
   server: {
-    proxy: {
-      '/api/ws': {
-        target: 'ws://localhost:8787',
-        ws: true,
-      },
-      '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true,
-      },
-    },
+    proxy: apiProxyConfig,
+  },
+  preview: {
+    proxy: apiProxyConfig,
   },
   build: {
     // Minimum supported browsers (see README §浏览器兼容性):
