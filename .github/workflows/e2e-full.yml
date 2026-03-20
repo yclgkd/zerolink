@@ -1,0 +1,120 @@
+name: E2E Full Suite
+
+on:
+  schedule:
+    - cron: "30 6 * * *" # 06:30 UTC daily
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: "Suites to run (all, mock, realtime, verification)"
+        required: false
+        default: "all"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-mock:
+    name: E2E Mock
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event.inputs.suites == 'all' ||
+      contains(github.event.inputs.suites, 'mock')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run mock E2E tests
+        run: pnpm --filter @zerolink/frontend test:e2e:mock
+
+  e2e-realtime:
+    name: E2E Realtime
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event.inputs.suites == 'all' ||
+      contains(github.event.inputs.suites, 'realtime')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run realtime E2E smoke tests
+        run: pnpm --filter @zerolink/frontend test:e2e:realtime
+
+  e2e-verification:
+    name: E2E Verification
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event.inputs.suites == 'all' ||
+      contains(github.event.inputs.suites, 'verification')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run verification E2E tests
+        run: pnpm --filter @zerolink/frontend test:e2e:verification
