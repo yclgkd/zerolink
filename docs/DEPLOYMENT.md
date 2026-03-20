@@ -210,7 +210,7 @@ curl https://zerolink.dev/api/health
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker + KV 权限） |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
 | `MANIFEST_SIGNING_KEY` | Ed25519 私钥（base64）用于 manifest 签名 |
-| `RELEASE_PLEASE_TOKEN` | GitHub PAT 或 GitHub App token，用于创建 Release PR、tag 和 GitHub Release，并确保后续 workflow 能被正常触发 |
+| `RELEASE_PLEASE_TOKEN` | GitHub PAT 或 GitHub App token，用于创建 Release PR、tag 和 GitHub Release，并确保后续 workflow 能被正常触发；若缺失，release-please workflow 会在预检查步骤里直接报错并给出配置提示 |
 
 ### 创建 Cloudflare API Token
 
@@ -293,7 +293,7 @@ routes = [
 
 工作流执行顺序：`install → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
 
-另有独立的 `.github/workflows/release-please.yml` 负责在 `main` 上生成或更新 Release PR。合并 Release PR 后，Release Please 会：
+另有独立的 `.github/workflows/release-please.yml` 负责在 `main` 上生成或更新 Release PR。该 workflow 会先预检查 `RELEASE_PLEASE_TOKEN`，然后继续执行 commit-pinned 官方 `release-please` action。当前上游 action 仍声明 `runs: node20`，因此 GitHub 可能显示 Node 20 deprecation warning；ZeroLink 暂不通过运行时安装 npm 包去规避这个告警，待上游升级后再更新 pin。合并 Release PR 后，Release Please 会：
 - 更新根目录 `version.txt`
 - 维护根目录 `CHANGELOG.md`
 - 创建新的 `v*` tag 和 GitHub Release
@@ -317,6 +317,8 @@ git push origin v1.0.0
 3. 当前工作流没有 `workflow_dispatch`，如需手动补发请重新推送对应分支或 tag
 4. 在 GitHub 仓库 **Settings → Actions → General** 中开启 **Allow GitHub Actions to create and approve pull requests**
 5. 使用 `RELEASE_PLEASE_TOKEN`（PAT 或 GitHub App token），不要退回到默认 `GITHUB_TOKEN`，否则 Release Please 创建的 PR / tag 默认不会继续触发后续 workflow
+6. 如果 `release-please.yml` 失败并出现 `Missing RELEASE_PLEASE_TOKEN` 注解，按上一步补齐 secret 后直接重新运行该 workflow
+7. 如果 GitHub 对该 workflow 标出 Node 20 deprecation warning，这是当前官方 action 的上游 runtime 告警，不是 ZeroLink 自己的脚本错误；待上游 action 升级后再 bump pin
 
 ### Release Please 提交约定
 

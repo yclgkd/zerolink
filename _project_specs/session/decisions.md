@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Add `.github/workflows/release-please.yml`, bootstrap `version.txt` at `0.2.0`, start `CHANGELOG.md` from the first automated release after `v0.2.0`, ignore `version.txt` in deploy workflow path filters to avoid duplicate staging deploys, and document the new commit guidance in both developer docs and `.ai/workflows.md`.
 **Reasoning**: The `simple` strategy keeps release metadata minimal for a single-app repository, preserves the existing `v*` deploy contract, and avoids reusing `package.json` as a release source. Requiring a non-default token ensures Release Please-generated PRs and tags still trigger downstream CI and deployment workflows.
 **Trade-offs**: Historical changelog entries before automation are not backfilled into `CHANGELOG.md`. Bare `security:` commits remain valid but no longer imply a release, so contributors must use scoped `fix(security)` / `feat(security)` when release automation matters.
+**Follow-up (2026-03-20)**: The upstream `googleapis/release-please-action@v4` still declares `runs: node20`, which now emits GitHub's Node 20 deprecation warning. ZeroLink keeps the commit-pinned official action anyway to avoid replacing it with a runtime npm install under a write-scoped release token, and only adds an explicit preflight failure message when `RELEASE_PLEASE_TOKEN` is missing.
 
 ## [2026-03-20] CI-injected release version is the source of truth for signed frontend manifests
 

@@ -14,7 +14,19 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    env:
+      RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
     steps:
+      - name: Validate Release Please configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_PLEASE_TOKEN:-}" ]; then
+            echo "::error title=Missing RELEASE_PLEASE_TOKEN::Add repository secret RELEASE_PLEASE_TOKEN under Settings > Secrets and variables > Actions. Use a PAT or GitHub App token with Contents, Pull requests, and Issues write access, then re-run this workflow."
+            exit 1
+          fi
+
       - name: Run Release Please
         uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4
         with:
