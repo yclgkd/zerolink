@@ -13,6 +13,16 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-20] CI-injected release version is the source of truth for signed frontend manifests
+
+**Decision**: Treat git release tags as the authoritative production version and inject a normalized `ZEROLINK_VERSION` into the deploy workflow for all signed builds. `scripts/generate-manifest.ts` now prefers that environment variable and falls back to `packages/frontend/package.json` only for local or otherwise non-injected runs.
+**Context**: Production deploys were already triggered by `v*` tags, but the signed frontend manifest still read `packages/frontend/package.json`, which allowed the `Verified Release` UI and release metadata to drift from the actual deployed tag. The repository root package already used `0.0.0` as a workspace-only placeholder, so package metadata was not a reliable release source.
+**Options Considered**: Keep `package.json` as the release truth and manually bump it before tagging; mutate `package.json` inside CI before each deploy; inject a workflow-scoped release version and let manifest generation consume it without rewriting repo files.
+**Choice**: Inject `ZEROLINK_VERSION` in `.github/workflows/deploy.yml`, deriving `vX.Y.Z -> X.Y.Z` for production tags and `0.0.0-dev+<short_sha>` for staging pushes to `main`.
+**Reasoning**: This aligns signed release metadata with the actual deploy trigger, keeps staging builds traceable, avoids repository churn from CI-edited `package.json`, and preserves local developer workflows through an explicit fallback path.
+**Trade-offs**: Local/manual signed builds must set `ZEROLINK_VERSION` explicitly if they need release metadata that differs from `packages/frontend/package.json`. The workspace package versions remain in the repository and can still be mistaken for release versions if readers ignore the CI contract.
+**Follow-up (2026-03-20)**: Manual signed-release docs must show `ZEROLINK_VERSION` overrides together with `VITE_RELEASE_VERIFICATION_REQUIRED=true`; overriding only the manifest version is not sufficient to produce a verified release shell.
+
 ## [2026-03-19] Split mocked realtime fallback E2E from real WebSocket smoke coverage
 
 **Decision**: Keep mocked Playwright coverage focused on HTTP route mocks plus one explicit polling-fallback scenario, and add a separate realtime smoke suite that starts local `wrangler dev` to exercise actual `/api/ws/:uuid` updates.

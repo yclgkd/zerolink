@@ -35,6 +35,8 @@ const MANIFEST_PATH = path.resolve(DIST_DIR, 'manifest.json');
 const MANIFEST_HASH_PATH = path.resolve(DIST_DIR, 'manifest-hash.txt');
 const SIGNATURE_PATH = path.resolve(DIST_DIR, 'manifest.sig');
 const SIGNED_RUNTIME_DIR = 'assets';
+const DEFAULT_RELEASE_VERSION = '0.0.0';
+const RELEASE_VERSION_ENV_KEY = 'ZEROLINK_VERSION';
 
 export async function collectFilePaths(rootDir: string): Promise<string[]> {
   const signedRootDir = path.resolve(rootDir, SIGNED_RUNTIME_DIR);
@@ -93,15 +95,29 @@ async function readEntryAssetPath(distDir: string): Promise<string> {
   return extractEntryAssetPath(indexHtml);
 }
 
-function readFrontendVersion(): string {
+function readVersionOverride(env: NodeJS.ProcessEnv): string | null {
+  const version = env[RELEASE_VERSION_ENV_KEY]?.trim();
+  return version && version.length > 0 ? version : null;
+}
+
+function readPackageVersion(packageJsonPath: string): string {
   try {
-    const pkg = JSON.parse(readFileSync(path.resolve(FRONTEND_DIR, 'package.json'), 'utf8')) as {
+    const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       version?: string;
     };
-    return typeof pkg.version === 'string' && pkg.version.length > 0 ? pkg.version : '0.0.0';
+    return typeof pkg.version === 'string' && pkg.version.length > 0
+      ? pkg.version
+      : DEFAULT_RELEASE_VERSION;
   } catch {
-    return '0.0.0';
+    return DEFAULT_RELEASE_VERSION;
   }
+}
+
+export function resolveReleaseVersion(
+  env: NodeJS.ProcessEnv = process.env,
+  packageJsonPath = path.resolve(FRONTEND_DIR, 'package.json')
+): string {
+  return readVersionOverride(env) ?? readPackageVersion(packageJsonPath);
 }
 
 function readCommitHash(): string {
@@ -121,7 +137,7 @@ async function generateManifest(): Promise<SignedManifest> {
     buildTime: new Date().toISOString(),
     commitHash: readCommitHash(),
     distDir: DIST_DIR,
-    version: readFrontendVersion(),
+    version: resolveReleaseVersion(),
   });
 }
 

@@ -292,6 +292,11 @@ routes = [
 
 工作流执行顺序：`install → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
 
+版本来源约定：
+- production 构建以 git tag 为唯一发布版本来源，`v1.2.3` 会注入为 `ZEROLINK_VERSION=1.2.3`
+- staging 构建固定注入 `ZEROLINK_VERSION=0.0.0-dev+<short_sha>`，用于在 `Verified Release` 卡片和 `manifest.json` 中追踪部署来源
+- `packages/frontend/package.json` 的 `version` 仅作为本地/未注入环境的兜底值，不再代表正式发布版本
+
 ### 配置步骤
 
 1. 在 GitHub 仓库 Settings → Secrets and variables → Actions 中添加所有必要 Secrets
@@ -303,6 +308,18 @@ git push origin v1.0.0
 ```
 
 3. 当前工作流没有 `workflow_dispatch`，如需手动补发请重新推送对应分支或 tag
+
+### 手动构建时覆盖发布版本
+
+如果你在 GitHub Actions 之外手动生成**已启用验证门禁**的签名发布产物，并且希望 `manifest.json` 中的版本号与外部发布版本保持一致，可显式注入 `ZEROLINK_VERSION`：
+
+```bash
+ZEROLINK_VERSION=1.0.0 VITE_RELEASE_VERIFICATION_REQUIRED=true \
+  pnpm --filter frontend build
+ZEROLINK_VERSION=1.0.0 pnpm manifest:generate
+```
+
+未设置该环境变量时，manifest 会回退到 `packages/frontend/package.json` 中的版本号。
 
 ---
 

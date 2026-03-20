@@ -68,6 +68,11 @@ signed manifest is intentionally limited to `dist/assets/*` runtime build output
 document itself is not hashed, but the bootstrap entry asset it launches must still match the
 signed manifest.
 
+For GitHub Actions deployments, the manifest `version` field is injected from CI via
+`ZEROLINK_VERSION`: production releases use the pushed `v*` tag without the leading `v`, while
+staging builds use `0.0.0-dev+<short_sha>`. Local/manual builds fall back to
+`packages/frontend/package.json` when that environment variable is unset.
+
 ## Quick verification (automated)
 
 After downloading a release build into `packages/frontend/dist/`:

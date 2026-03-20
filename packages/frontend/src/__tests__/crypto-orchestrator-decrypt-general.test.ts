@@ -4,7 +4,6 @@ import 'fake-indexeddb/auto';
 
 import {
   AES_GCM,
-  type AssertionJSON,
   CHANNEL_STATE,
   type DecryptFetchResponse,
   SECURITY_PROFILE,
@@ -23,7 +22,6 @@ vi.mock('../crypto/webauthn', async () => {
 
 import type { ApiClient } from '../api/client';
 import { createIndexedDbReceiverKeyStorage } from '../crypto/storage';
-import { assertWithWebAuthn, type WebAuthnAdapterResult } from '../crypto/webauthn';
 import { useCreateStore, useDecryptStore, useDeliverStore, useLockStore } from '../stores';
 import {
   buildDeliveredDecryptFixtureBase,
@@ -35,7 +33,6 @@ import {
   NOW,
   seedDeliveredDecryptFixture,
   toMutableReceiverJwk,
-  VALID_ASSERTION,
   VALID_B64U,
   VALID_LOCK_SECRET,
   VALID_UUID,
