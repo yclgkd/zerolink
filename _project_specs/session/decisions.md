@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-20] Optimize CI to reduce billable minutes: tiered pipeline
+
+**Decision**: Consolidate PR validation from 6 parallel jobs into 1 serial job, remove all test jobs from the deploy workflow, and move E2E suites to a dedicated nightly/manual workflow.
+**Context**: GitHub Actions free tier (2000 min/month) was fully consumed. Each PR triggered 6 jobs (~30 min), and each merge to main triggered another 6 jobs (~30 min) with identical tests, totaling ~60 billable minutes per PR lifecycle.
+**Options Considered**: Keep current setup and pay for more minutes; remove only E2E from PR but keep parallel jobs; full tiered optimization with job consolidation.
+**Choice**: Full tiered optimization — PR runs typecheck + unit + build in a single job (~7 min); deploy workflow only builds and deploys (~5 min); E2E runs nightly via schedule and on-demand via workflow_dispatch.
+**Reasoning**: Each parallel job carried ~2 min of redundant setup overhead (checkout + install). Consolidating eliminates 5 setup cycles. Tests on main are post-mortem (cannot prevent bad merges) so they are pure waste. E2E coverage is preserved via nightly runs and pre-release manual triggers.
+**Trade-offs**: E2E regressions detected within 24 hours instead of per-PR. Branch protection required checks must be updated from 6 job names to the single `PR Quality` check.
+
 ## [2026-03-20] Adopt Release Please with root version.txt and explicit releasable commit guidance
 
 **Decision**: Add a dedicated Release Please workflow using the root-level `simple` strategy (`version.txt` + `CHANGELOG.md`) and require a PAT or GitHub App token in `RELEASE_PLEASE_TOKEN`. Keep production deploys tag-driven and document that releasable security changes must use `fix(security): ...` or `feat(security): ...` instead of bare `security:`.
