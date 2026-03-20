@@ -7,8 +7,10 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 import { removeDevOnlyPublicAssets } from './tools/remove-dev-public-assets';
 
-const apiProxyHost = process.env['ZEROLINK_API_PROXY_HOST'] ?? 'localhost';
-const apiProxyPort = process.env['ZEROLINK_API_PROXY_PORT'] ?? '8787';
+const { ZEROLINK_API_PROXY_HOST: apiProxyHostEnv, ZEROLINK_API_PROXY_PORT: apiProxyPortEnv } =
+  process.env;
+const apiProxyHost = apiProxyHostEnv ?? 'localhost';
+const apiProxyPort = apiProxyPortEnv ?? '8787';
 const apiProxyConfig = {
   '/api/ws': {
     target: `ws://${apiProxyHost}:${apiProxyPort}`,
