@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Inject `ZEROLINK_VERSION` in `.github/workflows/deploy.yml`, deriving `vX.Y.Z -> X.Y.Z` for production tags and `0.0.0-dev+<short_sha>` for staging pushes to `main`.
 **Reasoning**: This aligns signed release metadata with the actual deploy trigger, keeps staging builds traceable, avoids repository churn from CI-edited `package.json`, and preserves local developer workflows through an explicit fallback path.
 **Trade-offs**: Local/manual signed builds must set `ZEROLINK_VERSION` explicitly if they need release metadata that differs from `packages/frontend/package.json`. The workspace package versions remain in the repository and can still be mistaken for release versions if readers ignore the CI contract.
+**Follow-up (2026-03-20)**: Manual signed-release docs must show `ZEROLINK_VERSION` overrides together with `VITE_RELEASE_VERIFICATION_REQUIRED=true`; overriding only the manifest version is not sufficient to produce a verified release shell.
 
 ## [2026-03-19] Split mocked realtime fallback E2E from real WebSocket smoke coverage
 

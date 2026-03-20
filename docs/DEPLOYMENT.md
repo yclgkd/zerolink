@@ -311,10 +311,11 @@ git push origin v1.0.0
 
 ### 手动构建时覆盖发布版本
 
-如果你在 GitHub Actions 之外手动生成签名发布产物，并且希望 `manifest.json` 中的版本号与外部发布版本保持一致，可显式注入 `ZEROLINK_VERSION`：
+如果你在 GitHub Actions 之外手动生成**已启用验证门禁**的签名发布产物，并且希望 `manifest.json` 中的版本号与外部发布版本保持一致，可显式注入 `ZEROLINK_VERSION`：
 
 ```bash
-ZEROLINK_VERSION=1.0.0 pnpm --filter frontend build
+ZEROLINK_VERSION=1.0.0 VITE_RELEASE_VERIFICATION_REQUIRED=true \
+  pnpm --filter frontend build
 ZEROLINK_VERSION=1.0.0 pnpm manifest:generate
 ```
 
