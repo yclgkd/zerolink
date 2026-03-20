@@ -20,6 +20,12 @@
 - Track task IDs in issue links, PR references, and optional PR titles.
 - Branch names do not carry task IDs.
 
+## Release Commit Types
+- Release Please derives release PRs from releasable Conventional Commits merged to `main`.
+- Use `feat:` and `fix:` for user-visible releasable changes in this repository.
+- If a security change must trigger a release, use `fix(security): ...` or `feat(security): ...`.
+- Plain `security:` remains allowed for non-releasable security work, but do not assume it will cut a release.
+
 ## AI Output Wording
 - Use neutral, project-focused wording only.
 - Do not mention Codex, Claude, Gemini, AI generation, or tool authorship in source code, comments, commit messages, PR titles, PR bodies, or PR comments.
