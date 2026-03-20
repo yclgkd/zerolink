@@ -41,7 +41,7 @@ UPDATE WHEN:
 | `packages/frontend/src/release/verification.ts` | Browser-side signed-manifest verifier |
 | `packages/frontend/src/release/tiered-verification.ts` | Cached release verifier that revalidates signed manifest bytes before reusing trusted snapshots |
 | `packages/shared/src/ws.ts` | Shared Zod schemas and types for channel sync WebSocket messages |
-| `scripts/generate-manifest.ts` | Build-time manifest generator (hashes `dist/assets/` + records `entryAssetPath`) |
+| `scripts/generate-manifest.ts` | Build-time manifest generator (hashes `dist/assets/`, records `entryAssetPath`, and prefers CI-injected `ZEROLINK_VERSION` over `packages/frontend/package.json`) |
 | `scripts/sign-manifest.ts` | Ed25519 manifest signer (requires `MANIFEST_SIGNING_KEY` env var) |
 | `scripts/verify-manifest.ts` | CLI manifest verifier — enforces entry binding + file hashes |
 | `packages/frontend/e2e/happy-path.spec.ts` | Canonical end-to-end coverage for create-only share-link visibility and ManagePage sender flow |
@@ -57,7 +57,7 @@ UPDATE WHEN:
 | `.github/workflows/pr-validate.yml` | PR CI gates: typecheck, unit tests, frontend build, mocked Playwright E2E, realtime WebSocket smoke E2E, and manifest-verification E2E on `pull_request` / `merge_group` |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
-| `.github/workflows/deploy.yml` | Post-merge CI/CD: typecheck, unit tests, mocked E2E, realtime WebSocket smoke E2E, verification E2E, frontend build, manifest generate/sign/verify, then Worker deploy |
+| `.github/workflows/deploy.yml` | Post-merge CI/CD: typecheck, unit tests, mocked E2E, realtime WebSocket smoke E2E, verification E2E, resolve `ZEROLINK_VERSION`, frontend build, manifest generate/sign/verify, then Worker deploy |
 
 ## File Size Rule
 

@@ -210,6 +210,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve release version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            SHORT_SHA="$(git rev-parse --short HEAD)"
+            VERSION="0.0.0-dev+${SHORT_SHA}"
+          fi
+
+          echo "ZEROLINK_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Resolved release version: ${VERSION}"
+
       - name: Build frontend
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"

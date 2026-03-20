@@ -9,6 +9,7 @@ import {
   collectFilePaths,
   extractEntryAssetPath,
   hashFileHex,
+  resolveReleaseVersion,
   toPosixRelativePath,
 } from '../generate-manifest';
 
@@ -139,6 +140,39 @@ describe('extractEntryAssetPath', () => {
     const html = '<script type="module" src="https://cdn.example.com/app.js"></script>';
 
     expect(() => extractEntryAssetPath(html)).toThrow('same-origin');
+  });
+});
+
+describe('resolveReleaseVersion', () => {
+  it('prefers ZEROLINK_VERSION when provided', async () => {
+    const packageJsonPath = path.join(tmpDir, 'package.json');
+    await fs.writeFile(packageJsonPath, JSON.stringify({ version: '1.2.3' }));
+
+    const version = resolveReleaseVersion(
+      { ZEROLINK_VERSION: '0.2.0' } as NodeJS.ProcessEnv,
+      packageJsonPath
+    );
+
+    expect(version).toBe('0.2.0');
+  });
+
+  it('keeps exact staging version strings from ZEROLINK_VERSION', async () => {
+    const packageJsonPath = path.join(tmpDir, 'package.json');
+    await fs.writeFile(packageJsonPath, JSON.stringify({ version: '1.2.3' }));
+
+    const version = resolveReleaseVersion(
+      { ZEROLINK_VERSION: '0.0.0-dev+abc1234' } as NodeJS.ProcessEnv,
+      packageJsonPath
+    );
+
+    expect(version).toBe('0.0.0-dev+abc1234');
+  });
+
+  it('falls back to the frontend package version when ZEROLINK_VERSION is missing', async () => {
+    const packageJsonPath = path.join(tmpDir, 'package.json');
+    await fs.writeFile(packageJsonPath, JSON.stringify({ version: '1.2.3' }));
+
+    expect(resolveReleaseVersion({} as NodeJS.ProcessEnv, packageJsonPath)).toBe('1.2.3');
   });
 });
 
