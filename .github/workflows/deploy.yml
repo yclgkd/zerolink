@@ -23,6 +23,7 @@ on:
       - "vitest.config.ts"
       - ".gitignore"
       - ".env.example"
+      - "version.txt"
 
 jobs:
   test-typecheck:

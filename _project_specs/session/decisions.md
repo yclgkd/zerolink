@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-20] Adopt Release Please with root version.txt and explicit releasable commit guidance
+
+**Decision**: Add a dedicated Release Please workflow using the root-level `simple` strategy (`version.txt` + `CHANGELOG.md`) and require a PAT or GitHub App token in `RELEASE_PLEASE_TOKEN`. Keep production deploys tag-driven and document that releasable security changes must use `fix(security): ...` or `feat(security): ...` instead of bare `security:`.
+**Context**: ZeroLink already deploys production from `v*` tags, but release creation was still manual. The repository also intentionally allows a custom `security:` Conventional Commit type, while Release Please's default releasable-unit logic centers on `feat`, `fix`, and `deps`.
+**Options Considered**: Continue manual tagging and changelog management; use a heavier manifest-based Release Please setup; adopt the single-app `simple` flow with `version.txt`, root `CHANGELOG.md`, and explicit commit wording guidance for releasable security fixes.
+**Choice**: Add `.github/workflows/release-please.yml`, bootstrap `version.txt` at `0.2.0`, start `CHANGELOG.md` from the first automated release after `v0.2.0`, ignore `version.txt` in deploy workflow path filters to avoid duplicate staging deploys, and document the new commit guidance in both developer docs and `.ai/workflows.md`.
+**Reasoning**: The `simple` strategy keeps release metadata minimal for a single-app repository, preserves the existing `v*` deploy contract, and avoids reusing `package.json` as a release source. Requiring a non-default token ensures Release Please-generated PRs and tags still trigger downstream CI and deployment workflows.
+**Trade-offs**: Historical changelog entries before automation are not backfilled into `CHANGELOG.md`. Bare `security:` commits remain valid but no longer imply a release, so contributors must use scoped `fix(security)` / `feat(security)` when release automation matters.
+
 ## [2026-03-20] CI-injected release version is the source of truth for signed frontend manifests
 
 **Decision**: Treat git release tags as the authoritative production version and inject a normalized `ZEROLINK_VERSION` into the deploy workflow for all signed builds. `scripts/generate-manifest.ts` now prefers that environment variable and falls back to `packages/frontend/package.json` only for local or otherwise non-injected runs.

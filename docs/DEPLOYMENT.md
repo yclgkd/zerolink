@@ -210,6 +210,7 @@ curl https://zerolink.dev/api/health
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker + KV 权限） |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
 | `MANIFEST_SIGNING_KEY` | Ed25519 私钥（base64）用于 manifest 签名 |
+| `RELEASE_PLEASE_TOKEN` | GitHub PAT 或 GitHub App token，用于创建 Release PR、tag 和 GitHub Release，并确保后续 workflow 能被正常触发 |
 
 ### 创建 Cloudflare API Token
 
@@ -292,6 +293,12 @@ routes = [
 
 工作流执行顺序：`install → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
 
+另有独立的 `.github/workflows/release-please.yml` 负责在 `main` 上生成或更新 Release PR。合并 Release PR 后，Release Please 会：
+- 更新根目录 `version.txt`
+- 维护根目录 `CHANGELOG.md`
+- 创建新的 `v*` tag 和 GitHub Release
+- 通过该 tag 继续复用现有 production deploy workflow
+
 版本来源约定：
 - production 构建以 git tag 为唯一发布版本来源，`v1.2.3` 会注入为 `ZEROLINK_VERSION=1.2.3`
 - staging 构建固定注入 `ZEROLINK_VERSION=0.0.0-dev+<short_sha>`，用于在 `Verified Release` 卡片和 `manifest.json` 中追踪部署来源
@@ -308,6 +315,21 @@ git push origin v1.0.0
 ```
 
 3. 当前工作流没有 `workflow_dispatch`，如需手动补发请重新推送对应分支或 tag
+4. 在 GitHub 仓库 **Settings → Actions → General** 中开启 **Allow GitHub Actions to create and approve pull requests**
+5. 使用 `RELEASE_PLEASE_TOKEN`（PAT 或 GitHub App token），不要退回到默认 `GITHUB_TOKEN`，否则 Release Please 创建的 PR / tag 默认不会继续触发后续 workflow
+
+### Release Please 提交约定
+
+在 ZeroLink 当前的 commitlint 约束下，应使用 `feat` / `fix` 作为可发版提交类型。仓库保留 `security:` 作为合法 Conventional Commit type，但它**不会**自动触发发版。
+
+如需让安全修复参与自动版本发布，请使用：
+
+```text
+fix(security): ...
+feat(security): ...
+```
+
+不要依赖裸 `security:` 提交去触发 Release PR。
 
 ### 手动构建时覆盖发布版本
 
