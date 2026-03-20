@@ -8,7 +8,11 @@ import {
 
 export default defineConfig({
   ...sharedPlaywrightConfig,
-  testIgnore: ['**/manifest-verification.spec.ts', '**/realtime-smoke.spec.ts'],
+  testIgnore: [
+    '**/manifest-verification.spec.ts',
+    '**/realtime-smoke.spec.ts',
+    '**/staging-smoke.spec.ts',
+  ],
   use: {
     ...sharedPlaywrightConfig.use,
     baseURL: 'http://127.0.0.1:4173',
