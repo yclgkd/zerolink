@@ -14,9 +14,47 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    env:
+      RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      RELEASE_PLEASE_REPO_URL: ${{ github.repository }}
+      RELEASE_PLEASE_TARGET_BRANCH: ${{ github.ref_name }}
+
     steps:
-      - name: Run Release Please
-        uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4
+      - name: Validate Release Please configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_PLEASE_TOKEN:-}" ]; then
+            echo "::error title=Missing RELEASE_PLEASE_TOKEN::Add repository secret RELEASE_PLEASE_TOKEN under Settings > Secrets and variables > Actions. Use a PAT or GitHub App token with Contents, Pull requests, and Issues write access, then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          release-type: simple
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install Release Please CLI
+        shell: bash
+        run: npm install --global release-please@17.3.0
+
+      - name: Create GitHub release and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          release-please github-release \
+            --token="${RELEASE_PLEASE_TOKEN}" \
+            --repo-url="${RELEASE_PLEASE_REPO_URL}" \
+            --target-branch="${RELEASE_PLEASE_TARGET_BRANCH}" \
+            --release-type=simple
+
+      - name: Create or update Release PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          release-please release-pr \
+            --token="${RELEASE_PLEASE_TOKEN}" \
+            --repo-url="${RELEASE_PLEASE_REPO_URL}" \
+            --target-branch="${RELEASE_PLEASE_TARGET_BRANCH}" \
+            --release-type=simple
