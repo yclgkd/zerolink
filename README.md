@@ -56,7 +56,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ### 后端
 - Cloudflare Workers + Durable Objects（提供免费层，支持 SQLite 后端）+ KV
-- 可选：Docker Compose 自托管
+- 可选：Docker Compose 自托管（计划中，尚未实现）
 
 ## 浏览器兼容性
 
@@ -89,7 +89,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - ✅ 抗重放/乱序/并发覆盖（DO 原子性）
 - ✅ 最小元数据泄露
 - ✅ 前端完整性可验证（CSP/SRI）
-- ✅ 管理权私钥不可导出
+- ✅ Secure Share 管理权私钥不可导出（WebAuthn）；Quick Share 管理密钥编码在管理链接中
 
 ## 部署 / Deploy
 

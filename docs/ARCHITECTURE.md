@@ -135,8 +135,8 @@ WebAuthn challenge 必须 === expected_challenge
 
 ### Quick Share（密码）
 - 本地生成 ECDSA P-256 管理密钥
-- Admin-Priv 用 Argon2id 包裹存 IndexedDB
-- 适合无 WebAuthn 支持或跨设备/跨浏览器场景
+- Admin-Priv 用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
+- 任何拥有管理链接和频道密码的人可从任何设备管理频道
 - 默认 4KB padding
 
 ### Secure Share（Passkey）

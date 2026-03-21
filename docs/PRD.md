@@ -77,7 +77,7 @@ v3.0 的产品目标：
 
 ### 1. Quick Share（快速分享）
 
-- **管理权**：本地生成 ECDSA P-256 keypair，由用户密码 Argon2id 包裹存 IndexedDB
+- **管理权**：本地生成 ECDSA P-256 keypair，由用户密码 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **WebAuthn**：不需要
 - **接收方**：Argon2id 强制
 - **Padding**：4KB 块
@@ -433,12 +433,12 @@ DO 校验：
 
 > 注意：这无法阻止攻击者直接篡改 index.html 关闭校验，但能让"离线下载包 + 校验工具"变得可行。
 
-### 12.2 离线包（Paranoid Mode）
+### 12.2 离线包（Paranoid Mode）（计划中，尚未实现）
 
 - 提供单独下载的 offline.zip（静态文件）
 - 用户可本地打开或本域自托管（甚至 file://，但 WebAuthn 与某些 API 可能受限，建议本域托管）
 
-### 12.3 自托管（Self-Hosting）
+### 12.3 自托管（Self-Hosting）（计划中，尚未实现）
 
 - 提供 Docker Compose：
     - 前端静态文件
