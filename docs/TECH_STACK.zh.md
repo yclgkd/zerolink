@@ -1,4 +1,4 @@
-<!-- synced-with: a086716 -->
+<!-- synced-with: 1a44062 -->
 
 > **语言**: [English](./TECH_STACK.md) | 中文
 

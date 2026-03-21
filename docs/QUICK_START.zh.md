@@ -1,4 +1,4 @@
-<!-- synced-with: a086716 -->
+<!-- synced-with: 940a85a -->
 
 > **语言**: [English](./QUICK_START.md) | 中文
 

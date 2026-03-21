@@ -58,11 +58,11 @@ docs/
 #### API Protocol
 - **Full API definition** → [PRD.md § 10. API](./PRD.md#10-api-v30-current)
 - **Lock API** → [PRD.md § Appendix D](./PRD.md#appendix-d-lock-api-schema-v25)
-- **Protocol diagrams (Mermaid)** → [PRD.md § 15. Protocol Diagrams](./PRD.md#15-protocol-diagrams-mermaid)
+- **Protocol diagrams (Mermaid)** → [PRD.md § 15. Protocol Diagrams](./PRD.md#15-protocol-diagram-mermaid)
 
 #### Implementation Details
 - **Canonical specification** → [PRD.md § Appendix B](./PRD.md#appendix-b-canonical-ghost-canon-v1-specification-and-test-vectors-mandatory)
-- **Lock precise definition** → [PRD.md § Appendix C](./PRD.md#appendix-c-tofu-lock-sniping-fix-lock_secret--lock_key--lock_proof-precise-definition)
+- **Lock precise definition** → [PRD.md § Appendix C](./PRD.md#appendix-c-tofu-lock-sniping-fix-lock-secret--lock-key--lock-proof-precise-definition)
 - **Padding format** → [PRD.md § Appendix E](./PRD.md#appendix-e-padding-specification-precise-byte-format--notes)
 - **WebAuthn verification** → [PRD.md § Appendix H](./PRD.md#appendix-h-webauthn-verification-byte-level-steps-continuing-v24-with-supplementary-constraints-for-lockprofile)
 
@@ -94,7 +94,7 @@ docs/
 2. [TECH_STACK.md](./TECH_STACK.md) - Full tech stack specification
 3. [ARCHITECTURE.md § Data Flow Diagrams](./ARCHITECTURE.md#data-flow-diagrams) - Frontend responsibilities
 4. [PRD.md § 7](./PRD.md#7-cryptography-and-data-formats-v25) - Cryptography implementation
-5. [PRD.md § Appendix C](./PRD.md#appendix-c-tofu-lock-sniping-fix-lock_secret--lock_key--lock_proof-precise-definition) - Lock Secret implementation
+5. [PRD.md § Appendix C](./PRD.md#appendix-c-tofu-lock-sniping-fix-lock-secret--lock-key--lock-proof-precise-definition) - Lock Secret implementation
 6. [PRD.md § Appendix E](./PRD.md#appendix-e-padding-specification-precise-byte-format--notes) - Padding implementation
 
 ### Backend Developer

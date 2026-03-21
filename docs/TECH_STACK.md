@@ -1,7 +1,5 @@
 > **Language**: English | [中文](./TECH_STACK.zh.md)
 
-<!-- synced-with: a086716 -->
-
 # ZeroLink Tech Stack Specification
 
 > **Version**: v1.1

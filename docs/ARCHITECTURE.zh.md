@@ -1,4 +1,4 @@
-<!-- synced-with: a086716 -->
+<!-- synced-with: 5d1d478 -->
 
 > **语言**: [English](./ARCHITECTURE.md) | 中文
 
