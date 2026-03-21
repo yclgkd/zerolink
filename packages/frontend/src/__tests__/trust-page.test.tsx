@@ -21,7 +21,7 @@ describe('TrustPage', () => {
     expect(screen.getByText('What the server never gets')).toBeTruthy();
     expect(screen.getByText('What the server stores at each stage')).toBeTruthy();
     expect(screen.getByText('What the sender can control')).toBeTruthy();
-    expect(screen.getByText('What stays on the sender device')).toBeTruthy();
+    expect(screen.getByText('What the manage link carries')).toBeTruthy();
     expect(screen.getByText('What stays on the receiver device')).toBeTruthy();
     expect(screen.getByText('Delete, expiry, local burn, and Verified Release')).toBeTruthy();
 

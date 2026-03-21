@@ -77,7 +77,7 @@ v3.0 的产品目标：
 
 ### 1. Quick Share（快速分享）
 
-- **管理权**：本地生成 ECDSA P-256 keypair，由用户密码 Argon2id 包裹存 IndexedDB
+- **管理权**：本地生成 ECDSA P-256 keypair，由用户密码 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **WebAuthn**：不需要
 - **接收方**：Argon2id 强制
 - **Padding**：4KB 块
@@ -155,7 +155,7 @@ v3.0 的产品目标：
 **v2.5 的硬修复：Lock Secret + Lock Challenge**
 
 - 攻击者/爬虫即使先访问 /s/:uuid，也无法 lock，因为它没有 fragment 中的 lock_secret
-- lock 时 DO 下发一次性 challenge，接收方需提供 lock_proof = SHA256("GL-lock"||uuid||lock_challenge_id||lock_challenge||lock_secret)
+- lock 时 DO 下发一次性 challenge，接收方需提供 lock_proof = SHA256("GL-lock"||uuid||lock_challenge_id||lock_challenge||lock_key)
 - DO 验证 lock_proof 后才接受 receiver_pub
 
 同时 UX 层仍建议：
@@ -166,20 +166,18 @@ v3.0 的产品目标：
 
 **v2.5 默认 padding**：明文在加密前被填充到固定块倍数，降低长度推断精度。
 
-### 6.3 Passkey 同步边界转移
+### 6.3 Passkey 同步边界（v3.0 简化）
 
-- 默认 Standard 允许同步
-- Strict/Hardware-Only 通过 policy 收紧，并尽可能检测 backupState/backupEligibility（若浏览器提供）：
-    - Hardware-Only：检测到可备份则拒绝或强警告
-    - Strict：检测到可备份则强提示并建议切换到硬件钥匙
+- **Quick Share**：不使用 WebAuthn，无 passkey 同步问题
+- **Secure Share**：使用 WebAuthn（UV=required, RK=discouraged），允许平台同步 passkey；如浏览器提供 backupState/backupEligibility，可检测并提示，但不强制拒绝
 
 ### 6.4 恶意服务器下发 JS
 
 v2.5 给出三层应对：
 
 1. **可验证发布链（Signed Manifest + 可复现构建）**：提升"被篡改可被发现"的概率
-2. **离线包/本地打开**：用户可选择从发布页下载离线静态包（减少在线下发风险）
-3. **自托管**：提供 Docker Compose 协议等价实现，彻底把信任根交给用户
+2. **离线包/本地打开**（计划中，尚未实现）：用户可选择从发布页下载离线静态包（减少在线下发风险）
+3. **自托管**（计划中，尚未实现）：提供 Docker Compose 协议等价实现，彻底把信任根交给用户
 
 ---
 
@@ -435,12 +433,12 @@ DO 校验：
 
 > 注意：这无法阻止攻击者直接篡改 index.html 关闭校验，但能让"离线下载包 + 校验工具"变得可行。
 
-### 12.2 离线包（Paranoid Mode）
+### 12.2 离线包（Paranoid Mode）（计划中，尚未实现）
 
 - 提供单独下载的 offline.zip（静态文件）
 - 用户可本地打开或本域自托管（甚至 file://，但 WebAuthn 与某些 API 可能受限，建议本域托管）
 
-### 12.3 自托管（Self-Hosting）
+### 12.3 自托管（Self-Hosting）（计划中，尚未实现）
 
 - 提供 Docker Compose：
     - 前端静态文件

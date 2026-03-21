@@ -135,9 +135,9 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 - 无法静默导出 Secure Share 管理私钥进行离线攻击
 
 **Quick Share 边界**：
-- Quick Share 使用本地 ECDSA 私钥，Argon2id 包裹后存 IndexedDB
+- Quick Share 本地生成 ECDSA 私钥，Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - 它是正式产品模式，不是降级兜底
-- 安全性依赖设备安全性与用户密码强度，不提供 WebAuthn 的不可导出保证
+- 任何拥有管理链接和频道密码的人可从任何设备管理频道，不提供 WebAuthn 的不可导出保证
 
 ---
 

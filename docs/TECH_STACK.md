@@ -518,23 +518,37 @@ ZeroLink/
 │   │
 │   ├── frontend/                  # React 应用
 │   │   ├── src/
-│   │   │   ├── features/
-│   │   │   │   ├── create/        # Sender Create
-│   │   │   │   ├── lock/          # Receiver Lock
-│   │   │   │   ├── deliver/       # Sender Deliver
-│   │   │   │   └── view/          # Receiver View
-│   │   │   ├── crypto/
-│   │   │   │   ├── webauthn.ts
-│   │   │   │   ├── hybrid-encrypt.ts
-│   │   │   │   ├── kdf.ts         # Argon2id
-│   │   │   │   └── storage.ts     # IndexedDB 包裹私钥
+│   │   │   ├── pages/             # 页面组件
+│   │   │   │   ├── CreatePage.tsx  # Sender Create
+│   │   │   │   ├── SharePage.tsx   # Receiver Lock/Decrypt
+│   │   │   │   ├── ManagePage.tsx  # Sender Manage/Deliver
+│   │   │   │   ├── TrustPage.tsx   # Trust Model
+│   │   │   │   ├── NotFoundPage.tsx
+│   │   │   │   └── manage/        # Manage 子模块
+│   │   │   ├── crypto/            # 加密编排层
+│   │   │   │   ├── orchestrator.ts          # 入口
+│   │   │   │   ├── orchestrator-create.ts   # 创建流程
+│   │   │   │   ├── orchestrator-lock.ts     # 上锁流程
+│   │   │   │   ├── orchestrator-deliver.ts  # 投递流程
+│   │   │   │   ├── orchestrator-decrypt.ts  # 解密流程
+│   │   │   │   ├── orchestrator-delete.ts   # 删除流程
+│   │   │   │   ├── webauthn.ts     # WebAuthn adapter
+│   │   │   │   ├── softkey.ts      # ECDSA softkey
+│   │   │   │   ├── storage.ts      # IndexedDB receiver key
+│   │   │   │   └── protocol-utils.ts
 │   │   │   ├── api/
-│   │   │   │   ├── client.ts
-│   │   │   │   └── hooks.ts       # React Query hooks
-│   │   │   ├── components/
-│   │   │   │   ├── SafetyCode.tsx
-│   │   │   │   └── WebAuthnPrompt.tsx
-│   │   │   ├── stores/            # Zustand（可选）
+│   │   │   │   └── client.ts
+│   │   │   ├── components/        # UI 组件
+│   │   │   │   ├── safety/        # Safety Code
+│   │   │   │   ├── lock/          # Passphrase input
+│   │   │   │   ├── layout/        # Page card, badges
+│   │   │   │   └── ui/            # shadcn/ui primitives
+│   │   │   ├── features/
+│   │   │   │   └── share/         # Share page logic
+│   │   │   ├── stores/            # Zustand stores
+│   │   │   ├── locales/           # i18n (en, zh)
+│   │   │   ├── release/           # Verified Release
+│   │   │   ├── sync/              # WebSocket channel sync
 │   │   │   ├── mocks/             # MSW handlers
 │   │   │   └── main.tsx
 │   │   ├── public/
@@ -548,14 +562,23 @@ ZeroLink/
 │   └── backend/                   # Cloudflare Workers
 │       ├── src/
 │       │   ├── index.ts           # Worker 入口
-│       │   ├── do/                # Durable Objects
-│       │   │   └── SecretDO.ts
-│       │   ├── handlers/          # API handlers
-│       │   │   ├── create.ts
-│       │   │   ├── lock.ts
-│       │   │   └── manage.ts
+│       │   ├── worker.ts          # Worker 路由
+│       │   ├── security-headers.ts
+│       │   ├── commitTokens.ts
+│       │   ├── do/                # Durable Objects（拆分 mixin）
+│       │   │   ├── SecretVault.ts           # DO 主类
+│       │   │   ├── SecretVaultCompound.ts   # 复合操作（deliver/update）
+│       │   │   ├── SecretVaultLock.ts       # Lock 逻辑
+│       │   │   ├── SecretVaultStateMachine.ts
+│       │   │   ├── SecretVaultStorage.ts    # 持久化
+│       │   │   ├── SecretVaultWebSocket.ts  # 实时推送
+│       │   │   ├── SecretVaultTypes.ts
+│       │   │   └── ...
 │       │   ├── crypto/
-│       │   │   └── webauthn-verify.ts
+│       │   │   ├── webauthn.ts
+│       │   │   ├── softkey.ts
+│       │   │   ├── attestation.ts
+│       │   │   └── bytes.ts
 │       │   └── __tests__/
 │       ├── package.json
 │       ├── wrangler.toml
@@ -610,9 +633,7 @@ backend   ──depends on───────┘
 ```json
 {
   "dependencies": {
-    "argon2-browser": "^1.18.0"
-    // 或
-    "@noble/hashes": "^1.5.0"  // 包含 argon2
+    "@noble/hashes": "^2.0.1"  // 包含 argon2
   }
 }
 ```
@@ -671,6 +692,44 @@ export async function wrapPrivateKey(
   }
 }
 ```
+
+#### Ed25519（Manifest 签名验证）
+
+```json
+{
+  "dependencies": {
+    "@noble/ed25519": "^3.0.0"
+  }
+}
+```
+
+**用途**：浏览器端验证签名 Manifest 的 Ed25519 签名（`packages/frontend/src/release/`）。
+
+#### 国际化（i18n）
+
+```json
+{
+  "dependencies": {
+    "i18next": "^25.8.18",
+    "react-i18next": "^16.5.8",
+    "i18next-browser-languagedetector": "^8.2.1"
+  }
+}
+```
+
+**用途**：中英文双语支持，翻译文件在 `packages/frontend/src/locales/`。
+
+#### 字体
+
+```json
+{
+  "dependencies": {
+    "@fontsource-variable/sora": "^5.2.8"
+  }
+}
+```
+
+**用途**：Sora 可变字体，零第三方 CDN 加载（字体随构建产物一起分发）。
 
 ### 安全相关配置
 
@@ -979,17 +1038,19 @@ jobs:
 
 ## 部署与发布
 
-### 前端部署（Cloudflare Pages）
+### 前端部署（Workers Assets 统一部署）
+
+前端构建产物通过 `wrangler.toml` 的 `[assets]` 绑定随 Worker 一起部署，不使用 Cloudflare Pages。
 
 ```bash
-# 构建
+# 构建前端
 pnpm --filter @zerolink/frontend build
 
 # 输出目录：packages/frontend/dist
 
-# Cloudflare Pages 配置
-Build command: pnpm --filter @zerolink/frontend build
-Build output directory: packages/frontend/dist
+# 统一部署（Worker + 前端静态资源）
+cd packages/backend
+npx wrangler deploy
 ```
 
 ### 后端部署（Cloudflare Workers）
@@ -1079,7 +1140,7 @@ packages/backend/
 ```json
 {
   "dependencies": {
-    "react": "^18.3.1",           // 应用依赖：允许小版本升级
+    "react": "^19.2.4",           // 应用依赖：允许小版本升级
     "argon2-browser": "1.18.0",   // 密码学：固定版本
     "@zerolink/shared": "workspace:*"  // Monorepo 内部：workspace 协议
   }
