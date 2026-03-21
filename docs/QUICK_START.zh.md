@@ -1,3 +1,7 @@
+<!-- synced-with: a086716 -->
+
+> **语言**: [English](./QUICK_START.md) | 中文
+
 # 快速启动
 
 ## 前置要求
@@ -36,4 +40,4 @@ pnpm build         # 构建所有包
 
 ## 部署
 
-见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+见 [DEPLOYMENT.md](./DEPLOYMENT.zh.md)。

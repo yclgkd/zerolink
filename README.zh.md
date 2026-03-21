@@ -1,3 +1,7 @@
+<!-- synced-with: a086716 -->
+
+> **语言**: [English](./README.md) | 中文
+
 # ZeroLink
 
 > 零知识秘密分享工具：无账号、端到端加密、发送方管理但不可解密
@@ -32,17 +36,17 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 ## 文档
 
 ### 快速开始
-- [快速启动指南](./docs/QUICK_START.md) - 从零到运行开发环境
-- [部署指南](./docs/DEPLOYMENT.md) - 部署到 Cloudflare（含一键部署）
-- [技术栈规范](./docs/TECH_STACK.md) - 完整技术栈与工具链
+- [快速启动指南](./docs/QUICK_START.zh.md) - 从零到运行开发环境
+- [部署指南](./docs/DEPLOYMENT.zh.md) - 部署到 Cloudflare（含一键部署）
+- [技术栈规范](./docs/TECH_STACK.zh.md) - 完整技术栈与工具链
 
 ### 设计文档
-- [完整 PRD v3.0](./docs/PRD.md) - 产品需求文档
-- [架构概览](./docs/ARCHITECTURE.md) - 技术架构与核心协议
-- [安全模型](./docs/SECURITY.md) - 威胁模型与安全保证
+- [完整 PRD v3.0](./docs/PRD.zh.md) - 产品需求文档
+- [架构概览](./docs/ARCHITECTURE.zh.md) - 技术架构与核心协议
+- [安全模型](./docs/SECURITY.zh.md) - 威胁模型与安全保证
 
 ### 导航
-- [文档索引](./docs/INDEX.md) - AI 助手和开发者的快速导航
+- [文档索引](./docs/INDEX.zh.md) - AI 助手和开发者的快速导航
 
 ## 技术栈
 
@@ -106,7 +110,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
 - Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
 
-完整部署文档见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+完整部署文档见 [部署指南](./docs/DEPLOYMENT.zh.md)
 
 ---
 

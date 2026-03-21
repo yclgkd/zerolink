@@ -1,3 +1,7 @@
+<!-- synced-with: a086716 -->
+
+> **语言**: [English](./VERIFY.md) | 中文
+
 # Verified Release & Build Integrity Verification
 
 ZeroLink publishes a **signed build manifest** with every release, and official signed frontend

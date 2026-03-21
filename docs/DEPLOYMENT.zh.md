@@ -1,3 +1,7 @@
+<!-- synced-with: a086716 -->
+
+> **语言**: [English](./DEPLOYMENT.md) | 中文
+
 # ZeroLink 部署指南 / Deployment Guide
 
 > 本文档涵盖将 ZeroLink 部署到 Cloudflare 的完整步骤。
@@ -428,10 +432,10 @@ pnpm build
 
 ## 相关文档 / Related Docs
 
-- [快速启动指南](./QUICK_START.md) - 本地开发环境配置
-- [技术栈规范](./TECH_STACK.md) - 完整技术栈说明
-- [架构概览](./ARCHITECTURE.md) - 系统设计
-- [安全模型](./SECURITY.md) - 威胁模型与安全保证
+- [快速启动指南](./QUICK_START.zh.md) - 本地开发环境配置
+- [技术栈规范](./TECH_STACK.zh.md) - 完整技术栈说明
+- [架构概览](./ARCHITECTURE.zh.md) - 系统设计
+- [安全模型](./SECURITY.zh.md) - 威胁模型与安全保证
 
 ---
 

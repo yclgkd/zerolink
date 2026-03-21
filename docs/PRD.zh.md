@@ -1,3 +1,7 @@
+<!-- synced-with: a086716 -->
+
+> **语言**: [English](./PRD.md) | 中文
+
 # ZeroLink 产品需求文档 (PRD) v3.0
 
 **Security-First / Low-Friction / DO-Atomic / WebAuthn Admin / TOFU-Safe / Padded Ciphertext**

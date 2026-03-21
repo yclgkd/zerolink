@@ -1,3 +1,7 @@
+<!-- synced-with: a086716 -->
+
+> **语言**: [English](./TECH_STACK.md) | 中文
+
 # ZeroLink 技术栈规范
 
 > **版本**: v1.1
@@ -1279,10 +1283,10 @@ packages/backend/
 
 ## 相关文档
 
-- [PRD v3.0](./PRD.md) - 产品需求
-- [架构设计](./ARCHITECTURE.md) - 系统架构
-- [安全模型](./SECURITY.md) - 威胁模型
-- [文档索引](./INDEX.md) - 快速导航
+- [PRD v3.0](./PRD.zh.md) - 产品需求
+- [架构设计](./ARCHITECTURE.zh.md) - 系统架构
+- [安全模型](./SECURITY.zh.md) - 威胁模型
+- [文档索引](./INDEX.zh.md) - 快速导航
 
 ---
 
