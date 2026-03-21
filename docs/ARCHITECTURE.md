@@ -1,210 +1,220 @@
-# ZeroLink 架构概览
+> **Language**: English | [中文](./ARCHITECTURE.zh.md)
 
-## 核心架构原则
+# ZeroLink Architecture Overview
 
-### 1. 零知识架构
-- **服务器不存明文**：所有内容在客户端加密，服务器只存储密文
-- **服务器不存私钥**：接收方私钥在客户端生成并本地存储（Argon2id 包裹）
-- **双路径管理权**：Secure Share 使用 WebAuthn（私钥驻留系统/硬件）；Quick Share 使用密码包裹的本地 ECDSA 密钥
+## Core Architecture Principles
 
-### 2. 三方角色模型
+### 1. Zero-Knowledge Architecture
+- **Server never stores plaintext**: All content is encrypted client-side; the server only stores ciphertext
+- **Server never stores private keys**: Receiver private keys are generated client-side and stored locally (wrapped with Argon2id)
+- **Dual-path admin authority**: Secure Share uses WebAuthn (private key resides in system/hardware); Quick Share uses a password-wrapped local ECDSA key
+
+### 2. Three-Party Role Model
 
 ```
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
 │   Sender     │         │   Server     │         │  Receiver    │
-│  (管理者)     │         │  (零知识)     │         │  (唯一解密)   │
+│  (Admin)     │         │(Zero-knowledge)│       │(Sole decryptor)│
 ├──────────────┤         ├──────────────┤         ├──────────────┤
 │ WebAuthn Key │────────▶│  Ciphertext  │◀────────│  RSA-OAEP    │
-│ (不可导出)    │  管理    │  (无明文)     │  解密    │  私钥本地     │
-│              │         │              │         │  (Argon2id)  │
-│ 可更新/销毁   │         │  DO 原子性    │         │  单向密码派生  │
-│ 但不能解密    │         │  防并发覆盖   │         │              │
+│(non-exportable)│ Manage │ (no plaintext)│ Decrypt │ Private key  │
+│              │         │              │         │   (local)    │
+│ Can update/  │         │  DO atomicity│         │  (Argon2id)  │
+│ delete but   │         │  Prevents    │         │ One-way pwd  │
+│ cannot decrypt│        │  concurrent  │         │  derivation  │
+│              │         │  overwrites  │         │              │
 └──────────────┘         └──────────────┘         └──────────────┘
 ```
 
-### 3. 技术栈
+### 3. Technology Stack
 
-#### 前端
-- **运行时**：浏览器 Web Crypto API
-- **认证**：WebAuthn（FIDO2）
-- **加密**：
-  - 内容：AES-256-GCM（对称加密）
-  - 密钥封装：RSA-OAEP-256（混合加密）
-  - KDF：Argon2id（接收方私钥包裹）
-- **存储**：IndexedDB（加密私钥）
+#### Frontend
+- **Runtime**: Browser Web Crypto API
+- **Authentication**: WebAuthn (FIDO2)
+- **Encryption**:
+  - Content: AES-256-GCM (symmetric encryption)
+  - Key wrapping: RSA-OAEP-256 (hybrid encryption)
+  - KDF: Argon2id (receiver private key wrapping)
+- **Storage**: IndexedDB (encrypted private keys)
 
-#### 后端
-- **平台**：Cloudflare Workers + Durable Objects + KV
-- **状态管理**：Durable Objects（串行化、原子性）
-- **持久化**：KV（密文、公钥、元数据）
-- **自托管选项**：Docker Compose（PostgreSQL/SQLite + Redis）（计划中，尚未实现）
+#### Backend
+- **Platform**: Cloudflare Workers + Durable Objects + KV
+- **State management**: Durable Objects (serialization, atomicity)
+- **Persistence**: KV (ciphertext, public keys, metadata)
+- **Self-hosting option**: Docker Compose (PostgreSQL/SQLite + Redis) (Planned, not yet implemented)
 
-## 核心协议流程
+## Core Protocol Flows
 
-### 1. Create（创建）
+### 1. Create
 ```
-Sender → 选择 Quick Share 或 Secure Share → 生成 lock_secret
-     → Quick Share：本地生成 ECDSA 管理密钥并用 Argon2id 包裹
-     → Secure Share：WebAuthn 注册管理凭据
-     → 返回两条链接：
-       - /s/:uuid#k=<lock_secret>  （分享链接，含 fragment）
-       - /m/:uuid                   （管理链接）
-```
-
-### 2. Lock（接收方上锁）
-```
-Receiver → 访问分享链接（获得 fragment 中的 lock_secret）
-        → 输入密码 → 生成 RSA keypair
-        → 私钥用 Argon2id(密码) 包裹存本地
-        → lock_begin 获取 challenge
-        → lock_commit 提交 receiver_pub + lock_proof
-        → Server 验证 lock_proof（基于 lock_key）
+Sender → Choose Quick Share or Secure Share → Generate lock_secret
+     → Quick Share: Generate local ECDSA admin key and wrap with Argon2id
+     → Secure Share: Register WebAuthn admin credential
+     → Return two links:
+       - /s/:uuid#k=<lock_secret>  (share link, with fragment)
+       - /m/:uuid                   (manage link)
 ```
 
-**TOFU 抢占锁定防护**：
-- lock_secret 只在 URL fragment（不会被 HTTP 请求携带）
-- 预加载爬虫无法获得 lock_secret → 无法计算 lock_proof → 无法 lock
-
-### 3. Deliver（投递内容）
+### 2. Lock (Receiver Locks)
 ```
-Sender → 获取 receiver_pub（已上锁）
-      → 本地混合加密：
-        - 随机 AES-256 key
-        - AES-GCM 加密 padded_plaintext
-        - RSA-OAEP 封装 AES key
-      → compound_begin 获取 challenge
-      → Secure Share: WebAuthn 签名确认
-      → Quick Share: 本地 ECDSA 签名确认
-      → compound_commit 写入密文（原子性）
+Receiver → Visit share link (obtain lock_secret from fragment)
+        → Enter password → Generate RSA keypair
+        → Wrap private key with Argon2id(password) and store locally
+        → lock_begin to obtain challenge
+        → lock_commit to submit receiver_pub + lock_proof
+        → Server verifies lock_proof (based on lock_key)
 ```
 
-### 4. Update/Delete（管理）
+**TOFU Preemptive Lock Protection**:
+- lock_secret is only in the URL fragment (never sent with HTTP requests)
+- Preload crawlers cannot obtain lock_secret → cannot compute lock_proof → cannot lock
+
+### 3. Deliver (Deliver Content)
 ```
-Sender → Secure Share: WebAuthn 签名授权
-      → Quick Share: 本地 ECDSA 签名授权
-      → DO 验证：version 单调 + nonce 去重
-      → 原子性更新/删除
+Sender → Fetch receiver_pub (already locked)
+      → Client-side hybrid encryption:
+        - Random AES-256 key
+        - AES-GCM encrypt padded_plaintext
+        - RSA-OAEP wrap AES key
+      → compound_begin to obtain challenge
+      → Secure Share: WebAuthn signature confirmation
+      → Quick Share: Local ECDSA signature confirmation
+      → compound_commit to write ciphertext (atomic)
 ```
 
-## 安全机制
+### 4. Update/Delete (Management)
+```
+Sender → Secure Share: WebAuthn signature authorization
+      → Quick Share: Local ECDSA signature authorization
+      → DO verification: monotonic version + nonce deduplication
+      → Atomic update/delete
+```
 
-### 1. TOFU 抢占锁定防护（v2.5 核心）
+## Security Mechanisms
 
-**问题**：预加载机器人可能先于真实接收方访问链接并上锁
+### 1. TOFU Preemptive Lock Protection (v2.5 Core)
 
-**解决方案**：
-- `lock_secret`（32 bytes 随机）只放在 URL fragment
-- Fragment 不会被 HTTP 请求携带（RFC 3986）
-- Server 存储 `lock_key = SHA256("GL-lockkey" || uuid || lock_secret)`
-- Lock 时需要 `lock_proof = SHA256("GL-lock" || uuid || challenge_id || challenge || lock_key)`
-- 没有 lock_secret → 无法计算 lock_key → 无法生成有效 lock_proof
+**Problem**: Preload bots may visit the link and lock it before the real receiver
 
-### 2. 密文长度泄露缓解（Padding）
+**Solution**:
+- `lock_secret` (32 bytes random) is placed only in the URL fragment
+- Fragments are never sent with HTTP requests (RFC 3986)
+- Server stores `lock_key = SHA256("GL-lockkey" || uuid || lock_secret)`
+- Locking requires `lock_proof = SHA256("GL-lock" || uuid || challenge_id || challenge || lock_key)`
+- Without lock_secret → cannot compute lock_key → cannot generate valid lock_proof
 
-**问题**：密文长度可能泄露明文长度信息
+### 2. Ciphertext Length Leakage Mitigation (Padding)
 
-**解决方案**：
+**Problem**: Ciphertext length may leak information about plaintext length
+
+**Solution**:
 ```
 padded_plaintext = [orig_len(4 bytes)] + [orig_data] + [random_padding]
-总长度 = ceil((4 + orig_len) / PAD_BLOCK) * PAD_BLOCK
-默认 PAD_BLOCK = 4096 bytes
+Total length = ceil((4 + orig_len) / PAD_BLOCK) * PAD_BLOCK
+Default PAD_BLOCK = 4096 bytes
 ```
 
-### 3. 并发安全（Durable Objects）
+### 3. Concurrency Safety (Durable Objects)
 
-**问题**：多个并发请求可能导致状态不一致
+**Problem**: Multiple concurrent requests may cause state inconsistency
 
-**解决方案**：
-- 所有写操作走 DO（串行化）
-- version 单调递增
-- nonce 去重（TTL 10min）
-- challenge 一次性消费
+**Solution**:
+- All write operations go through DO (serialized)
+- Monotonically increasing version
+- Nonce deduplication (TTL 10min)
+- Single-use challenge consumption
 
-### 4. Intent Binding（意图绑定）
+### 4. Intent Binding
 
-**问题**：WebAuthn 签名可能被诱导签署意外操作
+**Problem**: WebAuthn signatures could be tricked into signing unintended operations
 
-**解决方案**：
+**Solution**:
 ```
-intent_hash = SHA256(canonical_payload)  // payload 包含完整操作细节
+intent_hash = SHA256(canonical_payload)  // payload contains full operation details
 expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
-WebAuthn challenge 必须 === expected_challenge
+WebAuthn challenge must === expected_challenge
 ```
 
-## 产品模式（Current Profiles）
+## Product Modes (Current Profiles)
 
-### Quick Share（密码）
-- 本地生成 ECDSA P-256 管理密钥
-- Admin-Priv 用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
-- 任何拥有管理链接和频道密码的人可从任何设备管理频道
-- 默认 4KB padding
+### Quick Share (Password)
+- Locally generated ECDSA P-256 admin key
+- Admin-Priv is wrapped with Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB)
+- Anyone with the manage link and channel password can manage the channel from any device
+- Default 4KB padding
 
-### Secure Share（Passkey）
-- 使用 WebAuthn passkey 管理权
+### Secure Share (Passkey)
+- Uses WebAuthn passkey for admin authority
 - userVerification = "required"
 - residentKey = "discouraged"
-- 默认 8KB padding
+- Default 8KB padding
 
-### Legacy（只读兼容）
-- `standard` / `strict` / `hardware_only` 仅用于已有频道渲染和操作
-- 新建频道不再提供这些档位
+### Legacy (Read-Only Compatibility)
+- `standard` / `strict` / `hardware_only` are used only for rendering and operating existing channels
+- These profiles are no longer offered for new channel creation
 
-## 数据流图
+## Data Flow Diagrams
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Sender 视角                               │
+│                    Sender Perspective                        │
 ├─────────────────────────────────────────────────────────────┤
-│  1. 选择 Quick Share 或 Secure Share                        │
-│     - Quick: 本地 ECDSA 管理密钥 + Argon2id 包裹            │
-│     - Secure: WebAuthn 管理私钥（系统/硬件，不可导出）      │
-│  2. 获取 lock_secret（仅用于分享链接 fragment）             │
-│  3. 等待 Receiver 上锁                                       │
-│  4. 获得 receiver_pub 后：                                   │
-│     - 混合加密内容（AES-GCM + RSA-OAEP）                    │
-│     - Padding 到 4KB / 8KB 块                               │
-│     - Quick: 本地 ECDSA 签名 / Secure: WebAuthn 签名        │
-│     - 投递密文到 Server                                      │
-│  5. 可随时更新/删除（按所选模式授权）                        │
+│  1. Choose Quick Share or Secure Share                      │
+│     - Quick: Local ECDSA admin key + Argon2id wrapping      │
+│     - Secure: WebAuthn admin key (system/hardware,          │
+│       non-exportable)                                       │
+│  2. Obtain lock_secret (only for share link fragment)       │
+│  3. Wait for Receiver to lock                               │
+│  4. After obtaining receiver_pub:                           │
+│     - Hybrid encrypt content (AES-GCM + RSA-OAEP)          │
+│     - Pad to 4KB / 8KB blocks                              │
+│     - Quick: Local ECDSA signature / Secure: WebAuthn       │
+│       signature                                             │
+│     - Deliver ciphertext to Server                          │
+│  5. Can update/delete at any time (authorized per chosen    │
+│     mode)                                                   │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                   Receiver 视角                              │
+│                   Receiver Perspective                       │
 ├─────────────────────────────────────────────────────────────┤
-│  1. 从分享链接 fragment 获得 lock_secret                     │
-│  2. 输入密码 → 生成 RSA keypair                             │
-│  3. 私钥用 Argon2id(密码) 包裹存本地                        │
-│  4. 计算 lock_proof 上锁                                     │
-│  5. 展示 Safety Code（Emoji/Color）供核对                  │
-│  6. Sender 投递后：                                          │
-│     - 输入密码 → 解包私钥                                    │
-│     - RSA-OAEP 解封 AES key                                  │
-│     - AES-GCM 解密并去除 padding                             │
-│     - 展示明文                                               │
+│  1. Obtain lock_secret from share link fragment             │
+│  2. Enter password → Generate RSA keypair                   │
+│  3. Wrap private key with Argon2id(password) and store      │
+│     locally                                                 │
+│  4. Compute lock_proof to lock                              │
+│  5. Display Safety Code (Emoji/Color) for verification      │
+│  6. After Sender delivers:                                  │
+│     - Enter password → Unwrap private key                   │
+│     - RSA-OAEP unwrap AES key                               │
+│     - AES-GCM decrypt and remove padding                    │
+│     - Display plaintext                                     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                    Server 视角                               │
+│                    Server Perspective                        │
 ├─────────────────────────────────────────────────────────────┤
-│  - 存储：                                                    │
-│    * admin_webauthn 或 admin_pub（发送方管理凭据）          │
-│    * lock_key（用于验证 lock_proof，不可逆回 lock_secret）  │
-│    * receiver_pub（接收方公钥，仅上锁后存在）               │
-│    * cipher_bundle（密文 + 元数据）                         │
-│    * version, nonce, challenge（防重放/并发）               │
-│  - 能力：                                                    │
-│    * 验证 WebAuthn 签名                                      │
-│    * 验证 lock_proof                                         │
-│    * 原子性更新（DO）                                        │
-│    * 时间窗口检查（±120s）                                   │
-│  - 不能：                                                    │
-│    * 解密内容（无 receiver_priv）                            │
-│    * 伪造发送方操作（无 admin_priv）                         │
-│    * 知道 lock_secret（只存 lock_key）                       │
+│  - Stores:                                                  │
+│    * admin_webauthn or admin_pub (sender admin credential)  │
+│    * lock_key (used to verify lock_proof; cannot reverse    │
+│      to lock_secret)                                        │
+│    * receiver_pub (receiver public key; exists only after   │
+│      locking)                                               │
+│    * cipher_bundle (ciphertext + metadata)                  │
+│    * version, nonce, challenge (anti-replay/concurrency)    │
+│  - Can:                                                     │
+│    * Verify WebAuthn signatures                             │
+│    * Verify lock_proof                                      │
+│    * Atomic updates (DO)                                    │
+│    * Time window checks (±120s)                             │
+│  - Cannot:                                                  │
+│    * Decrypt content (no receiver_priv)                     │
+│    * Forge sender operations (no admin_priv)                │
+│    * Know lock_secret (only stores lock_key)                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 状态机
+## State Machine
 
 ```
 ┌─────────┐  lock_commit   ┌────────┐  compound_commit  ┌───────────┐
@@ -220,63 +230,63 @@ WebAuthn challenge 必须 === expected_challenge
           └─────────┘                    └─────────┘
 ```
 
-**状态转移规则**：
-- Waiting → Locked：lock_commit（需 lock_proof）
-- Locked → Delivered：compound_commit（首次投递）
-- Delivered → Delivered：compound_commit（更新）
-- 任意 → Deleted：delete_commit（WebAuthn 授权）
-- 任意 → Expired：TTL 到期
+**State Transition Rules**:
+- Waiting → Locked: lock_commit (requires lock_proof)
+- Locked → Delivered: compound_commit (first delivery)
+- Delivered → Delivered: compound_commit (update)
+- Any → Deleted: delete_commit (WebAuthn authorization)
+- Any → Expired: TTL expiration
 
-**不可变性**：
-- Deleted/Expired 后不可恢复
-- version 只能递增
-- nonce 不可重用
+**Immutability**:
+- Cannot recover after Deleted/Expired
+- Version can only increment
+- Nonce cannot be reused
 
-## 关键常量
+## Key Constants
 
 ```typescript
-// 标识符
+// Identifiers
 UUID_LENGTH = 21  // nanoid
 
-// 时间窗口
+// Time Windows
 TIMESTAMP_SKEW_MS = 120000  // ±2min
 CHALLENGE_TTL_MS = 60000    // 60s
 NONCE_TTL_MS = 600000       // 10min
 
-// 密码学
-LOCK_SECRET_BYTES = 32      // lock_secret 长度
-LOCK_KEY_BYTES = 32         // lock_key 长度 (SHA256 输出)
-CHALLENGE_BYTES = 32        // challenge 长度
-NONCE_BYTES = 24            // nonce 长度
+// Cryptography
+LOCK_SECRET_BYTES = 32      // lock_secret length
+LOCK_KEY_BYTES = 32         // lock_key length (SHA256 output)
+CHALLENGE_BYTES = 32        // challenge length
+NONCE_BYTES = 24            // nonce length
 
 // Padding
-PAD_BLOCK_DEFAULT = 4096    // 默认 4KB 块
-PAD_BLOCK_MAX = 65536       // 最大 64KB 块
-MAX_PLAINTEXT_BYTES = 2MB   // 建议上限
+PAD_BLOCK_DEFAULT = 4096    // Default 4KB block
+PAD_BLOCK_MAX = 65536       // Maximum 64KB block
+MAX_PLAINTEXT_BYTES = 2MB   // Recommended upper limit
 
 // WebAuthn
 WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 ```
 
-## 可验证发布链（当前方案）
+## Verifiable Release Chain (Current Approach)
 
 ### Signed Manifest
-- 每次发布生成 manifest.json（文件 hash + 版本 + commit）
-- Ed25519 离线签名 → manifest.sig
-- 用户可验证前端完整性
+- Each release generates manifest.json (file hashes + version + commit)
+- Ed25519 offline signing → manifest.sig
+- Users can verify frontend integrity
 
-### 离线包（计划中，尚未实现）
-- 提供 offline.zip（静态文件）
-- 可本地打开或自托管
+### Offline Package (Planned, not yet implemented)
+- Provide offline.zip (static files)
+- Can be opened locally or self-hosted
 
-### 自托管（计划中，尚未实现）
-- Docker Compose 一键部署
-- 协议等价实现（非 Cloudflare Workers）
-- 完全自主控制
+### Self-Hosting (Planned, not yet implemented)
+- One-click deployment with Docker Compose
+- Protocol-equivalent implementation (non-Cloudflare Workers)
+- Full autonomous control
 
-## 参考资料
+## References
 
-- 完整 PRD：[PRD.md](./PRD.md)
-- 安全模型：[SECURITY.md](./SECURITY.md)
-- API 规范：见 PRD 第 10 节
-- 协议图：见 PRD 第 15 节
+- Full PRD: [PRD.md](./PRD.md)
+- Security model: [SECURITY.md](./SECURITY.md)
+- API specification: See PRD Section 10
+- Protocol diagrams: See PRD Section 15

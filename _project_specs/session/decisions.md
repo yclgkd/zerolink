@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-21] Bilingual documentation: English primary, Chinese .zh.md suffix
+
+**Decision**: Adopt suffix-based bilingual documentation with English as the authoritative version and Chinese as a tracked translation.
+**Context**: All existing docs were written in Chinese. The project needs English docs for wider audience and international collaboration, while preserving the existing Chinese content.
+**Options Considered**: Separate `docs/en/` and `docs/zh/` directories; suffix-based (`*.md` = English, `*.zh.md` = Chinese); single-language English only.
+**Choice**: Suffix-based naming — `FILE.md` is English (primary), `FILE.zh.md` is Chinese. Each file has a language navigation header. Chinese files include `<!-- synced-with: <commit-hash> -->` to track sync status against the English version.
+**Reasoning**: Suffix-based keeps related files adjacent in the filesystem, avoids deep directory nesting, and makes `git diff <hash>..HEAD -- docs/X.md` easy for checking what changed since last sync. English as primary aligns with the project's international goals while preserving existing Chinese content.
+**Trade-offs**: Chinese versions may lag behind English; maintainers need to update sync hashes when translating. Cross-references within each language must point to the correct suffix variant.
+
 ## [2026-03-20] Optimize CI to reduce billable minutes: tiered pipeline
 
 **Decision**: Consolidate PR validation from 6 parallel jobs into 1 serial job, remove all test jobs from the deploy workflow, and move E2E suites to a dedicated nightly/manual workflow.

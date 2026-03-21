@@ -1,4 +1,6 @@
-> **Language**: English | [中文](./VERIFY.zh.md)
+<!-- synced-with: 940a85a -->
+
+> **语言**: [English](./VERIFY.md) | 中文
 
 # Verified Release & Build Integrity Verification
 

@@ -1,273 +1,275 @@
-# ZeroLink 产品需求文档 (PRD) v3.0
+> **Language**: English | [中文](./PRD.zh.md)
+
+# ZeroLink Product Requirements Document (PRD) v3.0
 
 **Security-First / Low-Friction / DO-Atomic / WebAuthn Admin / TOFU-Safe / Padded Ciphertext**
 
-> **v3.0 变更摘要（相对 v2.5）**：将三档安全模式（Standard / Strict / Hardware-Only）统一为两个用户入口：**Quick Share**（密码模式）和 **Secure Share**（Passkey 模式）。移除 Hardware-Only 的 attestation 强制执行（技术可行性差，保留 legacy 向后兼容读取）。Legacy 档位（standard / strict / hardware_only）仅用于已有频道的向后兼容展示，不再作为新建频道的选项。
+> **v3.0 Change Summary (relative to v2.5)**: Unified the three security tiers (Standard / Strict / Hardware-Only) into two user-facing entry points: **Quick Share** (password mode) and **Secure Share** (Passkey mode). Removed Hardware-Only attestation enforcement (poor technical feasibility; retained legacy backward-compatible reads). Legacy tiers (standard / strict / hardware_only) are used only for backward-compatible display of existing channels and are no longer offered as options for new channels.
 
 ---
 
-## 1. 产品概述
+## 1. Product Overview
 
-ZeroLink 是一款零知识秘密分享工具：无账号、服务器不持有明文与私钥。内容端到端加密，只有接收方本地私钥可解密。发送方拥有管理权，可更新/销毁密文，但无法解密内容。
+ZeroLink is a zero-knowledge secret sharing tool: no accounts, and the server never holds plaintext or private keys. Content is end-to-end encrypted, and only the receiver's local private key can decrypt it. The sender holds administrative authority and can update/destroy ciphertext but cannot decrypt the content.
 
-v3.0 的产品目标：
+v3.0 product goals:
 
-**在不牺牲"极简使用体验"的前提下，把真实世界的高概率攻击面（抢占锁定、passkey 同步、密文长度侧信道、恶意下发 JS）降到可接受甚至可审计的级别。**
-
----
-
-## 2. 安全目标与威胁模型
-
-### 2.1 安全目标（必须满足）
-
-1. **服务器零知识**：服务器/KV/DO 不存明文与任何私钥
-2. **端到端保密**：明文仅在接收方本地出现
-3. **更新/销毁不可伪造**：仅管理者可授权写入/销毁
-4. **抗重放/乱序/并发覆盖**：version 单调 + nonce 去重 + DO 串行
-5. **最小元数据泄露**：公共接口不可推断状态；receiver_pub 不向未授权者暴露
-6. **前端完整性可验证**：CSP/Signed Manifest/零第三方脚本/可复现构建
-7. **管理权私钥不可导出**：WebAuthn 私钥驻留系统/硬件
-8. **TOFU 抢占锁定风险可控**：预加载爬虫无法先于真实接收方 lock
-9. **密文长度泄露显著降低**：默认 padding 到固定块边界
-
-### 2.2 明确边界（必须写清）
-
-- 客户端被恶意扩展/木马控制：仍可能在用户确认窗口内滥用一次操作；无法静默导出管理私钥长期控制
-- Web 场景无法彻底解决"恶意服务器下发 JS"这一终极信任问题：v2.5 提供 **自托管/离线包/可验证发布链**作为可选"上限方案"
+**Without sacrificing the "minimal-friction user experience," reduce real-world high-probability attack surfaces (preload lock-sniping, passkey synchronization, ciphertext length side-channel, malicious JS delivery) to an acceptable and even auditable level.**
 
 ---
 
-## 3. 核心改动概览（相对 v2.4）
+## 2. Security Objectives and Threat Model
 
-### 3.1 新增：Lock Secret（URL Fragment）防抢占锁定
+### 2.1 Security Objectives (Mandatory)
 
-- create 时生成 lock_secret（16–32 bytes 随机），**只放在分享链接的 URL fragment**（例如 /s/UUID#k=...）
-- **fragment 不会被 HTTP 请求携带**，预加载机器人即使访问 /s/UUID 也拿不到 lock_secret，因此无法 lock
-- lock 需要 lock_secret 参与挑战响应（Lock Challenge）
+1. **Server Zero-Knowledge**: The server/KV/DO never stores plaintext or any private key
+2. **End-to-End Confidentiality**: Plaintext only appears locally on the receiver's device
+3. **Unforgeable Update/Destroy**: Only the admin can authorize writes/destruction
+4. **Replay/Reorder/Concurrent-Overwrite Resistance**: Monotonic version + nonce deduplication + DO serialization
+5. **Minimal Metadata Leakage**: Public endpoints cannot infer state; receiver_pub is not exposed to unauthorized parties
+6. **Frontend Integrity Verification**: CSP/Signed Manifest/zero third-party scripts/reproducible builds
+7. **Non-Exportable Admin Private Key**: WebAuthn private key resides in the system/hardware
+8. **Controllable TOFU Lock-Sniping Risk**: Preload crawlers cannot lock before the real receiver
+9. **Significantly Reduced Ciphertext Length Leakage**: Default padding to fixed block boundaries
 
-### 3.2 新增：Padding（块对齐）降低密文长度泄露
+### 2.2 Explicit Boundaries (Must Be Documented)
 
-- 明文加密前统一 padding 到 4KB/8KB（默认 4KB）倍数
-- padding 结构包含：原文长度 + 随机填充
-- cipher_bundle 仍为 AES-GCM 密文，但长度变成离散桶
-
-### 3.3 收紧：接收方 KDF 强制 Argon2id
-
-- 默认且必须：Argon2id（参数目标耗时 250–500ms）
-- PBKDF2 只允许在"兼容模式"下启用，并在 UI 明确标注"降低安全性"
-
-### 3.4 两档用户入口（v3.0 简化）
-
-创建时可选两档（Legacy 档位仅用于已有频道的向后兼容）：
-- **Quick Share**：密码模式，本地 Argon2id 派生 ECDSA 管理密钥，无需 passkey，4KB padding
-- **Secure Share**：Passkey 模式，UV=required / RK=discouraged，8KB padding，合并原 Standard+Strict 的安全级别
-- **Legacy（只读）**：standard / strict / hardware_only 仅渲染已有频道，不作为新建选项
-
-### 3.5 新增：Self-Hosting / Verifiable Releases
-
-- 官方 Cloudflare 版保持默认
-- 提供 Docker Compose 一键自托管（Worker/DO/KV 的自托管等价实现：HTTP 服务 + Postgres/SQLite + Redis/事务锁；或 Cloudflare 兼容运行时不现实则做协议等价实现）
-- 发布链：签名 Manifest + 可复现构建 + 可选离线静态包（用户可在本地打开/本域部署）
+- Client compromised by a malicious extension/trojan: may still abuse a single operation within the user confirmation window; cannot silently export the admin private key for long-term control
+- The Web scenario cannot fundamentally solve the ultimate trust problem of "malicious server delivering JS": v2.5 provides **self-hosting/offline packages/verifiable release chain** as optional "ceiling solutions"
 
 ---
 
-## 4. 产品模式与安全档位（对外清晰）
+## 3. Key Changes Overview (Relative to v2.4)
 
-创建时可选 `securityProfile`（v3.0 两档）：
+### 3.1 New: Lock Secret (URL Fragment) Anti-Lock-Sniping
 
-### 1. Quick Share（快速分享）
+- At creation, a lock_secret (16-32 random bytes) is generated and **placed only in the share link's URL fragment** (e.g., /s/UUID#k=...)
+- **The fragment is never sent with HTTP requests**, so preload bots that access /s/UUID cannot obtain the lock_secret and therefore cannot lock
+- Locking requires the lock_secret to participate in a challenge-response (Lock Challenge)
 
-- **管理权**：本地生成 ECDSA P-256 keypair，由用户密码 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
-- **WebAuthn**：不需要
-- **接收方**：Argon2id 强制
-- **Padding**：4KB 块
-- **adminMode**：`password`（内部协议字段）
-- **适合**：跨设备/跨浏览器、无 passkey 支持环境，或希望使用密码管理器的用户
+### 3.2 New: Padding (Block Alignment) to Reduce Ciphertext Length Leakage
 
-### 2. Secure Share（安全分享）
+- Plaintext is uniformly padded to multiples of 4KB/8KB (default 4KB) before encryption
+- Padding structure includes: original text length + random fill
+- cipher_bundle remains AES-GCM ciphertext, but lengths become discrete buckets
 
-- **管理权**：WebAuthn passkey（设备或平台），UV=required，RK=discouraged
-- **WebAuthn**：必须，不可降级
-- **接收方**：Argon2id 强制
-- **Padding**：8KB 块（更高隐私）
-- **adminMode**：`webauthn`（内部协议字段）
-- **适合**：最高安全需求，passkey 可用的环境
+### 3.3 Tightened: Receiver KDF Enforces Argon2id
 
-### Legacy 档位（只读，向后兼容）
+- Default and mandatory: Argon2id (parameter target latency 250-500ms)
+- PBKDF2 is only allowed in "compatibility mode" and is clearly labeled "reduced security" in the UI
 
-已有频道可能存储 `standard` / `strict` / `hardware_only` security_profile，系统继续正确渲染和操作。新建频道不提供这些选项。
+### 3.4 Two User-Facing Tiers (v3.0 Simplification)
 
-- **standard**：等价 Quick Share 安全级别（UV preferred）
-- **strict**：等价 Secure Share 安全级别（UV required），保留向后兼容
-- **hardware_only**：原 cross-platform 强制，已移除 attestation=direct 强制执行（技术原因），现行为与 strict 相同
+Two tiers available at creation (legacy tiers are only used for backward compatibility with existing channels):
+- **Quick Share**: Password mode, locally Argon2id-derived ECDSA admin key, no passkey required, 4KB padding
+- **Secure Share**: Passkey mode, UV=required / RK=discouraged, 8KB padding, merges the security levels of the original Standard+Strict
+- **Legacy (read-only)**: standard / strict / hardware_only only render existing channels; not offered as new creation options
 
----
+### 3.5 New: Self-Hosting / Verifiable Releases
 
-## 5. 用户流程（v2.5 UX 版）
-
-### 5.1 创建（Sender）
-
-1. 选择模式：**Quick Share**（密码）或 **Secure Share**（Passkey）
-2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（adminMode=password）
-3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required，RK=discouraged）→ Create Finish
-4. 页面显示两条链接：
-   - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
-   - 管理链接（发送方）：/m/:uuid
-
-> **UI 强制提示**：分享链接必须完整复制（包括 # 后部分），否则接收方无法上锁
-
-### 5.2 接收方上锁（Receiver：防呆）
-
-- 打开分享链接后，页面展示极简动画（3 帧）：
-    1. "你输入的密码只在你这里"
-    2. "它会生成你的解密钥匙（发送方也不知道）"
-    3. "上锁后，只有你能打开内容"
-- 输入密码 → 生成 RSA keypair → Argon2id 包裹私钥存本地
-- lock 请求必须携带 lock challenge 响应（见协议）
-- 上锁成功后显示 **安全码（Safety Code）**：
-    - Emoji 序列（例如 6–10 个 emoji）
-    - 颜色块（例如 4×4/5×5 色块）
-    - Identicon 仍保留但作为背景元素
-    - "高级"里可展开 raw hex 指纹
-
-### 5.3 发送方投递（Sender：软化核对）
-
-- 管理页显示相同的 Safety Code（emoji/颜色块），文案是：
-    - "请快速核对对方发来的安全码是否一致（推荐通过电话/另一个聊天工具核对）"
-- 默认 UI 不出现"指纹/哈希/公钥"等词；高级模式才显示
-- 点击投递：走 compound_begin/commit，一次系统确认完成写入
-
-### 5.4 WebAuthn 不可用（降级 UX）
-
-当 navigator.credentials 不可用或调用失败：
-
-- 页面自动检测 WebAuthn 支持状态
-- **Quick Share**：始终可用（不依赖 WebAuthn），当 WebAuthn 不可用时默认选中 Quick Share
-- **Secure Share**：显示"此环境不支持 Passkey"警告，按钮置灰不可点击
-- UI 显示提示："Secure Share 需要 WebAuthn 支持，请换浏览器/设备，或使用 Quick Share"
+- Official Cloudflare version remains the default
+- Docker Compose one-click self-hosting (protocol-equivalent implementation of Worker/DO/KV self-hosting: HTTP service + Postgres/SQLite + Redis/transaction locks; or protocol-equivalent implementation if Cloudflare-compatible runtime is impractical)
+- Release chain: Signed Manifest + reproducible builds + optional offline static packages (users can open locally/deploy on their own domain)
 
 ---
 
-## 6. 关键安全问题的 v2.5 解决方案
+## 4. Product Modes and Security Tiers (Externally Clear)
 
-### 6.1 TOFU 抢占锁定（预加载爬虫先 lock）
+Selectable `securityProfile` at creation (v3.0 two tiers):
 
-**v2.5 的硬修复：Lock Secret + Lock Challenge**
+### 1. Quick Share
 
-- 攻击者/爬虫即使先访问 /s/:uuid，也无法 lock，因为它没有 fragment 中的 lock_secret
-- lock 时 DO 下发一次性 challenge，接收方需提供 lock_proof = SHA256("GL-lock"||uuid||lock_challenge_id||lock_challenge||lock_key)
-- DO 验证 lock_proof 后才接受 receiver_pub
+- **Admin Authority**: Locally generated ECDSA P-256 keypair, wrapped by user password via Argon2id and encoded in the admin link's URL fragment (not stored in IndexedDB)
+- **WebAuthn**: Not required
+- **Receiver**: Argon2id enforced
+- **Padding**: 4KB blocks
+- **adminMode**: `password` (internal protocol field)
+- **Suitable for**: Cross-device/cross-browser usage, environments without passkey support, or users who prefer password managers
 
-同时 UX 层仍建议：
+### 2. Secure Share
 
-- 安全码核对建议走带外通道（电话/另一个 IM），但不再是唯一防线
+- **Admin Authority**: WebAuthn passkey (device or platform), UV=required, RK=discouraged
+- **WebAuthn**: Required, cannot be downgraded
+- **Receiver**: Argon2id enforced
+- **Padding**: 8KB blocks (higher privacy)
+- **adminMode**: `webauthn` (internal protocol field)
+- **Suitable for**: Highest security requirements, environments where passkey is available
 
-### 6.2 密文长度泄露
+### Legacy Tiers (Read-Only, Backward Compatible)
 
-**v2.5 默认 padding**：明文在加密前被填充到固定块倍数，降低长度推断精度。
+Existing channels may store `standard` / `strict` / `hardware_only` security_profile; the system continues to render and operate on them correctly. These options are not available for new channel creation.
 
-### 6.3 Passkey 同步边界（v3.0 简化）
-
-- **Quick Share**：不使用 WebAuthn，无 passkey 同步问题
-- **Secure Share**：使用 WebAuthn（UV=required, RK=discouraged），允许平台同步 passkey；如浏览器提供 backupState/backupEligibility，可检测并提示，但不强制拒绝
-
-### 6.4 恶意服务器下发 JS
-
-v2.5 给出三层应对：
-
-1. **可验证发布链（Signed Manifest + 可复现构建）**：提升"被篡改可被发现"的概率
-2. **离线包/本地打开**（计划中，尚未实现）：用户可选择从发布页下载离线静态包（减少在线下发风险）
-3. **自托管**（计划中，尚未实现）：提供 Docker Compose 协议等价实现，彻底把信任根交给用户
-
----
-
-## 7. 密码学与数据格式（v2.5）
-
-### 7.1 内容加密（不变 + padding）
-
-- AES-256-GCM 加密正文（密文包仍是 cipher_bundle）
-- RSA-OAEP-256 封装 AES key（enc_content_key）
-
-#### Padding 方案（强制，默认开启）
-
-定义 padded_plaintext 格式：
-
-- len：uint32（原文长度，big-endian）
-- data：原文 bytes
-- pad：随机 bytes，填充到 ceil((4 + len)/PAD_BLOCK)*PAD_BLOCK
-- 默认 PAD_BLOCK = 4096（可配置 8192）
-
-最终加密 padded_plaintext，接收方解密后按 len 截取原文。
-
-> 对超大内容（例如 >1MB）可允许关闭 padding 或采用更大块（例如 64KB），但默认仍启用。
-
-### 7.2 Receiver 私钥包裹（强制 Argon2id）
-
-- Argon2id 参数采用目标耗时策略（250–500ms）
-- 参数写入本地包头：salt, m, t, p, version
-- PBKDF2 仅"兼容模式"允许
-
-### 7.3 Safety Code（软化指纹核对）
-
-从 receiver_pub_fpr = SHA256(SPKI(receiver_pub)) 计算：
-
-- Emoji Safety Code：取 hash 分段映射到 emoji 表（固定表，稳定输出）
-- Color Blocks：取 hash nibble 映射到固定调色板
-- Identicon：继续保留（背景/头像）
-
-显示规则：
-
-- 默认展示 Emoji 或 Color（可切换）
-- Advanced 展示：短指纹（前 6/后 6）+ 完整 hex（折叠）
+- **standard**: Equivalent to Quick Share security level (UV preferred)
+- **strict**: Equivalent to Secure Share security level (UV required), retained for backward compatibility
+- **hardware_only**: Originally enforced cross-platform; attestation=direct enforcement removed (technical reasons); current behavior is identical to strict
 
 ---
 
-## 8. 状态机（与 v2.4 类似，新增 lock challenge）
+## 5. User Flows (v2.5 UX Edition)
 
-状态与转移保持 v2.4，但 lock 需要 lock_begin/lock_commit 的挑战流程（见 API）。
+### 5.1 Create (Sender)
 
-**状态集合**：Waiting, Locked, Delivered, Deleted, Expired
+1. Choose mode: **Quick Share** (Password) or **Secure Share** (Passkey)
+2. **Quick Share flow**: Enter password -> locally generate ECDSA keypair -> Argon2id wrapping -> Create Finish (adminMode=password)
+3. **Secure Share flow**: Create Begin -> WebAuthn registration (UV=required, RK=discouraged) -> Create Finish
+4. The page displays two links:
+   - Share link (receiver): /s/:uuid#k=\<lock_secret_b64url\>
+   - Admin link (sender): /m/:uuid
 
-**允许转移**：
-- Waiting -> Locked（lock_commit 成功）
-- Locked -> Delivered（compound_commit update）
-- Delivered -> Delivered（compound_commit update）
-- Waiting|Locked|Delivered -> Deleted（delete_commit）
-- Waiting|Locked|Delivered -> Expired（expire）
+> **Mandatory UI notice**: The share link must be copied in full (including the part after #), otherwise the receiver cannot lock
 
-**禁止转移**：
-- 非 Waiting 状态重复 lock_commit
-- Deleted/Expired 后任何写操作
-- 未通过 lock_begin 的 lock_commit（challenge 必须匹配且一次性）
+### 5.2 Receiver Locking (Receiver: Foolproof)
+
+- After opening the share link, the page shows a minimal animation (3 frames):
+    1. "Your password stays only with you"
+    2. "It generates your decryption key (the sender doesn't know it either)"
+    3. "After locking, only you can open the content"
+- Enter password -> generate RSA keypair -> Argon2id-wrap private key and store locally
+- Lock request must carry a lock challenge response (see protocol)
+- After successful locking, display **Safety Code**:
+    - Emoji sequence (e.g., 6-10 emoji)
+    - Color blocks (e.g., 4x4/5x5 color grid)
+    - Identicon is retained but as a background element
+    - "Advanced" section expands to show raw hex fingerprint
+
+### 5.3 Sender Delivery (Sender: Soft Verification)
+
+- The admin page shows the same Safety Code (emoji/color blocks), with copy:
+    - "Please quickly verify that the safety code matches what the other party sent you (recommended via phone call/another messaging tool)"
+- The default UI does not display terms like "fingerprint/hash/public key"; these appear only in advanced mode
+- Click deliver: goes through compound_begin/commit, completing the write with a single system confirmation
+
+### 5.4 WebAuthn Unavailable (Degraded UX)
+
+When navigator.credentials is unavailable or the call fails:
+
+- The page automatically detects WebAuthn support status
+- **Quick Share**: Always available (does not depend on WebAuthn); auto-selected when WebAuthn is unavailable
+- **Secure Share**: Displays "This environment does not support Passkey" warning; button is grayed out and unclickable
+- UI shows prompt: "Secure Share requires WebAuthn support. Please switch browsers/devices, or use Quick Share"
 
 ---
 
-## 9. Quick Share（密码模式）协议定义
+## 6. Key Security Solutions in v2.5
 
-Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用户入口，不再是降级选项：
+### 6.1 TOFU Lock-Sniping (Preload Crawler Locks First)
 
-- **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹存 IndexedDB
-- **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
-- **协议字段**：`adminMode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
-- **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
-- **UI**：不标注"较低安全"，而是作为独立的有效分享模式展示
+**v2.5 Hard Fix: Lock Secret + Lock Challenge**
 
-> 注意：Quick Share 安全性取决于用户密码强度。UI 通过密码强度指示器引导用户选择足够强度的密码。
+- Even if an attacker/crawler accesses /s/:uuid first, it cannot lock because it does not have the lock_secret from the fragment
+- During locking, the DO issues a one-time challenge; the receiver must provide lock_proof = SHA256("GL-lock"||uuid||lock_challenge_id||lock_challenge||lock_key)
+- The DO verifies lock_proof before accepting receiver_pub
+
+The UX layer still recommends:
+
+- Safety code verification via an out-of-band channel (phone call/another IM), but this is no longer the sole line of defense
+
+### 6.2 Ciphertext Length Leakage
+
+**v2.5 Default Padding**: Plaintext is padded to fixed block multiples before encryption, reducing length inference precision.
+
+### 6.3 Passkey Synchronization Boundaries (v3.0 Simplification)
+
+- **Quick Share**: Does not use WebAuthn; no passkey synchronization issue
+- **Secure Share**: Uses WebAuthn (UV=required, RK=discouraged); allows platform passkey synchronization; if the browser provides backupState/backupEligibility, it can be detected and flagged, but not forcibly rejected
+
+### 6.4 Malicious Server JS Delivery
+
+v2.5 provides three layers of response:
+
+1. **Verifiable release chain (Signed Manifest + reproducible builds)**: Increases the probability that "tampering can be detected"
+2. **Offline package/local opening** (planned, not yet implemented): Users can optionally download an offline static package from the release page (reducing online delivery risk)
+3. **Self-hosting** (planned, not yet implemented): Provides Docker Compose protocol-equivalent implementation, completely handing the trust root to the user
 
 ---
 
-## 10. API（v3.0 当前）
+## 7. Cryptography and Data Formats (v2.5)
 
-通用要求：
+### 7.1 Content Encryption (Unchanged + Padding)
 
-- 所有响应：`Cache-Control: no-store`
-- `/api/public/:uuid` 返回公开状态快照，而不是仅 `exists`
-- 所有敏感写操作走 DO 串行
-- 错误响应恒定形状 `{ok:false, code}`
+- AES-256-GCM encrypts the body (ciphertext bundle remains cipher_bundle)
+- RSA-OAEP-256 wraps the AES key (enc_content_key)
+
+#### Padding Scheme (Mandatory, Enabled by Default)
+
+padded_plaintext format definition:
+
+- len: uint32 (original text length, big-endian)
+- data: original text bytes
+- pad: random bytes, padded to ceil((4 + len)/PAD_BLOCK)*PAD_BLOCK
+- Default PAD_BLOCK = 4096 (configurable to 8192)
+
+The final encryption target is padded_plaintext; the receiver truncates to the original text by len after decryption.
+
+> For very large content (e.g., >1MB), padding may be disabled or a larger block (e.g., 64KB) may be used, but the default remains enabled.
+
+### 7.2 Receiver Private Key Wrapping (Argon2id Enforced)
+
+- Argon2id parameters use a target latency strategy (250-500ms)
+- Parameters are written to the local header: salt, m, t, p, version
+- PBKDF2 is only allowed in "compatibility mode"
+
+### 7.3 Safety Code (Softened Fingerprint Verification)
+
+Computed from receiver_pub_fpr = SHA256(SPKI(receiver_pub)):
+
+- Emoji Safety Code: Hash segments mapped to an emoji table (fixed table, stable output)
+- Color Blocks: Hash nibbles mapped to a fixed color palette
+- Identicon: Retained (background/avatar)
+
+Display rules:
+
+- Default: Emoji or Color (switchable)
+- Advanced: Short fingerprint (first 6/last 6) + full hex (collapsed)
+
+---
+
+## 8. State Machine (Similar to v2.4, with Lock Challenge Added)
+
+States and transitions remain as in v2.4, but locking requires the lock_begin/lock_commit challenge flow (see API).
+
+**State Set**: Waiting, Locked, Delivered, Deleted, Expired
+
+**Allowed Transitions**:
+- Waiting -> Locked (lock_commit succeeds)
+- Locked -> Delivered (compound_commit update)
+- Delivered -> Delivered (compound_commit update)
+- Waiting|Locked|Delivered -> Deleted (delete_commit)
+- Waiting|Locked|Delivered -> Expired (expire)
+
+**Prohibited Transitions**:
+- Repeated lock_commit in non-Waiting state
+- Any write operation after Deleted/Expired
+- lock_commit without a prior lock_begin (challenge must match and is single-use)
+
+---
+
+## 9. Quick Share (Password Mode) Protocol Definition
+
+Quick Share is the official user entry point in v3.0, replacing "Compatibility Mode" rather than being a fallback option:
+
+- **Admin Authority**: Locally generated ECDSA P-256 private key (Admin-Priv), wrapped via user password Argon2id and stored in IndexedDB
+- **Update/Delete Authorization**: ECDSA signature payload mode (DO still handles version/nonce atomicity)
+- **Protocol Field**: `adminMode: "password"` (internal); legacy channels may store `"softkey"` (treated as equivalent for backward compatibility)
+- **Padding**: 4KB blocks (compared to Secure Share's 8KB, lower bandwidth but slightly less privacy)
+- **UI**: Not labeled as "lower security"; presented as an independent, valid sharing mode
+
+> Note: Quick Share security depends on user password strength. The UI guides users to choose sufficiently strong passwords through a password strength indicator.
+
+---
+
+## 10. API (v3.0 Current)
+
+General requirements:
+
+- All responses: `Cache-Control: no-store`
+- `/api/public/:uuid` returns a public state snapshot, not just `exists`
+- All sensitive write operations go through DO serialization
+- Error responses have a constant shape: `{ok:false, code}`
 
 ### 10.1 GET /api/public/:uuid
 
-Response：
+Response:
 ```json
 {
   "ok": true,
@@ -278,17 +280,17 @@ Response：
 }
 ```
 
-说明：
+Notes:
 
-- `receiverPubFpr` 仅在接收方已上锁后返回
-- 频道被物理删除或过期后，公共读取返回 `404 NOT_FOUND`
-- mixed-version 回滚/本地 mock 场景下仍可能见到 legacy `deleted` / `expired` 公共状态，前端应统一归一化为 unavailable
+- `receiverPubFpr` is only returned after the receiver has locked
+- After a channel is physically deleted or expired, public reads return `404 NOT_FOUND`
+- In mixed-version rollback/local mock scenarios, legacy `deleted` / `expired` public states may still appear; the frontend should uniformly normalize these to unavailable
 
-### 10.2 创建（Quick Share / Secure Share）
+### 10.2 Create (Quick Share / Secure Share)
 
 #### POST /api/create_begin/:uuid
 
-Request：
+Request:
 ```json
 {
   "uuid": "string(21)",
@@ -297,7 +299,7 @@ Request：
 }
 ```
 
-Response：
+Response:
 ```json
 {
   "ok": true,
@@ -305,16 +307,16 @@ Response：
 }
 ```
 
-服务端行为：
+Server behavior:
 
-- 创建 `waiting` 频道记录并持久化 `securityProfile`
-- 为 Secure Share 签发 WebAuthn 注册 challenge（封装在 `creationOptions` 中）
-- Quick Share 仍走同一个 `create_begin`/`create_finish` 协议，但前端不会使用返回的 WebAuthn `creationOptions`
-- `lock_secret` 由前端本地生成并拼接到分享链接 fragment；服务端只在 `create_finish` 后持久化 `lockKeyB64u`
+- Creates a `waiting` channel record and persists the `securityProfile`
+- Issues a WebAuthn registration challenge for Secure Share (encapsulated in `creationOptions`)
+- Quick Share still uses the same `create_begin`/`create_finish` protocol, but the frontend does not use the returned WebAuthn `creationOptions`
+- `lock_secret` is generated locally by the frontend and appended to the share link fragment; the server only persists `lockKeyB64u` after `create_finish`
 
 #### POST /api/create_finish/:uuid
 
-WebAuthn 管理模式：
+WebAuthn admin mode:
 ```json
 {
   "adminMode": "webauthn",
@@ -325,7 +327,7 @@ WebAuthn 管理模式：
 }
 ```
 
-Quick Share / legacy password 模式：
+Quick Share / legacy password mode:
 ```json
 {
   "adminMode": "password",
@@ -336,19 +338,19 @@ Quick Share / legacy password 模式：
 }
 ```
 
-说明：
+Notes:
 
-- legacy `softkey` 与 `password` 协议等价，只保留向后兼容
-- 服务端保存管理凭据、`securityProfile` 和 `lockKeyB64u`
-- `lockKeyB64u` 用于后续验证 `lock_proof`，服务端从不持久化 `lock_secret`
+- Legacy `softkey` is protocol-equivalent to `password`; retained only for backward compatibility
+- The server saves admin credentials, `securityProfile`, and `lockKeyB64u`
+- `lockKeyB64u` is used to verify `lock_proof` subsequently; the server never persists `lock_secret`
 
-### 10.3 上锁（拆成 lock_begin / lock_commit）
+### 10.3 Locking (Split into lock_begin / lock_commit)
 
 #### POST /api/lock_begin/:uuid
 
-目的：避免 lock_proof 被重放，且让 DO 控制一次性消费。
+Purpose: Prevent lock_proof replay and let the DO control single-use consumption.
 
-Response：
+Response:
 ```json
 {
   "ok": true,
@@ -359,11 +361,11 @@ Response：
 }
 ```
 
-DO 存 challenge（TTL 60s，一次性）。
+The DO stores the challenge (TTL 60s, single-use).
 
 #### POST /api/lock_commit/:uuid
 
-Request（接收方携带 receiver_pub + lock_proof）：
+Request (receiver carries receiver_pub + lock_proof):
 
 ```json
 {
@@ -376,122 +378,122 @@ Request（接收方携带 receiver_pub + lock_proof）：
 }
 ```
 
-其中：
+Where:
 
 - lock_proof = SHA256("GL-lock" || uuid || lock_challenge_id || lock_challenge || lock_key)
-- lock_key 由前端从 lock_secret 派生（不上传 lock_secret）
+- lock_key is derived by the frontend from lock_secret (lock_secret is not uploaded)
 
-DO 校验：
+DO verification:
 
-- lock_challenge 未过期未消费
-- lock_key 与 lock_proof 对应正确（DO 用存的 lock_key 验证）
+- lock_challenge has not expired and has not been consumed
+- lock_key and lock_proof correspond correctly (DO verifies using the stored lock_key)
 
-最终：写入 receiver_pub、fpr、status=Locked
+Final result: writes receiver_pub, fpr, status=Locked
 
-### 10.4 投递（compound_begin/commit，v3.0 保持一次确认）
+### 10.4 Delivery (compound_begin/commit, v3.0 Retains Single Confirmation)
 
-与 v2.4 相同，但 update payload 增加：
+Same as v2.4, but the update payload adds:
 
-- pad_block（默认 4096）
-- plaintext_len（原文长度，仅用于调试/审计，建议不传）
+- pad_block (default 4096)
+- plaintext_len (original text length, for debugging/auditing only; recommended not to transmit)
 
-**建议**：plaintext_len 不要出现在明文可见字段，完全在 padding header 内即可。
+**Recommendation**: plaintext_len should not appear in plaintext-visible fields; it should be entirely within the padding header.
 
-### 10.5 删除（delete_begin/commit）
+### 10.5 Delete (delete_begin/commit)
 
-同 v2.4。
+Same as v2.4.
 
 ### 10.6 Quick Share / Legacy Password API
 
-新增字段：
+New fields:
 
 - adminMode="webauthn"|"password"|"softkey"
-- password / softkey 下 update/delete 需要 sig（ECDSA 签名；softkey 仅 legacy 向后兼容）
+- Under password / softkey, update/delete requires sig (ECDSA signature; softkey is legacy backward-compatible only)
 
 ---
 
-## 11. WebAuthn 验证（v3.0，继承 v2.4 字节级规范）
+## 11. WebAuthn Verification (v3.0, Inheriting v2.4 Byte-Level Specification)
 
-- origin、rpIdHash、UV/UP、challenge 精确匹配、COSE ES256 验签
-- Secure Share / strict / hardware_only：
+- origin, rpIdHash, UV/UP, challenge exact matching, COSE ES256 signature verification
+- Secure Share / strict / hardware_only:
     - userVerification="required"
     - residentKey="discouraged"
     - attestation="none"
 
 ---
 
-## 12. 前端完整性与"可验证发布链"（解决恶意下发 JS 的上限方案）
+## 12. Frontend Integrity and "Verifiable Release Chain" (Ceiling Solution for Malicious JS Delivery)
 
-### 12.1 Signed Manifest（推荐）
+### 12.1 Signed Manifest (Recommended)
 
-- 发布时生成 manifest.json，包含：
-    - 版本号
-    - 每个静态资源的 SHA-256
-    - 构建时间、commit hash
-- 用项目的 **离线签名私钥（Ed25519）** 对 manifest 签名，发布 manifest.sig
-- App 在运行时展示 manifest hash（高级用户可核对）
+- At release, generate manifest.json containing:
+    - Version number
+    - SHA-256 of each static resource
+    - Build time, commit hash
+- Sign the manifest with the project's **offline signing private key (Ed25519)**, publishing manifest.sig
+- The app displays the manifest hash at runtime (advanced users can verify)
 
-> 注意：这无法阻止攻击者直接篡改 index.html 关闭校验，但能让"离线下载包 + 校验工具"变得可行。
+> Note: This cannot prevent an attacker from directly tampering with index.html to disable verification, but it makes "offline download package + verification tool" viable.
 
-### 12.2 离线包（Paranoid Mode）（计划中，尚未实现）
+### 12.2 Offline Package (Paranoid Mode) (Planned, Not Yet Implemented)
 
-- 提供单独下载的 offline.zip（静态文件）
-- 用户可本地打开或本域自托管（甚至 file://，但 WebAuthn 与某些 API 可能受限，建议本域托管）
+- Provide a separately downloadable offline.zip (static files)
+- Users can open locally or self-host on their domain (even file://, but WebAuthn and certain APIs may be restricted; domain hosting is recommended)
 
-### 12.3 自托管（Self-Hosting）（计划中，尚未实现）
+### 12.3 Self-Hosting (Planned, Not Yet Implemented)
 
-- 提供 Docker Compose：
-    - 前端静态文件
-    - API 服务（协议等价实现：挑战/nonce/version/lockkey/padding/webauthn 验证）
-    - DB（Postgres/MySQL）或 SQLite + 事务锁
-- 自托管版必须通过同样的协议测试向量（canonical、challenge、nonce）
-
----
-
-## 13. UI/UX 规范（落实产品经理建议）
-
-### 13.1 指纹核对的柔化呈现
-
-- 默认：Emoji Safety Code（例如 8 个 emoji）
-- 次选：Color Blocks（例如 4×4）
-- Identicon：作为背景/头像存在
-- Advanced：短指纹 + 完整 hex（折叠）
-
-文案原则：
-
-- 不出现"指纹/哈希/公钥"术语（高级模式除外）
-- 强烈建议"带外核对"，但不制造焦虑（用轻提示）
-
-### 13.2 接收方防呆动画与文案
-
-- 3 帧以内动画 + 1 句强提示：
-    - "这是你的解密钥匙，发送方也不知道"
-- 密码强度提示（但不强迫过强，避免劝退；Secure Share 作为更高安全选项单独提供）
-
-### 13.3 WebAuthn 不可用时的引导
-
-- 失败时给出明确原因分类（不泄露敏感信息）：
-    - "浏览器不支持"
-    - "当前页面不安全（非 https / 非同源）"
-    - "系统未启用生物识别/安全密钥"
-- Quick Share：保持可用，并说明这是密码模式
-- Secure Share：阻断并给"换设备/换浏览器"建议
+- Provide Docker Compose:
+    - Frontend static files
+    - API service (protocol-equivalent implementation: challenge/nonce/version/lockkey/padding/WebAuthn verification)
+    - DB (Postgres/MySQL) or SQLite + transaction locks
+- The self-hosted version must pass the same protocol test vectors (canonical, challenge, nonce)
 
 ---
 
-## 14. 测试向量与验收（v3.0）
+## 13. UI/UX Specification (Implementing Product Manager Recommendations)
 
-必须新增测试：
+### 13.1 Softened Fingerprint Verification Presentation
 
-1. **TOFU 抢占锁定**：没有 fragment 的访问无法完成 lock_commit（lock_proof 验证失败）
-2. **lock_challenge 重放**：同 challenge_id 再次 lock_commit 必失败
-3. **padding**：不同长度明文映射到相同桶长度密文（至少 4KB 桶）
-4. **Argon2id 强制**：接收方私钥包裹必须为 Argon2id；Quick Share 管理密钥也必须使用 Argon2id 包裹
-5. **Secure Share Policy**：secure/strict/hardware_only 必须要求 UV=required，且注册使用 non-discoverable credential（`residentKey="discouraged"`）
+- Default: Emoji Safety Code (e.g., 8 emoji)
+- Secondary: Color Blocks (e.g., 4x4)
+- Identicon: Present as background/avatar
+- Advanced: Short fingerprint + full hex (collapsed)
+
+Copy principles:
+
+- Do not use terms like "fingerprint/hash/public key" (except in advanced mode)
+- Strongly suggest "out-of-band verification" but without creating anxiety (use gentle prompts)
+
+### 13.2 Receiver Foolproof Animation and Copy
+
+- Animation within 3 frames + 1 strong prompt:
+    - "This is your decryption key - the sender doesn't know it either"
+- Password strength prompt (but not forcing overly strong passwords to avoid discouraging users; Secure Share is available separately as a higher security option)
+
+### 13.3 Guidance When WebAuthn Is Unavailable
+
+- On failure, provide a clear reason classification (without leaking sensitive information):
+    - "Browser not supported"
+    - "Current page is insecure (not https / not same-origin)"
+    - "System has not enabled biometrics/security key"
+- Quick Share: Remains available, with explanation that this is password mode
+- Secure Share: Blocked, with suggestion to "switch devices/browsers"
 
 ---
 
-## 15. 协议图（Mermaid）
+## 14. Test Vectors and Acceptance (v3.0)
+
+New tests required:
+
+1. **TOFU Lock-Sniping**: Access without the fragment cannot complete lock_commit (lock_proof verification fails)
+2. **lock_challenge Replay**: Reusing the same challenge_id for lock_commit must fail
+3. **Padding**: Different plaintext lengths map to the same bucket-length ciphertext (at least 4KB buckets)
+4. **Argon2id Enforcement**: Receiver private key wrapping must use Argon2id; Quick Share admin key must also use Argon2id wrapping
+5. **Secure Share Policy**: secure/strict/hardware_only must require UV=required and use non-discoverable credentials for registration (`residentKey="discouraged"`)
+
+---
+
+## 15. Protocol Diagram (Mermaid)
 
 ```mermaid
 sequenceDiagram
@@ -572,38 +574,38 @@ sequenceDiagram
 
 ---
 
-## 附录 A：参数表与常量（强制）
+## Appendix A: Parameter Table and Constants (Mandatory)
 
-- UUID_LENGTH = 21（nanoid）
-- TIMESTAMP_SKEW_MS = 120000（±120s）
-- NONCE_BYTES = 24（base64url）
-- NONCE_TTL_MS = 600000（10min）
+- UUID_LENGTH = 21 (nanoid)
+- TIMESTAMP_SKEW_MS = 120000 (+/-120s)
+- NONCE_BYTES = 24 (base64url)
+- NONCE_TTL_MS = 600000 (10min)
 - CHALLENGE_BYTES = 32
-- CHALLENGE_TTL_MS = 60000（60s）
-- LOCK_SECRET_BYTES = 32（base64url，存在 URL fragment）
-- LOCK_KEY_BYTES = 32（server 存储，sha256 输出）
-- PAD_BLOCK_DEFAULT = 4096（可配置 8192）
-- PAD_BLOCK_MAX = 65536（上限）
-- MAX_PLAINTEXT_BYTES = 2MB（建议；可按产品定位调整）
-- WebAuthn：默认 alg = -7 (ES256)、UV required（Strict/HardwareOnly）
+- CHALLENGE_TTL_MS = 60000 (60s)
+- LOCK_SECRET_BYTES = 32 (base64url, stored in URL fragment)
+- LOCK_KEY_BYTES = 32 (server storage, sha256 output)
+- PAD_BLOCK_DEFAULT = 4096 (configurable to 8192)
+- PAD_BLOCK_MAX = 65536 (upper limit)
+- MAX_PLAINTEXT_BYTES = 2MB (recommended; adjustable per product positioning)
+- WebAuthn: default alg = -7 (ES256), UV required (Strict/HardwareOnly)
 
 ---
 
-## 附录 B：Canonical（Ghost Canon v1）规范与测试向量（强制）
+## Appendix B: Canonical (Ghost Canon v1) Specification and Test Vectors (Mandatory)
 
-### B1. 规则
+### B1. Rules
 
-- object key 递归按 Unicode code point 升序
-- array 保持顺序
-- number 必须整数、十进制、无科学计数
-- 输出 minified JSON，无空格
+- Object keys sorted recursively by Unicode code point in ascending order
+- Arrays preserve order
+- Numbers must be integers, decimal, no scientific notation
+- Output minified JSON, no whitespace
 - UTF-8 bytes
 
-### B2. 测试向量（update / delete）
+### B2. Test Vectors (update / delete)
 
-#### B2.1 update（无 sig）
+#### B2.1 update (without sig)
 
-输入对象（概念）：
+Input object (conceptual):
 
 ```json
 {
@@ -625,7 +627,7 @@ sequenceDiagram
 }
 ```
 
-canonical 输出必须为：
+Canonical output must be:
 
 ```json
 {"cipher_bundle":{"aad":"aad","ciphertext":"ct","ciphertext_hash":"h","enc_content_key":"ek","iv":"iv"},"expire_at":null,"nonce":"n","op":"update","pad_block":4096,"receiver_pub_fpr":"f","timestamp":1730000000000,"uuid":"u","version":1}
@@ -633,7 +635,7 @@ canonical 输出必须为：
 
 #### B2.2 delete
 
-输入对象（概念）：
+Input object (conceptual):
 
 ```json
 {
@@ -645,7 +647,7 @@ canonical 输出必须为：
 }
 ```
 
-canonical 输出必须为：
+Canonical output must be:
 
 ```json
 {"nonce":"n","op":"delete","timestamp":1730000000000,"uuid":"u","version":2}
@@ -653,55 +655,55 @@ canonical 输出必须为：
 
 ---
 
-## 附录 C：TOFU 抢占锁定修复（Lock Secret / Lock Key / Lock Proof）精确定义
+## Appendix C: TOFU Lock-Sniping Fix (Lock Secret / Lock Key / Lock Proof) Precise Definition
 
-### C1. Create 时生成与存储（关键）
+### C1. Generation and Storage at Create Time (Critical)
 
-- 前端本地生成 lock_secret：随机 32 bytes，并写入分享链接 fragment：
+- Frontend locally generates lock_secret: 32 random bytes, written to the share link fragment:
     ```
     share_url = /s/<uuid>#k=<b64url(lock_secret)>
     ```
-- 前端计算 lock_key：
+- Frontend computes lock_key:
     ```
     lock_key = SHA256( UTF8("GL-lockkey") || UTF8(uuid) || lock_secret )
     ```
-- 前端在 create_finish 时回传 lock_key_b64u
-- 服务端存储 lock_key（base64url 或 hex，必须固定一种；推荐 base64url）
+- Frontend sends lock_key_b64u back in create_finish
+- Server stores lock_key (base64url or hex; must be consistent; base64url recommended)
 
-> 注意：lock_secret 永不入日志、永不入 KV 明文。
+> Note: lock_secret must never be logged or stored in KV as plaintext.
 
-### C2. Lock 两阶段流程
+### C2. Lock Two-Phase Flow
 
-1. lock_begin：DO 签发 {lock_challenge_id, lock_challenge}（随机 32 bytes，TTL 60s，一次性）
-2. lock_commit：客户端提交 receiver_pub + fpr + lock_proof
+1. lock_begin: DO issues {lock_challenge_id, lock_challenge} (32 random bytes, TTL 60s, single-use)
+2. lock_commit: Client submits receiver_pub + fpr + lock_proof
 
-### C3. lock_proof 计算（客户端）
+### C3. lock_proof Computation (Client-Side)
 
-- 客户端从 fragment 拿到 lock_secret，本地算 lock_key（同 C1）
-- 再算：
+- Client reads lock_secret from the fragment, locally computes lock_key (same as C1)
+- Then computes:
     ```
     lock_proof = SHA256( UTF8("GL-lock") || UTF8(uuid) || b64url_decode(lock_challenge_id) || b64url_decode(lock_challenge) || lock_key )
     ```
-- lock_commit 只提交 lock_proof（hex 或 base64url；推荐 hex 小写）
+- lock_commit only submits lock_proof (hex or base64url; lowercase hex recommended)
 
-### C4. DO 验证（服务端）
+### C4. DO Verification (Server-Side)
 
-- 从 KV 取 lock_key
-- 用相同拼接重算 expected lock_proof
-- 一致才允许写入 receiver_pub
+- Retrieves lock_key from KV
+- Recomputes expected lock_proof using the same concatenation
+- Only allows receiver_pub to be written if the values match
 
-### C5. 安全性质
+### C5. Security Properties
 
-- 预加载爬虫没有 fragment → 得不到 lock_secret → 得不到 lock_key → 无法造 lock_proof
-- 即使拿到 lock_proof，也只能配合一次性 lock_challenge 使用，重放失败（challenge consumed）
+- Preload crawlers do not have the fragment -> cannot obtain lock_secret -> cannot obtain lock_key -> cannot forge lock_proof
+- Even if lock_proof is obtained, it can only be used with the single-use lock_challenge; replay fails (challenge consumed)
 
 ---
 
-## 附录 D：Lock API Schema（v2.5）
+## Appendix D: Lock API Schema (v2.5)
 
 ### D1. POST /api/lock_begin/:uuid
 
-Response：
+Response:
 
 ```json
 {
@@ -715,7 +717,7 @@ Response：
 
 ### D2. POST /api/lock_commit/:uuid
 
-Request：
+Request:
 
 ```json
 {
@@ -735,7 +737,7 @@ Request：
 }
 ```
 
-Response：
+Response:
 
 ```json
 {
@@ -743,140 +745,140 @@ Response：
 }
 ```
 
-错误语义（粗粒度）：
+Error semantics (coarse-grained):
 
-- 401：challenge 过期/不存在
-- 403：lock_proof 不匹配 / 已非 Waiting
-- 409：challenge 已消费（重放）
+- 401: Challenge expired/does not exist
+- 403: lock_proof mismatch / no longer in Waiting state
+- 409: Challenge already consumed (replay)
 
 ---
 
-## 附录 E：Padding 规范（精确字节格式 + 注意事项）
+## Appendix E: Padding Specification (Precise Byte Format + Notes)
 
-### E1. padded_plaintext 格式（bytes）
+### E1. padded_plaintext Format (bytes)
 
-- orig_len: uint32 big-endian（4 bytes）
+- orig_len: uint32 big-endian (4 bytes)
 - orig_data: orig_len bytes
-- pad_rand: 随机 bytes，长度使总长成为 PAD_BLOCK 的倍数
-- 总长度：ceil((4+orig_len)/PAD_BLOCK) * PAD_BLOCK
+- pad_rand: random bytes, length such that total length is a multiple of PAD_BLOCK
+- Total length: ceil((4+orig_len)/PAD_BLOCK) * PAD_BLOCK
 
-### E2. 生成规则（客户端）
+### E2. Generation Rules (Client-Side)
 
-- PAD_BLOCK 默认 4096，可在 update payload 中带 pad_block（用于审计一致性；不建议公开展示）
-- pad_rand 必须为加密安全随机数
-- 若 orig_len 已接近上限，按 MAX_PLAINTEXT_BYTES 拒绝或提示"文件模式/分片模式"（若未来支持）
+- PAD_BLOCK defaults to 4096; can be included in the update payload as pad_block (for audit consistency; not recommended for public display)
+- pad_rand must be cryptographically secure random numbers
+- If orig_len approaches the upper limit, reject or prompt for "file mode/chunk mode" (if supported in the future) per MAX_PLAINTEXT_BYTES
 
-### E3. 解码规则（接收方）
+### E3. Decoding Rules (Receiver)
 
-- 解密得到 padded_plaintext
-- 读取前 4 bytes 得到 orig_len
-- 截取后续 orig_len bytes 作为明文
-- 忽略剩余 pad_rand
+- Decrypt to obtain padded_plaintext
+- Read the first 4 bytes to get orig_len
+- Extract the subsequent orig_len bytes as the plaintext
+- Ignore the remaining pad_rand
 
-### E4. 与 AES-GCM 的关系
+### E4. Relationship with AES-GCM
 
-- 仍然使用 AES-GCM；padding 不引入 padding oracle
-- AAD 继续绑定 uuid/version/fpr，防替换与上下文混淆
-
----
-
-## 附录 F：Cipher Bundle 结构与长度泄露桶（bucket）策略
-
-CipherBundle（base64url）：
-
-- enc_content_key（RSA-OAEP 输出，长度固定约 256 bytes）
-- ciphertext（长度≈padded_plaintext_len + GCM tag）
-- iv（12 bytes）
-- aad（建议 base64url 的 AAD bytes）
-- ciphertext_hash（SHA-256 hex）
-
-桶策略：
-
-- 默认 PAD_BLOCK=4096，泄露粒度为 4KB 桶
-- 高安全档位可提高到 8KB/16KB（更隐私但更浪费流量）
+- AES-GCM is still used; padding does not introduce a padding oracle
+- AAD continues to bind uuid/version/fpr, preventing substitution and context confusion
 
 ---
 
-## 附录 G：WebAuthn Policy（v3.0）规范
+## Appendix F: Cipher Bundle Structure and Length Leakage Bucket Strategy
 
-### G1. Quick Share（quick）
+CipherBundle (base64url):
 
-- 不使用 WebAuthn，完全密码模式
+- enc_content_key (RSA-OAEP output, fixed length ~256 bytes)
+- ciphertext (length ~= padded_plaintext_len + GCM tag)
+- iv (12 bytes)
+- aad (recommended: base64url AAD bytes)
+- ciphertext_hash (SHA-256 hex)
+
+Bucket strategy:
+
+- Default PAD_BLOCK=4096, leakage granularity is 4KB buckets
+- Higher security tiers can increase to 8KB/16KB (more private but more bandwidth-intensive)
+
+---
+
+## Appendix G: WebAuthn Policy (v3.0) Specification
+
+### G1. Quick Share (quick)
+
+- Does not use WebAuthn; fully password mode
 - adminMode = "password"
 
-### G2. Secure Share（secure）
+### G2. Secure Share (secure)
 
-- userVerification = "required"（强制）
-- residentKey = "discouraged"（使用 non-discoverable credential）
+- userVerification = "required" (mandatory)
+- residentKey = "discouraged" (uses non-discoverable credential)
 - attestation = "none"
-- 适合平台 passkey 和硬件密钥
+- Suitable for platform passkeys and hardware security keys
 
-### G3. Legacy 档位（向后兼容）
+### G3. Legacy Tiers (Backward Compatible)
 
-#### standard（等价于早期 Quick Share 安全级别）
+#### standard (equivalent to early Quick Share security level)
 - userVerification = "preferred"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### strict（等价于 Secure Share）
+#### strict (equivalent to Secure Share)
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### hardware_only（等价于 Secure Share，attestation 强制已移除）
+#### hardware_only (equivalent to Secure Share; attestation enforcement removed)
 - userVerification = "required"
 - residentKey = "discouraged"
-- attestation = "none"（原 "direct" 强制执行已移除，cross-platform 限制已移除）
-- 移除原因：x5c attestation 验证技术实现复杂，且现代 passkey 生态中实际意义有限
+- attestation = "none" (original "direct" enforcement removed; cross-platform restriction removed)
+- Removal reason: x5c attestation verification is complex to implement, and its practical significance is limited in the modern passkey ecosystem
 
 ---
 
-## 附录 H：WebAuthn 验证字节级步骤（延续 v2.4，补充对 lock/profile 的约束点）
+## Appendix H: WebAuthn Verification Byte-Level Steps (Continuing v2.4, with Supplementary Constraints for Lock/Profile)
 
-commit（compound/delete）校验顺序必须包含：
+Commit (compound/delete) verification order must include:
 
-1. 校验 credentialId == stored cred_id
-2. clientDataJSON：
+1. Verify credentialId == stored cred_id
+2. clientDataJSON:
     - type=="webauthn.get"
     - origin strict match
     - challenge strict match expected_challenge
-3. authenticatorData：
+3. authenticatorData:
     - rpIdHash == SHA256(rpId)
-    - flags：UP=1；UV 按 policy
-4. 验签：
+    - flags: UP=1; UV per policy
+4. Signature verification:
     - signedData = authenticatorData || SHA256(clientDataJSON)
-    - COSE ES256 → P-256 公钥
-5. signCount 策略：记录异常不强阻断（避免误伤同步）
+    - COSE ES256 -> P-256 public key
+5. signCount strategy: Log anomalies without hard-blocking (to avoid false positives from synchronization)
 
 ---
 
-## 附录 I：Quick Share（password/softkey）协议规范
+## Appendix I: Quick Share (password/softkey) Protocol Specification
 
-Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
+Quick Share is the official user entry point in v3.0 (no longer a degraded mode).
 
-### I1. 管理密钥生成
+### I1. Admin Key Generation
 
-- 前端生成 ECDSA P-256 keypair
-- Admin-Priv 用 Argon2id 包裹存 IndexedDB（密码由用户提供）
-- 服务器存 Admin-Pub（JWK）+ adminMode="password"
-- Legacy 频道可能存 adminMode="softkey"，后端等价处理
+- Frontend generates ECDSA P-256 keypair
+- Admin-Priv is Argon2id-wrapped and stored in IndexedDB (password provided by user)
+- Server stores Admin-Pub (JWK) + adminMode="password"
+- Legacy channels may store adminMode="softkey"; the backend treats them equivalently
 
-### I2. 写入授权
+### I2. Write Authorization
 
-- update/delete 请求基于 ECDSA sig（Ghost Canon v1 canonical payload）
-- DO 仍负责 version/nonce/challenge 串行一致性
+- update/delete requests are based on ECDSA sig (Ghost Canon v1 canonical payload)
+- DO still handles version/nonce/challenge serial consistency
 
-### I3. UI 标注
+### I3. UI Labeling
 
-- 显示"Quick Share (Password)"徽章（而非"兼容模式"）
-- 不强制二次确认风险（密码强度指示器引导用户）
-- 密码强度较低时，UI 给出建议但不强制阻断
+- Displays "Quick Share (Password)" badge (not "Compatibility Mode")
+- Does not force a secondary risk confirmation (password strength indicator guides the user)
+- When password strength is low, the UI offers suggestions but does not forcibly block
 
 ---
 
-## 附录 J：错误码、响应恒定形状与抗枚举策略
+## Appendix J: Error Codes, Constant Response Shape, and Anti-Enumeration Strategy
 
-响应体统一：
+Unified response body:
 
 ```json
 {
@@ -884,60 +886,60 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 }
 ```
 
-建议状态码：
+Recommended status codes:
 
-- 400：格式错误
-- 401：timestamp 窗口失败 / challenge 过期（统一）
-- 403：权限/状态不允许 / WebAuthn 失败 / lock_proof 失败（统一）
-- 404：uuid 不存在（可将 Deleted/Expired 也返回 404，进一步降泄露）
-- 409：nonce 重放 / version 冲突 / challenge 已消费（统一）
+- 400: Malformed request
+- 401: Timestamp window failure / challenge expired (unified)
+- 403: Permission/state not allowed / WebAuthn failure / lock_proof failure (unified)
+- 404: uuid does not exist (Deleted/Expired may also return 404 to further reduce leakage)
+- 409: Nonce replay / version conflict / challenge already consumed (unified)
 
-公共接口 /api/public/:uuid：
+Public endpoint /api/public/:uuid:
 
-- 返回当前 `state`、`adminMode`、`securityProfile` 和可选 `receiverPubFpr`
-- 物理删除或过期后返回 `404 NOT_FOUND`
+- Returns current `state`, `adminMode`, `securityProfile`, and optional `receiverPubFpr`
+- Returns `404 NOT_FOUND` after physical deletion or expiration
 
 ---
 
-## 附录 K：安全码（Safety Code）视觉化规范（emoji / color）
+## Appendix K: Safety Code Visual Specification (Emoji / Color)
 
-### K1. 输入
+### K1. Input
 
-- receiver_pub_fpr（32 bytes sha256）
+- receiver_pub_fpr (32 bytes sha256)
 
-### K2. Emoji 方案（推荐默认）
+### K2. Emoji Scheme (Recommended Default)
 
-- 取 fpr bytes 分成 8 组，每组 1 byte → 映射到 emoji 表（长度 256 的固定表）
-- 输出 8 个 emoji（或 10 个更稳），跨端稳定一致
-- UI 展示为：🐳 🍀 🧩 ...（例子）
+- Split fpr bytes into 8 groups, each group 1 byte -> mapped to an emoji table (fixed table of length 256)
+- Output 8 emoji (or 10 for more stability), consistent across platforms
+- UI displays as: (example)
 
 ### K3. Color Blocks
 
-- 取 fpr 的 32 bytes → 每个 nibble 映射到 16 色固定调色板
-- 输出 4×4 或 5×5 色块（固定布局），跨端稳定
+- Take the 32 bytes of fpr -> each nibble mapped to a 16-color fixed palette
+- Output 4x4 or 5x5 color blocks (fixed layout), consistent across platforms
 
-### K4. Advanced 展示
+### K4. Advanced Display
 
-- 短指纹：前 6 bytes + 后 6 bytes（hex）
-- 完整 hex 折叠显示（用户主动展开）
+- Short fingerprint: first 6 bytes + last 6 bytes (hex)
+- Full hex displayed collapsed (user must explicitly expand)
 
 ---
 
-## 关键实现注意事项
+## Key Implementation Notes
 
-### 前端必须配合的两个关键点（否则 v2.5 语义会破）
+### Two Critical Points the Frontend Must Coordinate (Otherwise v2.5 Semantics Break)
 
-1. **create_finish 必须回传 lock_key_b64u**
-    - 因为 server 不能也不应该拿到 lock_secret
-    - 正确流程：前端拿到 lock_secret → 本地算 lock_key → create_finish 把 lock_key_b64u 传给后端存起来
-    - 这样后端能验证 lock_proof，但永远还原不了 lock_secret
+1. **create_finish must send lock_key_b64u**
+    - Because the server cannot and should not obtain lock_secret
+    - Correct flow: frontend obtains lock_secret -> locally computes lock_key -> create_finish sends lock_key_b64u to the backend for storage
+    - This allows the backend to verify lock_proof without ever being able to recover lock_secret
 
-2. **lock_commit 只传 lock_proof，不传 lock_secret**
-    - lock_secret 只存在 fragment，只用于本地派生 lock_key
+2. **lock_commit only transmits lock_proof, not lock_secret**
+    - lock_secret exists only in the fragment and is used solely for local derivation of lock_key
     - lock_proof = sha256("GL-lock" || uuid || cid || chal || lock_key)
-    - 服务器用存储的 lock_key 验证
+    - The server verifies using the stored lock_key
 
-### 最容易"实现跑偏"的两点（验收口径）
+### Two Most Likely "Implementation Drift" Points (Acceptance Criteria)
 
-1. **lock_key/lock_proof**：server 必须能验证，且 lock_secret 不得上传/入库
-2. **padding**：必须在加密前完成，且解密后严格按 orig_len 截取
+1. **lock_key/lock_proof**: The server must be able to verify, and lock_secret must not be uploaded or stored
+2. **padding**: Must be completed before encryption, and after decryption, the plaintext must be strictly truncated by orig_len

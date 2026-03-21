@@ -1,39 +1,41 @@
-# 快速启动
+> **Language**: English | [中文](./QUICK_START.zh.md)
 
-## 前置要求
+# Quick Start
+
+## Prerequisites
 
 - Node.js >= 22
 - pnpm >= 9
 
-## 本地开发
+## Local Development
 
 ```bash
-# 安装依赖
+# Install dependencies
 pnpm install
 
-# 启动所有包（前端 + 后端并行）
+# Start all packages (frontend + backend in parallel)
 pnpm dev
 ```
 
 - Frontend (Vite): http://localhost:5173
 - Backend (Wrangler): http://localhost:8787
 
-### 单独启动
+### Starting Individually
 
 ```bash
 pnpm --filter frontend dev
 pnpm --filter backend dev
 ```
 
-## 常用命令
+## Common Commands
 
 ```bash
-pnpm test          # 运行所有测试
-pnpm typecheck     # 类型检查
-pnpm lint          # 代码检查
-pnpm build         # 构建所有包
+pnpm test          # Run all tests
+pnpm typecheck     # Type checking
+pnpm lint          # Code linting
+pnpm build         # Build all packages
 ```
 
-## 部署
+## Deployment
 
-见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+See [DEPLOYMENT.md](./DEPLOYMENT.md).

@@ -1,210 +1,222 @@
-# ZeroLink 文档索引
+> **Language**: English | [中文](./INDEX.zh.md)
 
-> 快速定位：AI 助手和开发者的导航指南
+# ZeroLink Documentation Index
 
-## 文档结构
+> Quick navigation guide for AI assistants and developers
+
+## Document Structure
 
 ```
 docs/
-├── INDEX.md           # 本文件 - 快速索引
-├── QUICK_START.md    # 快速启动指南（从零到运行）
-├── DEPLOYMENT.md     # 部署指南（Cloudflare 一键部署 + 手动部署）
-├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
-├── PRD.md       # 完整产品需求文档（主文档）
-├── ARCHITECTURE.md   # 架构概览
-└── SECURITY.md       # 安全模型
+├── INDEX.md           # This file - Quick index
+├── QUICK_START.md     # Quick start guide (zero to running)
+├── DEPLOYMENT.md      # Deployment guide (Cloudflare one-click + manual)
+├── TECH_STACK.md      # Tech stack specification (toolchain, Monorepo, testing)
+├── PRD.md             # Full product requirements document (main document)
+├── ARCHITECTURE.md    # Architecture overview
+├── SECURITY.md        # Security model
+└── VERIFY.md          # Verified release & build integrity
 ```
 
 ---
 
-## 快速查找
+## Quick Lookup
 
-### 我想了解...
+### I want to learn about...
 
-#### 项目概念
-- **项目是什么？** → [README.md](../README.md)
-- **如何快速开始？** → [QUICK_START.md](./QUICK_START.md)
-- **如何部署到 Cloudflare？** → [DEPLOYMENT.md](./DEPLOYMENT.md)
-- **核心价值主张** → [PRD.md § 1. 产品概述](./PRD.md#1-产品概述)
-- **用户流程** → [PRD.md § 5. 用户流程](./PRD.md#5-用户流程v25-ux-版)
+#### Project Concepts
+- **What is this project?** → [README.md](../README.md)
+- **How to get started quickly?** → [QUICK_START.md](./QUICK_START.md)
+- **How to deploy to Cloudflare?** → [DEPLOYMENT.md](./DEPLOYMENT.md)
+- **Core value proposition** → [PRD.md § 1. Product Overview](./PRD.md#1-product-overview)
+- **User flows** → [PRD.md § 5. User Flows](./PRD.md#5-user-flows-v25-ux-edition)
 
-#### 技术架构
-- **整体架构** → [ARCHITECTURE.md](./ARCHITECTURE.md)
-- **技术栈规范** → [TECH_STACK.md](./TECH_STACK.md)
-- **Monorepo 结构** → [TECH_STACK.md § Monorepo 结构](./TECH_STACK.md#monorepo-结构)
-- **三方角色模型** → [ARCHITECTURE.md § 三方角色模型](./ARCHITECTURE.md#2-三方角色模型)
-- **状态机** → [ARCHITECTURE.md § 状态机](./ARCHITECTURE.md#状态机)
+#### Technical Architecture
+- **Overall architecture** → [ARCHITECTURE.md](./ARCHITECTURE.md)
+- **Tech stack specification** → [TECH_STACK.md](./TECH_STACK.md)
+- **Monorepo structure** → [TECH_STACK.md § Monorepo Structure](./TECH_STACK.md#monorepo-structure)
+- **Three-party role model** → [ARCHITECTURE.md § Three-Party Role Model](./ARCHITECTURE.md#2-three-party-role-model)
+- **State machine** → [ARCHITECTURE.md § State Machine](./ARCHITECTURE.md#state-machine)
 
-#### 安全设计
-- **威胁模型** → [SECURITY.md § 威胁模型](./SECURITY.md#威胁模型)
-- **安全目标** → [PRD.md § 2.1 安全目标](./PRD.md#21-安全目标必须满足)
-- **攻击场景分析** → [SECURITY.md § 攻击场景分析](./SECURITY.md#攻击场景分析)
-- **安全档位** → [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
+#### Security Design
+- **Threat model** → [SECURITY.md § Threat Model](./SECURITY.md#threat-model)
+- **Security objectives** → [PRD.md § 2.1 Security Objectives](./PRD.md#21-security-objectives-mandatory)
+- **Attack scenario analysis** → [SECURITY.md § Attack Scenario Analysis](./SECURITY.md#attack-scenario-analysis)
+- **Security tiers** → [PRD.md § 4. Product Modes and Security Tiers](./PRD.md#4-product-modes-and-security-tiers-externally-clear)
 
-#### 核心机制
-- **Lock Secret（防 TOFU）** → [ARCHITECTURE.md § TOFU 抢占锁定防护](./ARCHITECTURE.md#1-tofu-抢占锁定防护v25-核心)
-- **Padding（防长度泄露）** → [ARCHITECTURE.md § 密文长度泄露缓解](./ARCHITECTURE.md#2-密文长度泄露缓解padding)
-- **WebAuthn 管理权** → [ARCHITECTURE.md § 并发安全](./ARCHITECTURE.md#3-并发安全durable-objects)
-- **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.md#4-intent-binding意图绑定)
+#### Core Mechanisms
+- **Lock Secret (Anti-TOFU)** → [ARCHITECTURE.md § TOFU Preemptive Lock Protection](./ARCHITECTURE.md#1-tofu-preemptive-lock-protection-v25-core)
+- **Padding (Anti-Length Leakage)** → [ARCHITECTURE.md § Ciphertext Length Leakage Mitigation](./ARCHITECTURE.md#2-ciphertext-length-leakage-mitigation-padding)
+- **WebAuthn Admin Authority** → [ARCHITECTURE.md § Concurrency Safety](./ARCHITECTURE.md#3-concurrency-safety-durable-objects)
+- **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.md#4-intent-binding)
 
-#### 密码学
-- **加密方案** → [PRD.md § 7. 密码学与数据格式](./PRD.md#7-密码学与数据格式v25)
-- **密码学规范** → [SECURITY.md § 密码学规范](./SECURITY.md#密码学规范)
-- **协议常量** → [PRD.md § 附录 A](./PRD.md#附录-a参数表与常量强制)
+#### Cryptography
+- **Encryption scheme** → [PRD.md § 7. Cryptography and Data Formats](./PRD.md#7-cryptography-and-data-formats-v25)
+- **Cryptographic specification** → [SECURITY.md § Cryptographic Specification](./SECURITY.md#cryptographic-specification)
+- **Protocol constants** → [PRD.md § Appendix A](./PRD.md#appendix-a-parameter-table-and-constants-mandatory)
 
-#### API 协议
-- **完整 API 定义** → [PRD.md § 10. API](./PRD.md)
-- **Lock API** → [PRD.md § 附录 D](./PRD.md#附录-dlock-api-schemav25)
-- **协议图（Mermaid）** → [PRD.md § 15. 协议图](./PRD.md#15-协议图mermaid)
+#### API Protocol
+- **Full API definition** → [PRD.md § 10. API](./PRD.md#10-api-v30-current)
+- **Lock API** → [PRD.md § Appendix D](./PRD.md#appendix-d-lock-api-schema-v25)
+- **Protocol diagrams (Mermaid)** → [PRD.md § 15. Protocol Diagrams](./PRD.md#15-protocol-diagram-mermaid)
 
-#### 实现细节
-- **Canonical 规范** → [PRD.md § 附录 B](./PRD.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
-- **Lock 精确定义** → [PRD.md § 附录 C](./PRD.md#附录-ctofu-抢占锁定修复lock-secret--lock-key--lock-proof精确定义)
-- **Padding 格式** → [PRD.md § 附录 E](./PRD.md#附录-epadding-规范精确字节格式--注意事项)
-- **WebAuthn 验证** → [PRD.md § 附录 H](./PRD.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点)
+#### Implementation Details
+- **Canonical specification** → [PRD.md § Appendix B](./PRD.md#appendix-b-canonical-ghost-canon-v1-specification-and-test-vectors-mandatory)
+- **Lock precise definition** → [PRD.md § Appendix C](./PRD.md#appendix-c-tofu-lock-sniping-fix-lock-secret--lock-key--lock-proof-precise-definition)
+- **Padding format** → [PRD.md § Appendix E](./PRD.md#appendix-e-padding-specification-precise-byte-format--notes)
+- **WebAuthn verification** → [PRD.md § Appendix H](./PRD.md#appendix-h-webauthn-verification-byte-level-steps-continuing-v24-with-supplementary-constraints-for-lockprofile)
 
-#### UX 设计
-- **指纹核对柔化** → [PRD.md § 13.1](./PRD.md#131-指纹核对的柔化呈现)
-- **Safety Code 规范** → [PRD.md § 附录 K](./PRD.md#附录-k安全码safety-code视觉化规范emoji--color)
-- **WebAuthn 不可用引导** → [PRD.md § 13.3](./PRD.md)
+#### UX Design
+- **Softened fingerprint verification** → [PRD.md § 13.1](./PRD.md#131-softened-fingerprint-verification-presentation)
+- **Safety Code specification** → [PRD.md § Appendix K](./PRD.md#appendix-k-safety-code-visual-specification-emoji--color)
+- **WebAuthn unavailable guidance** → [PRD.md § 13.3](./PRD.md)
 
-#### 测试
-- **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.md)
-- **安全检查清单** → [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation)
+#### Testing
+- **Test vectors** → [PRD.md § 14. Test Vectors and Acceptance](./PRD.md)
+- **Security checklist** → [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation)
 
----
-
-## 按角色阅读
-
-### 产品经理
-1. [README.md](../README.md) - 项目概览
-2. [PRD.md § 1-5](./PRD.md) - 产品定义、流程、UX
-3. [PRD.md § 4](./PRD.md#4-产品模式与安全档位对外清晰) - 安全档位
-4. [PRD.md § 13](./PRD.md#13-uiux-规范落实产品经理建议) - UI/UX 规范
-
-### 前端开发
-1. [QUICK_START.md](./QUICK_START.md) - 初始化项目
-2. [TECH_STACK.md](./TECH_STACK.md) - 完整技术栈规范
-3. [ARCHITECTURE.md § 数据流图](./ARCHITECTURE.md#数据流图) - 前端职责
-4. [PRD.md § 7](./PRD.md#7-密码学与数据格式v25) - 密码学实现
-5. [PRD.md § 附录 C](./PRD.md#附录-ctofu-抢占锁定修复lock-secret--lock-key--lock-proof精确定义) - Lock Secret 实现
-6. [PRD.md § 附录 E](./PRD.md#附录-epadding-规范精确字节格式--注意事项) - Padding 实现
-
-### 后端开发
-1. [QUICK_START.md](./QUICK_START.md) - 初始化项目
-2. [TECH_STACK.md § 后端部署](./TECH_STACK.md#部署与发布) - Cloudflare Workers 配置
-3. [ARCHITECTURE.md § 技术栈](./ARCHITECTURE.md#3-技术栈) - 后端架构
-4. [PRD.md § 10](./PRD.md) - 完整 API
-5. [PRD.md § 附录 D](./PRD.md#附录-dlock-api-schemav25) - Lock API Schema
-6. [PRD.md § 附录 H](./PRD.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点) - WebAuthn 验证
-
-### 安全审计
-1. [SECURITY.md](./SECURITY.md) - 完整安全模型
-2. [SECURITY.md § 攻击场景分析](./SECURITY.md#攻击场景分析) - 威胁分析
-3. [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation) - 审计要点
-4. [PRD.md § 14](./PRD.md#14-测试向量与验收v25-新增) - 测试向量
-5. [SECURITY.md § 密码学规范](./SECURITY.md#密码学规范) - 加密参数
-
-### DevOps / 部署
-1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **完整部署指南（一键部署 + 手动部署）**
-2. [DEPLOYMENT.md](./DEPLOYMENT.md) - GitHub Actions 与发布流程
-3. [TECH_STACK.md § 部署与发布](./TECH_STACK.md#部署与发布) - 前后端部署
-4. [TECH_STACK.md § 发布流程](./TECH_STACK.md#版本管理与发布流水线) - PR 验证与 tag 发布
-5. [DEPLOYMENT.md](./DEPLOYMENT.md) - 域名与 Cloudflare 配置
+#### Build Integrity
+- **Verified release process** → [VERIFY.md](./VERIFY.md)
+- **Manifest signing** → [DEPLOYMENT.md § Manifest Signing](./DEPLOYMENT.md#manifest-signing-optional)
 
 ---
 
-## 版本历史
+## Reading by Role
 
-### v3.0（当前）
-- **核心改进**：Lock Secret（URL Fragment）+ Padding + Argon2id 强制
-- **新增**：Quick Share（密码）/ Secure Share（Passkey）双模式创建
-- **新增**：可验证发布链设计
-- **完善**：新建与发送者管理主流程统一到 Quick Share / Secure Share；legacy 档位仅用于向后兼容
+### Product Manager
+1. [README.md](../README.md) - Project overview
+2. [PRD.md § 1-5](./PRD.md) - Product definition, flows, UX
+3. [PRD.md § 4](./PRD.md#4-product-modes-and-security-tiers-externally-clear) - Security tiers
+4. [PRD.md § 13](./PRD.md#13-uiux-specification-implementing-product-manager-recommendations) - UI/UX specification
 
-### v2.4（前代）
-- WebAuthn 管理权 + DO 原子性 + Intent Binding
+### Frontend Developer
+1. [QUICK_START.md](./QUICK_START.md) - Initialize project
+2. [TECH_STACK.md](./TECH_STACK.md) - Full tech stack specification
+3. [ARCHITECTURE.md § Data Flow Diagrams](./ARCHITECTURE.md#data-flow-diagrams) - Frontend responsibilities
+4. [PRD.md § 7](./PRD.md#7-cryptography-and-data-formats-v25) - Cryptography implementation
+5. [PRD.md § Appendix C](./PRD.md#appendix-c-tofu-lock-sniping-fix-lock-secret--lock-key--lock-proof-precise-definition) - Lock Secret implementation
+6. [PRD.md § Appendix E](./PRD.md#appendix-e-padding-specification-precise-byte-format--notes) - Padding implementation
 
-### v2.3（更早）
-- ECDSA 软件密钥管理
+### Backend Developer
+1. [QUICK_START.md](./QUICK_START.md) - Initialize project
+2. [TECH_STACK.md § Deployment & Release](./TECH_STACK.md#deployment--release) - Cloudflare Workers configuration
+3. [ARCHITECTURE.md § Technology Stack](./ARCHITECTURE.md#3-technology-stack) - Backend architecture
+4. [PRD.md § 10](./PRD.md#10-api-v30-current) - Full API
+5. [PRD.md § Appendix D](./PRD.md#appendix-d-lock-api-schema-v25) - Lock API Schema
+6. [PRD.md § Appendix H](./PRD.md#appendix-h-webauthn-verification-byte-level-steps-continuing-v24-with-supplementary-constraints-for-lockprofile) - WebAuthn verification
+
+### Security Auditor
+1. [SECURITY.md](./SECURITY.md) - Full security model
+2. [SECURITY.md § Attack Scenario Analysis](./SECURITY.md#attack-scenario-analysis) - Threat analysis
+3. [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation) - Audit checkpoints
+4. [PRD.md § 14](./PRD.md) - Test vectors
+5. [SECURITY.md § Cryptographic Specification](./SECURITY.md#cryptographic-specification) - Encryption parameters
+
+### DevOps / Deployment
+1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **Full deployment guide (one-click + manual)**
+2. [DEPLOYMENT.md](./DEPLOYMENT.md) - GitHub Actions and release process
+3. [TECH_STACK.md § Deployment & Release](./TECH_STACK.md#deployment--release) - Frontend and backend deployment
+4. [TECH_STACK.md § Release Pipeline](./TECH_STACK.md#version-management--release-pipeline) - PR validation and tag releases
+5. [VERIFY.md](./VERIFY.md) - Build integrity verification
 
 ---
 
-## 常见问题快速定位
+## Version History
 
-### Q: 为什么使用 URL Fragment 存储 lock_secret？
-→ [SECURITY.md § TOFU 抢占锁定](./SECURITY.md#3-tofu-抢占锁定)
+### v3.0 (Current)
+- **Core improvements**: Lock Secret (URL Fragment) + Padding + Argon2id enforced
+- **New**: Quick Share (Password) / Secure Share (Passkey) dual-mode creation
+- **New**: Verifiable release chain design
+- **Refined**: Create and sender management flows unified into Quick Share / Secure Share; legacy tiers retained only for backward compatibility
 
-### Q: Padding 如何防止长度泄露？
-→ [ARCHITECTURE.md § 密文长度泄露缓解](./ARCHITECTURE.md#2-密文长度泄露缓解padding)
+### v2.4 (Previous)
+- WebAuthn admin authority + DO atomicity + Intent Binding
 
-### Q: WebAuthn 私钥能被导出吗？
-→ [SECURITY.md § 管理权私钥不可导出](./SECURITY.md#7-管理权私钥不可导出-)
+### v2.3 (Earlier)
+- ECDSA software key management
 
-### Q: 服务器能看到明文吗？
-→ [SECURITY.md § 服务器零知识](./SECURITY.md#1-服务器零知识-)
+---
 
-### Q: 如何防止中间人攻击？
-→ [SECURITY.md § 中间人攻击](./SECURITY.md#4-中间人攻击mitm)
+## FAQ Quick Reference
 
-### Q: Argon2id 参数如何选择？
-→ [SECURITY.md § 密码学规范 § KDF](./SECURITY.md#密码学规范)
+### Q: Why use URL Fragment to store lock_secret?
+→ [SECURITY.md § TOFU Preemptive Lock](./SECURITY.md#3-tofu-preemptive-lock)
 
-### Q: 如何验证前端代码未被篡改？
-→ [PRD.md § 12. 前端完整性](./PRD.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
+### Q: How does Padding prevent length leakage?
+→ [ARCHITECTURE.md § Ciphertext Length Leakage Mitigation](./ARCHITECTURE.md#2-ciphertext-length-leakage-mitigation-padding)
 
-### Q: Quick Share 和 Secure Share 有什么区别？
-→ [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
+### Q: Can WebAuthn private keys be exported?
+→ [SECURITY.md § Admin Private Key Non-Exportable](./SECURITY.md#7-admin-private-key-non-exportable-)
 
-### Q: legacy 档位和旧 softkey 频道怎么处理？
-→ [PRD.md § 4. 产品模式与安全档位](./PRD.md#4-产品模式与安全档位对外清晰)
+### Q: Can the server see plaintext?
+→ [SECURITY.md § Server Zero-Knowledge](./SECURITY.md#1-server-zero-knowledge-)
 
-### Q: 如何初始化 Monorepo？
+### Q: How to prevent man-in-the-middle attacks?
+→ [SECURITY.md § Man-in-the-Middle Attack](./SECURITY.md#4-man-in-the-middle-attack-mitm)
+
+### Q: How are Argon2id parameters chosen?
+→ [SECURITY.md § Cryptographic Specification § KDF](./SECURITY.md#cryptographic-specification)
+
+### Q: How to verify frontend code hasn't been tampered with?
+→ [VERIFY.md](./VERIFY.md) and [PRD.md § 12. Frontend Integrity](./PRD.md#12-frontend-integrity-and-verifiable-release-chain-ceiling-solution-for-malicious-js-delivery)
+
+### Q: What's the difference between Quick Share and Secure Share?
+→ [PRD.md § 4. Product Modes and Security Tiers](./PRD.md#4-product-modes-and-security-tiers-externally-clear)
+
+### Q: How are legacy tiers and old softkey channels handled?
+→ [PRD.md § 4. Product Modes and Security Tiers](./PRD.md#4-product-modes-and-security-tiers-externally-clear)
+
+### Q: How to initialize the Monorepo?
 → [QUICK_START.md](./QUICK_START.md)
 
-### Q: 为什么选择 pnpm Monorepo？
-→ [TECH_STACK.md § 设计原则](./TECH_STACK.md#设计原则)
+### Q: Why choose pnpm Monorepo?
+→ [TECH_STACK.md § Design Principles](./TECH_STACK.md#design-principles)
 
-### Q: 测试体系如何设计？
-→ [TECH_STACK.md § 测试体系](./TECH_STACK.md#测试体系)
-
----
-
-## AI 助手使用指南
-
-### 当被问到"ZeroLink 是什么"时
-→ 先读 [README.md](../README.md)，再引用 [PRD.md § 1](./PRD.md#1-产品概述)
-
-### 当被问到"如何防止 XXX 攻击"时
-→ 先查 [SECURITY.md § 攻击场景分析](./SECURITY.md#攻击场景分析)，找对应章节
-
-### 当需要实现某个功能时
-1. 先查 [ARCHITECTURE.md](./ARCHITECTURE.md) 了解整体架构
-2. 再查 [PRD.md § 10. API](./PRD.md) 了解接口
-3. 最后查对应附录了解精确字节格式
-
-### 当需要写测试时
-→ 直接查 [PRD.md § 14](./PRD.md) 和 [PRD.md § 附录 B](./PRD.md#附录-bcanonical-ghost-canon-v1-规范与测试向量强制)
-
-### 当需要审查安全性时
-→ 按照 [SECURITY.md § 安全检查清单](./SECURITY.md#安全检查清单implementation) 逐项检查
+### Q: How is the testing system designed?
+→ [TECH_STACK.md § Testing System](./TECH_STACK.md#testing-system)
 
 ---
 
-## 文档维护
+## AI Assistant Guide
 
-### 更新规则
-- PRD 是权威来源（Single Source of Truth）
-- ARCHITECTURE.md 和 SECURITY.md 从 PRD 提取，保持同步
-- 任何协议级修改必须先更新 PRD，再更新其他文档
+### When asked "What is ZeroLink?"
+→ Read [README.md](../README.md) first, then cite [PRD.md § 1](./PRD.md#1-product-overview)
 
-### 版本控制
-- 重大协议变更：创建新版本 PRD（如 v2.6.md）
-- 小修正：直接更新当前版本，在文档顶部标注修订日期
-- 废弃条款：保留但标注 `[已废弃]`
+### When asked "How to prevent XXX attack?"
+→ Check [SECURITY.md § Attack Scenario Analysis](./SECURITY.md#attack-scenario-analysis) first, find the corresponding section
+
+### When implementing a feature
+1. Check [ARCHITECTURE.md](./ARCHITECTURE.md) for overall architecture
+2. Check [PRD.md § 10. API](./PRD.md#10-api-v30-current) for interfaces
+3. Check the corresponding appendix for precise byte formats
+
+### When writing tests
+→ Check [PRD.md § 14](./PRD.md) and [PRD.md § Appendix B](./PRD.md#appendix-b-canonical-ghost-canon-v1-specification-and-test-vectors-mandatory)
+
+### When reviewing security
+→ Follow [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation) item by item
 
 ---
 
-**最后更新**：2026-03-11
-**当前版本**：v3.0
-**维护者**：ZeroLink Team
+## Documentation Maintenance
+
+### Update Rules
+- PRD is the authoritative source (Single Source of Truth)
+- ARCHITECTURE.md and SECURITY.md are extracted from PRD, kept in sync
+- Any protocol-level changes must update PRD first, then other documents
+
+### Version Control
+- Major protocol changes: create new PRD version (e.g., v2.6.md)
+- Minor corrections: update current version, note revision date at top
+- Deprecated clauses: retain but mark `[Deprecated]`
+
+### Bilingual Maintenance
+- English (`.md`) is the primary/authoritative version
+- Chinese (`.zh.md`) may lag behind; each Chinese file has a `<!-- synced-with: <hash> -->` comment tracking the English version it was last synced with
+- Run `git diff <hash>..HEAD -- docs/X.md` to see what changed since last sync
+
+---
+
+**Last Updated**: 2026-03-21
+**Current Version**: v3.0
+**Maintainer**: ZeroLink Team

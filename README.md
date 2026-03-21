@@ -1,116 +1,116 @@
+> **Language**: English | [中文](./README.zh.md)
+
 # ZeroLink
 
-> 零知识秘密分享工具：无账号、端到端加密、发送方管理但不可解密
+> Zero-knowledge secret sharing: no accounts, end-to-end encrypted, sender-managed but never decryptable by the server
 
-## 概述
+## Overview
 
-ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
+ZeroLink is a security-first secret sharing tool with the following features:
 
-- **零知识架构**：服务器不存明文与任何私钥
-- **端到端加密**：只有接收方可解密内容
-- **双模式创建**：Quick Share（密码）/ Secure Share（Passkey）
-- **WebAuthn 管理**：Secure Share 使用系统/硬件密钥管理权（不可导出）
-- **TOFU 防护**：URL Fragment + Lock Challenge 防止抢占锁定
-- **密文长度保护**：Padding 降低长度泄露精度
-- **当前产品模式**：Quick Share / Secure Share，legacy 档位仅保留向后兼容
+- **Zero-Knowledge Architecture**: The server never stores plaintext or any private keys
+- **End-to-End Encryption**: Only the receiver can decrypt the content
+- **Dual Creation Modes**: Quick Share (password) / Secure Share (Passkey)
+- **WebAuthn Management**: Secure Share uses system/hardware keys for non-exportable management authority
+- **TOFU Protection**: URL Fragment + Lock Challenge prevents race-condition lock hijacking
+- **Ciphertext Length Protection**: Padding reduces length-based information leakage
+- **Current Product Modes**: Quick Share / Secure Share; legacy mode retained only for backward compatibility
 
-## 核心流程
+## Core Flow
 
 ```
-1. Sender → Create (Quick Share 密码模式 / Secure Share Passkey 模式)
-          → 分享链接: /s/:uuid#k=<lock_secret>
+1. Sender → Create (Quick Share password mode / Secure Share Passkey mode)
+          → Share link: /s/:uuid#k=<lock_secret>
 
-2. Receiver → Lock (输入密码 → 生成 RSA keypair → 本地存储)
-            → 展示 Safety Code (Emoji/Color)
+2. Receiver → Lock (enter password → generate RSA keypair → store locally)
+            → Display Safety Code (Emoji/Color)
 
-3. Sender → 核对 Safety Code (带外)
-          → Deliver (混合加密 + Padding → 投递密文)
+3. Sender → Verify Safety Code (out-of-band)
+          → Deliver (hybrid encryption + Padding → deliver ciphertext)
 
-4. Receiver → 输入密码 → 解密查看
+4. Receiver → Enter password → Decrypt and view
 ```
 
-## 文档
+## Documentation
 
-### 快速开始
-- [快速启动指南](./docs/QUICK_START.md) - 从零到运行开发环境
-- [部署指南](./docs/DEPLOYMENT.md) - 部署到 Cloudflare（含一键部署）
-- [技术栈规范](./docs/TECH_STACK.md) - 完整技术栈与工具链
+### Getting Started
+- [Quick Start Guide](./docs/QUICK_START.md) - From zero to running dev environment
+- [Deployment Guide](./docs/DEPLOYMENT.md) - Deploy to Cloudflare (including one-click deploy)
+- [Tech Stack Specification](./docs/TECH_STACK.md) - Complete tech stack and toolchain
 
-### 设计文档
-- [完整 PRD v3.0](./docs/PRD.md) - 产品需求文档
-- [架构概览](./docs/ARCHITECTURE.md) - 技术架构与核心协议
-- [安全模型](./docs/SECURITY.md) - 威胁模型与安全保证
+### Design Documents
+- [Full PRD v3.0](./docs/PRD.md) - Product Requirements Document
+- [Architecture Overview](./docs/ARCHITECTURE.md) - Technical architecture and core protocols
+- [Security Model](./docs/SECURITY.md) - Threat model and security guarantees
 
-### 导航
-- [文档索引](./docs/INDEX.md) - AI 助手和开发者的快速导航
+### Navigation
+- [Documentation Index](./docs/INDEX.md) - Quick navigation for AI assistants and developers
 
-## 技术栈
+## Tech Stack
 
-### 前端
+### Frontend
 - React 19 + Vite 7 + React Router
-- Tailwind CSS v4 + shadcn/ui（基于 Radix primitives）
+- Tailwind CSS v4 + shadcn/ui (based on Radix primitives)
 - Zustand + Zod
 - Web Crypto API (AES-GCM, RSA-OAEP, SHA-256)
 - WebAuthn (FIDO2)
 - Argon2id (KDF)
 
-### 后端
-- Cloudflare Workers + Durable Objects（提供免费层，支持 SQLite 后端）+ KV
-- 可选：Docker Compose 自托管（计划中，尚未实现）
+### Backend
+- Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported) + KV
+- Optional: Docker Compose self-hosted (planned, not yet implemented)
 
-## 浏览器兼容性
+## Browser Compatibility
 
-| 浏览器 | 最低版本 | 发布时间 |
-|--------|----------|----------|
-| Chrome / Edge | 93+ | 2021 年 9 月 |
-| Firefox | 92+ | 2021 年 9 月 |
-| Safari | 15.4+ | 2022 年 3 月 |
+| Browser | Minimum Version | Release Date |
+|---------|-----------------|--------------|
+| Chrome / Edge | 93+ | September 2021 |
+| Firefox | 92+ | September 2021 |
+| Safari | 15.4+ | March 2022 |
 
-**说明**：
-- WebAuthn（硬件密钥）需要 HTTPS，本地开发使用 `localhost` 即可
-- Ed25519 签名验证：Chrome 113+ / Safari 16.4+ 使用原生 WebCrypto；旧版本自动降级到纯 JS 实现（`@noble/ed25519`）
-- 不提供 polyfill，不支持 Internet Explorer
+**Notes**:
+- WebAuthn (hardware keys) requires HTTPS; `localhost` works for local development
+- Ed25519 signature verification: Chrome 113+ / Safari 16.4+ use native WebCrypto; older versions automatically fall back to pure JS implementation (`@noble/ed25519`)
+- No polyfills provided; Internet Explorer is not supported
 
-## 安全特性
+## Security Features
 
-### v3.0 当前重点
+### v3.0 Current Focus
 
-1. **Lock Secret (URL Fragment)**: 防止预加载爬虫抢占锁定
-2. **Padding (4KB 块)**: 降低密文长度泄露精度
-3. **Argon2id 强制**: 接收方私钥包裹（250-500ms 目标耗时）
-4. **双模式创建**: Quick Share（密码）/ Secure Share（Passkey）
-5. **可验证发布链**: Signed Manifest + 可复现构建（未来）
+1. **Lock Secret (URL Fragment)**: Prevents preload crawlers from hijacking locks
+2. **Padding (4KB blocks)**: Reduces ciphertext length-based information leakage
+3. **Argon2id Enforced**: Receiver private key wrapping (250-500ms target duration)
+4. **Dual Creation Modes**: Quick Share (password) / Secure Share (Passkey)
+5. **Verifiable Release Chain**: Signed Manifest + reproducible builds (future)
 
-### 安全保证
+### Security Guarantees
 
-- ✅ 服务器零知识
-- ✅ 端到端保密
-- ✅ 更新/销毁不可伪造（WebAuthn）
-- ✅ 抗重放/乱序/并发覆盖（DO 原子性）
-- ✅ 最小元数据泄露
-- ✅ 前端完整性可验证（CSP/SRI）
-- ✅ Secure Share 管理权私钥不可导出（WebAuthn）；Quick Share 管理密钥编码在管理链接中
+- Server zero-knowledge
+- End-to-end confidentiality
+- Update/destroy operations are unforgeable (WebAuthn)
+- Replay/reorder/concurrent-overwrite resistant (DO atomicity)
+- Minimal metadata leakage
+- Frontend integrity verifiable (CSP/SRI)
+- Secure Share management private key is non-exportable (WebAuthn); Quick Share admin key is encoded in the management link
 
-## 部署 / Deploy
+## Deploy
 
-### 一键部署到 Cloudflare / One-click Deploy
+### One-Click Deploy to Cloudflare
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
-> **注意**: 一键部署后，运行 `pnpm setup` 完成 KV namespace 创建和 Secrets 配置（只需回答 2 个问题）。
->
 > **Note**: After one-click deploy, run `pnpm setup` to finish KV namespace creation and secrets configuration (only 2 questions required).
 
-### 前提条件 / Prerequisites
+### Prerequisites
 
-- Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
+- Cloudflare account (free plan is sufficient; Durable Objects free tier supported)
 - Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
 
-完整部署文档见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+For full deployment documentation, see the [Deployment Guide](./docs/DEPLOYMENT.md).
 
 ---
 
-## 快速开始（本地开发）/ Quick Start (Local Dev)
+## Quick Start (Local Dev)
 
 ```bash
 git clone https://github.com/yclgkd/ZeroLink.git
@@ -121,4 +121,4 @@ pnpm dev
 
 ## License
 
-（待补充）
+(TBD)
