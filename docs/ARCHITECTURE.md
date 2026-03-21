@@ -37,7 +37,7 @@
 - **平台**：Cloudflare Workers + Durable Objects + KV
 - **状态管理**：Durable Objects（串行化、原子性）
 - **持久化**：KV（密文、公钥、元数据）
-- **自托管选项**：Docker Compose（PostgreSQL/SQLite + Redis）
+- **自托管选项**：Docker Compose（PostgreSQL/SQLite + Redis）（计划中，尚未实现）
 
 ## 核心协议流程
 
@@ -265,11 +265,11 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 - Ed25519 离线签名 → manifest.sig
 - 用户可验证前端完整性
 
-### 离线包
+### 离线包（计划中，尚未实现）
 - 提供 offline.zip（静态文件）
 - 可本地打开或自托管
 
-### 自托管
+### 自托管（计划中，尚未实现）
 - Docker Compose 一键部署
 - 协议等价实现（非 Cloudflare Workers）
 - 完全自主控制

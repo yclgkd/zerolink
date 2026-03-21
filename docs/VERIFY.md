@@ -62,7 +62,7 @@ When bootstrap verification succeeds, the shell renders a `Verified Release` car
 - Verified file count
 - Publisher key fingerprint
 
-Cloudflare Pages serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
+The Worker serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
 shell is never reused across deployments, while hashed `/assets/*` files remain immutable. The
 signed manifest is intentionally limited to `dist/assets/*` runtime build outputs; the HTML
 document itself is not hashed, but the bootstrap entry asset it launches must still match the

@@ -217,9 +217,9 @@ const en = {
     section3Title: 'What the sender can control',
     section3Body:
       'The sender can create a channel, share the receiver link, deliver ciphertext, and delete the channel. The sender cannot read the receiver passphrase, inspect the receiver private key, or see decrypted plaintext on the receiver device.',
-    section4Title: 'What stays on the sender device',
+    section4Title: 'What the manage link carries',
     section4Body:
-      'Quick Share keeps a wrapped admin key on the sender device so the same device can later deliver or delete the channel. If you switch devices without that local material, you cannot keep managing the existing channel from the new device.',
+      'Quick Share embeds a wrapped admin key in the manage link itself (the URL fragment). Anyone who has that link — and the channel password — can deliver or delete the channel from any device. If you lose the manage link, there is no way to recover it.',
     section5Title: 'What stays on the receiver device',
     section5Body:
       'The receiver device keeps a wrapped receiver private key in IndexedDB for that channel. Plaintext appears only on the local device after decrypt. Channel status may surface the receiver fingerprint to the sender, but the receiver page should show a Safety Code only after this device proves it holds the matching local receiver key.',
