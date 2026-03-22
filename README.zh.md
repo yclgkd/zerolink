@@ -83,16 +83,16 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 2. **Padding (4KB 块)**: 降低密文长度泄露精度
 3. **Argon2id 强制**: 接收方私钥包裹（250-500ms 目标耗时）
 4. **双模式创建**: Quick Share（密码）/ Secure Share（Passkey）
-5. **可验证发布链**: Signed Manifest + 可复现构建（未来）
+5. **可验证发布链**: Signed Manifest + 运行时哈希验证
 
 ### 安全保证
 
 - ✅ 服务器零知识
 - ✅ 端到端保密
-- ✅ 更新/销毁不可伪造（WebAuthn）
+- ✅ 更新/销毁不可伪造（WebAuthn 或 ECDSA）
 - ✅ 抗重放/乱序/并发覆盖（DO 原子性）
 - ✅ 最小元数据泄露
-- ✅ 前端完整性可验证（CSP/SRI）
+- ✅ 前端完整性可验证（CSP + Signed Manifest）
 - ✅ Secure Share 管理权私钥不可导出（WebAuthn）；Quick Share 管理密钥编码在管理链接中
 
 ## 部署 / Deploy

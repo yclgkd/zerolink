@@ -143,7 +143,7 @@ docs/
 → [ARCHITECTURE.md § 密文长度泄露缓解](./ARCHITECTURE.zh.md#2-密文长度泄露缓解padding)
 
 ### Q: WebAuthn 私钥能被导出吗？
-→ [SECURITY.md § 管理权私钥不可导出](./SECURITY.zh.md#7-管理权私钥不可导出-)
+→ [SECURITY.md § 管理权私钥不可导出（Secure Share）](./SECURITY.zh.md#7-管理权私钥不可导出-secure-share)
 
 ### Q: 服务器能看到明文吗？
 → [SECURITY.md § 服务器零知识](./SECURITY.zh.md#1-服务器零知识-)

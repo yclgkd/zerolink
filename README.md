@@ -81,16 +81,16 @@ ZeroLink is a security-first secret sharing tool with the following features:
 2. **Padding (4KB blocks)**: Reduces ciphertext length-based information leakage
 3. **Argon2id Enforced**: Receiver private key wrapping (250-500ms target duration)
 4. **Dual Creation Modes**: Quick Share (password) / Secure Share (Passkey)
-5. **Verifiable Release Chain**: Signed Manifest + reproducible builds (future)
+5. **Verifiable Release Chain**: Signed Manifest + runtime hash verification
 
 ### Security Guarantees
 
 - Server zero-knowledge
 - End-to-end confidentiality
-- Update/destroy operations are unforgeable (WebAuthn)
+- Update/destroy operations are unforgeable (WebAuthn or ECDSA)
 - Replay/reorder/concurrent-overwrite resistant (DO atomicity)
 - Minimal metadata leakage
-- Frontend integrity verifiable (CSP/SRI)
+- Frontend integrity verifiable (CSP + Signed Manifest)
 - Secure Share management private key is non-exportable (WebAuthn); Quick Share admin key is encoded in the management link
 
 ## Deploy

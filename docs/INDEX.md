@@ -146,7 +146,7 @@ docs/
 → [ARCHITECTURE.md § Ciphertext Length Leakage Mitigation](./ARCHITECTURE.md#2-ciphertext-length-leakage-mitigation-padding)
 
 ### Q: Can WebAuthn private keys be exported?
-→ [SECURITY.md § Admin Private Key Non-Exportable](./SECURITY.md#7-admin-private-key-non-exportable-)
+→ [SECURITY.md § Admin Private Key Non-Exportable (Secure Share)](./SECURITY.md#7-admin-private-key-non-exportable--secure-share)
 
 ### Q: Can the server see plaintext?
 → [SECURITY.md § Server Zero-Knowledge](./SECURITY.md#1-server-zero-knowledge-)
