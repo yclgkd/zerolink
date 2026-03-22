@@ -516,7 +516,7 @@ sequenceDiagram
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
   S->>S: build share URL: /s/{uuid}#k=lock_secret
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
-  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv (Quick Share) or /m/{uuid} (Secure Share)
+  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
   D->>K: store admin credential + lock_key + status=Waiting
