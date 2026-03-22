@@ -1,4 +1,4 @@
-<!-- synced-with: 5d1d478 -->
+<!-- synced-with: c6d6bdc -->
 
 > **语言**: [English](./SECURITY.md) | 中文
 
