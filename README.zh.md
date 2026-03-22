@@ -22,7 +22,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ```
 1. Sender → Create (Quick Share 密码模式 / Secure Share Passkey 模式)
-          → 分享链接: /s/:uuid#k=<lock_secret>
+          → 分享链接: /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]
 
 2. Receiver → Lock (输入密码 → 生成 RSA keypair → 本地存储)
             → 展示 Safety Code (Emoji/Color)

@@ -20,7 +20,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ```
 1. Sender → Create (Quick Share password mode / Secure Share Passkey mode)
-          → Share link: /s/:uuid#k=<lock_secret>
+          → Share link: /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]
 
 2. Receiver → Lock (enter password → generate RSA keypair → store locally)
             → Display Safety Code (Emoji/Color)
