@@ -45,7 +45,7 @@ v3.0 的产品目标：
 
 ### 3.1 新增：Lock Secret（URL Fragment）防抢占锁定
 
-- create 时生成 lock_secret（16–32 bytes 随机），**只放在分享链接的 URL fragment**（例如 /s/UUID#k=...）
+- create 时生成 lock_secret（32 bytes 随机），**只放在分享链接的 URL fragment**（例如 /s/UUID#k=...）
 - **fragment 不会被 HTTP 请求携带**，预加载机器人即使访问 /s/UUID 也拿不到 lock_secret，因此无法 lock
 - lock 需要 lock_secret 参与挑战响应（Lock Challenge）
 
@@ -115,7 +115,7 @@ v3.0 的产品目标：
 2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（adminMode=password）
 3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required，RK=discouraged）→ Create Finish
 4. 页面显示两条链接：
-   - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
+   - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>[&af=\<sender_auth_fpr\>]
    - 管理链接（发送方）：/m/:uuid#wk=\<wrapped_priv\>（Quick Share）或 /m/:uuid（Secure Share）
 
 > **UI 强制提示**：分享链接必须完整复制（包括 # 后部分），否则接收方无法上锁
@@ -397,13 +397,12 @@ DO 校验：
 与 v2.4 相同，但 update payload 增加：
 
 - pad_block（默认 4096）
-- plaintext_len（原文长度，仅用于调试/审计，建议不传）
 
-**建议**：plaintext_len 不要出现在明文可见字段，完全在 padding header 内即可。
+> 注意：`plaintext_len` 不是 API 层字段。它仅存在于加密后的 padding header 内部（`padded_plaintext` 的前 4 字节；参见附录 E），不作为请求的顶层字段传输。
 
-### 10.5 删除（delete_begin/commit）
+### 10.5 删除（compound_begin + delete_commit）
 
-同 v2.4。
+删除复用 `compound_begin` 获取 challenge，再调用 `delete_commit` 完成管理授权。没有单独的 `delete_begin` 端点。
 
 ### 10.6 Quick Share / Legacy Password API
 
@@ -514,7 +513,7 @@ sequenceDiagram
   W-->>S: creationOptions
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
-  S->>S: build share URL: /s/{uuid}#k=lock_secret
+  S->>S: build share URL: /s/{uuid}#k=lock_secret[&af=sender_auth_fpr]
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
   S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
@@ -561,8 +560,8 @@ sequenceDiagram
   end
 
   rect rgb(240,240,240)
-  Note over S,D: Delete (one-confirm)
-  S->>W: POST /api/delete_begin/{uuid}
+  Note over S,D: Delete (reuses compound_begin)
+  S->>W: POST /api/manage/compound_begin/{uuid}
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin

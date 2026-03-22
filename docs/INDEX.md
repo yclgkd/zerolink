@@ -47,7 +47,7 @@ docs/
 #### Core Mechanisms
 - **Lock Secret (Anti-TOFU)** → [ARCHITECTURE.md § TOFU Preemptive Lock Protection](./ARCHITECTURE.md#1-tofu-preemptive-lock-protection-v25-core)
 - **Padding (Anti-Length Leakage)** → [ARCHITECTURE.md § Ciphertext Length Leakage Mitigation](./ARCHITECTURE.md#2-ciphertext-length-leakage-mitigation-padding)
-- **WebAuthn Admin Authority** → [ARCHITECTURE.md § Concurrency Safety](./ARCHITECTURE.md#3-concurrency-safety-durable-objects)
+- **Admin Authority (WebAuthn / ECDSA)** → [ARCHITECTURE.md § Product Modes](./ARCHITECTURE.md#product-modes-current-profiles)
 - **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.md#4-intent-binding)
 
 #### Cryptography

@@ -43,7 +43,7 @@ v3.0 product goals:
 
 ### 3.1 New: Lock Secret (URL Fragment) Anti-Lock-Sniping
 
-- At creation, a lock_secret (16-32 random bytes) is generated and **placed only in the share link's URL fragment** (e.g., /s/UUID#k=...)
+- At creation, a lock_secret (32 random bytes) is generated and **placed only in the share link's URL fragment** (e.g., /s/UUID#k=...)
 - **The fragment is never sent with HTTP requests**, so preload bots that access /s/UUID cannot obtain the lock_secret and therefore cannot lock
 - Locking requires the lock_secret to participate in a challenge-response (Lock Challenge)
 
@@ -113,7 +113,7 @@ Existing channels may store `standard` / `strict` / `hardware_only` security_pro
 2. **Quick Share flow**: Enter password -> locally generate ECDSA keypair -> Argon2id wrapping -> Create Finish (adminMode=password)
 3. **Secure Share flow**: Create Begin -> WebAuthn registration (UV=required, RK=discouraged) -> Create Finish
 4. The page displays two links:
-   - Share link (receiver): /s/:uuid#k=\<lock_secret_b64url\>
+   - Share link (receiver): /s/:uuid#k=\<lock_secret_b64url\>[&af=\<sender_auth_fpr\>]
    - Admin link (sender): /m/:uuid#wk=\<wrapped_priv\> (Quick Share) or /m/:uuid (Secure Share)
 
 > **Mandatory UI notice**: The share link must be copied in full (including the part after #), otherwise the receiver cannot lock
@@ -395,13 +395,12 @@ Final result: writes receiver_pub, fpr, status=Locked
 Same as v2.4, but the update payload adds:
 
 - pad_block (default 4096)
-- plaintext_len (original text length, for debugging/auditing only; recommended not to transmit)
 
-**Recommendation**: plaintext_len should not appear in plaintext-visible fields; it should be entirely within the padding header.
+> Note: `plaintext_len` is not an API-level field. It exists only inside the encrypted padding header (the first 4 bytes of `padded_plaintext`; see Appendix E). It is never transmitted as a top-level request field.
 
-### 10.5 Delete (delete_begin/commit)
+### 10.5 Delete (compound_begin + delete_commit)
 
-Same as v2.4.
+Delete reuses `compound_begin` for challenge issuance, then calls `delete_commit` with admin authorization. There is no separate `delete_begin` endpoint.
 
 ### 10.6 Quick Share / Legacy Password API
 
@@ -512,7 +511,7 @@ sequenceDiagram
   W-->>S: creationOptions
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
-  S->>S: build share URL: /s/{uuid}#k=lock_secret
+  S->>S: build share URL: /s/{uuid}#k=lock_secret[&af=sender_auth_fpr]
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
   S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
@@ -559,8 +558,8 @@ sequenceDiagram
   end
 
   rect rgb(240,240,240)
-  Note over S,D: Delete (one-confirm)
-  S->>W: POST /api/delete_begin/{uuid}
+  Note over S,D: Delete (reuses compound_begin)
+  S->>W: POST /api/manage/compound_begin/{uuid}
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin

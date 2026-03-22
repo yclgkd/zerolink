@@ -51,7 +51,7 @@ Sender → 选择 Quick Share 或 Secure Share → 生成 lock_secret
      → Quick Share：本地生成 ECDSA 管理密钥并用 Argon2id 包裹
      → Secure Share：WebAuthn 注册管理凭据
      → 返回两条链接：
-       - /s/:uuid#k=<lock_secret>  （分享链接，含 fragment）
+       - /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]  （分享链接；af= 在存在发送者身份指纹时附加）
        - /m/:uuid#wk=<wrapped_priv> （管理链接；Quick Share — fragment 携带 Argon2id 包裹的 Admin-Priv）
        - /m/:uuid                   （管理链接；Secure Share — 无需 fragment）
 ```

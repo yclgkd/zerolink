@@ -51,7 +51,7 @@ Sender → Choose Quick Share or Secure Share → Generate lock_secret
      → Quick Share: Generate local ECDSA admin key and wrap with Argon2id
      → Secure Share: Register WebAuthn admin credential
      → Return two links:
-       - /s/:uuid#k=<lock_secret>  (share link, with fragment)
+       - /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]  (share link; af= appended when sender auth fingerprint exists)
        - /m/:uuid#wk=<wrapped_priv> (manage link; Quick Share — fragment carries Argon2id-wrapped Admin-Priv)
        - /m/:uuid                   (manage link; Secure Share — no fragment needed)
 ```

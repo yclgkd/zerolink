@@ -48,7 +48,7 @@ docs/
 #### 核心机制
 - **Lock Secret（防 TOFU）** → [ARCHITECTURE.md § TOFU 抢占锁定防护](./ARCHITECTURE.zh.md#1-tofu-抢占锁定防护v25-核心)
 - **Padding（防长度泄露）** → [ARCHITECTURE.md § 密文长度泄露缓解](./ARCHITECTURE.zh.md#2-密文长度泄露缓解padding)
-- **WebAuthn 管理权** → [ARCHITECTURE.md § 并发安全](./ARCHITECTURE.zh.md#3-并发安全durable-objects)
+- **管理权（WebAuthn / ECDSA）** → [ARCHITECTURE.md § 产品模式](./ARCHITECTURE.zh.md#产品模式current-profiles)
 - **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.zh.md#4-intent-binding意图绑定)
 
 #### 密码学
