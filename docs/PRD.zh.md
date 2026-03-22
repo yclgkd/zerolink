@@ -131,7 +131,6 @@ v3.0 的产品目标：
 - 上锁成功后显示 **安全码（Safety Code）**：
     - Emoji 序列（例如 6–10 个 emoji）
     - 颜色块（例如 4×4/5×5 色块）
-    - Identicon 仍保留但作为背景元素
     - "高级"里可展开 raw hex 指纹
 
 ### 5.3 发送方投递（Sender：软化核对）
@@ -217,8 +216,6 @@ v2.5 给出三层应对：
 
 - Emoji Safety Code：取 hash 分段映射到 emoji 表（固定表，稳定输出）
 - Color Blocks：取 hash nibble 映射到固定调色板
-- Identicon：继续保留（背景/头像）
-
 显示规则：
 
 - 默认展示 Emoji 或 Color（可切换）
@@ -457,7 +454,6 @@ DO 校验：
 
 - 默认：Emoji Safety Code（例如 8 个 emoji）
 - 次选：Color Blocks（例如 4×4）
-- Identicon：作为背景/头像存在
 - Advanced：短指纹 + 完整 hex（折叠）
 
 文案原则：

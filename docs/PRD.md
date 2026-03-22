@@ -129,7 +129,6 @@ Existing channels may store `standard` / `strict` / `hardware_only` security_pro
 - After successful locking, display **Safety Code**:
     - Emoji sequence (e.g., 6-10 emoji)
     - Color blocks (e.g., 4x4/5x5 color grid)
-    - Identicon is retained but as a background element
     - "Advanced" section expands to show raw hex fingerprint
 
 ### 5.3 Sender Delivery (Sender: Soft Verification)
@@ -215,8 +214,6 @@ Computed from receiver_pub_fpr = SHA256(SPKI(receiver_pub)):
 
 - Emoji Safety Code: Hash segments mapped to an emoji table (fixed table, stable output)
 - Color Blocks: Hash nibbles mapped to a fixed color palette
-- Identicon: Retained (background/avatar)
-
 Display rules:
 
 - Default: Emoji or Color (switchable)
@@ -455,7 +452,6 @@ New fields:
 
 - Default: Emoji Safety Code (e.g., 8 emoji)
 - Secondary: Color Blocks (e.g., 4x4)
-- Identicon: Present as background/avatar
 - Advanced: Short fingerprint + full hex (collapsed)
 
 Copy principles:

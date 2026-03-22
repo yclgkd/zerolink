@@ -149,7 +149,7 @@
 ```json
 {
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^4.3.6"
   }
 }
 ```
@@ -277,7 +277,7 @@ export const handlers = [
 ```json
 {
   "devDependencies": {
-    "@testing-library/react": "^16.0.0",
+    "@testing-library/react": "^16.3.2",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/user-event": "^14.5.2"
   }
@@ -610,8 +610,8 @@ backend   ──depends on───────┘
   "name": "@zerolink/frontend",
   "dependencies": {
     "@zerolink/shared": "workspace:*",
-    "react": "^18.3.1",
-    "zod": "^3.23.8"
+    "react": "^19.2.4",
+    "zod": "^4.3.6"
   }
 }
 
@@ -684,16 +684,6 @@ export async function wrapPrivateKey(
 }
 ```
 
-#### Optional: Identicon Generation
-
-```json
-{
-  "dependencies": {
-    "@dicebear/core": "^9.0.0",
-    "@dicebear/collection": "^9.0.0"
-  }
-}
-```
 
 #### Ed25519 (Manifest Signature Verification)
 
@@ -959,47 +949,14 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-          package-manager-cache: false
-
-      - run: corepack enable
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm typecheck
       - run: pnpm test
-
-  pr-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-          package-manager-cache: false
-
-      - run: corepack enable
-
-      - run: pnpm install --frozen-lockfile
-
       - run: pnpm --filter @zerolink/frontend build
 
-  pr-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-          package-manager-cache: false
-
-      - run: corepack enable
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm exec playwright install --with-deps chromium
-        working-directory: packages/frontend
-
-      - run: pnpm --filter @zerolink/frontend test:e2e
+# E2E tests run in a separate workflow (e2e-full.yml, scheduled/manual)
 ```
 
 ---
@@ -1144,7 +1101,7 @@ packages/backend/
 {
   "dependencies": {
     "react": "^19.2.4",           // Application dependency: allow minor upgrades
-    "argon2-browser": "1.18.0",   // Cryptographic: fixed version
+    "@noble/hashes": "^2.0.1",    // Cryptographic: Argon2id KDF
     "@zerolink/shared": "workspace:*"  // Monorepo internal: workspace protocol
   }
 }
@@ -1222,7 +1179,7 @@ packages/backend/
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -1248,7 +1205,7 @@ packages/backend/
   },
   "dependencies": {
     "@zerolink/shared": "workspace:*",
-    "@noble/hashes": "^1.5.0",
+    "@noble/hashes": "^2.0.1",
     "@github/webauthn-json": "^2.1.1",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.2.1",
