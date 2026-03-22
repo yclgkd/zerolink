@@ -16,7 +16,8 @@ docs/
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
 ├── PRD.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
-└── SECURITY.md       # 安全模型
+├── SECURITY.md       # 安全模型
+└── VERIFY.md         # 构建完整性与可验证发布
 ```
 
 ---
@@ -76,6 +77,10 @@ docs/
 - **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.zh.md)
 - **安全检查清单** → [SECURITY.md § 安全检查清单](./SECURITY.zh.md#安全检查清单implementation)
 
+#### 构建完整性
+- **可验证发布流程** → [VERIFY.md](./VERIFY.zh.md)
+- **Manifest 签名** → [DEPLOYMENT.md § Manifest 签名](./DEPLOYMENT.zh.md#manifest-签名可选)
+
 ---
 
 ## 按角色阅读
@@ -106,7 +111,7 @@ docs/
 1. [SECURITY.md](./SECURITY.zh.md) - 完整安全模型
 2. [SECURITY.md § 攻击场景分析](./SECURITY.zh.md#攻击场景分析) - 威胁分析
 3. [SECURITY.md § 安全检查清单](./SECURITY.zh.md#安全检查清单implementation) - 审计要点
-4. [PRD.md § 14](./PRD.zh.md#14-测试向量与验收v25-新增) - 测试向量
+4. [PRD.md § 14](./PRD.zh.md#14-测试向量与验收v30) - 测试向量
 5. [SECURITY.md § 密码学规范](./SECURITY.zh.md#密码学规范) - 加密参数
 
 ### DevOps / 部署

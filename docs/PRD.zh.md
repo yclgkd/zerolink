@@ -58,7 +58,7 @@ v3.0 的产品目标：
 ### 3.3 收紧：接收方 KDF 强制 Argon2id
 
 - 默认且必须：Argon2id（参数目标耗时 250–500ms）
-- PBKDF2 只允许在"兼容模式"下启用，并在 UI 明确标注"降低安全性"
+- PBKDF2 未实现
 
 ### 3.4 两档用户入口（v3.0 简化）
 
@@ -129,8 +129,8 @@ v3.0 的产品目标：
 - 输入密码 → 生成 RSA keypair → Argon2id 包裹私钥存本地
 - lock 请求必须携带 lock challenge 响应（见协议）
 - 上锁成功后显示 **安全码（Safety Code）**：
-    - Emoji 序列（例如 6–10 个 emoji）
-    - 颜色块（例如 4×4/5×5 色块）
+    - Emoji 序列（8 个 emoji）
+    - 颜色块（4×4 色块）
     - "高级"里可展开 raw hex 指纹
 
 ### 5.3 发送方投递（Sender：软化核对）
@@ -208,13 +208,13 @@ v2.5 给出三层应对：
 
 - Argon2id 参数采用目标耗时策略（250–500ms）
 - 参数写入本地包头：salt, m, t, p, version
-- PBKDF2 仅"兼容模式"允许
+- PBKDF2 未实现
 
 ### 7.3 Safety Code（软化指纹核对）
 
 从 receiver_pub_fpr = SHA256(SPKI(receiver_pub)) 计算：
 
-- Emoji Safety Code：取 hash 分段映射到 emoji 表（固定表，稳定输出）
+- Emoji Safety Code：取每个 hash byte 的低 nibble（4 bits）映射到 16 项 emoji 调色板（固定表，稳定输出）
 - Color Blocks：取 hash nibble 映射到固定调色板
 显示规则：
 
@@ -907,14 +907,14 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
 ### K2. Emoji 方案（推荐默认）
 
-- 取 fpr bytes 分成 8 组，每组 1 byte → 映射到 emoji 表（长度 256 的固定表）
-- 输出 8 个 emoji（或 10 个更稳），跨端稳定一致
+- 取 fpr bytes 分成 8 组，每组取低 nibble（4 bits）→ 映射到 16 项 emoji 调色板（固定表）
+- 输出 8 个 emoji，跨端稳定一致
 - UI 展示为：🐳 🍀 🧩 ...（例子）
 
 ### K3. Color Blocks
 
 - 取 fpr 的 32 bytes → 每个 nibble 映射到 16 色固定调色板
-- 输出 4×4 或 5×5 色块（固定布局），跨端稳定
+- 输出 4×4 色块（固定布局），跨端稳定
 
 ### K4. Advanced 展示
 

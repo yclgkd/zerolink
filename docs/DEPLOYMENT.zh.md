@@ -30,7 +30,7 @@
 | Cloudflare 账号 | 免费版即可（支持 Durable Objects 免费层） | — |
 | Node.js | JavaScript 运行时 | 22.x |
 | pnpm | 包管理器 | 9.x |
-| Wrangler CLI | Cloudflare 官方部署工具 | 3.x |
+| Wrangler CLI | Cloudflare 官方部署工具 | 4.x |
 
 > **重要 / Important**: Durable Objects 自 2026 年起提供 **免费层 (Free Tier)**。
 > 本项目已适配 **SQLite 存储后端**，支持在免费计划下运行（每日 10 万次请求限额）。
@@ -158,7 +158,8 @@ run_worker_first = true
 not_found_handling = "single-page-application"
 
 routes = [
-  { pattern = "zerolink.dev*", zone_name = "zerolink.dev" }
+  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
+  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
 ]
 
 [[durable_objects.bindings]]
@@ -279,13 +280,14 @@ bootstrap 会先确认自己正在运行的入口资源与 manifest 一致；若
 
 ```toml
 routes = [
-  { pattern = "zerolink.dev*", zone_name = "zerolink.dev" }
+  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
+  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
 ]
 ```
 
 或通过 Cloudflare Dashboard：**Workers → zerolink-api → Settings → Domains & Routes → Add**
 
-> **注意**: pattern 使用 `zerolink.dev*`（不带斜杠），确保根路径 `/` 也被正确匹配。
+> **注意**: 使用两条独立的路由条目——一条匹配裸根路径（`zerolink.dev`），一条匹配所有子路径（`zerolink.dev/*`）——以确保根路径 `/` 也被正确匹配。
 
 ---
 

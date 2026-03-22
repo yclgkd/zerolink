@@ -104,7 +104,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 ### Prerequisites
 
 - Cloudflare account (free plan is sufficient; Durable Objects free tier supported)
-- Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
+- Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
 For full deployment documentation, see the [Deployment Guide](./docs/DEPLOYMENT.md).
 

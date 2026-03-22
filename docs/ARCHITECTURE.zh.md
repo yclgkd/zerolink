@@ -40,7 +40,7 @@
 #### 后端
 - **平台**：Cloudflare Workers + Durable Objects + KV
 - **状态管理**：Durable Objects（串行化、原子性）
-- **持久化**：KV（密文、公钥、元数据）
+- **持久化**：DO 存储 / SQLite（密文、公钥、元数据）
 - **自托管选项**：Docker Compose（PostgreSQL/SQLite + Redis）（计划中，尚未实现）
 
 ## 核心协议流程

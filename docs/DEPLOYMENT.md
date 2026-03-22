@@ -27,7 +27,7 @@
 | Cloudflare Account | Free plan is sufficient (supports Durable Objects free tier) | — |
 | Node.js | JavaScript runtime | 22.x |
 | pnpm | Package manager | 9.x |
-| Wrangler CLI | Official Cloudflare deployment tool | 3.x |
+| Wrangler CLI | Official Cloudflare deployment tool | 4.x |
 
 > **Important**: Durable Objects now offer a **Free Tier**. This project uses the **SQLite backend**, which is supported on the free plan (100k daily requests).
 
@@ -157,7 +157,8 @@ run_worker_first = true
 not_found_handling = "single-page-application"
 
 routes = [
-  { pattern = "zerolink.dev*", zone_name = "zerolink.dev" }
+  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
+  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
 ]
 
 [[durable_objects.bindings]]
@@ -281,13 +282,14 @@ Configure routes in `wrangler.toml` so the Worker handles all requests (API + st
 
 ```toml
 routes = [
-  { pattern = "zerolink.dev*", zone_name = "zerolink.dev" }
+  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
+  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
 ]
 ```
 
 Or via the Cloudflare Dashboard: **Workers > zerolink-api > Settings > Domains & Routes > Add**
 
-> **Note**: The pattern uses `zerolink.dev*` (without a trailing slash) to ensure the root path `/` is matched correctly.
+> **Note**: Two separate route entries are used — one for the bare root (`zerolink.dev`) and one for all sub-paths (`zerolink.dev/*`) — to ensure the root path `/` is matched correctly.
 
 ---
 

@@ -115,9 +115,11 @@ openssl pkeyutl \
 
 ```bash
 # Check a signed runtime asset
-sha256sum packages/frontend/dist/assets/index.js
-# Compare with the value in manifest.json:
-jq '.files["assets/index.js"]' packages/frontend/dist/manifest.json
+# Note: Vite outputs content-hashed filenames such as index-Abc123.js
+sha256sum packages/frontend/dist/assets/index-*.js
+# Compare with the value in manifest.json (use the actual hashed filename):
+jq '.files | to_entries[] | select(.key | startswith("assets/index-"))' \
+  packages/frontend/dist/manifest.json
 ```
 
 ### 3. Verify the manifest hash

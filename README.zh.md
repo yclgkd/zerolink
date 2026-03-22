@@ -108,7 +108,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 ### 前提条件 / Prerequisites
 
 - Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
-- Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
+- Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
 完整部署文档见 [部署指南](./docs/DEPLOYMENT.zh.md)
 

@@ -40,7 +40,7 @@
 #### Backend
 - **Platform**: Cloudflare Workers + Durable Objects + KV
 - **State management**: Durable Objects (serialization, atomicity)
-- **Persistence**: KV (ciphertext, public keys, metadata)
+- **Persistence**: DO storage / SQLite (ciphertext, public keys, metadata)
 - **Self-hosting option**: Docker Compose (PostgreSQL/SQLite + Redis) (Planned, not yet implemented)
 
 ## Core Protocol Flows

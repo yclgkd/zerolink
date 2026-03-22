@@ -56,7 +56,7 @@ v3.0 product goals:
 ### 3.3 Tightened: Receiver KDF Enforces Argon2id
 
 - Default and mandatory: Argon2id (parameter target latency 250-500ms)
-- PBKDF2 is only allowed in "compatibility mode" and is clearly labeled "reduced security" in the UI
+- PBKDF2 is not implemented
 
 ### 3.4 Two User-Facing Tiers (v3.0 Simplification)
 
@@ -127,8 +127,8 @@ Existing channels may store `standard` / `strict` / `hardware_only` security_pro
 - Enter password -> generate RSA keypair -> Argon2id-wrap private key and store locally
 - Lock request must carry a lock challenge response (see protocol)
 - After successful locking, display **Safety Code**:
-    - Emoji sequence (e.g., 6-10 emoji)
-    - Color blocks (e.g., 4x4/5x5 color grid)
+    - Emoji sequence (8 emoji)
+    - Color blocks (4x4 color grid)
     - "Advanced" section expands to show raw hex fingerprint
 
 ### 5.3 Sender Delivery (Sender: Soft Verification)
@@ -206,13 +206,13 @@ The final encryption target is padded_plaintext; the receiver truncates to the o
 
 - Argon2id parameters use a target latency strategy (250-500ms)
 - Parameters are written to the local header: salt, m, t, p, version
-- PBKDF2 is only allowed in "compatibility mode"
+- PBKDF2 is not implemented
 
 ### 7.3 Safety Code (Softened Fingerprint Verification)
 
 Computed from receiver_pub_fpr = SHA256(SPKI(receiver_pub)):
 
-- Emoji Safety Code: Hash segments mapped to an emoji table (fixed table, stable output)
+- Emoji Safety Code: lower nibble (4 bits) of each hash byte mapped to 16-entry emoji palette (fixed table, stable output)
 - Color Blocks: Hash nibbles mapped to a fixed color palette
 Display rules:
 
@@ -905,14 +905,14 @@ Public endpoint /api/public/:uuid:
 
 ### K2. Emoji Scheme (Recommended Default)
 
-- Split fpr bytes into 8 groups, each group 1 byte -> mapped to an emoji table (fixed table of length 256)
-- Output 8 emoji (or 10 for more stability), consistent across platforms
+- Split fpr bytes into 8 groups; for each group take lower nibble (4 bits) -> mapped to 16-entry emoji palette (fixed table)
+- Output 8 emoji, consistent across platforms
 - UI displays as: (example)
 
 ### K3. Color Blocks
 
 - Take the 32 bytes of fpr -> each nibble mapped to a 16-color fixed palette
-- Output 4x4 or 5x5 color blocks (fixed layout), consistent across platforms
+- Output 4x4 color blocks (fixed layout), consistent across platforms
 
 ### K4. Advanced Display
 
