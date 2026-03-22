@@ -52,7 +52,8 @@ Sender → 选择 Quick Share 或 Secure Share → 生成 lock_secret
      → Secure Share：WebAuthn 注册管理凭据
      → 返回两条链接：
        - /s/:uuid#k=<lock_secret>  （分享链接，含 fragment）
-       - /m/:uuid                   （管理链接）
+       - /m/:uuid#wk=<wrapped_priv> （管理链接；Quick Share — fragment 携带 Argon2id 包裹的 Admin-Priv）
+       - /m/:uuid                   （管理链接；Secure Share — 无需 fragment）
 ```
 
 ### 2. Lock（接收方上锁）
@@ -228,7 +229,7 @@ WebAuthn challenge 必须 === expected_challenge
 - Waiting → Locked：lock_commit（需 lock_proof）
 - Locked → Delivered：compound_commit（首次投递）
 - Delivered → Delivered：compound_commit（更新）
-- 任意 → Deleted：delete_commit（WebAuthn 授权）
+- 任意 → Deleted：delete_commit（管理授权：WebAuthn 或 ECDSA）
 - 任意 → Expired：TTL 到期
 
 **不可变性**：

@@ -63,7 +63,7 @@ v3.0 的产品目标：
 ### 3.4 两档用户入口（v3.0 简化）
 
 创建时可选两档（Legacy 档位仅用于已有频道的向后兼容）：
-- **Quick Share**：密码模式，本地 Argon2id 派生 ECDSA 管理密钥，无需 passkey，4KB padding
+- **Quick Share**：密码模式，本地生成 ECDSA 管理密钥（Argon2id 包裹），无需 passkey，4KB padding
 - **Secure Share**：Passkey 模式，UV=required / RK=discouraged，8KB padding，合并原 Standard+Strict 的安全级别
 - **Legacy（只读）**：standard / strict / hardware_only 仅渲染已有频道，不作为新建选项
 
@@ -116,7 +116,7 @@ v3.0 的产品目标：
 3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required，RK=discouraged）→ Create Finish
 4. 页面显示两条链接：
    - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
-   - 管理链接（发送方）：/m/:uuid
+   - 管理链接（发送方）：/m/:uuid#wk=\<wrapped_priv\>（Quick Share）或 /m/:uuid（Secure Share）
 
 > **UI 强制提示**：分享链接必须完整复制（包括 # 后部分），否则接收方无法上锁
 
@@ -250,7 +250,7 @@ v2.5 给出三层应对：
 
 Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用户入口，不再是降级选项：
 
-- **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹存 IndexedDB
+- **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
 - **协议字段**：`adminMode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
 - **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
@@ -515,6 +515,7 @@ sequenceDiagram
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
   S->>S: build share URL: /s/{uuid}#k=lock_secret
+  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv (Quick Share) or /m/{uuid} (Secure Share)
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
@@ -861,7 +862,7 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 ### I1. 管理密钥生成
 
 - 前端生成 ECDSA P-256 keypair
-- Admin-Priv 用 Argon2id 包裹存 IndexedDB（密码由用户提供）
+- Admin-Priv 用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB；密码由用户提供）
 - 服务器存 Admin-Pub（JWK）+ adminMode="password"
 - Legacy 频道可能存 adminMode="softkey"，后端等价处理
 

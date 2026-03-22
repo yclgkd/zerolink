@@ -33,7 +33,7 @@
 **Guarantees**:
 - Plaintext is encrypted on the client before being sent
 - Receiver private key is generated on the client, wrapped with Argon2id, and stored locally only
-- Sender admin private key is managed by WebAuthn (resides in system/hardware keystore)
+- Sender admin private key is managed by WebAuthn (Secure Share: resides in system/hardware keystore) or generated locally as ECDSA and encoded in the manage link fragment (Quick Share)
 - lock_secret exists only in the URL fragment; the server stores only lock_key (one-way derivation)
 
 **Verification**:
@@ -63,8 +63,8 @@
 **Goal**: Only the admin can authorize writes/destroys
 
 **Guarantees**:
-- Admin authority is based on WebAuthn (private key is non-exportable)
-- Each operation requires a WebAuthn signature (user confirmation)
+- Admin authority is based on WebAuthn (Secure Share: private key is non-exportable) or ECDSA signature (Quick Share: Argon2id-wrapped key in manage link fragment)
+- Each operation requires a WebAuthn signature (Secure Share) or ECDSA signature (Quick Share)
 - Intent Binding: challenge binds to operation details, preventing induced signatures
 
 **Verification**:
@@ -209,7 +209,7 @@ default PAD_BLOCK = 4096 bytes
 
 ### Quick Share (Password)
 - **Use case**: Environments without WebAuthn support, cross-device/cross-browser scenarios, users who prefer password managers
-- **Admin authority**: Local ECDSA P-256 admin key, wrapped with Argon2id and stored in IndexedDB
+- **Admin authority**: Local ECDSA P-256 admin key, wrapped with Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB)
 - **Padding**: 4KB
 - **Risk boundary**: Does not have WebAuthn's non-exportable property; password strength and endpoint security are more critical
 
@@ -325,7 +325,7 @@ Trojan monitors user operations
 ```
 
 **Quick Share Risk Boundary**:
-- Local ECDSA private key stored in IndexedDB (wrapped with Argon2id); theoretically more dependent on endpoint security than Secure Share
+- Local ECDSA private key wrapped with Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB); theoretically more dependent on endpoint security than Secure Share
 - UI should guide users to set a sufficiently strong password rather than presenting it as a "fallback mode"
 
 ---

@@ -35,7 +35,7 @@
 **保证**：
 - 明文在客户端加密后才发送
 - 接收方私钥在客户端生成，Argon2id 包裹后仅存本地
-- 发送方管理私钥由 WebAuthn 管理（驻留系统/硬件）
+- 发送方管理私钥由 WebAuthn 管理（Secure Share：驻留系统/硬件）或本地生成 ECDSA 密钥编码在管理链接 fragment 中（Quick Share）
 - lock_secret 只在 URL fragment，服务器只存 lock_key（单向派生）
 
 **验证**：
@@ -65,8 +65,8 @@
 **目标**：仅管理者可授权写入/销毁
 
 **保证**：
-- 管理权基于 WebAuthn（私钥不可导出）
-- 每次操作需要 WebAuthn 签名（用户确认）
+- 管理权基于 WebAuthn（Secure Share：私钥不可导出）或 ECDSA 签名（Quick Share：Argon2id 包裹的密钥在管理链接 fragment 中）
+- 每次操作需要 WebAuthn 签名（Secure Share）或 ECDSA 签名（Quick Share）
 - Intent Binding：challenge 绑定操作细节，防诱导签名
 
 **验证**：
@@ -211,7 +211,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 
 ### Quick Share（密码）
 - **适用**：无 WebAuthn 支持环境、跨设备/跨浏览器场景、希望使用密码管理器的用户
-- **管理权**：本地 ECDSA P-256 管理密钥，Argon2id 包裹后存 IndexedDB
+- **管理权**：本地 ECDSA P-256 管理密钥，Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **Padding**：4KB
 - **风险边界**：不具备 WebAuthn 的不可导出属性，密码强度与终端安全更关键
 
@@ -327,7 +327,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 ```
 
 **Quick Share 风险边界**：
-- 本地 ECDSA 私钥存 IndexedDB（Argon2id 包裹），理论上比 Secure Share 更依赖终端安全
+- 本地 ECDSA 私钥用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB），理论上比 Secure Share 更依赖终端安全
 - UI 应引导用户设置足够强的密码，而不是将其表述为“降级模式”
 
 ---

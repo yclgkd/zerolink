@@ -61,7 +61,7 @@ v3.0 product goals:
 ### 3.4 Two User-Facing Tiers (v3.0 Simplification)
 
 Two tiers available at creation (legacy tiers are only used for backward compatibility with existing channels):
-- **Quick Share**: Password mode, locally Argon2id-derived ECDSA admin key, no passkey required, 4KB padding
+- **Quick Share**: Password mode, locally generated ECDSA admin key (Argon2id-wrapped), no passkey required, 4KB padding
 - **Secure Share**: Passkey mode, UV=required / RK=discouraged, 8KB padding, merges the security levels of the original Standard+Strict
 - **Legacy (read-only)**: standard / strict / hardware_only only render existing channels; not offered as new creation options
 
@@ -114,7 +114,7 @@ Existing channels may store `standard` / `strict` / `hardware_only` security_pro
 3. **Secure Share flow**: Create Begin -> WebAuthn registration (UV=required, RK=discouraged) -> Create Finish
 4. The page displays two links:
    - Share link (receiver): /s/:uuid#k=\<lock_secret_b64url\>
-   - Admin link (sender): /m/:uuid
+   - Admin link (sender): /m/:uuid#wk=\<wrapped_priv\> (Quick Share) or /m/:uuid (Secure Share)
 
 > **Mandatory UI notice**: The share link must be copied in full (including the part after #), otherwise the receiver cannot lock
 
@@ -248,7 +248,7 @@ States and transitions remain as in v2.4, but locking requires the lock_begin/lo
 
 Quick Share is the official user entry point in v3.0, replacing "Compatibility Mode" rather than being a fallback option:
 
-- **Admin Authority**: Locally generated ECDSA P-256 private key (Admin-Priv), wrapped via user password Argon2id and stored in IndexedDB
+- **Admin Authority**: Locally generated ECDSA P-256 private key (Admin-Priv), wrapped via user password Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB)
 - **Update/Delete Authorization**: ECDSA signature payload mode (DO still handles version/nonce atomicity)
 - **Protocol Field**: `adminMode: "password"` (internal); legacy channels may store `"softkey"` (treated as equivalent for backward compatibility)
 - **Padding**: 4KB blocks (compared to Secure Share's 8KB, lower bandwidth but slightly less privacy)
@@ -513,6 +513,7 @@ sequenceDiagram
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
   S->>S: build share URL: /s/{uuid}#k=lock_secret
+  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv (Quick Share) or /m/{uuid} (Secure Share)
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
@@ -859,7 +860,7 @@ Quick Share is the official user entry point in v3.0 (no longer a degraded mode)
 ### I1. Admin Key Generation
 
 - Frontend generates ECDSA P-256 keypair
-- Admin-Priv is Argon2id-wrapped and stored in IndexedDB (password provided by user)
+- Admin-Priv is Argon2id-wrapped and encoded in the manage link's URL fragment (not stored in IndexedDB; password provided by user)
 - Server stores Admin-Pub (JWK) + adminMode="password"
 - Legacy channels may store adminMode="softkey"; the backend treats them equivalently
 

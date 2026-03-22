@@ -52,7 +52,8 @@ Sender → Choose Quick Share or Secure Share → Generate lock_secret
      → Secure Share: Register WebAuthn admin credential
      → Return two links:
        - /s/:uuid#k=<lock_secret>  (share link, with fragment)
-       - /m/:uuid                   (manage link)
+       - /m/:uuid#wk=<wrapped_priv> (manage link; Quick Share — fragment carries Argon2id-wrapped Admin-Priv)
+       - /m/:uuid                   (manage link; Secure Share — no fragment needed)
 ```
 
 ### 2. Lock (Receiver Locks)
@@ -234,7 +235,7 @@ WebAuthn challenge must === expected_challenge
 - Waiting → Locked: lock_commit (requires lock_proof)
 - Locked → Delivered: compound_commit (first delivery)
 - Delivered → Delivered: compound_commit (update)
-- Any → Deleted: delete_commit (WebAuthn authorization)
+- Any → Deleted: delete_commit (admin authorization: WebAuthn or ECDSA)
 - Any → Expired: TTL expiration
 
 **Immutability**:
