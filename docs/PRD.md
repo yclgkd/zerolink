@@ -513,8 +513,8 @@ sequenceDiagram
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
   S->>S: build share URL: /s/{uuid}#k=lock_secret
-  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv (Quick Share) or /m/{uuid} (Secure Share)
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
+  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv (Quick Share) or /m/{uuid} (Secure Share)
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
   D->>K: store admin credential + lock_key + status=Waiting
@@ -548,10 +548,10 @@ sequenceDiagram
   W-->>S: begin
   S->>S: pad plaintext (4KB buckets) + hybrid encrypt + intent_hash
   S->>S: expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
-  S->>S: navigator.credentials.get(...) (or password-mode ECDSA sign; legacy softkey alias)
-  S->>W: POST /api/manage/compound_commit/{uuid} (assertion + update)
+  S->>S: Secure Share: navigator.credentials.get(...) / Quick Share: ECDSA sign with Admin-Priv
+  S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
-  D->>D: verify intent_hash + expected_challenge + WebAuthn signature + version/nonce
+  D->>D: verify intent_hash + expected_challenge + admin signature (WebAuthn or ECDSA) + version/nonce
   D->>K: write cipher_bundle + status=Delivered + last_version++
   K-->>D: ok
   D-->>W: ok
@@ -564,7 +564,7 @@ sequenceDiagram
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin
-  S->>S: intent_hash + expected_challenge + WebAuthn get
+  S->>S: intent_hash + expected_challenge + admin sign (WebAuthn get or ECDSA sign)
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
   D->>K: delete record

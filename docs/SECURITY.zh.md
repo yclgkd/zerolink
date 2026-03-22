@@ -129,9 +129,9 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 
 ---
 
-### 7. 管理权私钥不可导出 ✅
+### 7. 管理权私钥不可导出 ✅（Secure Share）
 
-**目标**：攻击者无法长期窃取管理权
+**目标**：攻击者无法长期窃取管理权（Secure Share：不可导出；Quick Share：密码保护）
 
 **保证**：
 - Secure Share：WebAuthn 私钥驻留系统密钥库/硬件

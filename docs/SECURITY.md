@@ -127,9 +127,9 @@ The WebAuthn assertion's challenge must === expected_challenge
 
 ---
 
-### 7. Admin Private Key Non-Exportable ✅
+### 7. Admin Private Key Non-Exportable ✅ (Secure Share)
 
-**Goal**: Attackers cannot permanently steal admin authority
+**Goal**: Attackers cannot permanently steal admin authority (Secure Share: non-exportable; Quick Share: password-protected)
 
 **Guarantees**:
 - Secure Share: WebAuthn private key resides in system keystore/hardware
