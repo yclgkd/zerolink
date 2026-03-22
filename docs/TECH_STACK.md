@@ -1019,11 +1019,12 @@ Automatically run before commit:
 ### Pull Request (CI)
 
 ```
-Must pass before merge:
+Must pass before merge (pr-validate.yml):
 1. pnpm typecheck (fails on type errors)
 2. pnpm test (fails on unit test failures)
 3. pnpm --filter @zerolink/frontend build (fails on signed release build errors)
-4. pnpm --filter @zerolink/frontend test:e2e (fails on E2E test failures)
+
+E2E tests run in a separate workflow (e2e-full.yml, scheduled/manual), not as a PR gate.
 ```
 
 ### Pre-Release (Release)

@@ -190,8 +190,8 @@ A single command deploys both the Worker code and frontend static assets.
 # View Worker logs
 npx wrangler tail
 
-# Test API health check
-curl https://zerolink.dev/api/health
+# Verify the Worker is reachable (should return a JSON response)
+curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
 ```
 
 ---

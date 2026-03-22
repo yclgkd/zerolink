@@ -49,9 +49,8 @@ not show the `Verified Release` card.
 | `dist/manifest.sig` | Ed25519 signature over `manifest.json` |
 | `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
 
-All dist artifacts are uploaded as `frontend-dist` in GitHub Actions release runs. That workflow
-also enables bootstrap verification by building the frontend with
-`VITE_RELEASE_VERIFICATION_REQUIRED=true`.
+The release workflow builds the frontend with `VITE_RELEASE_VERIFICATION_REQUIRED=true`,
+generates the signed manifest, and deploys the dist to Cloudflare Pages.
 
 ## Browser trust surface
 

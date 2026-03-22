@@ -1021,11 +1021,12 @@ jobs:
 ### Pull Request（CI）
 
 ```
-合并前必须通过：
+合并前必须通过（pr-validate.yml）：
 1. ✅ pnpm typecheck（类型错误则失败）
 2. ✅ pnpm test（单元测试失败则失败）
 3. ✅ pnpm --filter @zerolink/frontend build（签名发布构建失败则失败）
-4. ✅ pnpm --filter @zerolink/frontend test:e2e（E2E 测试失败则失败）
+
+E2E 测试在独立工作流中运行（e2e-full.yml，定时/手动触发），不作为 PR 合并门槛。
 ```
 
 ### 发布前（Release）

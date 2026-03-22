@@ -114,7 +114,7 @@ docs/
 2. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - GitHub Actions 与发布流程
 3. [TECH_STACK.md § 部署与发布](./TECH_STACK.zh.md#部署与发布) - 前后端部署
 4. [TECH_STACK.md § 发布流程](./TECH_STACK.zh.md#版本管理与发布流水线) - PR 验证与 tag 发布
-5. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - 域名与 Cloudflare 配置
+5. [VERIFY.md](./VERIFY.zh.md) - 构建完整性验证
 
 ---
 
@@ -155,7 +155,7 @@ docs/
 → [SECURITY.md § 密码学规范 § KDF](./SECURITY.zh.md#密码学规范)
 
 ### Q: 如何验证前端代码未被篡改？
-→ [PRD.md § 12. 前端完整性](./PRD.zh.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
+→ [VERIFY.md](./VERIFY.zh.md) 和 [PRD.md § 12. 前端完整性](./PRD.zh.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
 
 ### Q: Quick Share 和 Secure Share 有什么区别？
 → [PRD.md § 4. 产品模式与安全档位](./PRD.zh.md#4-产品模式与安全档位对外清晰)

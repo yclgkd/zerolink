@@ -191,8 +191,8 @@ npx wrangler deploy
 # 查看 Worker 日志
 npx wrangler tail
 
-# 测试 API 健康检查
-curl https://zerolink.dev/api/health
+# 验证 Worker 可达（应返回 JSON 响应）
+curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
 ```
 
 ---
