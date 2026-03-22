@@ -2,8 +2,8 @@
 
 # ZeroLink Tech Stack Specification
 
-> **Version**: v1.1
-> **Last Updated**: 2026-03-10
+> **Version**: v1.2
+> **Last Updated**: 2026-03-22
 > **Status**: Implemented, kept in sync with the main branch
 
 ---
@@ -42,6 +42,8 @@
 | **Vitest** | Seamless integration with Vite + fast | Testing protocol logic like Canonical requires fast feedback |
 | **Playwright** | WebAuthn API simulation + cross-browser | Testing the complete Create->Lock->Deliver flow |
 
+> **Dependency versions**: All version numbers live in `packages/*/package.json` (the single source of truth). This document describes *what* and *why*, not specific version pins.
+
 ---
 
 ## Core Tech Stack
@@ -49,20 +51,6 @@
 ### Language & Frameworks
 
 #### React 19 + TypeScript
-
-```json
-{
-  "dependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
-  },
-  "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "typescript": "^5.9.3"
-  }
-}
-```
 
 **Configuration Requirements**:
 - TypeScript **strict mode** (mandatory)
@@ -80,29 +68,11 @@
 
 #### Vite
 
-```json
-{
-  "devDependencies": {
-    "vite": "^7.3.1",
-    "@vitejs/plugin-react": "^5.1.4"
-  }
-}
-```
+Build tool and dev server. See `packages/frontend/vite.config.ts` for configuration.
 
 #### Tailwind CSS v4 + shadcn/ui
 
-```json
-{
-  "dependencies": {
-    "tailwindcss": "^4.2.1",
-    "@tailwindcss/vite": "^4.2.1",
-    "@radix-ui/react-slot": "^1.2.4",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^3.5.0"
-  }
-}
-```
+Utility-first CSS with Radix-based component primitives (`class-variance-authority`, `clsx`, `tailwind-merge`).
 
 **Security configuration requirements** (see "Security-Related Configuration" below)
 
@@ -111,14 +81,6 @@
 ### Code Standards & Quality Gates
 
 #### Biome (Replaces ESLint + Prettier)
-
-```json
-{
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.4"
-  }
-}
-```
 
 **Responsibilities**:
 - Format (code formatting)
@@ -145,14 +107,6 @@
 ### Data Validation & Type Consistency
 
 #### Zod
-
-```json
-{
-  "dependencies": {
-    "zod": "^4.3.6"
-  }
-}
-```
 
 **Usage** (ZeroLink-specific):
 
@@ -196,14 +150,6 @@
 
 #### MSW (Mock Service Worker)
 
-```json
-{
-  "devDependencies": {
-    "msw": "^2.4.0"
-  }
-}
-```
-
 **Usage Boundaries** (important):
 
 | Scenario | Use MSW | Use Real Backend |
@@ -239,16 +185,6 @@ export const handlers = [
 
 #### Vitest
 
-```json
-{
-  "devDependencies": {
-    "vitest": "^4.0.18",
-    "@vitest/ui": "^4.0.18",
-    "@vitest/coverage-v8": "^4.0.18"
-  }
-}
-```
-
 **Test Layers**:
 
 1. **Unit Tests** (protocol logic):
@@ -274,16 +210,6 @@ export const handlers = [
 
 #### React Testing Library
 
-```json
-{
-  "devDependencies": {
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/jest-dom": "^6.5.0",
-    "@testing-library/user-event": "^14.5.2"
-  }
-}
-```
-
 **Principle**: Test from the user's perspective, not internal implementation.
 
 ```typescript
@@ -305,14 +231,6 @@ test('displays Safety Code and allows copying', async () => {
 ```
 
 #### Playwright
-
-```json
-{
-  "devDependencies": {
-    "@playwright/test": "^1.58.2"
-  }
-}
-```
 
 **E2E Test Scenarios** (ZeroLink-specific):
 
@@ -385,15 +303,6 @@ packages:
 
 #### Husky + lint-staged
 
-```json
-{
-  "devDependencies": {
-    "husky": "^9.1.0",
-    "lint-staged": "^15.2.0"
-  }
-}
-```
-
 **Configuration**:
 ```json
 // package.json
@@ -417,15 +326,6 @@ pnpm typecheck
 ```
 
 #### commitlint + Conventional Commits
-
-```json
-{
-  "devDependencies": {
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0"
-  }
-}
-```
 
 **commitlint.config.js**:
 ```javascript
@@ -484,7 +384,6 @@ git push origin <branch>
 pnpm typecheck
 pnpm test
 pnpm --filter @zerolink/frontend build
-pnpm --filter @zerolink/frontend test:e2e
 
 # 3. Auto-deploy to staging after merging to main
 
@@ -603,26 +502,7 @@ frontend  ──depends on──▶  shared
 backend   ──depends on───────┘
 ```
 
-**package.json example**:
-```json
-// packages/frontend/package.json
-{
-  "name": "@zerolink/frontend",
-  "dependencies": {
-    "@zerolink/shared": "workspace:*",
-    "react": "^19.2.4",
-    "zod": "^4.3.6"
-  }
-}
-
-// packages/backend/package.json
-{
-  "name": "@zerolink/backend",
-  "dependencies": {
-    "@zerolink/shared": "workspace:*"
-  }
-}
-```
+Internal packages reference each other via `"@zerolink/shared": "workspace:*"`. See `packages/*/package.json` for the full dependency lists.
 
 ---
 
@@ -630,17 +510,16 @@ backend   ──depends on───────┘
 
 ### Required Dependencies
 
-#### Argon2id (KDF)
+| Library | Purpose |
+|---------|---------|
+| `@noble/hashes` | Argon2id KDF for password-based key wrapping |
+| `@noble/ed25519` | Browser-side Ed25519 manifest signature verification |
+| `@github/webauthn-json` | Simplifies WebAuthn API type definitions |
+| `i18next` + `react-i18next` | Bilingual support (Chinese and English) |
+| `@fontsource-variable/sora` | Sora variable font (zero CDN loading) |
 
-```json
-{
-  "dependencies": {
-    "@noble/hashes": "^2.0.1"  // includes argon2
-  }
-}
-```
+#### Argon2id Usage
 
-**Usage**:
 ```typescript
 // packages/frontend/src/crypto/kdf.ts
 import { argon2id } from '@noble/hashes/argon2';
@@ -662,66 +541,6 @@ export async function wrapPrivateKey(
   // ...
 }
 ```
-
-#### WebAuthn Type Definitions
-
-```json
-{
-  "devDependencies": {
-    "@github/webauthn-json": "^2.1.1"  // Simplifies WebAuthn API
-  }
-}
-```
-
-#### Base64url Encoding
-
-```json
-{
-  "dependencies": {
-    "base64-js": "^1.5.1"
-    // Or implement your own (recommended, fewer dependencies)
-  }
-}
-```
-
-
-#### Ed25519 (Manifest Signature Verification)
-
-```json
-{
-  "dependencies": {
-    "@noble/ed25519": "^3.0.0"
-  }
-}
-```
-
-**Purpose**: Browser-side verification of the Ed25519 signature on the signed Manifest (`packages/frontend/src/release/`).
-
-#### Internationalization (i18n)
-
-```json
-{
-  "dependencies": {
-    "i18next": "^25.8.18",
-    "react-i18next": "^16.5.8",
-    "i18next-browser-languagedetector": "^8.2.1"
-  }
-}
-```
-
-**Purpose**: Bilingual support (Chinese and English), translation files in `packages/frontend/src/locales/`.
-
-#### Fonts
-
-```json
-{
-  "dependencies": {
-    "@fontsource-variable/sora": "^5.2.8"
-  }
-}
-```
-
-**Purpose**: Sora variable font, zero third-party CDN loading (fonts are distributed with the build artifacts).
 
 ### Security-Related Configuration
 
@@ -1095,17 +914,9 @@ packages/backend/
 - **Application packages** (frontend/backend): Use `^` ranges (auto-upgrade minor versions)
 - **Library packages** (shared): Use `^` ranges (for compatibility)
 - **Cryptographic libraries**: Consider fixed versions (for security audit requirements)
+- **Monorepo internal**: Use `workspace:*` protocol
 
-**Example**:
-```json
-{
-  "dependencies": {
-    "react": "^19.2.4",           // Application dependency: allow minor upgrades
-    "@noble/hashes": "^2.0.1",    // Cryptographic: Argon2id KDF
-    "@zerolink/shared": "workspace:*"  // Monorepo internal: workspace protocol
-  }
-}
-```
+See `packages/*/package.json` for current version pins.
 
 ### Renovate Bot Configuration (Optional)
 
@@ -1126,117 +937,6 @@ packages/backend/
 
 ---
 
-## Appendix: Complete package.json Templates
-
-### Root package.json
-
-```json
-{
-  "name": "zerolink",
-  "version": "0.0.0",
-  "private": true,
-  "packageManager": "pnpm@9.12.0",
-  "scripts": {
-    "dev": "pnpm -r --parallel dev",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "test:e2e": "pnpm --filter @zerolink/frontend test:e2e",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "biome check package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
-    "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0",
-    "husky": "^9.1.0",
-    "lint-staged": "^15.2.0",
-    "typescript": "^5.9.3"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,json,md}": [
-      "biome check --write --no-errors-on-unmatched"
-    ]
-  }
-}
-```
-
-### packages/shared/package.json
-
-```json
-{
-  "name": "@zerolink/shared",
-  "version": "0.1.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./constants": "./src/constants.ts",
-    "./schemas": "./src/schemas.ts"
-  },
-  "scripts": {
-    "test": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "vitest": "^4.0.18"
-  }
-}
-```
-
-### packages/frontend/package.json
-
-```json
-{
-  "name": "@zerolink/frontend",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "test": "vitest",
-    "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@zerolink/shared": "workspace:*",
-    "@noble/hashes": "^2.0.1",
-    "@github/webauthn-json": "^2.1.1",
-    "@radix-ui/react-slot": "^1.2.4",
-    "@tailwindcss/vite": "^4.2.1",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.1",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.2.1",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.11"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.4",
-    "@vitest/ui": "^4.0.18",
-    "msw": "^2.12.10",
-    "vite": "^7.3.1",
-    "vitest": "^4.0.18"
-  }
-}
-```
-
----
-
 ## Related Documentation
 
 - [PRD v3.0](./PRD.md) - Product Requirements
@@ -1246,6 +946,6 @@ packages/backend/
 
 ---
 
-**Last Updated**: 2026-03-11
+**Last Updated**: 2026-03-22
 **Maintainer**: ZeroLink Team
 **Status**: Implemented, updated to match the current main branch workflow

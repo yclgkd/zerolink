@@ -1,11 +1,11 @@
-<!-- synced-with: 1a44062 -->
+<!-- synced-with: pending -->
 
 > **语言**: [English](./TECH_STACK.md) | 中文
 
 # ZeroLink 技术栈规范
 
-> **版本**: v1.1
-> **最后更新**: 2026-03-10
+> **版本**: v1.2
+> **最后更新**: 2026-03-22
 > **状态**: 已落地，与 main 分支保持同步
 
 ---
@@ -44,6 +44,8 @@
 | **Vitest** | 与 Vite 无缝集成 + 快速 | 测试 Canonical 等协议逻辑需要快速反馈 |
 | **Playwright** | WebAuthn API 模拟 + 跨浏览器 | 测试完整的 Create→Lock→Deliver 流程 |
 
+> **依赖版本号**: 所有版本号以 `packages/*/package.json` 为唯一权威来源。本文档只描述"选什么"和"为什么"，不钉具体版本。
+
 ---
 
 ## 核心技术栈
@@ -51,20 +53,6 @@
 ### 语言与框架
 
 #### React 19 + TypeScript
-
-```json
-{
-  "dependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
-  },
-  "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "typescript": "^5.9.3"
-  }
-}
-```
 
 **配置要求**:
 - TypeScript **strict mode**（必须）
@@ -82,29 +70,11 @@
 
 #### Vite
 
-```json
-{
-  "devDependencies": {
-    "vite": "^7.3.1",
-    "@vitejs/plugin-react": "^5.1.4"
-  }
-}
-```
+构建工具与开发服务器。配置见 `packages/frontend/vite.config.ts`。
 
 #### Tailwind CSS v4 + shadcn/ui
 
-```json
-{
-  "dependencies": {
-    "tailwindcss": "^4.2.1",
-    "@tailwindcss/vite": "^4.2.1",
-    "@radix-ui/react-slot": "^1.2.4",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^3.5.0"
-  }
-}
-```
+原子化 CSS + 基于 Radix 的组件原语（`class-variance-authority`、`clsx`、`tailwind-merge`）。
 
 **安全配置要求**（见后文"安全相关配置"）
 
@@ -114,18 +84,10 @@
 
 #### Biome（替代 ESLint + Prettier）
 
-```json
-{
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.4"
-  }
-}
-```
-
 **职责**:
-- ✅ Format（代码格式化）
-- ✅ Lint（代码检查）
-- ✅ Organize imports（自动排序导入）
+- Format（代码格式化）
+- Lint（代码检查）
+- Organize imports（自动排序导入）
 
 **配置**: `biome.json`（见后文）
 
@@ -147,14 +109,6 @@
 ### 数据校验与类型一致性
 
 #### Zod
-
-```json
-{
-  "dependencies": {
-    "zod": "^4.3.6"
-  }
-}
-```
 
 **用途**（ZeroLink 特定）:
 
@@ -198,14 +152,6 @@
 
 #### MSW (Mock Service Worker)
 
-```json
-{
-  "devDependencies": {
-    "msw": "^2.4.0"
-  }
-}
-```
-
 **使用边界**（重要）:
 
 | 场景 | 使用 MSW | 使用真实后端 |
@@ -241,16 +187,6 @@ export const handlers = [
 
 #### Vitest
 
-```json
-{
-  "devDependencies": {
-    "vitest": "^4.0.18",
-    "@vitest/ui": "^4.0.18",
-    "@vitest/coverage-v8": "^4.0.18"
-  }
-}
-```
-
 **测试分层**:
 
 1. **单元测试**（协议逻辑）:
@@ -276,16 +212,6 @@ export const handlers = [
 
 #### React Testing Library
 
-```json
-{
-  "devDependencies": {
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/jest-dom": "^6.5.0",
-    "@testing-library/user-event": "^14.5.2"
-  }
-}
-```
-
 **原则**: 以用户行为为中心，不测试内部实现。
 
 ```typescript
@@ -307,14 +233,6 @@ test('显示 Safety Code 并允许复制', async () => {
 ```
 
 #### Playwright
-
-```json
-{
-  "devDependencies": {
-    "@playwright/test": "^1.58.2"
-  }
-}
-```
 
 **E2E 测试场景**（ZeroLink 特定）:
 
@@ -377,24 +295,15 @@ packages:
 ```
 
 **优势**（ZeroLink 相关）:
-- ✅ 严格依赖管理（避免幽灵依赖导致的安全问题）
-- ✅ 快速安装（节省 CI 时间）
-- ✅ workspace 支持共享代码
+- 严格依赖管理（避免幽灵依赖导致的安全问题）
+- 快速安装（节省 CI 时间）
+- workspace 支持共享代码
 
 ---
 
 ### Git Hooks 与提交规范
 
 #### Husky + lint-staged
-
-```json
-{
-  "devDependencies": {
-    "husky": "^9.1.0",
-    "lint-staged": "^15.2.0"
-  }
-}
-```
 
 **配置**:
 ```json
@@ -419,15 +328,6 @@ pnpm typecheck
 ```
 
 #### commitlint + Conventional Commits
-
-```json
-{
-  "devDependencies": {
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0"
-  }
-}
-```
 
 **commitlint.config.js**:
 ```javascript
@@ -486,7 +386,6 @@ git push origin <branch>
 pnpm typecheck
 pnpm test
 pnpm --filter @zerolink/frontend build
-pnpm --filter @zerolink/frontend test:e2e
 
 # 3. 合并到 main 后自动部署 staging
 
@@ -605,26 +504,7 @@ frontend  ──depends on──▶  shared
 backend   ──depends on───────┘
 ```
 
-**package.json 示例**:
-```json
-// packages/frontend/package.json
-{
-  "name": "@zerolink/frontend",
-  "dependencies": {
-    "@zerolink/shared": "workspace:*",
-    "react": "^19.2.4",
-    "zod": "^4.3.6"
-  }
-}
-
-// packages/backend/package.json
-{
-  "name": "@zerolink/backend",
-  "dependencies": {
-    "@zerolink/shared": "workspace:*"
-  }
-}
-```
+内部包通过 `"@zerolink/shared": "workspace:*"` 互相引用。完整依赖列表见 `packages/*/package.json`。
 
 ---
 
@@ -632,17 +512,16 @@ backend   ──depends on───────┘
 
 ### 必须添加的依赖
 
-#### Argon2id（KDF）
+| 库 | 用途 |
+|----|------|
+| `@noble/hashes` | Argon2id KDF，用于密码派生密钥包裹 |
+| `@noble/ed25519` | 浏览器端 Ed25519 Manifest 签名验证 |
+| `@github/webauthn-json` | 简化 WebAuthn API 类型定义 |
+| `i18next` + `react-i18next` | 中英文双语支持 |
+| `@fontsource-variable/sora` | Sora 可变字体（零 CDN 加载） |
 
-```json
-{
-  "dependencies": {
-    "@noble/hashes": "^2.0.1"  // 包含 argon2
-  }
-}
-```
+#### Argon2id 使用示例
 
-**使用**:
 ```typescript
 // packages/frontend/src/crypto/kdf.ts
 import { argon2id } from '@noble/hashes/argon2';
@@ -664,66 +543,6 @@ export async function wrapPrivateKey(
   // ...
 }
 ```
-
-#### WebAuthn 类型定义
-
-```json
-{
-  "devDependencies": {
-    "@github/webauthn-json": "^2.1.1"  // 简化 WebAuthn API
-  }
-}
-```
-
-#### Base64url 编码
-
-```json
-{
-  "dependencies": {
-    "base64-js": "^1.5.1"
-    // 或自己实现（推荐，减少依赖）
-  }
-}
-```
-
-
-#### Ed25519（Manifest 签名验证）
-
-```json
-{
-  "dependencies": {
-    "@noble/ed25519": "^3.0.0"
-  }
-}
-```
-
-**用途**：浏览器端验证签名 Manifest 的 Ed25519 签名（`packages/frontend/src/release/`）。
-
-#### 国际化（i18n）
-
-```json
-{
-  "dependencies": {
-    "i18next": "^25.8.18",
-    "react-i18next": "^16.5.8",
-    "i18next-browser-languagedetector": "^8.2.1"
-  }
-}
-```
-
-**用途**：中英文双语支持，翻译文件在 `packages/frontend/src/locales/`。
-
-#### 字体
-
-```json
-{
-  "dependencies": {
-    "@fontsource-variable/sora": "^5.2.8"
-  }
-}
-```
-
-**用途**：Sora 可变字体，零第三方 CDN 加载（字体随构建产物一起分发）。
 
 ### 安全相关配置
 
@@ -979,9 +798,9 @@ jobs:
 
 ```
 合并前必须通过（pr-validate.yml）：
-1. ✅ pnpm typecheck（类型错误则失败）
-2. ✅ pnpm test（单元测试失败则失败）
-3. ✅ pnpm --filter @zerolink/frontend build（签名发布构建失败则失败）
+1. pnpm typecheck（类型错误则失败）
+2. pnpm test（单元测试失败则失败）
+3. pnpm --filter @zerolink/frontend build（签名发布构建失败则失败）
 
 E2E 测试在独立工作流中运行（e2e-full.yml，定时/手动触发），不作为 PR 合并门槛。
 ```
@@ -989,11 +808,11 @@ E2E 测试在独立工作流中运行（e2e-full.yml，定时/手动触发），
 ### 发布前（Release）
 
 ```
-1. ✅ 所有 CI 检查通过
-2. ✅ 手动验证部署说明与签名配置
-3. ✅ 标记版本：git tag v1.0.0
-4. ✅ 推送 tag：git push origin v1.0.0
-5. ✅ 等待 `deploy.yml` 完成 production 发布
+1. 所有 CI 检查通过
+2. 手动验证部署说明与签名配置
+3. 标记版本：git tag v1.0.0
+4. 推送 tag：git push origin v1.0.0
+5. 等待 `deploy.yml` 完成 production 发布
 ```
 
 ---
@@ -1097,17 +916,9 @@ packages/backend/
 - **应用包**（frontend/backend）：使用 `^` 范围（自动升级小版本）
 - **库包**（shared）：使用 `^` 范围（兼容性考虑）
 - **密码学库**：考虑固定版本（安全审计需要）
+- **Monorepo 内部**：使用 `workspace:*` 协议
 
-**示例**:
-```json
-{
-  "dependencies": {
-    "react": "^19.2.4",           // 应用依赖：允许小版本升级
-    "@noble/hashes": "^2.0.1",    // 密码学：Argon2id KDF
-    "@zerolink/shared": "workspace:*"  // Monorepo 内部：workspace 协议
-  }
-}
-```
+具体版本号见 `packages/*/package.json`。
 
 ### Renovate Bot 配置（可选）
 
@@ -1128,117 +939,6 @@ packages/backend/
 
 ---
 
-## 附录：完整 package.json 模板
-
-### 根 package.json
-
-```json
-{
-  "name": "zerolink",
-  "version": "0.0.0",
-  "private": true,
-  "packageManager": "pnpm@9.12.0",
-  "scripts": {
-    "dev": "pnpm -r --parallel dev",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "test:e2e": "pnpm --filter @zerolink/frontend test:e2e",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "biome check package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
-    "format": "biome format --write package.json biome.json commitlint.config.js pnpm-workspace.yaml packages docs scripts .husky",
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0",
-    "husky": "^9.1.0",
-    "lint-staged": "^15.2.0",
-    "typescript": "^5.9.3"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,json,md}": [
-      "biome check --write --no-errors-on-unmatched"
-    ]
-  }
-}
-```
-
-### packages/shared/package.json
-
-```json
-{
-  "name": "@zerolink/shared",
-  "version": "0.1.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./constants": "./src/constants.ts",
-    "./schemas": "./src/schemas.ts"
-  },
-  "scripts": {
-    "test": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "vitest": "^4.0.18"
-  }
-}
-```
-
-### packages/frontend/package.json
-
-```json
-{
-  "name": "@zerolink/frontend",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "test": "vitest",
-    "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@zerolink/shared": "workspace:*",
-    "@noble/hashes": "^2.0.1",
-    "@github/webauthn-json": "^2.1.1",
-    "@radix-ui/react-slot": "^1.2.4",
-    "@tailwindcss/vite": "^4.2.1",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.1",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.2.1",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.11"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.4",
-    "@vitest/ui": "^4.0.18",
-    "msw": "^2.12.10",
-    "vite": "^7.3.1",
-    "vitest": "^4.0.18"
-  }
-}
-```
-
----
-
 ## 相关文档
 
 - [PRD v3.0](./PRD.zh.md) - 产品需求
@@ -1248,6 +948,6 @@ packages/backend/
 
 ---
 
-**最后更新**: 2026-03-11
+**最后更新**: 2026-03-22
 **维护者**: ZeroLink Team
-**状态**: ✅ 已落地，已按当前 main 分支流程更新
+**状态**: 已落地，已按当前 main 分支流程更新
