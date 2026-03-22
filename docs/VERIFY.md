@@ -50,7 +50,7 @@ not show the `Verified Release` card.
 | `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
 
 The release workflow builds the frontend with `VITE_RELEASE_VERIFICATION_REQUIRED=true`,
-generates the signed manifest, and deploys the dist to Cloudflare Pages.
+generates the signed manifest, and deploys via `wrangler deploy` (Cloudflare Workers).
 
 ## Browser trust surface
 
