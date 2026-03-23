@@ -1,4 +1,4 @@
-<!-- synced-with: pending -->
+<!-- synced-with: 586c412 -->
 
 > **语言**: [English](./TECH_STACK.md) | 中文
 
