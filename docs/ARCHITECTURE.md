@@ -38,9 +38,9 @@
 - **Storage**: IndexedDB (encrypted private keys)
 
 #### Backend
-- **Platform**: Cloudflare Workers + Durable Objects + KV
+- **Platform**: Cloudflare Workers + Durable Objects
 - **State management**: Durable Objects (serialization, atomicity)
-- **Persistence**: KV (ciphertext, public keys, metadata)
+- **Persistence**: DO storage / SQLite (ciphertext, public keys, metadata)
 - **Self-hosting option**: Docker Compose (PostgreSQL/SQLite + Redis) (Planned, not yet implemented)
 
 ## Core Protocol Flows
@@ -51,8 +51,9 @@ Sender → Choose Quick Share or Secure Share → Generate lock_secret
      → Quick Share: Generate local ECDSA admin key and wrap with Argon2id
      → Secure Share: Register WebAuthn admin credential
      → Return two links:
-       - /s/:uuid#k=<lock_secret>  (share link, with fragment)
-       - /m/:uuid                   (manage link)
+       - /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]  (share link; af= appended when sender auth fingerprint exists)
+       - /m/:uuid#wk=<wrapped_priv> (manage link; Quick Share — fragment carries Argon2id-wrapped Admin-Priv)
+       - /m/:uuid                   (manage link; Secure Share — no fragment needed)
 ```
 
 ### 2. Lock (Receiver Locks)
@@ -128,11 +129,17 @@ Default PAD_BLOCK = 4096 bytes
 
 **Problem**: WebAuthn signatures could be tricked into signing unintended operations
 
-**Solution**:
+**Solution**: Two domain-separated challenge derivations depending on the operation:
 ```
 intent_hash = SHA256(canonical_payload)  // payload contains full operation details
+
+// Deliver/Update — deterministic, no server nonce; replay protection via single-use challenge consumption
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// Delete — includes server nonce (challenge_id + seed) for freshness
 expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
-WebAuthn challenge must === expected_challenge
+
+WebAuthn/ECDSA challenge must === expected_challenge
 ```
 
 ## Product Modes (Current Profiles)
@@ -234,7 +241,7 @@ WebAuthn challenge must === expected_challenge
 - Waiting → Locked: lock_commit (requires lock_proof)
 - Locked → Delivered: compound_commit (first delivery)
 - Delivered → Delivered: compound_commit (update)
-- Any → Deleted: delete_commit (WebAuthn authorization)
+- Any → Deleted: delete_commit (admin authorization: WebAuthn or ECDSA)
 - Any → Expired: TTL expiration
 
 **Immutability**:

@@ -1,4 +1,4 @@
-<!-- synced-with: 940a85a -->
+<!-- synced-with: 7426a72 -->
 
 > **语言**: [English](./README.md) | 中文
 
@@ -22,7 +22,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ```
 1. Sender → Create (Quick Share 密码模式 / Secure Share Passkey 模式)
-          → 分享链接: /s/:uuid#k=<lock_secret>
+          → 分享链接: /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]
 
 2. Receiver → Lock (输入密码 → 生成 RSA keypair → 本地存储)
             → 展示 Safety Code (Emoji/Color)
@@ -59,7 +59,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - Argon2id (KDF)
 
 ### 后端
-- Cloudflare Workers + Durable Objects（提供免费层，支持 SQLite 后端）+ KV
+- Cloudflare Workers + Durable Objects（提供免费层，支持 SQLite 后端）
 - 可选：Docker Compose 自托管（计划中，尚未实现）
 
 ## 浏览器兼容性
@@ -83,16 +83,16 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 2. **Padding (4KB 块)**: 降低密文长度泄露精度
 3. **Argon2id 强制**: 接收方私钥包裹（250-500ms 目标耗时）
 4. **双模式创建**: Quick Share（密码）/ Secure Share（Passkey）
-5. **可验证发布链**: Signed Manifest + 可复现构建（未来）
+5. **可验证发布链**: Signed Manifest + 运行时哈希验证
 
 ### 安全保证
 
 - ✅ 服务器零知识
 - ✅ 端到端保密
-- ✅ 更新/销毁不可伪造（WebAuthn）
+- ✅ 更新/销毁不可伪造（WebAuthn 或 ECDSA）
 - ✅ 抗重放/乱序/并发覆盖（DO 原子性）
 - ✅ 最小元数据泄露
-- ✅ 前端完整性可验证（CSP/SRI）
+- ✅ 前端完整性可验证（CSP + Signed Manifest）
 - ✅ Secure Share 管理权私钥不可导出（WebAuthn）；Quick Share 管理密钥编码在管理链接中
 
 ## 部署 / Deploy
@@ -101,14 +101,14 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
-> **注意**: 一键部署后，运行 `pnpm setup` 完成 KV namespace 创建和 Secrets 配置（只需回答 2 个问题）。
+> **注意**: 一键部署后，运行 `pnpm setup` 完成 Secrets 配置。
 >
-> **Note**: After one-click deploy, run `pnpm setup` to finish KV namespace creation and secrets configuration (only 2 questions required).
+> **Note**: After one-click deploy, run `pnpm setup` to finish secrets configuration.
 
 ### 前提条件 / Prerequisites
 
 - Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
-- Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
+- Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
 完整部署文档见 [部署指南](./docs/DEPLOYMENT.zh.md)
 

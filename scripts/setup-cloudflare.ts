@@ -2,9 +2,8 @@
  * Interactive Cloudflare setup script.
  *
  * Automates the post-deploy manual steps:
- *   1. Creates KV namespace(s) and patches wrangler.toml with the new ID(s)
- *   2. Auto-generates COMMIT_TOKEN_SECRET (random 32-byte hex)
- *   3. Prompts for RP_ID and RP_ORIGIN, then pushes all three as Worker secrets
+ *   1. Auto-generates COMMIT_TOKEN_SECRET (random 32-byte hex)
+ *   2. Prompts for RP_ID and RP_ORIGIN, then pushes all three as Worker secrets
  *
  * Usage:
  *   pnpm setup
@@ -13,7 +12,6 @@
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
@@ -22,7 +20,6 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(SCRIPT_FILE), '..');
 const BACKEND_DIR = path.resolve(REPO_ROOT, 'packages/backend');
-const WRANGLER_TOML = path.resolve(BACKEND_DIR, 'wrangler.toml');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,25 +42,6 @@ function runWrangler(args: string, stdin?: string): { ok: boolean; output: strin
   };
 }
 
-function extractKvId(output: string): string | null {
-  // Matches: id = "abc123..." or id: "abc123..."
-  const match = output.match(/["']?id["']?\s*[=:]\s*["']([a-f0-9]{32})["']/);
-  return match ? match[1] : null;
-}
-
-function patchKvId(toml: string, id: string, isStaging: boolean): string {
-  if (isStaging) {
-    return toml.replace(
-      /(\[\[env\.staging\.kv_namespaces\]\]\nbinding = "SECRETS_KV"\nid = ")[^"]+(")/,
-      `$1${id}$2`
-    );
-  }
-  return toml.replace(
-    /(\[\[kv_namespaces\]\]\nbinding = "SECRETS_KV"\nid = ")[^"]+(")/,
-    `$1${id}$2`
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Setup logic for one environment
 // ---------------------------------------------------------------------------
@@ -71,35 +49,14 @@ function patchKvId(toml: string, id: string, isStaging: boolean): string {
 interface EnvConfig {
   label: string;
   wranglerFlag: string;
-  isStaging: boolean;
   rpId: string;
   rpOrigin: string;
 }
 
-function setupEnv(cfg: EnvConfig): boolean {
+function setupEnv(cfg: EnvConfig): void {
   const flag = cfg.wranglerFlag ? ` ${cfg.wranglerFlag}` : '';
-  let tomlPatched = false;
 
   out(`\n📦 Setting up ${cfg.label}...\n`);
-
-  // KV namespace
-  out('  Creating KV namespace... ');
-  const kv = runWrangler(`kv:namespace create SECRETS_KV${flag}`);
-  if (kv.ok) {
-    const kvId = extractKvId(kv.output);
-    if (kvId) {
-      const toml = readFileSync(WRANGLER_TOML, 'utf8');
-      writeFileSync(WRANGLER_TOML, patchKvId(toml, kvId, cfg.isStaging));
-      tomlPatched = true;
-      out(`✅  (${kvId})\n`);
-    } else {
-      out('created but could not parse ID — patch wrangler.toml manually\n');
-    }
-  } else if (kv.output.includes('already exist') || kv.output.includes('already exists')) {
-    out('already exists, skipping\n');
-  } else {
-    out(`⚠️  ${kv.output.trim().split('\n')[0]}\n`);
-  }
 
   // COMMIT_TOKEN_SECRET — auto-generated
   out('  Setting COMMIT_TOKEN_SECRET... ');
@@ -116,8 +73,6 @@ function setupEnv(cfg: EnvConfig): boolean {
   out('  Setting RP_ORIGIN... ');
   const putRpOrigin = runWrangler(`secret put RP_ORIGIN${flag}`, `${cfg.rpOrigin}\n`);
   out(putRpOrigin.ok ? '✅\n' : `⚠️  ${putRpOrigin.output.trim().split('\n')[0]}\n`);
-
-  return tomlPatched;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,39 +121,25 @@ export async function run() {
 
   rl.close();
 
-  let tomlChanged = false;
-
   if (setupProd) {
-    const patched = setupEnv({
+    setupEnv({
       label: 'production',
       wranglerFlag: '',
-      isStaging: false,
       rpId,
       rpOrigin,
     });
-    tomlChanged = tomlChanged || patched;
   }
 
   if (setupStaging) {
-    const patched = setupEnv({
+    setupEnv({
       label: 'staging',
       wranglerFlag: '--env staging',
-      isStaging: true,
       rpId: stagingRpId,
       rpOrigin: stagingRpOrigin,
     });
-    tomlChanged = tomlChanged || patched;
   }
 
   out('\n🎉 Setup complete!\n');
-  if (tomlChanged) {
-    out(
-      '\n⚠️  wrangler.toml was updated with new KV namespace IDs.\n' +
-        '   Commit and push this change before deploying:\n' +
-        '     git add packages/backend/wrangler.toml\n' +
-        '     git commit -m "chore: update KV namespace IDs"\n'
-    );
-  }
   out('\nNext step: pnpm build && cd packages/backend && npx wrangler deploy\n');
 }
 

@@ -49,9 +49,8 @@ not show the `Verified Release` card.
 | `dist/manifest.sig` | Ed25519 signature over `manifest.json` |
 | `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
 
-All dist artifacts are uploaded as `frontend-dist` in GitHub Actions release runs. That workflow
-also enables bootstrap verification by building the frontend with
-`VITE_RELEASE_VERIFICATION_REQUIRED=true`.
+The release workflow builds the frontend with `VITE_RELEASE_VERIFICATION_REQUIRED=true`,
+generates the signed manifest, and deploys via `wrangler deploy` (Cloudflare Workers).
 
 ## Browser trust surface
 
@@ -114,9 +113,11 @@ openssl pkeyutl \
 
 ```bash
 # Check a signed runtime asset
-sha256sum packages/frontend/dist/assets/index.js
-# Compare with the value in manifest.json:
-jq '.files["assets/index.js"]' packages/frontend/dist/manifest.json
+# Note: Vite outputs content-hashed filenames such as index-Abc123.js
+sha256sum packages/frontend/dist/assets/index-*.js
+# Compare with the value in manifest.json (use the actual hashed filename):
+jq '.files | to_entries[] | select(.key | startswith("assets/index-"))' \
+  packages/frontend/dist/manifest.json
 ```
 
 ### 3. Verify the manifest hash

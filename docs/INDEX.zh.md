@@ -1,4 +1,4 @@
-<!-- synced-with: 8d64659 -->
+<!-- synced-with: b910249 -->
 
 > **语言**: [English](./INDEX.md) | 中文
 
@@ -16,7 +16,8 @@ docs/
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
 ├── PRD.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
-└── SECURITY.md       # 安全模型
+├── SECURITY.md       # 安全模型
+└── VERIFY.md         # 构建完整性与可验证发布
 ```
 
 ---
@@ -48,7 +49,7 @@ docs/
 #### 核心机制
 - **Lock Secret（防 TOFU）** → [ARCHITECTURE.md § TOFU 抢占锁定防护](./ARCHITECTURE.zh.md#1-tofu-抢占锁定防护v25-核心)
 - **Padding（防长度泄露）** → [ARCHITECTURE.md § 密文长度泄露缓解](./ARCHITECTURE.zh.md#2-密文长度泄露缓解padding)
-- **WebAuthn 管理权** → [ARCHITECTURE.md § 并发安全](./ARCHITECTURE.zh.md#3-并发安全durable-objects)
+- **管理权（WebAuthn / ECDSA）** → [ARCHITECTURE.md § 产品模式](./ARCHITECTURE.zh.md#产品模式current-profiles)
 - **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.zh.md#4-intent-binding意图绑定)
 
 #### 密码学
@@ -75,6 +76,10 @@ docs/
 #### 测试
 - **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.zh.md)
 - **安全检查清单** → [SECURITY.md § 安全检查清单](./SECURITY.zh.md#安全检查清单implementation)
+
+#### 构建完整性
+- **可验证发布流程** → [VERIFY.md](./VERIFY.zh.md)
+- **Manifest 签名** → [DEPLOYMENT.md § Manifest 签名](./DEPLOYMENT.zh.md#manifest-签名可选)
 
 ---
 
@@ -106,7 +111,7 @@ docs/
 1. [SECURITY.md](./SECURITY.zh.md) - 完整安全模型
 2. [SECURITY.md § 攻击场景分析](./SECURITY.zh.md#攻击场景分析) - 威胁分析
 3. [SECURITY.md § 安全检查清单](./SECURITY.zh.md#安全检查清单implementation) - 审计要点
-4. [PRD.md § 14](./PRD.zh.md#14-测试向量与验收v25-新增) - 测试向量
+4. [PRD.md § 14](./PRD.zh.md#14-测试向量与验收v30) - 测试向量
 5. [SECURITY.md § 密码学规范](./SECURITY.zh.md#密码学规范) - 加密参数
 
 ### DevOps / 部署
@@ -114,7 +119,7 @@ docs/
 2. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - GitHub Actions 与发布流程
 3. [TECH_STACK.md § 部署与发布](./TECH_STACK.zh.md#部署与发布) - 前后端部署
 4. [TECH_STACK.md § 发布流程](./TECH_STACK.zh.md#版本管理与发布流水线) - PR 验证与 tag 发布
-5. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - 域名与 Cloudflare 配置
+5. [VERIFY.md](./VERIFY.zh.md) - 构建完整性验证
 
 ---
 
@@ -143,7 +148,7 @@ docs/
 → [ARCHITECTURE.md § 密文长度泄露缓解](./ARCHITECTURE.zh.md#2-密文长度泄露缓解padding)
 
 ### Q: WebAuthn 私钥能被导出吗？
-→ [SECURITY.md § 管理权私钥不可导出](./SECURITY.zh.md#7-管理权私钥不可导出-)
+→ [SECURITY.md § 管理权私钥不可导出（Secure Share）](./SECURITY.zh.md#7-管理权私钥不可导出-secure-share)
 
 ### Q: 服务器能看到明文吗？
 → [SECURITY.md § 服务器零知识](./SECURITY.zh.md#1-服务器零知识-)
@@ -155,7 +160,7 @@ docs/
 → [SECURITY.md § 密码学规范 § KDF](./SECURITY.zh.md#密码学规范)
 
 ### Q: 如何验证前端代码未被篡改？
-→ [PRD.md § 12. 前端完整性](./PRD.zh.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
+→ [VERIFY.md](./VERIFY.zh.md) 和 [PRD.md § 12. 前端完整性](./PRD.zh.md#12-前端完整性与可验证发布链解决恶意下发-js-的上限方案)
 
 ### Q: Quick Share 和 Secure Share 有什么区别？
 → [PRD.md § 4. 产品模式与安全档位](./PRD.zh.md#4-产品模式与安全档位对外清晰)

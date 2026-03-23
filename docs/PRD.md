@@ -22,7 +22,7 @@ v3.0 product goals:
 
 ### 2.1 Security Objectives (Mandatory)
 
-1. **Server Zero-Knowledge**: The server/KV/DO never stores plaintext or any private key
+1. **Server Zero-Knowledge**: The server/DO never stores plaintext or any private key
 2. **End-to-End Confidentiality**: Plaintext only appears locally on the receiver's device
 3. **Unforgeable Update/Destroy**: Only the admin can authorize writes/destruction
 4. **Replay/Reorder/Concurrent-Overwrite Resistance**: Monotonic version + nonce deduplication + DO serialization
@@ -43,7 +43,7 @@ v3.0 product goals:
 
 ### 3.1 New: Lock Secret (URL Fragment) Anti-Lock-Sniping
 
-- At creation, a lock_secret (16-32 random bytes) is generated and **placed only in the share link's URL fragment** (e.g., /s/UUID#k=...)
+- At creation, a lock_secret (32 random bytes) is generated and **placed only in the share link's URL fragment** (e.g., /s/UUID#k=...)
 - **The fragment is never sent with HTTP requests**, so preload bots that access /s/UUID cannot obtain the lock_secret and therefore cannot lock
 - Locking requires the lock_secret to participate in a challenge-response (Lock Challenge)
 
@@ -56,19 +56,19 @@ v3.0 product goals:
 ### 3.3 Tightened: Receiver KDF Enforces Argon2id
 
 - Default and mandatory: Argon2id (parameter target latency 250-500ms)
-- PBKDF2 is only allowed in "compatibility mode" and is clearly labeled "reduced security" in the UI
+- PBKDF2 is not implemented
 
 ### 3.4 Two User-Facing Tiers (v3.0 Simplification)
 
 Two tiers available at creation (legacy tiers are only used for backward compatibility with existing channels):
-- **Quick Share**: Password mode, locally Argon2id-derived ECDSA admin key, no passkey required, 4KB padding
+- **Quick Share**: Password mode, locally generated ECDSA admin key (Argon2id-wrapped), no passkey required, 4KB padding
 - **Secure Share**: Passkey mode, UV=required / RK=discouraged, 8KB padding, merges the security levels of the original Standard+Strict
 - **Legacy (read-only)**: standard / strict / hardware_only only render existing channels; not offered as new creation options
 
 ### 3.5 New: Self-Hosting / Verifiable Releases
 
 - Official Cloudflare version remains the default
-- Docker Compose one-click self-hosting (protocol-equivalent implementation of Worker/DO/KV self-hosting: HTTP service + Postgres/SQLite + Redis/transaction locks; or protocol-equivalent implementation if Cloudflare-compatible runtime is impractical)
+- Docker Compose one-click self-hosting (protocol-equivalent implementation of Worker/DO self-hosting: HTTP service + Postgres/SQLite + Redis/transaction locks; or protocol-equivalent implementation if Cloudflare-compatible runtime is impractical)
 - Release chain: Signed Manifest + reproducible builds + optional offline static packages (users can open locally/deploy on their own domain)
 
 ---
@@ -99,8 +99,8 @@ Selectable `securityProfile` at creation (v3.0 two tiers):
 
 Existing channels may store `standard` / `strict` / `hardware_only` security_profile; the system continues to render and operate on them correctly. These options are not available for new channel creation.
 
-- **standard**: Equivalent to Quick Share security level (UV preferred)
-- **strict**: Equivalent to Secure Share security level (UV required), retained for backward compatibility
+- **standard**: Legacy WebAuthn tier with UV=preferred (lower assurance than Secure Share; architecturally distinct from Quick Share, which uses ECDSA)
+- **strict**: Legacy WebAuthn tier with UV=required (comparable assurance to Secure Share), retained for backward compatibility
 - **hardware_only**: Originally enforced cross-platform; attestation=direct enforcement removed (technical reasons); current behavior is identical to strict
 
 ---
@@ -113,8 +113,8 @@ Existing channels may store `standard` / `strict` / `hardware_only` security_pro
 2. **Quick Share flow**: Enter password -> locally generate ECDSA keypair -> Argon2id wrapping -> Create Finish (adminMode=password)
 3. **Secure Share flow**: Create Begin -> WebAuthn registration (UV=required, RK=discouraged) -> Create Finish
 4. The page displays two links:
-   - Share link (receiver): /s/:uuid#k=\<lock_secret_b64url\>
-   - Admin link (sender): /m/:uuid
+   - Share link (receiver): /s/:uuid#k=\<lock_secret_b64url\>[&af=\<sender_auth_fpr\>]
+   - Admin link (sender): /m/:uuid#wk=\<wrapped_priv\> (Quick Share) or /m/:uuid (Secure Share)
 
 > **Mandatory UI notice**: The share link must be copied in full (including the part after #), otherwise the receiver cannot lock
 
@@ -127,9 +127,8 @@ Existing channels may store `standard` / `strict` / `hardware_only` security_pro
 - Enter password -> generate RSA keypair -> Argon2id-wrap private key and store locally
 - Lock request must carry a lock challenge response (see protocol)
 - After successful locking, display **Safety Code**:
-    - Emoji sequence (e.g., 6-10 emoji)
-    - Color blocks (e.g., 4x4/5x5 color grid)
-    - Identicon is retained but as a background element
+    - Emoji sequence (8 emoji)
+    - Color blocks (4x4 color grid)
     - "Advanced" section expands to show raw hex fingerprint
 
 ### 5.3 Sender Delivery (Sender: Soft Verification)
@@ -207,16 +206,14 @@ The final encryption target is padded_plaintext; the receiver truncates to the o
 
 - Argon2id parameters use a target latency strategy (250-500ms)
 - Parameters are written to the local header: salt, m, t, p, version
-- PBKDF2 is only allowed in "compatibility mode"
+- PBKDF2 is not implemented
 
 ### 7.3 Safety Code (Softened Fingerprint Verification)
 
 Computed from receiver_pub_fpr = SHA256(SPKI(receiver_pub)):
 
-- Emoji Safety Code: Hash segments mapped to an emoji table (fixed table, stable output)
+- Emoji Safety Code: lower nibble (4 bits) of each hash byte mapped to 16-entry emoji palette (fixed table, stable output)
 - Color Blocks: Hash nibbles mapped to a fixed color palette
-- Identicon: Retained (background/avatar)
-
 Display rules:
 
 - Default: Emoji or Color (switchable)
@@ -248,7 +245,7 @@ States and transitions remain as in v2.4, but locking requires the lock_begin/lo
 
 Quick Share is the official user entry point in v3.0, replacing "Compatibility Mode" rather than being a fallback option:
 
-- **Admin Authority**: Locally generated ECDSA P-256 private key (Admin-Priv), wrapped via user password Argon2id and stored in IndexedDB
+- **Admin Authority**: Locally generated ECDSA P-256 private key (Admin-Priv), wrapped via user password Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB)
 - **Update/Delete Authorization**: ECDSA signature payload mode (DO still handles version/nonce atomicity)
 - **Protocol Field**: `adminMode: "password"` (internal); legacy channels may store `"softkey"` (treated as equivalent for backward compatibility)
 - **Padding**: 4KB blocks (compared to Secure Share's 8KB, lower bandwidth but slightly less privacy)
@@ -395,13 +392,12 @@ Final result: writes receiver_pub, fpr, status=Locked
 Same as v2.4, but the update payload adds:
 
 - pad_block (default 4096)
-- plaintext_len (original text length, for debugging/auditing only; recommended not to transmit)
 
-**Recommendation**: plaintext_len should not appear in plaintext-visible fields; it should be entirely within the padding header.
+> Note: `plaintext_len` is not an API-level field. It exists only inside the encrypted padding header (the first 4 bytes of `padded_plaintext`; see Appendix E). It is never transmitted as a top-level request field.
 
-### 10.5 Delete (delete_begin/commit)
+### 10.5 Delete (compound_begin + delete_commit)
 
-Same as v2.4.
+Delete reuses `compound_begin` for challenge issuance, then calls `delete_commit` with admin authorization. There is no separate `delete_begin` endpoint.
 
 ### 10.6 Quick Share / Legacy Password API
 
@@ -456,7 +452,6 @@ New fields:
 
 - Default: Emoji Safety Code (e.g., 8 emoji)
 - Secondary: Color Blocks (e.g., 4x4)
-- Identicon: Present as background/avatar
 - Advanced: Short fingerprint + full hex (collapsed)
 
 Copy principles:
@@ -502,7 +497,6 @@ sequenceDiagram
   participant R as Receiver (Browser)
   participant W as Worker
   participant D as DO(uuid)
-  participant K as KV
 
   rect rgb(240,240,240)
   Note over S,D: Create (creationOptions + local lock_secret)
@@ -512,12 +506,12 @@ sequenceDiagram
   W-->>S: creationOptions
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
-  S->>S: build share URL: /s/{uuid}#k=lock_secret
+  S->>S: build share URL: /s/{uuid}#k=lock_secret[&af=sender_auth_fpr]
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
+  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
-  D->>K: store admin credential + lock_key + status=Waiting
-  K-->>D: ok
+  D->>D: store admin credential + lock_key + status=Waiting
   D-->>W: ok
   W-->>S: ok
   end
@@ -533,8 +527,7 @@ sequenceDiagram
   R->>R: lock_proof = sha256("GL-lock"||uuid||cid||chal||lock_key)
   R->>W: POST /api/lock_commit/{uuid} (receiver_pub + fpr + lock_proof)
   W->>D: forward
-  D->>K: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
-  K-->>D: ok
+  D->>D: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
   D-->>W: ok
   W-->>R: ok + SafetyCode shown locally
   end
@@ -546,27 +539,28 @@ sequenceDiagram
   D-->>W: challenge_id/seed + receiver_pub/fpr + last_version (if locked)
   W-->>S: begin
   S->>S: pad plaintext (4KB buckets) + hybrid encrypt + intent_hash
-  S->>S: expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
-  S->>S: navigator.credentials.get(...) (or password-mode ECDSA sign; legacy softkey alias)
-  S->>W: POST /api/manage/compound_commit/{uuid} (assertion + update)
+  S->>S: expected_challenge = sha256("GL-delivery-proof"||uuid||intent_hash)
+  S->>S: Secure Share: navigator.credentials.get(...) / Quick Share: ECDSA sign with Admin-Priv
+  S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
-  D->>D: verify intent_hash + expected_challenge + WebAuthn signature + version/nonce
-  D->>K: write cipher_bundle + status=Delivered + last_version++
-  K-->>D: ok
+  D->>D: verify intent_hash + delivery_proof challenge + admin signature (WebAuthn or ECDSA) + version/nonce
+  D->>D: write cipher_bundle + status=Delivered + last_version++
   D-->>W: ok
   W-->>S: ok
   end
 
   rect rgb(240,240,240)
-  Note over S,D: Delete (one-confirm)
-  S->>W: POST /api/delete_begin/{uuid}
+  Note over S,D: Delete (reuses compound_begin)
+  S->>W: POST /api/manage/compound_begin/{uuid}
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin
-  S->>S: intent_hash + expected_challenge + WebAuthn get
+  S->>S: intent_hash + expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
+  S->>S: admin sign (WebAuthn get or ECDSA sign)
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
-  D->>K: delete record
+  D->>D: verify intent_hash + nonce-bound challenge + admin signature
+  D->>D: delete record
   D-->>W: ok
   W-->>S: ok
   end
@@ -670,7 +664,7 @@ Canonical output must be:
 - Frontend sends lock_key_b64u back in create_finish
 - Server stores lock_key (base64url or hex; must be consistent; base64url recommended)
 
-> Note: lock_secret must never be logged or stored in KV as plaintext.
+> Note: lock_secret must never be logged or stored as plaintext.
 
 ### C2. Lock Two-Phase Flow
 
@@ -688,7 +682,7 @@ Canonical output must be:
 
 ### C4. DO Verification (Server-Side)
 
-- Retrieves lock_key from KV
+- Retrieves lock_key from DO storage
 - Recomputes expected lock_proof using the same concatenation
 - Only allows receiver_pub to be written if the values match
 
@@ -815,17 +809,17 @@ Bucket strategy:
 
 ### G3. Legacy Tiers (Backward Compatible)
 
-#### standard (equivalent to early Quick Share security level)
+#### standard (legacy WebAuthn tier, UV=preferred)
 - userVerification = "preferred"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### strict (equivalent to Secure Share)
+#### strict (legacy WebAuthn tier, UV=required)
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### hardware_only (equivalent to Secure Share; attestation enforcement removed)
+#### hardware_only (legacy WebAuthn tier; attestation enforcement removed, behavior identical to strict)
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none" (original "direct" enforcement removed; cross-platform restriction removed)
@@ -859,7 +853,7 @@ Quick Share is the official user entry point in v3.0 (no longer a degraded mode)
 ### I1. Admin Key Generation
 
 - Frontend generates ECDSA P-256 keypair
-- Admin-Priv is Argon2id-wrapped and stored in IndexedDB (password provided by user)
+- Admin-Priv is Argon2id-wrapped and encoded in the manage link's URL fragment (not stored in IndexedDB; password provided by user)
 - Server stores Admin-Pub (JWK) + adminMode="password"
 - Legacy channels may store adminMode="softkey"; the backend treats them equivalently
 
@@ -909,14 +903,14 @@ Public endpoint /api/public/:uuid:
 
 ### K2. Emoji Scheme (Recommended Default)
 
-- Split fpr bytes into 8 groups, each group 1 byte -> mapped to an emoji table (fixed table of length 256)
-- Output 8 emoji (or 10 for more stability), consistent across platforms
+- Split fpr bytes into 8 groups; for each group take lower nibble (4 bits) -> mapped to 16-entry emoji palette (fixed table)
+- Output 8 emoji, consistent across platforms
 - UI displays as: (example)
 
 ### K3. Color Blocks
 
 - Take the 32 bytes of fpr -> each nibble mapped to a 16-color fixed palette
-- Output 4x4 or 5x5 color blocks (fixed layout), consistent across platforms
+- Output 4x4 color blocks (fixed layout), consistent across platforms
 
 ### K4. Advanced Display
 

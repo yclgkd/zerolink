@@ -12,7 +12,7 @@
 
 ## Backend
 - Package: `packages/backend/`
-- Stack: Cloudflare Worker, Durable Objects, KV.
+- Stack: Cloudflare Worker, Durable Objects (SQLite backend).
 - Durable Objects enforce ordered state transitions and terminal-state guarantees.
 
 ## Shared Contracts

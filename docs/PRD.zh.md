@@ -1,4 +1,4 @@
-<!-- synced-with: 1a44062 -->
+<!-- synced-with: b910249 -->
 
 > **语言**: [English](./PRD.md) | 中文
 
@@ -24,7 +24,7 @@ v3.0 的产品目标：
 
 ### 2.1 安全目标（必须满足）
 
-1. **服务器零知识**：服务器/KV/DO 不存明文与任何私钥
+1. **服务器零知识**：服务器/DO 不存明文与任何私钥
 2. **端到端保密**：明文仅在接收方本地出现
 3. **更新/销毁不可伪造**：仅管理者可授权写入/销毁
 4. **抗重放/乱序/并发覆盖**：version 单调 + nonce 去重 + DO 串行
@@ -45,7 +45,7 @@ v3.0 的产品目标：
 
 ### 3.1 新增：Lock Secret（URL Fragment）防抢占锁定
 
-- create 时生成 lock_secret（16–32 bytes 随机），**只放在分享链接的 URL fragment**（例如 /s/UUID#k=...）
+- create 时生成 lock_secret（32 bytes 随机），**只放在分享链接的 URL fragment**（例如 /s/UUID#k=...）
 - **fragment 不会被 HTTP 请求携带**，预加载机器人即使访问 /s/UUID 也拿不到 lock_secret，因此无法 lock
 - lock 需要 lock_secret 参与挑战响应（Lock Challenge）
 
@@ -58,19 +58,19 @@ v3.0 的产品目标：
 ### 3.3 收紧：接收方 KDF 强制 Argon2id
 
 - 默认且必须：Argon2id（参数目标耗时 250–500ms）
-- PBKDF2 只允许在"兼容模式"下启用，并在 UI 明确标注"降低安全性"
+- PBKDF2 未实现
 
 ### 3.4 两档用户入口（v3.0 简化）
 
 创建时可选两档（Legacy 档位仅用于已有频道的向后兼容）：
-- **Quick Share**：密码模式，本地 Argon2id 派生 ECDSA 管理密钥，无需 passkey，4KB padding
+- **Quick Share**：密码模式，本地生成 ECDSA 管理密钥（Argon2id 包裹），无需 passkey，4KB padding
 - **Secure Share**：Passkey 模式，UV=required / RK=discouraged，8KB padding，合并原 Standard+Strict 的安全级别
 - **Legacy（只读）**：standard / strict / hardware_only 仅渲染已有频道，不作为新建选项
 
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
 - 官方 Cloudflare 版保持默认
-- 提供 Docker Compose 一键自托管（Worker/DO/KV 的自托管等价实现：HTTP 服务 + Postgres/SQLite + Redis/事务锁；或 Cloudflare 兼容运行时不现实则做协议等价实现）
+- 提供 Docker Compose 一键自托管（Worker/DO 的自托管等价实现：HTTP 服务 + Postgres/SQLite + Redis/事务锁；或 Cloudflare 兼容运行时不现实则做协议等价实现）
 - 发布链：签名 Manifest + 可复现构建 + 可选离线静态包（用户可在本地打开/本域部署）
 
 ---
@@ -101,8 +101,8 @@ v3.0 的产品目标：
 
 已有频道可能存储 `standard` / `strict` / `hardware_only` security_profile，系统继续正确渲染和操作。新建频道不提供这些选项。
 
-- **standard**：等价 Quick Share 安全级别（UV preferred）
-- **strict**：等价 Secure Share 安全级别（UV required），保留向后兼容
+- **standard**：Legacy WebAuthn 档位，UV=preferred（低于 Secure Share 保障级别；与使用 ECDSA 的 Quick Share 架构不同）
+- **strict**：Legacy WebAuthn 档位，UV=required（保障级别接近 Secure Share），保留向后兼容
 - **hardware_only**：原 cross-platform 强制，已移除 attestation=direct 强制执行（技术原因），现行为与 strict 相同
 
 ---
@@ -115,8 +115,8 @@ v3.0 的产品目标：
 2. **Quick Share 流程**：输入密码 → 本地生成 ECDSA 密钥对 → Argon2id 包裹 → Create Finish（adminMode=password）
 3. **Secure Share 流程**：Create Begin → WebAuthn 注册（UV=required，RK=discouraged）→ Create Finish
 4. 页面显示两条链接：
-   - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>
-   - 管理链接（发送方）：/m/:uuid
+   - 分享链接（接收方）：/s/:uuid#k=\<lock_secret_b64url\>[&af=\<sender_auth_fpr\>]
+   - 管理链接（发送方）：/m/:uuid#wk=\<wrapped_priv\>（Quick Share）或 /m/:uuid（Secure Share）
 
 > **UI 强制提示**：分享链接必须完整复制（包括 # 后部分），否则接收方无法上锁
 
@@ -129,9 +129,8 @@ v3.0 的产品目标：
 - 输入密码 → 生成 RSA keypair → Argon2id 包裹私钥存本地
 - lock 请求必须携带 lock challenge 响应（见协议）
 - 上锁成功后显示 **安全码（Safety Code）**：
-    - Emoji 序列（例如 6–10 个 emoji）
-    - 颜色块（例如 4×4/5×5 色块）
-    - Identicon 仍保留但作为背景元素
+    - Emoji 序列（8 个 emoji）
+    - 颜色块（4×4 色块）
     - "高级"里可展开 raw hex 指纹
 
 ### 5.3 发送方投递（Sender：软化核对）
@@ -209,16 +208,14 @@ v2.5 给出三层应对：
 
 - Argon2id 参数采用目标耗时策略（250–500ms）
 - 参数写入本地包头：salt, m, t, p, version
-- PBKDF2 仅"兼容模式"允许
+- PBKDF2 未实现
 
 ### 7.3 Safety Code（软化指纹核对）
 
 从 receiver_pub_fpr = SHA256(SPKI(receiver_pub)) 计算：
 
-- Emoji Safety Code：取 hash 分段映射到 emoji 表（固定表，稳定输出）
+- Emoji Safety Code：取每个 hash byte 的低 nibble（4 bits）映射到 16 项 emoji 调色板（固定表，稳定输出）
 - Color Blocks：取 hash nibble 映射到固定调色板
-- Identicon：继续保留（背景/头像）
-
 显示规则：
 
 - 默认展示 Emoji 或 Color（可切换）
@@ -250,7 +247,7 @@ v2.5 给出三层应对：
 
 Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用户入口，不再是降级选项：
 
-- **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹存 IndexedDB
+- **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
 - **协议字段**：`adminMode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
 - **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
@@ -397,13 +394,12 @@ DO 校验：
 与 v2.4 相同，但 update payload 增加：
 
 - pad_block（默认 4096）
-- plaintext_len（原文长度，仅用于调试/审计，建议不传）
 
-**建议**：plaintext_len 不要出现在明文可见字段，完全在 padding header 内即可。
+> 注意：`plaintext_len` 不是 API 层字段。它仅存在于加密后的 padding header 内部（`padded_plaintext` 的前 4 字节；参见附录 E），不作为请求的顶层字段传输。
 
-### 10.5 删除（delete_begin/commit）
+### 10.5 删除（compound_begin + delete_commit）
 
-同 v2.4。
+删除复用 `compound_begin` 获取 challenge，再调用 `delete_commit` 完成管理授权。没有单独的 `delete_begin` 端点。
 
 ### 10.6 Quick Share / Legacy Password API
 
@@ -458,7 +454,6 @@ DO 校验：
 
 - 默认：Emoji Safety Code（例如 8 个 emoji）
 - 次选：Color Blocks（例如 4×4）
-- Identicon：作为背景/头像存在
 - Advanced：短指纹 + 完整 hex（折叠）
 
 文案原则：
@@ -504,7 +499,6 @@ sequenceDiagram
   participant R as Receiver (Browser)
   participant W as Worker
   participant D as DO(uuid)
-  participant K as KV
 
   rect rgb(240,240,240)
   Note over S,D: Create (creationOptions + local lock_secret)
@@ -514,12 +508,12 @@ sequenceDiagram
   W-->>S: creationOptions
   S->>S: generate local lock_secret
   S->>S: lock_key = sha256("GL-lockkey"||uuid||lock_secret)
-  S->>S: build share URL: /s/{uuid}#k=lock_secret
+  S->>S: build share URL: /s/{uuid}#k=lock_secret[&af=sender_auth_fpr]
   S->>S: navigator.credentials.create(...) or generate local ECDSA admin key
+  S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
-  D->>K: store admin credential + lock_key + status=Waiting
-  K-->>D: ok
+  D->>D: store admin credential + lock_key + status=Waiting
   D-->>W: ok
   W-->>S: ok
   end
@@ -535,8 +529,7 @@ sequenceDiagram
   R->>R: lock_proof = sha256("GL-lock"||uuid||cid||chal||lock_key)
   R->>W: POST /api/lock_commit/{uuid} (receiver_pub + fpr + lock_proof)
   W->>D: forward
-  D->>K: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
-  K-->>D: ok
+  D->>D: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
   D-->>W: ok
   W-->>R: ok + SafetyCode shown locally
   end
@@ -548,27 +541,28 @@ sequenceDiagram
   D-->>W: challenge_id/seed + receiver_pub/fpr + last_version (if locked)
   W-->>S: begin
   S->>S: pad plaintext (4KB buckets) + hybrid encrypt + intent_hash
-  S->>S: expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
-  S->>S: navigator.credentials.get(...) (or password-mode ECDSA sign; legacy softkey alias)
-  S->>W: POST /api/manage/compound_commit/{uuid} (assertion + update)
+  S->>S: expected_challenge = sha256("GL-delivery-proof"||uuid||intent_hash)
+  S->>S: Secure Share: navigator.credentials.get(...) / Quick Share: ECDSA sign with Admin-Priv
+  S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
-  D->>D: verify intent_hash + expected_challenge + WebAuthn signature + version/nonce
-  D->>K: write cipher_bundle + status=Delivered + last_version++
-  K-->>D: ok
+  D->>D: verify intent_hash + delivery_proof challenge + admin signature (WebAuthn or ECDSA) + version/nonce
+  D->>D: write cipher_bundle + status=Delivered + last_version++
   D-->>W: ok
   W-->>S: ok
   end
 
   rect rgb(240,240,240)
-  Note over S,D: Delete (one-confirm)
-  S->>W: POST /api/delete_begin/{uuid}
+  Note over S,D: Delete (reuses compound_begin)
+  S->>W: POST /api/manage/compound_begin/{uuid}
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin
-  S->>S: intent_hash + expected_challenge + WebAuthn get
+  S->>S: intent_hash + expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
+  S->>S: admin sign (WebAuthn get or ECDSA sign)
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
-  D->>K: delete record
+  D->>D: verify intent_hash + nonce-bound challenge + admin signature
+  D->>D: delete record
   D-->>W: ok
   W-->>S: ok
   end
@@ -672,7 +666,7 @@ canonical 输出必须为：
 - 前端在 create_finish 时回传 lock_key_b64u
 - 服务端存储 lock_key（base64url 或 hex，必须固定一种；推荐 base64url）
 
-> 注意：lock_secret 永不入日志、永不入 KV 明文。
+> 注意：lock_secret 永不入日志、永不以明文存储。
 
 ### C2. Lock 两阶段流程
 
@@ -690,7 +684,7 @@ canonical 输出必须为：
 
 ### C4. DO 验证（服务端）
 
-- 从 KV 取 lock_key
+- 从 DO 存储取 lock_key
 - 用相同拼接重算 expected lock_proof
 - 一致才允许写入 receiver_pub
 
@@ -817,17 +811,17 @@ CipherBundle（base64url）：
 
 ### G3. Legacy 档位（向后兼容）
 
-#### standard（等价于早期 Quick Share 安全级别）
+#### standard（Legacy WebAuthn 档位，UV=preferred）
 - userVerification = "preferred"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### strict（等价于 Secure Share）
+#### strict（Legacy WebAuthn 档位，UV=required）
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### hardware_only（等价于 Secure Share，attestation 强制已移除）
+#### hardware_only（Legacy WebAuthn 档位，attestation 强制已移除，行为与 strict 相同）
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"（原 "direct" 强制执行已移除，cross-platform 限制已移除）
@@ -861,7 +855,7 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 ### I1. 管理密钥生成
 
 - 前端生成 ECDSA P-256 keypair
-- Admin-Priv 用 Argon2id 包裹存 IndexedDB（密码由用户提供）
+- Admin-Priv 用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB；密码由用户提供）
 - 服务器存 Admin-Pub（JWK）+ adminMode="password"
 - Legacy 频道可能存 adminMode="softkey"，后端等价处理
 
@@ -911,14 +905,14 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
 ### K2. Emoji 方案（推荐默认）
 
-- 取 fpr bytes 分成 8 组，每组 1 byte → 映射到 emoji 表（长度 256 的固定表）
-- 输出 8 个 emoji（或 10 个更稳），跨端稳定一致
+- 取 fpr bytes 分成 8 组，每组取低 nibble（4 bits）→ 映射到 16 项 emoji 调色板（固定表）
+- 输出 8 个 emoji，跨端稳定一致
 - UI 展示为：🐳 🍀 🧩 ...（例子）
 
 ### K3. Color Blocks
 
 - 取 fpr 的 32 bytes → 每个 nibble 映射到 16 色固定调色板
-- 输出 4×4 或 5×5 色块（固定布局），跨端稳定
+- 输出 4×4 色块（固定布局），跨端稳定
 
 ### K4. Advanced 展示
 

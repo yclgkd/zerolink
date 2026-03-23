@@ -39,10 +39,6 @@ new_sqlite_classes = ["SecretVaultProduction"]
 tag = "v3"
 new_sqlite_classes = ["SecretVaultV2"]
 
-[[kv_namespaces]]
-binding = "SECRETS_KV"
-id = "b8313bed33c9492885c12c9d26034420"
-
 # COMMIT_TOKEN_SECRET, RP_ID, and RP_ORIGIN are configured in the Cloudflare Dashboard
 # (Workers > Settings > Variables and Secrets). Do NOT add them here or pass via --var.
 # These values are environment-specific and must not be committed to git.
@@ -87,10 +83,6 @@ deleted_classes = ["SecretVault"]
 [[env.staging.migrations]]
 tag = "v3"
 new_sqlite_classes = ["SecretVaultV2"]
-
-[[env.staging.kv_namespaces]]
-binding = "SECRETS_KV"
-id = "1a3fb3548446479a8f401d8bb54de4c0"
 
 # COMMIT_TOKEN_SECRET, RP_ID, and RP_ORIGIN for staging are configured in the
 # Cloudflare Dashboard under Workers > zerolink-api-staging > Settings > Variables and Secrets

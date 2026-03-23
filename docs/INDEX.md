@@ -47,7 +47,7 @@ docs/
 #### Core Mechanisms
 - **Lock Secret (Anti-TOFU)** → [ARCHITECTURE.md § TOFU Preemptive Lock Protection](./ARCHITECTURE.md#1-tofu-preemptive-lock-protection-v25-core)
 - **Padding (Anti-Length Leakage)** → [ARCHITECTURE.md § Ciphertext Length Leakage Mitigation](./ARCHITECTURE.md#2-ciphertext-length-leakage-mitigation-padding)
-- **WebAuthn Admin Authority** → [ARCHITECTURE.md § Concurrency Safety](./ARCHITECTURE.md#3-concurrency-safety-durable-objects)
+- **Admin Authority (WebAuthn / ECDSA)** → [ARCHITECTURE.md § Product Modes](./ARCHITECTURE.md#product-modes-current-profiles)
 - **Intent Binding** → [ARCHITECTURE.md § Intent Binding](./ARCHITECTURE.md#4-intent-binding)
 
 #### Cryptography
@@ -69,10 +69,10 @@ docs/
 #### UX Design
 - **Softened fingerprint verification** → [PRD.md § 13.1](./PRD.md#131-softened-fingerprint-verification-presentation)
 - **Safety Code specification** → [PRD.md § Appendix K](./PRD.md#appendix-k-safety-code-visual-specification-emoji--color)
-- **WebAuthn unavailable guidance** → [PRD.md § 13.3](./PRD.md)
+- **WebAuthn unavailable guidance** → [PRD.md § 13.3](./PRD.md#133-guidance-when-webauthn-is-unavailable)
 
 #### Testing
-- **Test vectors** → [PRD.md § 14. Test Vectors and Acceptance](./PRD.md)
+- **Test vectors** → [PRD.md § 14. Test Vectors and Acceptance](./PRD.md#14-test-vectors-and-acceptance-v30)
 - **Security checklist** → [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation)
 
 #### Build Integrity
@@ -109,7 +109,7 @@ docs/
 1. [SECURITY.md](./SECURITY.md) - Full security model
 2. [SECURITY.md § Attack Scenario Analysis](./SECURITY.md#attack-scenario-analysis) - Threat analysis
 3. [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation) - Audit checkpoints
-4. [PRD.md § 14](./PRD.md) - Test vectors
+4. [PRD.md § 14](./PRD.md#14-test-vectors-and-acceptance-v30) - Test vectors
 5. [SECURITY.md § Cryptographic Specification](./SECURITY.md#cryptographic-specification) - Encryption parameters
 
 ### DevOps / Deployment
@@ -146,7 +146,7 @@ docs/
 → [ARCHITECTURE.md § Ciphertext Length Leakage Mitigation](./ARCHITECTURE.md#2-ciphertext-length-leakage-mitigation-padding)
 
 ### Q: Can WebAuthn private keys be exported?
-→ [SECURITY.md § Admin Private Key Non-Exportable](./SECURITY.md#7-admin-private-key-non-exportable-)
+→ [SECURITY.md § Admin Private Key Non-Exportable (Secure Share)](./SECURITY.md#7-admin-private-key-non-exportable--secure-share)
 
 ### Q: Can the server see plaintext?
 → [SECURITY.md § Server Zero-Knowledge](./SECURITY.md#1-server-zero-knowledge-)
@@ -191,7 +191,7 @@ docs/
 3. Check the corresponding appendix for precise byte formats
 
 ### When writing tests
-→ Check [PRD.md § 14](./PRD.md) and [PRD.md § Appendix B](./PRD.md#appendix-b-canonical-ghost-canon-v1-specification-and-test-vectors-mandatory)
+→ Check [PRD.md § 14](./PRD.md#14-test-vectors-and-acceptance-v30) and [PRD.md § Appendix B](./PRD.md#appendix-b-canonical-ghost-canon-v1-specification-and-test-vectors-mandatory)
 
 ### When reviewing security
 → Follow [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation) item by item

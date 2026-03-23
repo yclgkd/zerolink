@@ -28,17 +28,17 @@
 
 ### 1. Server Zero-Knowledge ✅
 
-**Goal**: The server/KV/DO stores no plaintext and no private keys
+**Goal**: The server/DO stores no plaintext and no private keys
 
 **Guarantees**:
 - Plaintext is encrypted on the client before being sent
 - Receiver private key is generated on the client, wrapped with Argon2id, and stored locally only
-- Sender admin private key is managed by WebAuthn (resides in system/hardware keystore)
+- Sender admin private key is managed by WebAuthn (Secure Share: resides in system/hardware keystore) or generated locally as ECDSA and encoded in the manage link fragment (Quick Share)
 - lock_secret exists only in the URL fragment; the server stores only lock_key (one-way derivation)
 
 **Verification**:
 - Audit server code: there should be no plaintext/private key storage
-- Inspect KV storage: only ciphertext, public keys, hashes, and metadata
+- Inspect DO storage: only ciphertext, public keys, hashes, and metadata
 
 ---
 
@@ -63,17 +63,22 @@
 **Goal**: Only the admin can authorize writes/destroys
 
 **Guarantees**:
-- Admin authority is based on WebAuthn (private key is non-exportable)
-- Each operation requires a WebAuthn signature (user confirmation)
+- Admin authority is based on WebAuthn (Secure Share: private key is non-exportable) or ECDSA signature (Quick Share: Argon2id-wrapped key in manage link fragment)
+- Each operation requires a WebAuthn signature (Secure Share) or ECDSA signature (Quick Share)
 - Intent Binding: challenge binds to operation details, preventing induced signatures
 
-**Verification**:
+**Verification** — two domain-separated challenge derivations:
 ```
-expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 intent_hash = SHA256(canonical_payload)  // includes full operation
+
+// Deliver/Update — deterministic; server-side challenge consumption prevents replay
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// Delete — server nonce (challenge_id + seed) ensures freshness
+expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 ```
 
-The WebAuthn assertion's challenge must === expected_challenge
+The WebAuthn/ECDSA assertion's challenge must === expected_challenge
 
 ---
 
@@ -127,9 +132,9 @@ The WebAuthn assertion's challenge must === expected_challenge
 
 ---
 
-### 7. Admin Private Key Non-Exportable ✅
+### 7. Admin Private Key Non-Exportable ✅ (Secure Share)
 
-**Goal**: Attackers cannot permanently steal admin authority
+**Goal**: Attackers cannot permanently steal admin authority (Secure Share: non-exportable; Quick Share: password-protected)
 
 **Guarantees**:
 - Secure Share: WebAuthn private key resides in system keystore/hardware
@@ -209,7 +214,7 @@ default PAD_BLOCK = 4096 bytes
 
 ### Quick Share (Password)
 - **Use case**: Environments without WebAuthn support, cross-device/cross-browser scenarios, users who prefer password managers
-- **Admin authority**: Local ECDSA P-256 admin key, wrapped with Argon2id and stored in IndexedDB
+- **Admin authority**: Local ECDSA P-256 admin key, wrapped with Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB)
 - **Padding**: 4KB
 - **Risk boundary**: Does not have WebAuthn's non-exportable property; password strength and endpoint security are more critical
 
@@ -220,8 +225,8 @@ default PAD_BLOCK = 4096 bytes
 - **Risk boundary**: Still affected by the web-scenario malicious JS boundary, but admin private key is non-exportable
 
 ### Legacy (Read-Only Compatible)
-- `standard`: understood at the early Quick Share security level
-- `strict` / `hardware_only`: understood at the Secure Share security level
+- `standard`: legacy WebAuthn tier with UV=preferred (lower assurance; architecturally distinct from Quick Share, which uses ECDSA)
+- `strict` / `hardware_only`: legacy WebAuthn tier with UV=required (comparable assurance to Secure Share)
 - New channels no longer offer legacy profiles
 
 ---
@@ -325,7 +330,7 @@ Trojan monitors user operations
 ```
 
 **Quick Share Risk Boundary**:
-- Local ECDSA private key stored in IndexedDB (wrapped with Argon2id); theoretically more dependent on endpoint security than Secure Share
+- Local ECDSA private key wrapped with Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB); theoretically more dependent on endpoint security than Secure Share
 - UI should guide users to set a sufficiently strong password rather than presenting it as a "fallback mode"
 
 ---
@@ -469,7 +474,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 
 ### Server-Side
 - [ ] All responses include `Cache-Control: no-store`
-- [ ] lock_secret never enters logs/KV
+- [ ] lock_secret never enters logs/storage
 - [ ] lock_key is one-way derived (irreversible)
 - [ ] challenge is consumed once (TTL + marking)
 - [ ] nonce deduplication (TTL 10min)

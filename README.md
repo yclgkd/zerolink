@@ -20,7 +20,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ```
 1. Sender → Create (Quick Share password mode / Secure Share Passkey mode)
-          → Share link: /s/:uuid#k=<lock_secret>
+          → Share link: /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]
 
 2. Receiver → Lock (enter password → generate RSA keypair → store locally)
             → Display Safety Code (Emoji/Color)
@@ -57,7 +57,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 - Argon2id (KDF)
 
 ### Backend
-- Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported) + KV
+- Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported)
 - Optional: Docker Compose self-hosted (planned, not yet implemented)
 
 ## Browser Compatibility
@@ -81,16 +81,16 @@ ZeroLink is a security-first secret sharing tool with the following features:
 2. **Padding (4KB blocks)**: Reduces ciphertext length-based information leakage
 3. **Argon2id Enforced**: Receiver private key wrapping (250-500ms target duration)
 4. **Dual Creation Modes**: Quick Share (password) / Secure Share (Passkey)
-5. **Verifiable Release Chain**: Signed Manifest + reproducible builds (future)
+5. **Verifiable Release Chain**: Signed Manifest + runtime hash verification
 
 ### Security Guarantees
 
 - Server zero-knowledge
 - End-to-end confidentiality
-- Update/destroy operations are unforgeable (WebAuthn)
+- Update/destroy operations are unforgeable (WebAuthn or ECDSA)
 - Replay/reorder/concurrent-overwrite resistant (DO atomicity)
 - Minimal metadata leakage
-- Frontend integrity verifiable (CSP/SRI)
+- Frontend integrity verifiable (CSP + Signed Manifest)
 - Secure Share management private key is non-exportable (WebAuthn); Quick Share admin key is encoded in the management link
 
 ## Deploy
@@ -99,12 +99,12 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
-> **Note**: After one-click deploy, run `pnpm setup` to finish KV namespace creation and secrets configuration (only 2 questions required).
+> **Note**: After one-click deploy, run `pnpm setup` to finish secrets configuration.
 
 ### Prerequisites
 
 - Cloudflare account (free plan is sufficient; Durable Objects free tier supported)
-- Node.js 22+ · pnpm 9+ · Wrangler CLI 3+
+- Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
 For full deployment documentation, see the [Deployment Guide](./docs/DEPLOYMENT.md).
 

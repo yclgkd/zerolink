@@ -123,7 +123,7 @@ export const LOCK_SECRET_BYTES = 32 as const;
 /**
  * lock_key = SHA-256(DOMAIN.LOCK_KEY || uuid || lock_secret) — 32 bytes.
  * PRD Appendix A: LOCK_KEY_BYTES = 32.
- * Stored server-side in KV; used to verify the receiver's lock_proof.
+ * Stored server-side in the Durable Object (SQLite); used to verify the receiver's lock_proof.
  */
 export const LOCK_KEY_BYTES = 32 as const;
 

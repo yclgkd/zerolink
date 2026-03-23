@@ -1,4 +1,4 @@
-<!-- synced-with: 5d1d478 -->
+<!-- synced-with: c6d6bdc -->
 
 > **语言**: [English](./SECURITY.md) | 中文
 
@@ -30,17 +30,17 @@
 
 ### 1. 服务器零知识 ✅
 
-**目标**：服务器/KV/DO 不存明文与任何私钥
+**目标**：服务器/DO 不存明文与任何私钥
 
 **保证**：
 - 明文在客户端加密后才发送
 - 接收方私钥在客户端生成，Argon2id 包裹后仅存本地
-- 发送方管理私钥由 WebAuthn 管理（驻留系统/硬件）
+- 发送方管理私钥由 WebAuthn 管理（Secure Share：驻留系统/硬件）或本地生成 ECDSA 密钥编码在管理链接 fragment 中（Quick Share）
 - lock_secret 只在 URL fragment，服务器只存 lock_key（单向派生）
 
 **验证**：
 - 审计服务器代码：不应有任何明文/私钥存储
-- 检查 KV 存储：只有密文、公钥、hash、元数据
+- 检查 DO 存储：只有密文、公钥、hash、元数据
 
 ---
 
@@ -65,17 +65,22 @@
 **目标**：仅管理者可授权写入/销毁
 
 **保证**：
-- 管理权基于 WebAuthn（私钥不可导出）
-- 每次操作需要 WebAuthn 签名（用户确认）
+- 管理权基于 WebAuthn（Secure Share：私钥不可导出）或 ECDSA 签名（Quick Share：Argon2id 包裹的密钥在管理链接 fragment 中）
+- 每次操作需要 WebAuthn 签名（Secure Share）或 ECDSA 签名（Quick Share）
 - Intent Binding：challenge 绑定操作细节，防诱导签名
 
-**验证**：
+**验证** — 两种域分离的 challenge 推导：
 ```
-expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 intent_hash = SHA256(canonical_payload)  // 包含完整操作
+
+// 投递/更新 — 确定性推导；服务端 challenge 一次性消费防重放
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// 删除 — 服务端 nonce（challenge_id + seed）确保新鲜性
+expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 ```
 
-WebAuthn assertion 的 challenge 必须 === expected_challenge
+WebAuthn/ECDSA assertion 的 challenge 必须 === expected_challenge
 
 ---
 
@@ -129,9 +134,9 @@ WebAuthn assertion 的 challenge 必须 === expected_challenge
 
 ---
 
-### 7. 管理权私钥不可导出 ✅
+### 7. 管理权私钥不可导出 ✅（Secure Share）
 
-**目标**：攻击者无法长期窃取管理权
+**目标**：攻击者无法长期窃取管理权（Secure Share：不可导出；Quick Share：密码保护）
 
 **保证**：
 - Secure Share：WebAuthn 私钥驻留系统密钥库/硬件
@@ -211,7 +216,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 
 ### Quick Share（密码）
 - **适用**：无 WebAuthn 支持环境、跨设备/跨浏览器场景、希望使用密码管理器的用户
-- **管理权**：本地 ECDSA P-256 管理密钥，Argon2id 包裹后存 IndexedDB
+- **管理权**：本地 ECDSA P-256 管理密钥，Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **Padding**：4KB
 - **风险边界**：不具备 WebAuthn 的不可导出属性，密码强度与终端安全更关键
 
@@ -222,8 +227,8 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 - **风险边界**：依然受 Web 场景恶意 JS 边界影响，但管理私钥不可导出
 
 ### Legacy（只读兼容）
-- `standard`：按早期 Quick Share 安全级别理解
-- `strict` / `hardware_only`：按 Secure Share 级别理解
+- `standard`：Legacy WebAuthn 档位，UV=preferred（较低保障级别；与使用 ECDSA 的 Quick Share 架构不同）
+- `strict` / `hardware_only`：Legacy WebAuthn 档位，UV=required（保障级别接近 Secure Share）
 - 新建频道不再提供 legacy 档位
 
 ---
@@ -327,7 +332,7 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 ```
 
 **Quick Share 风险边界**：
-- 本地 ECDSA 私钥存 IndexedDB（Argon2id 包裹），理论上比 Secure Share 更依赖终端安全
+- 本地 ECDSA 私钥用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB），理论上比 Secure Share 更依赖终端安全
 - UI 应引导用户设置足够强的密码，而不是将其表述为“降级模式”
 
 ---
@@ -471,7 +476,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 
 ### 服务端
 - [ ] 所有响应 `Cache-Control: no-store`
-- [ ] lock_secret 永不入日志/KV
+- [ ] lock_secret 永不入日志/存储
 - [ ] lock_key 单向派生（不可逆）
 - [ ] challenge 一次性消费（TTL + 标记）
 - [ ] nonce 去重（TTL 10min）

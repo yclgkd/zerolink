@@ -488,7 +488,6 @@ export const CALLER_KEY_B = asBase64Url('caller_key_b');
 
 export const env: SecretVaultEnv = {
   SECRET_VAULT: {} as DurableObjectNamespace,
-  SECRETS_KV: {} as KVNamespace,
   APP_ENV: 'test',
   COMMIT_TOKEN_SECRET: 'commit-token-secret',
   RP_ID,

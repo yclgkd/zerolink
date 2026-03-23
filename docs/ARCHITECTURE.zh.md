@@ -1,4 +1,4 @@
-<!-- synced-with: 5d1d478 -->
+<!-- synced-with: c6d6bdc -->
 
 > **语言**: [English](./ARCHITECTURE.md) | 中文
 
@@ -38,9 +38,9 @@
 - **存储**：IndexedDB（加密私钥）
 
 #### 后端
-- **平台**：Cloudflare Workers + Durable Objects + KV
+- **平台**：Cloudflare Workers + Durable Objects
 - **状态管理**：Durable Objects（串行化、原子性）
-- **持久化**：KV（密文、公钥、元数据）
+- **持久化**：DO 存储 / SQLite（密文、公钥、元数据）
 - **自托管选项**：Docker Compose（PostgreSQL/SQLite + Redis）（计划中，尚未实现）
 
 ## 核心协议流程
@@ -51,8 +51,9 @@ Sender → 选择 Quick Share 或 Secure Share → 生成 lock_secret
      → Quick Share：本地生成 ECDSA 管理密钥并用 Argon2id 包裹
      → Secure Share：WebAuthn 注册管理凭据
      → 返回两条链接：
-       - /s/:uuid#k=<lock_secret>  （分享链接，含 fragment）
-       - /m/:uuid                   （管理链接）
+       - /s/:uuid#k=<lock_secret>[&af=<sender_auth_fpr>]  （分享链接；af= 在存在发送者身份指纹时附加）
+       - /m/:uuid#wk=<wrapped_priv> （管理链接；Quick Share — fragment 携带 Argon2id 包裹的 Admin-Priv）
+       - /m/:uuid                   （管理链接；Secure Share — 无需 fragment）
 ```
 
 ### 2. Lock（接收方上锁）
@@ -128,11 +129,17 @@ padded_plaintext = [orig_len(4 bytes)] + [orig_data] + [random_padding]
 
 **问题**：WebAuthn 签名可能被诱导签署意外操作
 
-**解决方案**：
+**解决方案**：两种域分离的 challenge 推导，取决于操作类型：
 ```
 intent_hash = SHA256(canonical_payload)  // payload 包含完整操作细节
+
+// 投递/更新 — 确定性推导，无服务端 nonce；重放保护依赖 challenge 一次性消费
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// 删除 — 包含服务端 nonce（challenge_id + seed）确保新鲜性
 expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
-WebAuthn challenge 必须 === expected_challenge
+
+WebAuthn/ECDSA challenge 必须 === expected_challenge
 ```
 
 ## 产品模式（Current Profiles）
@@ -228,7 +235,7 @@ WebAuthn challenge 必须 === expected_challenge
 - Waiting → Locked：lock_commit（需 lock_proof）
 - Locked → Delivered：compound_commit（首次投递）
 - Delivered → Delivered：compound_commit（更新）
-- 任意 → Deleted：delete_commit（WebAuthn 授权）
+- 任意 → Deleted：delete_commit（管理授权：WebAuthn 或 ECDSA）
 - 任意 → Expired：TTL 到期
 
 **不可变性**：

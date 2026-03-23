@@ -94,7 +94,7 @@ UPDATE WHEN:
 | Location | Issue | Notes |
 |----------|-------|-------|
 | URL fragments | Never sent to server | Key material lives in `window.location.hash` |
-| Durable Objects | Single-location consistency | DO must be in same region as KV for performance |
+| Durable Objects | Single-location consistency | All channel data stored in DO SQLite; no external KV dependency |
 | `@noble/hashes` | Not WebCrypto | Runs synchronously; may block UI on heavy params |
 | `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | `createOrchestrator()` defaults to fast KDF params in tests | Opt out with `{ useFastKdf: false }` when a frontend smoke test must exercise production-strength Argon2id defaults |
 | Biome | No ESLint plugins | Some rules need manual enforcement |
