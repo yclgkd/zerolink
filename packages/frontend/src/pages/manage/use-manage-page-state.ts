@@ -135,7 +135,9 @@ export function useManagePageState(uuid?: string) {
     secretInput,
     softkeyPassphrase,
     profile,
-    wrappedPrivateKey
+    wrappedPrivateKey,
+    setSecretInput,
+    setSoftkeyPassphrase
   );
 
   const { handleDestroyConfirm, handleApplyDestroy } = useManageDestructionLogic(
