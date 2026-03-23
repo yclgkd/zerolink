@@ -35,7 +35,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ### Getting Started
 - [Quick Start Guide](./docs/QUICK_START.md) - From zero to running dev environment
-- [Deployment Guide](./docs/DEPLOYMENT.md) - Deploy to Cloudflare (including one-click deploy)
+- [Deployment Guide](./docs/DEPLOYMENT.md) - Deploy to Cloudflare Workers manually
 - [Tech Stack Specification](./docs/TECH_STACK.md) - Complete tech stack and toolchain
 
 ### Design Documents
@@ -95,18 +95,14 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ## Deploy
 
-### One-Click Deploy to Cloudflare
-
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
-
-> **Note**: After one-click deploy, run `pnpm setup` to finish secrets configuration.
+ZeroLink currently documents manual deployment to Cloudflare Workers rather than a generic deploy button flow.
 
 ### Prerequisites
 
 - Cloudflare account (free plan is sufficient; Durable Objects free tier supported)
 - Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
-For full deployment documentation, see the [Deployment Guide](./docs/DEPLOYMENT.md).
+For the full step-by-step process, see the [Deployment Guide](./docs/DEPLOYMENT.md).
 
 ---
 

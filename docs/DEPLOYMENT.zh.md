@@ -13,13 +13,12 @@
 
 1. [前提条件 / Prerequisites](#前提条件--prerequisites)
 2. [架构概览 / Architecture Overview](#架构概览--architecture-overview)
-3. [快速部署 / Quick Deploy](#快速部署--quick-deploy)
-4. [手动部署 / Manual Deploy](#手动部署--manual-deploy)
-5. [环境变量参考 / Environment Variables](#环境变量参考--environment-variables)
-6. [Manifest 签名（可选）/ Manifest Signing](#manifest-签名可选--manifest-signing)
-7. [自定义域名 / Custom Domain](#自定义域名--custom-domain)
-8. [CI/CD 自动部署 / Automated Deployment](#cicd-自动部署--automated-deployment)
-9. [故障排查 / Troubleshooting](#故障排查--troubleshooting)
+3. [手动部署 / Manual Deploy](#手动部署--manual-deploy)
+4. [环境变量参考 / Environment Variables](#环境变量参考--environment-variables)
+5. [Manifest 签名（可选）/ Manifest Signing](#manifest-签名可选--manifest-signing)
+6. [自定义域名 / Custom Domain](#自定义域名--custom-domain)
+7. [CI/CD 自动部署 / Automated Deployment](#cicd-自动部署--automated-deployment)
+8. [故障排查 / Troubleshooting](#故障排查--troubleshooting)
 
 ---
 
@@ -70,34 +69,51 @@ Frontend SPA    ──→    Worker (zerolink-api)
 
 ---
 
-## 快速部署 / Quick Deploy
-
-### 一键部署
-
-点击下方按钮，将 ZeroLink Worker（含前端资源）部署到你的 Cloudflare 账号：
-
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
-
-> **注意 / Note**: 一键部署完成后，运行交互式 setup 脚本完成剩余配置：
->
-> ```bash
-> pnpm setup
-> ```
->
-> 脚本会自动生成 `COMMIT_TOKEN_SECRET`，仅需手动输入 `RP_ID` 和 `RP_ORIGIN`（域名相关，
-> 无法自动推断）。
-
----
-
 ## 手动部署 / Manual Deploy
 
-### 第 1 步：登录 Wrangler
+### 第 1 步：克隆仓库并安装依赖
+
+```bash
+git clone https://github.com/yclgkd/ZeroLink.git
+cd ZeroLink
+pnpm install --frozen-lockfile
+```
+
+### 第 2 步：登录 Wrangler
 
 ```bash
 npx wrangler login
 ```
 
-### 第 2 步：运行 setup 脚本
+### 第 3 步：在设置 Secrets 前先确定最终访问域名
+
+在运行 `pnpm setup` 之前，先决定 ZeroLink 最终是挂在自定义域名，还是挂在
+`*.workers.dev` 主机名上。`RP_ID` 和 `RP_ORIGIN` 必须与最终浏览器访问的 Origin
+完全一致。
+
+#### 选项 A：自定义域名
+
+在部署前先把 `packages/backend/wrangler.toml` 里的示例 `zerolink.dev` routes 改成你自己的
+域名；如果你也会部署 staging，则 `[env.staging].routes` 也要一起更新。
+
+```toml
+routes = [
+  { pattern = "example.com", zone_name = "example.com" },
+  { pattern = "example.com/*", zone_name = "example.com" },
+]
+```
+
+#### 选项 B：`*.workers.dev`
+
+如果你想先不绑定自定义域名，请移除目标环境对应的 `routes` 配置块。这样 Cloudflare 会把
+Worker 挂到默认的 `*.workers.dev` 主机名上。
+
+- `RP_ID` 必须是最终的 `worker-name.<your-workers-subdomain>.workers.dev` 主机名。
+- `RP_ORIGIN` 必须是完整的 `https://worker-name.<your-workers-subdomain>.workers.dev`。
+- 如果你还不知道最终主机名，可以先在没有 routes 的情况下部署一次，记下生成的
+  `*.workers.dev` URL，再重新运行 `pnpm setup` 并重新部署。
+
+### 第 4 步：运行 setup 脚本
 
 ```bash
 pnpm setup
@@ -106,6 +122,10 @@ pnpm setup
 脚本会交互式地完成以下工作：
 - 自动生成并设置 `COMMIT_TOKEN_SECRET`
 - 提示输入 `RP_ID` 和 `RP_ORIGIN`，设置为 Worker Secret
+- 让你选择 `production`、`staging` 或 `both`
+
+这里输入的值必须与第 3 步确定的最终 Origin 完全一致。如果之后改了访问域名，需要重新运行
+`pnpm setup` 更新 Secrets，再继续依赖 WebAuthn。
 
 ```
 🚀 ZeroLink Cloudflare Setup
@@ -126,64 +146,52 @@ WebAuthn configuration for production:
 🎉 Setup complete!
 ```
 
-### 第 3 步：构建前端
+### 第 5 步：构建前端
 
 ```bash
-pnpm --filter frontend build
+pnpm --filter @zerolink/frontend build
 # 构建输出在 packages/frontend/dist/ 目录
 ```
 
 默认的 `pnpm build` 产物是可运行但**未验证**的前端壳。它不会启用 fail-closed 的
 `Verified Release` 启动门禁，因此适用于本地预览和未签名的手动部署。
 
-### 第 4 步：确认 wrangler.toml 配置
+### 第 6 步：部署
 
-`packages/backend/wrangler.toml` 关键配置：
-
-```toml
-name = "zerolink-api"
-main = "src/index.ts"
-compatibility_date = "2025-01-01"
-
-[assets]
-directory = "../frontend/dist"
-binding = "ASSETS"
-run_worker_first = true
-not_found_handling = "single-page-application"
-
-routes = [
-  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
-  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
-]
-
-[[durable_objects.bindings]]
-name = "SECRET_VAULT"
-class_name = "SecretVaultV2"
-```
-
-### 第 5 步：部署
+根据你实际要部署的环境选择对应命令：
 
 ```bash
 cd packages/backend
-npx wrangler deploy
+
+# Production（顶层环境）
+npx wrangler deploy --env=""
+
+# Staging
+npx wrangler deploy --env staging
 ```
 
 一条命令同时部署 Worker 代码和前端静态资源。
 
 > **WebAuthn 说明 / WebAuthn Note**:
-> - `RP_ID` = 你的域名（不含协议前缀），例如 `zerolink.dev`
-> - `RP_ORIGIN` = 完整的 Origin，例如 `https://zerolink.dev`
-> - 如果使用 `*.workers.dev`，则 `RP_ID=your-worker.username.workers.dev`
+> - `RP_ID` = 最终主机名（不含协议），例如 `example.com`
+> - `RP_ORIGIN` = 最终完整 Origin，例如 `https://example.com`
+> - 如果使用 `*.workers.dev`，则这两个值都必须从最终的
+>   `worker-name.<subdomain>.workers.dev` 主机名推导
 > - 这两个值必须与实际访问域名完全匹配，否则 WebAuthn 认证会失败
 
-### 第 6 步：验证部署
+### 第 7 步：验证部署
 
 ```bash
-# 查看 Worker 日志
-npx wrangler tail
+cd packages/backend
 
-# 验证 Worker 可达（应返回 JSON 响应）
-curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
+# 查看 production 日志
+npx wrangler tail --env=""
+
+# 查看 staging 日志
+npx wrangler tail --env staging
+
+# 验证 Worker 可达（把 <your-origin> 替换成实际访问域名）
+curl -s https://<your-origin>/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
 ```
 
 ---
@@ -204,7 +212,7 @@ curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | h
 |-----------|------|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker 权限） |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
-| `MANIFEST_SIGNING_KEY` | Ed25519 私钥（base64）用于 manifest 签名 |
+| `MANIFEST_SIGNING_KEY` | PEM 文本格式的 Ed25519 私钥，用于 manifest 签名 |
 | `RELEASE_PLEASE_TOKEN` | GitHub PAT 或 GitHub App token，用于创建 Release PR、tag 和 GitHub Release，并确保后续 workflow 能被正常触发；若缺失，release-please workflow 会在预检查步骤里直接报错并给出配置提示 |
 
 ### 创建 Cloudflare API Token
@@ -239,7 +247,7 @@ cat keys/manifest-signing.pem
 
 ```bash
 # 构建
-VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter frontend build
+VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build
 
 # 生成 manifest（记录 `entryAssetPath`，并仅哈希 `dist/assets/` 下的稳定运行时资源；
 # 根目录文档如 `index.html`、`robots.txt` 不进入签名集）
@@ -264,18 +272,22 @@ bootstrap 会先确认自己正在运行的入口资源与 manifest 一致；若
 
 ## 自定义域名 / Custom Domain
 
-在 `wrangler.toml` 中配置 routes，Worker 会自动处理该域名下所有请求（API + 静态资源）：
+如果你使用自定义域名，请在 `wrangler.toml` 中配置 routes，让 Worker 处理该域名下的所有
+请求（API + 静态资源）。下面只是示例值，必须替换成你自己的 zone：
 
 ```toml
 routes = [
-  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
-  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
+  { pattern = "example.com", zone_name = "example.com" },
+  { pattern = "example.com/*", zone_name = "example.com" },
 ]
 ```
 
-或通过 Cloudflare Dashboard：**Workers → zerolink-api → Settings → Domains & Routes → Add**
+如果你使用 `*.workers.dev`，请跳过本节，并保持目标环境对应的 `routes` 配置已移除。
 
-> **注意**: 使用两条独立的路由条目——一条匹配裸根路径（`zerolink.dev`），一条匹配所有子路径（`zerolink.dev/*`）——以确保根路径 `/` 也被正确匹配。
+或通过 Cloudflare Dashboard：**Workers → <your-worker-name> → Settings → Domains & Routes → Add**
+
+> **注意**: 使用两条独立的路由条目——一条匹配裸根路径（`example.com`），一条匹配所有子路径
+> （`example.com/*`）——以确保根路径 `/` 也被正确匹配。
 
 ---
 
@@ -333,7 +345,7 @@ feat(security): ...
 
 ```bash
 ZEROLINK_VERSION=1.0.0 VITE_RELEASE_VERIFICATION_REQUIRED=true \
-  pnpm --filter frontend build
+  pnpm --filter @zerolink/frontend build
 ZEROLINK_VERSION=1.0.0 pnpm manifest:generate
 ```
 
@@ -357,10 +369,19 @@ Error: COMMIT_TOKEN_SECRET environment variable is missing or empty
 - `RP_ORIGIN`
 
 ```bash
-# 查看当前已配置的 secrets
+cd packages/backend
+
+# 查看 production 当前已配置的 secrets
+npx wrangler secret list --name zerolink-api
+
+# 查看 staging 当前已配置的 secrets
 npx wrangler secret list --name zerolink-api-staging
 
-# 补充缺失的 secret（以 COMMIT_TOKEN_SECRET 为例）
+# 补充缺失的 production secret（以 COMMIT_TOKEN_SECRET 为例）
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
+  npx wrangler secret put COMMIT_TOKEN_SECRET
+
+# 补充缺失的 staging secret
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
   npx wrangler secret put COMMIT_TOKEN_SECRET --name zerolink-api-staging
 ```
@@ -384,11 +405,16 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
 
 **解决方案**:
 ```bash
-# 查看实时日志
-npx wrangler tail zerolink-api
+cd packages/backend
+
+# 查看 production 日志
+npx wrangler tail --env=""
+
+# 查看 staging 日志
+npx wrangler tail --env staging
 
 # 确认 wrangler.toml 中的 migrations 配置正确
-cat packages/backend/wrangler.toml
+cat wrangler.toml
 ```
 
 ### 构建失败
@@ -405,7 +431,7 @@ pnpm build
 **症状**: 前端页面加载但 JS/CSS 等资源返回 404
 
 **解决方案**:
-- 确认 `packages/frontend/dist/` 目录存在且包含构建产物（先运行 `pnpm --filter frontend build`）
+- 确认 `packages/frontend/dist/` 目录存在且包含构建产物（先运行 `pnpm --filter @zerolink/frontend build`）
 - 确认 `wrangler.toml` 中 `[assets] directory = "../frontend/dist"` 路径相对于 `packages/backend/` 正确
 - `wrangler deploy` 需要在前端构建完成后执行
 

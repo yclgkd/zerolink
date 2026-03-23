@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-23] Cloudflare docs now document manual deploy only for the main repo
+
+**Decision**: Remove the public one-click Cloudflare deploy path from the main repository docs and document only the manual Cloudflare Workers deployment flow here.
+**Context**: The repository is a pnpm monorepo with the Worker config under `packages/backend/`, frontend assets under `packages/frontend/`, and maintainer-specific example routes committed in `wrangler.toml`. The previous one-click wording implied a generic deploy-button flow that the main repo does not safely support.
+**Choice**: Remove one-click deploy references from `README*` and deployment indexes, rewrite `docs/DEPLOYMENT*.md` around manual deployment only, require deployers to choose their final origin before setting WebAuthn secrets, and replace maintainer-specific verification / troubleshooting examples with environment-appropriate commands and placeholders.
+**Reasoning**: A broken or maintainer-specific deploy button is worse than no button. The main repository should document the path that contributors and self-hosters can actually execute today without guessing around routes, origins, or worker names.
+**Trade-offs**: The repository no longer advertises a zero-click trial path. If a true deploy-button experience is desired later, it should ship as a separate isolated template rather than by stretching the main monorepo config.
+
 ## [2026-03-21] Bilingual documentation: English primary, Chinese .zh.md suffix
 
 **Decision**: Adopt suffix-based bilingual documentation with English as the authoritative version and Chinese as a tracked translation.

@@ -12,7 +12,7 @@
 docs/
 ├── INDEX.md           # 本文件 - 快速索引
 ├── QUICK_START.md    # 快速启动指南（从零到运行）
-├── DEPLOYMENT.md     # 部署指南（Cloudflare 一键部署 + 手动部署）
+├── DEPLOYMENT.md     # 部署指南（Cloudflare Workers 手动部署）
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
 ├── PRD.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
@@ -115,7 +115,7 @@ docs/
 5. [SECURITY.md § 密码学规范](./SECURITY.zh.md#密码学规范) - 加密参数
 
 ### DevOps / 部署
-1. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - **完整部署指南（一键部署 + 手动部署）**
+1. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - **完整部署指南（手动部署）**
 2. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - GitHub Actions 与发布流程
 3. [TECH_STACK.md § 部署与发布](./TECH_STACK.zh.md#部署与发布) - 前后端部署
 4. [TECH_STACK.md § 发布流程](./TECH_STACK.zh.md#版本管理与发布流水线) - PR 验证与 tag 发布
