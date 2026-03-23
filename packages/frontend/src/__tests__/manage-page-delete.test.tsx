@@ -398,6 +398,31 @@ describe('ManagePage – delete / destroy confirm', () => {
     expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
   });
 
+  it('shows INTERNAL_ERROR and logs to console when deleteChannel throws', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'waiting');
+
+    deleteChannelMock.mockRejectedValueOnce(new TypeError('unexpected crypto failure'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    await waitForManageActionsEnabled();
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    const error = await screen.findByTestId('manage-action-error');
+    expect(error.textContent).toContain('Unexpected internal error');
+    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[useManageDestructionLogic] deleteChannel threw unexpectedly',
+      expect.objectContaining({ uuid: VALID_UUID })
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('ignores stale delete failure after navigating to a new uuid', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {

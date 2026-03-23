@@ -246,6 +246,37 @@ describe('ManagePage – public status and waiting state', () => {
     expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
+  it('falls back to safety unavailable and logs when receiverPubFpr is malformed', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+    const MALFORMED_HEX = 'zzzz_not_valid_hex';
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'locked',
+        version: 2,
+        adminMode: 'webauthn',
+        securityProfile: SECURITY_PROFILE.SECURE,
+        receiverPubFpr: MALFORMED_HEX,
+      });
+    });
+
+    expect(screen.getByTestId('manage-safety-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('safety-code-root')).toBeNull();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[useManagePageState] deriveSafetyCodeDisplay failed',
+      expect.objectContaining({ receiverPubFpr: MALFORMED_HEX })
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('hides delivery composer while waiting for receiver lock', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');
