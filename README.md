@@ -57,7 +57,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 - Argon2id (KDF)
 
 ### Backend
-- Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported) + KV
+- Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported)
 - Optional: Docker Compose self-hosted (planned, not yet implemented)
 
 ## Browser Compatibility
@@ -99,7 +99,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
 
-> **Note**: After one-click deploy, run `pnpm setup` to finish KV namespace creation and secrets configuration.
+> **Note**: After one-click deploy, run `pnpm setup` to finish secrets configuration.
 
 ### Prerequisites
 

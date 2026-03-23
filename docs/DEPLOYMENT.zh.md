@@ -54,17 +54,15 @@ Frontend SPA    ──→    Worker (zerolink-api)
                          │  ├─ /api/* → 业务逻辑
                          │  └─ 其余路径 → Workers Assets (静态文件)
                          │
-                 ┌───────┴───────┐
-                 │               │
-            Durable Object   KV Namespace
-            (SecretVault)   (SECRETS_KV)
-            [状态机/SQLite]  [键值存储]
+                         │
+                    Durable Object
+                    (SecretVault)
+                    [状态机/SQLite]
 ```
 
 - **Cloudflare Worker**：统一处理所有请求（API + 静态文件），注入安全响应头
 - **Workers Assets**：Worker 内置静态资源托管，静态资源请求免费无限额
 - **Durable Object**：每个 Secret 的原子状态机（SQLite 后端）
-- **KV Namespace**：辅助键值存储
 
 > **架构说明 / Architecture Note**: 本项目采用 **Workers Assets 统一部署**模式，不使用
 > Cloudflare Pages。前端构建产物通过 `wrangler.toml` 的 `[assets]` 绑定随 Worker 一起部署，
@@ -86,8 +84,8 @@ Frontend SPA    ──→    Worker (zerolink-api)
 > pnpm setup
 > ```
 >
-> 脚本会自动创建 KV namespace 并更新 `wrangler.toml`，自动生成 `COMMIT_TOKEN_SECRET`，
-> 仅需手动输入 `RP_ID` 和 `RP_ORIGIN`（域名相关，无法自动推断）。
+> 脚本会自动生成 `COMMIT_TOKEN_SECRET`，仅需手动输入 `RP_ID` 和 `RP_ORIGIN`（域名相关，
+> 无法自动推断）。
 
 ---
 
@@ -106,7 +104,6 @@ pnpm setup
 ```
 
 脚本会交互式地完成以下工作：
-- 自动创建 KV namespace 并更新 `wrangler.toml`
 - 自动生成并设置 `COMMIT_TOKEN_SECRET`
 - 提示输入 `RP_ID` 和 `RP_ORIGIN`，设置为 Worker Secret
 
@@ -122,15 +119,12 @@ WebAuthn configuration for production:
   RP_ORIGIN (full URL,   e.g. https://zerolink.dev): https://zerolink.dev
 
 📦 Setting up production...
-  Creating KV namespace... ✅  (b8313bed33c9492885c12c9d26034420)
   Setting COMMIT_TOKEN_SECRET... ✅
   Setting RP_ID... ✅
   Setting RP_ORIGIN... ✅
 
 🎉 Setup complete!
 ```
-
-> 若已有 KV namespace（重新部署场景），脚本会跳过创建步骤，只更新 Secrets。
 
 ### 第 3 步：构建前端
 
@@ -165,10 +159,6 @@ routes = [
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
 class_name = "SecretVaultV2"
-
-[[kv_namespaces]]
-binding = "SECRETS_KV"
-id = "你的-kv-namespace-id"
 ```
 
 ### 第 5 步：部署
@@ -212,7 +202,7 @@ curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | h
 
 | Secret 名 | 说明 |
 |-----------|------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker + KV 权限） |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker 权限） |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
 | `MANIFEST_SIGNING_KEY` | Ed25519 私钥（base64）用于 manifest 签名 |
 | `RELEASE_PLEASE_TOKEN` | GitHub PAT 或 GitHub App token，用于创建 Release PR、tag 和 GitHub Release，并确保后续 workflow 能被正常触发；若缺失，release-please workflow 会在预检查步骤里直接报错并给出配置提示 |
@@ -222,9 +212,7 @@ curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | h
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
 2. 进入 **My Profile → API Tokens → Create Token**
 3. 选择 **Edit Cloudflare Workers** 模板
-4. 额外添加权限：
-   - `Workers KV Storage:Edit`
-5. 复制 Token 并保存到 GitHub Secrets
+4. 复制 Token 并保存到 GitHub Secrets
 
 ---
 
@@ -402,15 +390,6 @@ npx wrangler tail zerolink-api
 # 确认 wrangler.toml 中的 migrations 配置正确
 cat packages/backend/wrangler.toml
 ```
-
-### KV 读写失败
-
-**症状**: API 返回 KV 相关错误
-
-**解决方案**:
-- 确认 `wrangler.toml` 中的 KV namespace ID 是当前账号的 ID
-- 确认 API Token 有 KV 读写权限
-- 使用 `npx wrangler kv:namespace list` 查看当前账号的所有 namespace
 
 ### 构建失败
 

@@ -22,7 +22,7 @@ v3.0 product goals:
 
 ### 2.1 Security Objectives (Mandatory)
 
-1. **Server Zero-Knowledge**: The server/KV/DO never stores plaintext or any private key
+1. **Server Zero-Knowledge**: The server/DO never stores plaintext or any private key
 2. **End-to-End Confidentiality**: Plaintext only appears locally on the receiver's device
 3. **Unforgeable Update/Destroy**: Only the admin can authorize writes/destruction
 4. **Replay/Reorder/Concurrent-Overwrite Resistance**: Monotonic version + nonce deduplication + DO serialization
@@ -68,7 +68,7 @@ Two tiers available at creation (legacy tiers are only used for backward compati
 ### 3.5 New: Self-Hosting / Verifiable Releases
 
 - Official Cloudflare version remains the default
-- Docker Compose one-click self-hosting (protocol-equivalent implementation of Worker/DO/KV self-hosting: HTTP service + Postgres/SQLite + Redis/transaction locks; or protocol-equivalent implementation if Cloudflare-compatible runtime is impractical)
+- Docker Compose one-click self-hosting (protocol-equivalent implementation of Worker/DO self-hosting: HTTP service + Postgres/SQLite + Redis/transaction locks; or protocol-equivalent implementation if Cloudflare-compatible runtime is impractical)
 - Release chain: Signed Manifest + reproducible builds + optional offline static packages (users can open locally/deploy on their own domain)
 
 ---
@@ -497,7 +497,6 @@ sequenceDiagram
   participant R as Receiver (Browser)
   participant W as Worker
   participant D as DO(uuid)
-  participant K as KV
 
   rect rgb(240,240,240)
   Note over S,D: Create (creationOptions + local lock_secret)
@@ -512,8 +511,7 @@ sequenceDiagram
   S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
-  D->>K: store admin credential + lock_key + status=Waiting
-  K-->>D: ok
+  D->>D: store admin credential + lock_key + status=Waiting
   D-->>W: ok
   W-->>S: ok
   end
@@ -529,8 +527,7 @@ sequenceDiagram
   R->>R: lock_proof = sha256("GL-lock"||uuid||cid||chal||lock_key)
   R->>W: POST /api/lock_commit/{uuid} (receiver_pub + fpr + lock_proof)
   W->>D: forward
-  D->>K: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
-  K-->>D: ok
+  D->>D: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
   D-->>W: ok
   W-->>R: ok + SafetyCode shown locally
   end
@@ -547,8 +544,7 @@ sequenceDiagram
   S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
   D->>D: verify intent_hash + delivery_proof challenge + admin signature (WebAuthn or ECDSA) + version/nonce
-  D->>K: write cipher_bundle + status=Delivered + last_version++
-  K-->>D: ok
+  D->>D: write cipher_bundle + status=Delivered + last_version++
   D-->>W: ok
   W-->>S: ok
   end
@@ -564,7 +560,7 @@ sequenceDiagram
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
   D->>D: verify intent_hash + nonce-bound challenge + admin signature
-  D->>K: delete record
+  D->>D: delete record
   D-->>W: ok
   W-->>S: ok
   end
@@ -668,7 +664,7 @@ Canonical output must be:
 - Frontend sends lock_key_b64u back in create_finish
 - Server stores lock_key (base64url or hex; must be consistent; base64url recommended)
 
-> Note: lock_secret must never be logged or stored in KV as plaintext.
+> Note: lock_secret must never be logged or stored as plaintext.
 
 ### C2. Lock Two-Phase Flow
 
@@ -686,7 +682,7 @@ Canonical output must be:
 
 ### C4. DO Verification (Server-Side)
 
-- Retrieves lock_key from KV
+- Retrieves lock_key from DO storage
 - Recomputes expected lock_proof using the same concatenation
 - Only allows receiver_pub to be written if the values match
 

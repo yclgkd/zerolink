@@ -21,7 +21,6 @@ import { applySecurityHeaders } from './security-headers.ts';
 
 export interface Env {
   SECRET_VAULT: DurableObjectNamespace;
-  SECRETS_KV: KVNamespace;
   ASSETS: Fetcher;
   APP_ENV: string;
   COMMIT_TOKEN_SECRET: string;

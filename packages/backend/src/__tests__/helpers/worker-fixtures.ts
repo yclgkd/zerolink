@@ -186,7 +186,6 @@ export function createMockEnv(responder: (request: Request) => Promise<Response>
   return {
     env: {
       SECRET_VAULT: namespace,
-      SECRETS_KV: {} as KVNamespace,
       ASSETS: assets,
       APP_ENV: 'test',
       COMMIT_TOKEN_SECRET: 'commit-token-secret',

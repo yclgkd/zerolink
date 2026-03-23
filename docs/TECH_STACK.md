@@ -858,7 +858,7 @@ ZeroLink's core logic relies on **Cloudflare Durable Objects (DO)**. Since 2026,
 
 **Key Notes**:
 1. **Free Tier Limitation**: The free tier only supports the **SQLite storage backend**. This project is already adapted for SQLite.
-2. **Paid Plan**: If higher quotas or the traditional KV storage backend are needed, the Workers Paid plan is required (starting at $5/month).
+2. **Paid Plan**: If higher quotas are needed, the Workers Paid plan is required (starting at $5/month).
 3. **Hibernation**: This project leverages WebSocket auto-hibernation to reduce compute duration consumption.
 
 ---

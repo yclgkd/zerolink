@@ -16,7 +16,6 @@ import type { CommitCookieSignal } from '../commitTokens.ts';
 
 export interface SecretVaultEnv {
   SECRET_VAULT: DurableObjectNamespace;
-  SECRETS_KV: KVNamespace;
   APP_ENV: string;
   COMMIT_TOKEN_SECRET: string;
   RP_ID: string;

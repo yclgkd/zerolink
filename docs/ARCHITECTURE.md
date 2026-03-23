@@ -38,7 +38,7 @@
 - **Storage**: IndexedDB (encrypted private keys)
 
 #### Backend
-- **Platform**: Cloudflare Workers + Durable Objects + KV
+- **Platform**: Cloudflare Workers + Durable Objects
 - **State management**: Durable Objects (serialization, atomicity)
 - **Persistence**: DO storage / SQLite (ciphertext, public keys, metadata)
 - **Self-hosting option**: Docker Compose (PostgreSQL/SQLite + Redis) (Planned, not yet implemented)

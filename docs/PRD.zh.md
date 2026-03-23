@@ -24,7 +24,7 @@ v3.0 的产品目标：
 
 ### 2.1 安全目标（必须满足）
 
-1. **服务器零知识**：服务器/KV/DO 不存明文与任何私钥
+1. **服务器零知识**：服务器/DO 不存明文与任何私钥
 2. **端到端保密**：明文仅在接收方本地出现
 3. **更新/销毁不可伪造**：仅管理者可授权写入/销毁
 4. **抗重放/乱序/并发覆盖**：version 单调 + nonce 去重 + DO 串行
@@ -70,7 +70,7 @@ v3.0 的产品目标：
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
 - 官方 Cloudflare 版保持默认
-- 提供 Docker Compose 一键自托管（Worker/DO/KV 的自托管等价实现：HTTP 服务 + Postgres/SQLite + Redis/事务锁；或 Cloudflare 兼容运行时不现实则做协议等价实现）
+- 提供 Docker Compose 一键自托管（Worker/DO 的自托管等价实现：HTTP 服务 + Postgres/SQLite + Redis/事务锁；或 Cloudflare 兼容运行时不现实则做协议等价实现）
 - 发布链：签名 Manifest + 可复现构建 + 可选离线静态包（用户可在本地打开/本域部署）
 
 ---
@@ -499,7 +499,6 @@ sequenceDiagram
   participant R as Receiver (Browser)
   participant W as Worker
   participant D as DO(uuid)
-  participant K as KV
 
   rect rgb(240,240,240)
   Note over S,D: Create (creationOptions + local lock_secret)
@@ -514,8 +513,7 @@ sequenceDiagram
   S->>S: build manage URL: /m/{uuid}#wk=wrapped_priv [Quick Share] or /m/{uuid} [Secure Share]
   S->>W: POST /api/create_finish/{uuid} (attestation or softkeyPubJwk + lockKeyB64u)
   W->>D: forward
-  D->>K: store admin credential + lock_key + status=Waiting
-  K-->>D: ok
+  D->>D: store admin credential + lock_key + status=Waiting
   D-->>W: ok
   W-->>S: ok
   end
@@ -531,8 +529,7 @@ sequenceDiagram
   R->>R: lock_proof = sha256("GL-lock"||uuid||cid||chal||lock_key)
   R->>W: POST /api/lock_commit/{uuid} (receiver_pub + fpr + lock_proof)
   W->>D: forward
-  D->>K: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
-  K-->>D: ok
+  D->>D: verify lock_proof using stored lock_key, then store receiver_pub/fpr, status=Locked
   D-->>W: ok
   W-->>R: ok + SafetyCode shown locally
   end
@@ -549,8 +546,7 @@ sequenceDiagram
   S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
   D->>D: verify intent_hash + delivery_proof challenge + admin signature (WebAuthn or ECDSA) + version/nonce
-  D->>K: write cipher_bundle + status=Delivered + last_version++
-  K-->>D: ok
+  D->>D: write cipher_bundle + status=Delivered + last_version++
   D-->>W: ok
   W-->>S: ok
   end
@@ -566,7 +562,7 @@ sequenceDiagram
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
   D->>D: verify intent_hash + nonce-bound challenge + admin signature
-  D->>K: delete record
+  D->>D: delete record
   D-->>W: ok
   W-->>S: ok
   end
@@ -670,7 +666,7 @@ canonical 输出必须为：
 - 前端在 create_finish 时回传 lock_key_b64u
 - 服务端存储 lock_key（base64url 或 hex，必须固定一种；推荐 base64url）
 
-> 注意：lock_secret 永不入日志、永不入 KV 明文。
+> 注意：lock_secret 永不入日志、永不以明文存储。
 
 ### C2. Lock 两阶段流程
 
@@ -688,7 +684,7 @@ canonical 输出必须为：
 
 ### C4. DO 验证（服务端）
 
-- 从 KV 取 lock_key
+- 从 DO 存储取 lock_key
 - 用相同拼接重算 expected lock_proof
 - 一致才允许写入 receiver_pub
 

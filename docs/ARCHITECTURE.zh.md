@@ -38,7 +38,7 @@
 - **存储**：IndexedDB（加密私钥）
 
 #### 后端
-- **平台**：Cloudflare Workers + Durable Objects + KV
+- **平台**：Cloudflare Workers + Durable Objects
 - **状态管理**：Durable Objects（串行化、原子性）
 - **持久化**：DO 存储 / SQLite（密文、公钥、元数据）
 - **自托管选项**：Docker Compose（PostgreSQL/SQLite + Redis）（计划中，尚未实现）

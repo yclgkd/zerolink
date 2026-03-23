@@ -28,7 +28,7 @@
 
 ### 1. Server Zero-Knowledge ✅
 
-**Goal**: The server/KV/DO stores no plaintext and no private keys
+**Goal**: The server/DO stores no plaintext and no private keys
 
 **Guarantees**:
 - Plaintext is encrypted on the client before being sent
@@ -38,7 +38,7 @@
 
 **Verification**:
 - Audit server code: there should be no plaintext/private key storage
-- Inspect KV storage: only ciphertext, public keys, hashes, and metadata
+- Inspect DO storage: only ciphertext, public keys, hashes, and metadata
 
 ---
 
@@ -474,7 +474,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 
 ### Server-Side
 - [ ] All responses include `Cache-Control: no-store`
-- [ ] lock_secret never enters logs/KV
+- [ ] lock_secret never enters logs/storage
 - [ ] lock_key is one-way derived (irreversible)
 - [ ] challenge is consumed once (TTL + marking)
 - [ ] nonce deduplication (TTL 10min)

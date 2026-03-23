@@ -49,18 +49,16 @@ Frontend SPA    ──→    Worker (zerolink-api)
                         │  ├─ /api/* → Business logic
                         │  └─ Other paths → Workers Assets (static files)
                         │
-                ┌───────┴───────┐
-                │               │
-           Durable Object   KV Namespace
-           (SecretVault)   (SECRETS_KV)
-           [State machine  [Key-value
-            / SQLite]       storage]
+                        │
+                   Durable Object
+                   (SecretVault)
+                   [State machine
+                    / SQLite]
 ```
 
 - **Cloudflare Worker**: Handles all requests (API + static files) and injects security response headers
 - **Workers Assets**: Built-in static asset hosting within the Worker; static asset requests are free and unlimited
 - **Durable Object**: Atomic state machine for each Secret (SQLite backend)
-- **KV Namespace**: Auxiliary key-value storage
 
 > **Architecture Note**: This project uses the **Workers Assets unified deployment** model, not
 > Cloudflare Pages. Frontend build artifacts are deployed alongside the Worker via the `[assets]`
@@ -83,9 +81,8 @@ Click the button below to deploy ZeroLink Worker (including frontend assets) to 
 > pnpm setup
 > ```
 >
-> The script automatically creates the KV namespace and updates `wrangler.toml`, and auto-generates
-> `COMMIT_TOKEN_SECRET`. You only need to manually enter `RP_ID` and `RP_ORIGIN` (domain-related
-> values that cannot be inferred automatically).
+> The script auto-generates `COMMIT_TOKEN_SECRET`. You only need to manually enter `RP_ID` and
+> `RP_ORIGIN` (domain-related values that cannot be inferred automatically).
 
 ---
 
@@ -104,7 +101,6 @@ pnpm setup
 ```
 
 The script interactively performs the following:
-- Automatically creates the KV namespace and updates `wrangler.toml`
 - Automatically generates and sets `COMMIT_TOKEN_SECRET`
 - Prompts for `RP_ID` and `RP_ORIGIN`, setting them as Worker Secrets
 
@@ -120,15 +116,12 @@ WebAuthn configuration for production:
   RP_ORIGIN (full URL,   e.g. https://zerolink.dev): https://zerolink.dev
 
 📦 Setting up production...
-  Creating KV namespace... ✅  (b8313bed33c9492885c12c9d26034420)
   Setting COMMIT_TOKEN_SECRET... ✅
   Setting RP_ID... ✅
   Setting RP_ORIGIN... ✅
 
 🎉 Setup complete!
 ```
-
-> If a KV namespace already exists (redeployment scenario), the script skips the creation step and only updates Secrets.
 
 ### Step 3: Build the frontend
 
@@ -164,10 +157,6 @@ routes = [
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
 class_name = "SecretVaultV2"
-
-[[kv_namespaces]]
-binding = "SECRETS_KV"
-id = "your-kv-namespace-id"
 ```
 
 ### Step 5: Deploy
@@ -211,7 +200,7 @@ curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | h
 
 | Secret Name | Description |
 |-------------|-------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token (requires Worker + KV permissions) |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token (requires Worker permissions) |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
 | `MANIFEST_SIGNING_KEY` | Ed25519 private key (base64) for manifest signing |
 | `RELEASE_PLEASE_TOKEN` | GitHub PAT or GitHub App token, used to create Release PRs, tags, and GitHub Releases, and to ensure subsequent workflows are triggered correctly; if missing, the release-please workflow will fail at the pre-check step with a configuration hint |
@@ -221,9 +210,7 @@ curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | h
 1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com)
 2. Go to **My Profile > API Tokens > Create Token**
 3. Select the **Edit Cloudflare Workers** template
-4. Add additional permissions:
-   - `Workers KV Storage:Edit`
-5. Copy the Token and save it to GitHub Secrets
+4. Copy the Token and save it to GitHub Secrets
 
 ---
 
@@ -404,15 +391,6 @@ npx wrangler tail zerolink-api
 # Verify that the migrations configuration in wrangler.toml is correct
 cat packages/backend/wrangler.toml
 ```
-
-### KV Read/Write Failure
-
-**Symptom**: API returns KV-related errors
-
-**Solution**:
-- Verify that the KV namespace ID in `wrangler.toml` belongs to the current account
-- Verify that the API Token has KV read/write permissions
-- Use `npx wrangler kv:namespace list` to view all namespaces in the current account
 
 ### Build Failure
 

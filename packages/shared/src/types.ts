@@ -51,7 +51,7 @@ export interface ReceiverIdentity {
 }
 
 /**
- * Full channel record persisted in Cloudflare KV by the Durable Object.
+ * Full channel record persisted by the Durable Object (SQLite backend).
  * This is the server-side source of truth for a channel's lifecycle.
  * PRD §8 / ARCHITECTURE.md §"Data Model".
  */
@@ -102,7 +102,7 @@ export interface ChannelRecord {
 
 /**
  * JSON Web Key representation of the receiver's RSA-OAEP-256 public key.
- * Stored server-side in KV after lock_commit; sent to the sender at deliver time.
+ * Stored server-side in the Durable Object after lock_commit; sent to the sender at deliver time.
  * PRD Appendix C / SECURITY.md §"非对称加密".
  */
 export interface RSAPublicKeyJWK {
@@ -170,7 +170,7 @@ export interface WrappedPrivateKey {
 
 /**
  * Encrypted secret payload produced by the sender.
- * Stored in Cloudflare KV until the receiver fetches and decrypts it.
+ * Stored in the Durable Object until the receiver fetches and decrypts it.
  *
  * Construction:
  *   content_key  = random 32-byte AES key
