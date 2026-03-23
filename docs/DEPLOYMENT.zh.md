@@ -1,4 +1,4 @@
-<!-- synced-with: 5d1d478 -->
+<!-- synced-with: 7e8ffef -->
 
 > **语言**: [English](./DEPLOYMENT.md) | 中文
 
