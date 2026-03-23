@@ -99,8 +99,8 @@ Selectable `securityProfile` at creation (v3.0 two tiers):
 
 Existing channels may store `standard` / `strict` / `hardware_only` security_profile; the system continues to render and operate on them correctly. These options are not available for new channel creation.
 
-- **standard**: Equivalent to Quick Share security level (UV preferred)
-- **strict**: Equivalent to Secure Share security level (UV required), retained for backward compatibility
+- **standard**: Legacy WebAuthn tier with UV=preferred (lower assurance than Secure Share; architecturally distinct from Quick Share, which uses ECDSA)
+- **strict**: Legacy WebAuthn tier with UV=required (comparable assurance to Secure Share), retained for backward compatibility
 - **hardware_only**: Originally enforced cross-platform; attestation=direct enforcement removed (technical reasons); current behavior is identical to strict
 
 ---
@@ -542,11 +542,11 @@ sequenceDiagram
   D-->>W: challenge_id/seed + receiver_pub/fpr + last_version (if locked)
   W-->>S: begin
   S->>S: pad plaintext (4KB buckets) + hybrid encrypt + intent_hash
-  S->>S: expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
+  S->>S: expected_challenge = sha256("GL-delivery-proof"||uuid||intent_hash)
   S->>S: Secure Share: navigator.credentials.get(...) / Quick Share: ECDSA sign with Admin-Priv
   S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
-  D->>D: verify intent_hash + expected_challenge + admin signature (WebAuthn or ECDSA) + version/nonce
+  D->>D: verify intent_hash + delivery_proof challenge + admin signature (WebAuthn or ECDSA) + version/nonce
   D->>K: write cipher_bundle + status=Delivered + last_version++
   K-->>D: ok
   D-->>W: ok
@@ -559,9 +559,11 @@ sequenceDiagram
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin
-  S->>S: intent_hash + expected_challenge + admin sign (WebAuthn get or ECDSA sign)
+  S->>S: intent_hash + expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
+  S->>S: admin sign (WebAuthn get or ECDSA sign)
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
+  D->>D: verify intent_hash + nonce-bound challenge + admin signature
   D->>K: delete record
   D-->>W: ok
   W-->>S: ok
@@ -811,17 +813,17 @@ Bucket strategy:
 
 ### G3. Legacy Tiers (Backward Compatible)
 
-#### standard (equivalent to early Quick Share security level)
+#### standard (legacy WebAuthn tier, UV=preferred)
 - userVerification = "preferred"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### strict (equivalent to Secure Share)
+#### strict (legacy WebAuthn tier, UV=required)
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### hardware_only (equivalent to Secure Share; attestation enforcement removed)
+#### hardware_only (legacy WebAuthn tier; attestation enforcement removed, behavior identical to strict)
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none" (original "direct" enforcement removed; cross-platform restriction removed)

@@ -129,11 +129,17 @@ padded_plaintext = [orig_len(4 bytes)] + [orig_data] + [random_padding]
 
 **问题**：WebAuthn 签名可能被诱导签署意外操作
 
-**解决方案**：
+**解决方案**：两种域分离的 challenge 推导，取决于操作类型：
 ```
 intent_hash = SHA256(canonical_payload)  // payload 包含完整操作细节
+
+// 投递/更新 — 确定性推导，无服务端 nonce；重放保护依赖 challenge 一次性消费
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// 删除 — 包含服务端 nonce（challenge_id + seed）确保新鲜性
 expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
-WebAuthn challenge 必须 === expected_challenge
+
+WebAuthn/ECDSA challenge 必须 === expected_challenge
 ```
 
 ## 产品模式（Current Profiles）

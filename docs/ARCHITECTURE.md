@@ -129,11 +129,17 @@ Default PAD_BLOCK = 4096 bytes
 
 **Problem**: WebAuthn signatures could be tricked into signing unintended operations
 
-**Solution**:
+**Solution**: Two domain-separated challenge derivations depending on the operation:
 ```
 intent_hash = SHA256(canonical_payload)  // payload contains full operation details
+
+// Deliver/Update — deterministic, no server nonce; replay protection via single-use challenge consumption
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// Delete — includes server nonce (challenge_id + seed) for freshness
 expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
-WebAuthn challenge must === expected_challenge
+
+WebAuthn/ECDSA challenge must === expected_challenge
 ```
 
 ## Product Modes (Current Profiles)

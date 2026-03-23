@@ -67,13 +67,18 @@
 - Each operation requires a WebAuthn signature (Secure Share) or ECDSA signature (Quick Share)
 - Intent Binding: challenge binds to operation details, preventing induced signatures
 
-**Verification**:
+**Verification** — two domain-separated challenge derivations:
 ```
-expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 intent_hash = SHA256(canonical_payload)  // includes full operation
+
+// Deliver/Update — deterministic; server-side challenge consumption prevents replay
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// Delete — server nonce (challenge_id + seed) ensures freshness
+expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 ```
 
-The WebAuthn assertion's challenge must === expected_challenge
+The WebAuthn/ECDSA assertion's challenge must === expected_challenge
 
 ---
 
@@ -220,8 +225,8 @@ default PAD_BLOCK = 4096 bytes
 - **Risk boundary**: Still affected by the web-scenario malicious JS boundary, but admin private key is non-exportable
 
 ### Legacy (Read-Only Compatible)
-- `standard`: understood at the early Quick Share security level
-- `strict` / `hardware_only`: understood at the Secure Share security level
+- `standard`: legacy WebAuthn tier with UV=preferred (lower assurance; architecturally distinct from Quick Share, which uses ECDSA)
+- `strict` / `hardware_only`: legacy WebAuthn tier with UV=required (comparable assurance to Secure Share)
 - New channels no longer offer legacy profiles
 
 ---

@@ -101,8 +101,8 @@ v3.0 的产品目标：
 
 已有频道可能存储 `standard` / `strict` / `hardware_only` security_profile，系统继续正确渲染和操作。新建频道不提供这些选项。
 
-- **standard**：等价 Quick Share 安全级别（UV preferred）
-- **strict**：等价 Secure Share 安全级别（UV required），保留向后兼容
+- **standard**：Legacy WebAuthn 档位，UV=preferred（低于 Secure Share 保障级别；与使用 ECDSA 的 Quick Share 架构不同）
+- **strict**：Legacy WebAuthn 档位，UV=required（保障级别接近 Secure Share），保留向后兼容
 - **hardware_only**：原 cross-platform 强制，已移除 attestation=direct 强制执行（技术原因），现行为与 strict 相同
 
 ---
@@ -544,11 +544,11 @@ sequenceDiagram
   D-->>W: challenge_id/seed + receiver_pub/fpr + last_version (if locked)
   W-->>S: begin
   S->>S: pad plaintext (4KB buckets) + hybrid encrypt + intent_hash
-  S->>S: expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
+  S->>S: expected_challenge = sha256("GL-delivery-proof"||uuid||intent_hash)
   S->>S: Secure Share: navigator.credentials.get(...) / Quick Share: ECDSA sign with Admin-Priv
   S->>W: POST /api/manage/compound_commit/{uuid} (assertion or softkeySignature + update)
   W->>D: forward
-  D->>D: verify intent_hash + expected_challenge + admin signature (WebAuthn or ECDSA) + version/nonce
+  D->>D: verify intent_hash + delivery_proof challenge + admin signature (WebAuthn or ECDSA) + version/nonce
   D->>K: write cipher_bundle + status=Delivered + last_version++
   K-->>D: ok
   D-->>W: ok
@@ -561,9 +561,11 @@ sequenceDiagram
   W->>D: forward
   D-->>W: challenge_id/seed + last_version
   W-->>S: begin
-  S->>S: intent_hash + expected_challenge + admin sign (WebAuthn get or ECDSA sign)
+  S->>S: intent_hash + expected_challenge = sha256("GLv2.5"||uuid||cid||intent_hash||seed)
+  S->>S: admin sign (WebAuthn get or ECDSA sign)
   S->>W: POST /api/delete_commit/{uuid}
   W->>D: forward
+  D->>D: verify intent_hash + nonce-bound challenge + admin signature
   D->>K: delete record
   D-->>W: ok
   W-->>S: ok
@@ -813,17 +815,17 @@ CipherBundle（base64url）：
 
 ### G3. Legacy 档位（向后兼容）
 
-#### standard（等价于早期 Quick Share 安全级别）
+#### standard（Legacy WebAuthn 档位，UV=preferred）
 - userVerification = "preferred"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### strict（等价于 Secure Share）
+#### strict（Legacy WebAuthn 档位，UV=required）
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"
 
-#### hardware_only（等价于 Secure Share，attestation 强制已移除）
+#### hardware_only（Legacy WebAuthn 档位，attestation 强制已移除，行为与 strict 相同）
 - userVerification = "required"
 - residentKey = "discouraged"
 - attestation = "none"（原 "direct" 强制执行已移除，cross-platform 限制已移除）

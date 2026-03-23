@@ -69,13 +69,18 @@
 - 每次操作需要 WebAuthn 签名（Secure Share）或 ECDSA 签名（Quick Share）
 - Intent Binding：challenge 绑定操作细节，防诱导签名
 
-**验证**：
+**验证** — 两种域分离的 challenge 推导：
 ```
-expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 intent_hash = SHA256(canonical_payload)  // 包含完整操作
+
+// 投递/更新 — 确定性推导；服务端 challenge 一次性消费防重放
+expected_challenge = SHA256("GL-delivery-proof" || uuid || intent_hash)
+
+// 删除 — 服务端 nonce（challenge_id + seed）确保新鲜性
+expected_challenge = SHA256("GLv2.5" || uuid || challenge_id || intent_hash || seed)
 ```
 
-WebAuthn assertion 的 challenge 必须 === expected_challenge
+WebAuthn/ECDSA assertion 的 challenge 必须 === expected_challenge
 
 ---
 
@@ -222,8 +227,8 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 - **风险边界**：依然受 Web 场景恶意 JS 边界影响，但管理私钥不可导出
 
 ### Legacy（只读兼容）
-- `standard`：按早期 Quick Share 安全级别理解
-- `strict` / `hardware_only`：按 Secure Share 级别理解
+- `standard`：Legacy WebAuthn 档位，UV=preferred（较低保障级别；与使用 ECDSA 的 Quick Share 架构不同）
+- `strict` / `hardware_only`：Legacy WebAuthn 档位，UV=required（保障级别接近 Secure Share）
 - 新建频道不再提供 legacy 档位
 
 ---
