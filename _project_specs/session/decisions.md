@@ -13,6 +13,14 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-23] Keep `pnpm setup` as the manual deploy secret bootstrap helper
+
+**Decision**: Retain the root `pnpm setup` helper instead of deleting it, and keep its prompts/output aligned with the documented manual Cloudflare deployment flow.
+**Context**: After removing the broken deploy-button path, the repository still needs a concrete way to bootstrap `COMMIT_TOKEN_SECRET`, `RP_ID`, and `RP_ORIGIN` for Worker environments. The existing `scripts/setup-cloudflare.ts` remains the only automated path for that work, but some prompt text had drifted behind the updated docs.
+**Choice**: Keep `pnpm setup`, continue to use it in the manual deploy guide, and refresh its environment labels and next-step output so production and staging instructions match the current documented commands.
+**Reasoning**: The script still removes repetitive secret-management work and reduces deployer mistakes. Deleting it would push users back to fully manual secret setup without replacing the functionality.
+**Trade-offs**: The repository keeps a small deploy-helper script that must stay in sync with docs whenever the manual deployment flow changes.
+
 ## [2026-03-23] Cloudflare docs now document manual deploy only for the main repo
 
 **Decision**: Remove the public one-click Cloudflare deploy path from the main repository docs and document only the manual Cloudflare Workers deployment flow here.

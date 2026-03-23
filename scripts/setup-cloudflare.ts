@@ -101,8 +101,9 @@ export async function run() {
   const setupProd = envRaw === 'production' || envRaw === 'both';
   const setupStaging = envRaw === 'staging' || envRaw === 'both';
 
-  // Production RP config
-  out('\nWebAuthn configuration for production:\n');
+  // Primary RP config
+  const primaryLabel = setupProd ? 'production' : 'staging';
+  out(`\nWebAuthn configuration for ${primaryLabel}:\n`);
   const rpId = (
     await rl.question('  RP_ID    (domain without https://, e.g. zerolink.dev): ')
   ).trim();
@@ -140,7 +141,15 @@ export async function run() {
   }
 
   out('\n🎉 Setup complete!\n');
-  out('\nNext step: pnpm build && cd packages/backend && npx wrangler deploy\n');
+  out('\nNext steps:\n');
+  out('  1. pnpm --filter @zerolink/frontend build\n');
+  out('  2. cd packages/backend\n');
+  if (setupProd) {
+    out('  3. Deploy production: npx wrangler deploy --env=""\n');
+  }
+  if (setupStaging) {
+    out('  3. Deploy staging:    npx wrangler deploy --env staging\n');
+  }
 }
 
 if (process.argv[1] === SCRIPT_FILE) {
