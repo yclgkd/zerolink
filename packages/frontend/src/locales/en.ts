@@ -260,8 +260,6 @@ const en = {
     showButton: 'Show passphrase',
     hideButton: 'Hide passphrase',
     strengthLabel: 'Passphrase strength',
-    strictWarning:
-      'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)',
     weak: 'Weak',
     medium: 'Medium',
     strong: 'Strong',

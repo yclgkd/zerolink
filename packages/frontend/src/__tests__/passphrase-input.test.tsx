@@ -57,35 +57,6 @@ describe('PassphraseInput', () => {
     expect(screen.getAllByTestId(/passphrase-strength-segment-/)).toHaveLength(3);
   });
 
-  it('shows strict warning for weak passphrase in strict mode', () => {
-    render(<PassphraseInput onChange={() => {}} strictMode value="abc" />);
-
-    expect(
-      screen.getByText(
-        'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)'
-      )
-    ).toBeTruthy();
-  });
-
-  it('does not show strict warning for medium or strong passphrase', () => {
-    const { rerender } = render(
-      <PassphraseInput onChange={() => {}} strictMode value="Password12" />
-    );
-
-    expect(
-      screen.queryByText(
-        'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)'
-      )
-    ).toBeNull();
-
-    rerender(<PassphraseInput onChange={() => {}} strictMode value="Strong#Pass1234XYZ" />);
-    expect(
-      screen.queryByText(
-        'Strict mode recommends a stronger passphrase (12+ characters with mixed case, numbers, and symbols)'
-      )
-    ).toBeNull();
-  });
-
   it('merges custom className with default container classes', () => {
     render(<PassphraseInput className="custom-passphrase-root" onChange={() => {}} value="" />);
 

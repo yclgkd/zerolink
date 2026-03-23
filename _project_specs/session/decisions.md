@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-23] Remove stale create-flow UI residue without touching protocol compatibility
+
+**Decision**: Delete the unused `security-profile-card` UI, remove create-store compatibility-confirm state, default create-store to Quick Share, and drop the unused `PassphraseInput.strictMode` warning path.
+**Context**: The Quick Share / Secure Share product split was already live, but the frontend still carried dead create-flow artifacts from the old Standard / Strict / Hardware-Only era. Those leftovers were no longer referenced by production UI and were creating misleading test coverage around removed UX concepts.
+**Options Considered**: Leave the residue in place; remove only the dead component file; clean the full frontend residue set while preserving shared/backend compatibility code.
+**Choice**: Clean the dead frontend-only residue and test drift, but keep shared schemas, constants, and backend policy mappings for legacy profile compatibility.
+**Reasoning**: This keeps the change small and safe: it reduces dead code and stale state in the active UI without breaking old channel reads or protocol compatibility guarantees.
+**Trade-offs**: Direct compatibility coverage now stays concentrated in orchestrator/shared/backend tests rather than in unused create-page UI components.
+
 ## [2026-03-23] Keep `pnpm setup` as the manual deploy secret bootstrap helper
 
 **Decision**: Retain the root `pnpm setup` helper instead of deleting it, and keep its prompts/output aligned with the documented manual Cloudflare deployment flow.

@@ -241,7 +241,6 @@ const zh: Translation = {
     showButton: '显示密码短语',
     hideButton: '隐藏密码短语',
     strengthLabel: '密码短语强度',
-    strictWarning: '严格模式建议使用更强的密码短语（12 个以上字符，包含大小写、数字和符号）',
     weak: '弱',
     medium: '中',
     strong: '强',
