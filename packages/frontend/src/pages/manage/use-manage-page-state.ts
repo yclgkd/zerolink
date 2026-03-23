@@ -111,7 +111,12 @@ export function useManagePageState(uuid?: string) {
     if (!store.receiverPubFpr) return null;
     try {
       return deriveSafetyCodeDisplay(store.receiverPubFpr);
-    } catch {
+    } catch (error: unknown) {
+      // biome-ignore lint/suspicious/noConsole: runtime error logging for safety code derivation failures
+      console.error('[useManagePageState] deriveSafetyCodeDisplay failed', {
+        receiverPubFpr: store.receiverPubFpr,
+        error,
+      });
       return null;
     }
   }, [store.receiverPubFpr]);

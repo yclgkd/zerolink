@@ -71,7 +71,12 @@ export function useManageDeliveryLogic(
         ...(needsChannelPassword ? { softkeyPassphrase } : {}),
         ...(wrappedPrivateKey !== undefined ? { wrappedPrivateKey } : {}),
       });
-    } catch {
+    } catch (error: unknown) {
+      // biome-ignore lint/suspicious/noConsole: runtime error logging for unexpected deliverSecret failures
+      console.error('[useManageDeliveryLogic] deliverSecret threw unexpectedly', {
+        uuid: actionUuid,
+        error,
+      });
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
       setIsSecretInputInvalid(false);
@@ -162,7 +167,12 @@ export function useManageDestructionLogic(
         ...(needsChannelPassword ? { softkeyPassphrase } : {}),
         ...(wrappedPrivateKey !== undefined ? { wrappedPrivateKey } : {}),
       });
-    } catch {
+    } catch (error: unknown) {
+      // biome-ignore lint/suspicious/noConsole: runtime error logging for unexpected deleteChannel failures
+      console.error('[useManageDestructionLogic] deleteChannel threw unexpectedly', {
+        uuid: actionUuid,
+        error,
+      });
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
       setIsSecretInputInvalid(false);
