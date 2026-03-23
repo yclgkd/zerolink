@@ -62,7 +62,9 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
         store.setAdminMode(parsedPayload.data.adminMode);
         store.setSecurityProfile(parsedPayload.data.securityProfile);
         store.setReceiverPubFpr(parsedPayload.data.receiverPubFpr ?? null);
-      } catch {
+      } catch (error: unknown) {
+        // biome-ignore lint/suspicious/noConsole: runtime error logging for unexpected public status load failures
+        console.error('[usePublicStatusFetcher] loadPublicStatus failed', { uuid, error });
         if (canceled || !mountedRef.current) return;
         store.setShowDestroyConfirm(false);
         store.setAdminMode(null);

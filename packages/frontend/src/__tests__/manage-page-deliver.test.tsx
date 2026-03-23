@@ -654,6 +654,33 @@ describe('ManagePage – deliver actions', () => {
     expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
   });
 
+  it('shows INTERNAL_ERROR and logs to console when deliverSecret throws', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    deliverSecretMock.mockRejectedValueOnce(new TypeError('unexpected crypto failure'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload' },
+    });
+    await waitForManageActionsEnabled();
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    const error = await screen.findByTestId('manage-action-error');
+    expect(error.textContent).toContain('Unexpected internal error');
+    expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[useManageDeliveryLogic] deliverSecret threw unexpectedly',
+      expect.objectContaining({ uuid: VALID_UUID })
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('calls toast.success after successful deliver', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
