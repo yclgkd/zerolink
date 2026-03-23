@@ -78,7 +78,13 @@ export function useManageDeliveryLogic(
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
-    if (!isActiveActionContext(actionScope, actionUuid)) return;
+    if (!isActiveActionContext(actionScope, actionUuid)) {
+      if (result.ok) {
+        setSecretInput('');
+        setSoftkeyPassphrase('');
+      }
+      return;
+    }
     setIsActionPending(false);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
