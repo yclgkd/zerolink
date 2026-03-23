@@ -13,6 +13,22 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-23] Keep `pnpm setup` as the manual deploy secret bootstrap helper
+
+**Decision**: Retain the root `pnpm setup` helper instead of deleting it, and keep its prompts/output aligned with the documented manual Cloudflare deployment flow.
+**Context**: After removing the broken deploy-button path, the repository still needs a concrete way to bootstrap `COMMIT_TOKEN_SECRET`, `RP_ID`, and `RP_ORIGIN` for Worker environments. The existing `scripts/setup-cloudflare.ts` remains the only automated path for that work, but some prompt text had drifted behind the updated docs.
+**Choice**: Keep `pnpm setup`, continue to use it in the manual deploy guide, and refresh its environment labels and next-step output so production and staging instructions match the current documented commands.
+**Reasoning**: The script still removes repetitive secret-management work and reduces deployer mistakes. Deleting it would push users back to fully manual secret setup without replacing the functionality.
+**Trade-offs**: The repository keeps a small deploy-helper script that must stay in sync with docs whenever the manual deployment flow changes.
+
+## [2026-03-23] Cloudflare docs now document manual deploy only for the main repo
+
+**Decision**: Remove the public one-click Cloudflare deploy path from the main repository docs and document only the manual Cloudflare Workers deployment flow here.
+**Context**: The repository is a pnpm monorepo with the Worker config under `packages/backend/`, frontend assets under `packages/frontend/`, and maintainer-specific example routes committed in `wrangler.toml`. The previous one-click wording implied a generic deploy-button flow that the main repo does not safely support.
+**Choice**: Remove one-click deploy references from `README*` and deployment indexes, rewrite `docs/DEPLOYMENT*.md` around manual deployment only, require deployers to choose their final origin before setting WebAuthn secrets, and replace maintainer-specific verification / troubleshooting examples with environment-appropriate commands and placeholders.
+**Reasoning**: A broken or maintainer-specific deploy button is worse than no button. The main repository should document the path that contributors and self-hosters can actually execute today without guessing around routes, origins, or worker names.
+**Trade-offs**: The repository no longer advertises a zero-click trial path. If a true deploy-button experience is desired later, it should ship as a separate isolated template rather than by stretching the main monorepo config.
+
 ## [2026-03-21] Bilingual documentation: English primary, Chinese .zh.md suffix
 
 **Decision**: Adopt suffix-based bilingual documentation with English as the authoritative version and Chinese as a tracked translation.

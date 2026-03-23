@@ -10,13 +10,12 @@
 
 1. [Prerequisites](#prerequisites)
 2. [Architecture Overview](#architecture-overview)
-3. [Quick Deploy](#quick-deploy)
-4. [Manual Deploy](#manual-deploy)
-5. [Environment Variables](#environment-variables)
-6. [Manifest Signing (Optional)](#manifest-signing-optional)
-7. [Custom Domain](#custom-domain)
-8. [CI/CD Automated Deployment](#cicd-automated-deployment)
-9. [Troubleshooting](#troubleshooting)
+3. [Manual Deploy](#manual-deploy)
+4. [Environment Variables](#environment-variables)
+5. [Manifest Signing (Optional)](#manifest-signing-optional)
+6. [Custom Domain](#custom-domain)
+7. [CI/CD Automated Deployment](#cicd-automated-deployment)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -67,34 +66,50 @@ Frontend SPA    ──→    Worker (zerolink-api)
 
 ---
 
-## Quick Deploy
-
-### One-Click Deploy
-
-Click the button below to deploy ZeroLink Worker (including frontend assets) to your Cloudflare account:
-
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
-
-> **Note**: After one-click deployment, run the interactive setup script to complete the remaining configuration:
->
-> ```bash
-> pnpm setup
-> ```
->
-> The script auto-generates `COMMIT_TOKEN_SECRET`. You only need to manually enter `RP_ID` and
-> `RP_ORIGIN` (domain-related values that cannot be inferred automatically).
-
----
-
 ## Manual Deploy
 
-### Step 1: Log in to Wrangler
+### Step 1: Clone the repository and install dependencies
+
+```bash
+git clone https://github.com/yclgkd/ZeroLink.git
+cd ZeroLink
+pnpm install --frozen-lockfile
+```
+
+### Step 2: Log in to Wrangler
 
 ```bash
 npx wrangler login
 ```
 
-### Step 2: Run the setup script
+### Step 3: Choose the final access origin before setting secrets
+
+Before you run `pnpm setup`, decide whether ZeroLink will be served from a custom domain or from a
+`*.workers.dev` hostname. `RP_ID` and `RP_ORIGIN` must exactly match the final browser origin.
+
+#### Option A: Custom domain
+
+Replace the example `zerolink.dev` routes in `packages/backend/wrangler.toml` with your own domain
+before deployment. If you also deploy staging, update the `[env.staging].routes` entries too.
+
+```toml
+routes = [
+  { pattern = "example.com", zone_name = "example.com" },
+  { pattern = "example.com/*", zone_name = "example.com" },
+]
+```
+
+#### Option B: `*.workers.dev`
+
+If you want to deploy without a custom domain, remove the `routes` block for the environment you
+are deploying. Cloudflare will then serve the Worker from its default `*.workers.dev` hostname.
+
+- `RP_ID` must be the final `worker-name.<your-workers-subdomain>.workers.dev` hostname.
+- `RP_ORIGIN` must be the full `https://worker-name.<your-workers-subdomain>.workers.dev` origin.
+- If you do not know that hostname yet, deploy once without routes, note the generated
+  `*.workers.dev` URL, then rerun `pnpm setup` and deploy again.
+
+### Step 4: Run the setup script
 
 ```bash
 pnpm setup
@@ -103,6 +118,10 @@ pnpm setup
 The script interactively performs the following:
 - Automatically generates and sets `COMMIT_TOKEN_SECRET`
 - Prompts for `RP_ID` and `RP_ORIGIN`, setting them as Worker Secrets
+- Lets you choose `production`, `staging`, or `both`
+
+Enter the exact values from Step 3. If the deployed origin changes later, rerun `pnpm setup` and
+update the secrets before relying on WebAuthn.
 
 ```
 🚀 ZeroLink Cloudflare Setup
@@ -123,10 +142,10 @@ WebAuthn configuration for production:
 🎉 Setup complete!
 ```
 
-### Step 3: Build the frontend
+### Step 5: Build the frontend
 
 ```bash
-pnpm --filter frontend build
+pnpm --filter @zerolink/frontend build
 # Build output is in packages/frontend/dist/
 ```
 
@@ -134,54 +153,42 @@ The default `pnpm build` output is a runnable but **unverified** frontend shell.
 the fail-closed `Verified Release` startup gate, making it suitable for local preview and unsigned
 manual deployments.
 
-### Step 4: Verify wrangler.toml configuration
+### Step 6: Deploy
 
-Key configuration in `packages/backend/wrangler.toml`:
-
-```toml
-name = "zerolink-api"
-main = "src/index.ts"
-compatibility_date = "2025-01-01"
-
-[assets]
-directory = "../frontend/dist"
-binding = "ASSETS"
-run_worker_first = true
-not_found_handling = "single-page-application"
-
-routes = [
-  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
-  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
-]
-
-[[durable_objects.bindings]]
-name = "SECRET_VAULT"
-class_name = "SecretVaultV2"
-```
-
-### Step 5: Deploy
+Choose the command for the environment you actually want to deploy:
 
 ```bash
 cd packages/backend
-npx wrangler deploy
+
+# Production (top-level environment)
+npx wrangler deploy --env=""
+
+# Staging
+npx wrangler deploy --env staging
 ```
 
 A single command deploys both the Worker code and frontend static assets.
 
 > **WebAuthn Note**:
-> - `RP_ID` = your domain (without protocol prefix), e.g. `zerolink.dev`
-> - `RP_ORIGIN` = full Origin URL, e.g. `https://zerolink.dev`
-> - If using `*.workers.dev`, then `RP_ID=your-worker.username.workers.dev`
+> - `RP_ID` = your final hostname without protocol, e.g. `example.com`
+> - `RP_ORIGIN` = your full final origin, e.g. `https://example.com`
+> - If using `*.workers.dev`, set both values from the final
+>   `worker-name.<your-workers-subdomain>.workers.dev` hostname
 > - These two values must exactly match the actual access domain, otherwise WebAuthn authentication will fail
 
-### Step 6: Verify deployment
+### Step 7: Verify deployment
 
 ```bash
-# View Worker logs
-npx wrangler tail
+cd packages/backend
 
-# Verify the Worker is reachable (should return a JSON response)
-curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
+# Production logs
+npx wrangler tail --env=""
+
+# Staging logs
+npx wrangler tail --env staging
+
+# Verify the Worker is reachable (replace with your actual origin)
+curl -s https://<your-origin>/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
 ```
 
 ---
@@ -202,7 +209,7 @@ curl -s https://zerolink.dev/api/public/00000000-0000-0000-0000-000000000000 | h
 |-------------|-------------|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token (requires Worker permissions) |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
-| `MANIFEST_SIGNING_KEY` | Ed25519 private key (base64) for manifest signing |
+| `MANIFEST_SIGNING_KEY` | Ed25519 private key in PEM text form for manifest signing |
 | `RELEASE_PLEASE_TOKEN` | GitHub PAT or GitHub App token, used to create Release PRs, tags, and GitHub Releases, and to ensure subsequent workflows are triggered correctly; if missing, the release-please workflow will fail at the pre-check step with a configuration hint |
 
 ### Creating a Cloudflare API Token
@@ -237,7 +244,7 @@ cat keys/manifest-signing.pem
 
 ```bash
 # Build
-VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter frontend build
+VITE_RELEASE_VERIFICATION_REQUIRED=true pnpm --filter @zerolink/frontend build
 
 # Generate manifest (records `entryAssetPath` and hashes only the stable runtime
 # assets under `dist/assets/`; root-level files like `index.html` and `robots.txt`
@@ -265,18 +272,23 @@ fail-closes and blocks execution.
 
 ## Custom Domain
 
-Configure routes in `wrangler.toml` so the Worker handles all requests (API + static assets) for your domain:
+If you are using a custom domain, configure routes in `wrangler.toml` so the Worker handles all
+requests (API + static assets) for your domain. Replace the example domain below with your actual
+zone:
 
 ```toml
 routes = [
-  { pattern = "zerolink.dev", zone_name = "zerolink.dev" },
-  { pattern = "zerolink.dev/*", zone_name = "zerolink.dev" },
+  { pattern = "example.com", zone_name = "example.com" },
+  { pattern = "example.com/*", zone_name = "example.com" },
 ]
 ```
 
-Or via the Cloudflare Dashboard: **Workers > zerolink-api > Settings > Domains & Routes > Add**
+If you are using `*.workers.dev`, skip this section and leave the relevant `routes` block removed.
 
-> **Note**: Two separate route entries are used — one for the bare root (`zerolink.dev`) and one for all sub-paths (`zerolink.dev/*`) — to ensure the root path `/` is matched correctly.
+Or via the Cloudflare Dashboard: **Workers > <your-worker-name> > Settings > Domains & Routes > Add**
+
+> **Note**: Two separate route entries are used — one for the bare root (`example.com`) and one for
+> all sub-paths (`example.com/*`) — to ensure the root path `/` is matched correctly.
 
 ---
 
@@ -334,7 +346,7 @@ If you are manually generating signed release artifacts **with the verification 
 
 ```bash
 ZEROLINK_VERSION=1.0.0 VITE_RELEASE_VERIFICATION_REQUIRED=true \
-  pnpm --filter frontend build
+  pnpm --filter @zerolink/frontend build
 ZEROLINK_VERSION=1.0.0 pnpm manifest:generate
 ```
 
@@ -358,10 +370,19 @@ Error: COMMIT_TOKEN_SECRET environment variable is missing or empty
 - `RP_ORIGIN`
 
 ```bash
-# View currently configured secrets
+cd packages/backend
+
+# View currently configured secrets for production
+npx wrangler secret list --name zerolink-api
+
+# View currently configured secrets for staging
 npx wrangler secret list --name zerolink-api-staging
 
-# Add a missing secret (using COMMIT_TOKEN_SECRET as an example)
+# Add a missing production secret (using COMMIT_TOKEN_SECRET as an example)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
+  npx wrangler secret put COMMIT_TOKEN_SECRET
+
+# Add a missing staging secret
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
   npx wrangler secret put COMMIT_TOKEN_SECRET --name zerolink-api-staging
 ```
@@ -385,11 +406,16 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | \
 
 **Solution**:
 ```bash
-# View real-time logs
-npx wrangler tail zerolink-api
+cd packages/backend
+
+# View production logs
+npx wrangler tail --env=""
+
+# View staging logs
+npx wrangler tail --env staging
 
 # Verify that the migrations configuration in wrangler.toml is correct
-cat packages/backend/wrangler.toml
+cat wrangler.toml
 ```
 
 ### Build Failure
@@ -406,7 +432,7 @@ pnpm build
 **Symptom**: Frontend page loads but JS/CSS and other assets return 404
 
 **Solution**:
-- Verify that the `packages/frontend/dist/` directory exists and contains build artifacts (run `pnpm --filter frontend build` first)
+- Verify that the `packages/frontend/dist/` directory exists and contains build artifacts (run `pnpm --filter @zerolink/frontend build` first)
 - Verify that `[assets] directory = "../frontend/dist"` in `wrangler.toml` is correct relative to `packages/backend/`
 - `wrangler deploy` must be run after the frontend build is complete
 

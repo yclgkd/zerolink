@@ -1,4 +1,4 @@
-<!-- synced-with: 7426a72 -->
+<!-- synced-with: 7e8ffef -->
 
 > **语言**: [English](./README.md) | 中文
 
@@ -37,7 +37,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ### 快速开始
 - [快速启动指南](./docs/QUICK_START.zh.md) - 从零到运行开发环境
-- [部署指南](./docs/DEPLOYMENT.zh.md) - 部署到 Cloudflare（含一键部署）
+- [部署指南](./docs/DEPLOYMENT.zh.md) - 手动部署到 Cloudflare Workers
 - [技术栈规范](./docs/TECH_STACK.zh.md) - 完整技术栈与工具链
 
 ### 设计文档
@@ -97,13 +97,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ## 部署 / Deploy
 
-### 一键部署到 Cloudflare / One-click Deploy
-
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F4801A?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.cloudflare.com/?url=https://github.com/yclgkd/ZeroLink)
-
-> **注意**: 一键部署后，运行 `pnpm setup` 完成 Secrets 配置。
->
-> **Note**: After one-click deploy, run `pnpm setup` to finish secrets configuration.
+ZeroLink 当前文档仅保留 Cloudflare Workers 的手动部署路径，不再提供通用的一键部署入口。
 
 ### 前提条件 / Prerequisites
 

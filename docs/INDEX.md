@@ -10,7 +10,7 @@
 docs/
 ├── INDEX.md           # This file - Quick index
 ├── QUICK_START.md     # Quick start guide (zero to running)
-├── DEPLOYMENT.md      # Deployment guide (Cloudflare one-click + manual)
+├── DEPLOYMENT.md      # Deployment guide (Cloudflare Workers manual deploy)
 ├── TECH_STACK.md      # Tech stack specification (toolchain, Monorepo, testing)
 ├── PRD.md             # Full product requirements document (main document)
 ├── ARCHITECTURE.md    # Architecture overview
@@ -113,7 +113,7 @@ docs/
 5. [SECURITY.md § Cryptographic Specification](./SECURITY.md#cryptographic-specification) - Encryption parameters
 
 ### DevOps / Deployment
-1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **Full deployment guide (one-click + manual)**
+1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **Full deployment guide (manual deploy)**
 2. [DEPLOYMENT.md](./DEPLOYMENT.md) - GitHub Actions and release process
 3. [TECH_STACK.md § Deployment & Release](./TECH_STACK.md#deployment--release) - Frontend and backend deployment
 4. [TECH_STACK.md § Release Pipeline](./TECH_STACK.md#version-management--release-pipeline) - PR validation and tag releases
