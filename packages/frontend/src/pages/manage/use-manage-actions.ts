@@ -20,7 +20,9 @@ export function useManageDeliveryLogic(
   secretInput: string,
   softkeyPassphrase: string,
   profile: SecurityProfile | null,
-  wrappedPrivateKey: WrappedPrivateKey | undefined
+  wrappedPrivateKey: WrappedPrivateKey | undefined,
+  setSecretInput: (value: string) => void,
+  setSoftkeyPassphrase: (value: string) => void
 ) {
   const { t } = useTranslation();
   const store = useDeliverStore();
@@ -76,7 +78,13 @@ export function useManageDeliveryLogic(
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
-    if (!isActiveActionContext(actionScope, actionUuid)) return;
+    if (!isActiveActionContext(actionScope, actionUuid)) {
+      if (result.ok) {
+        setSecretInput('');
+        setSoftkeyPassphrase('');
+      }
+      return;
+    }
     setIsActionPending(false);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
@@ -86,6 +94,8 @@ export function useManageDeliveryLogic(
     store.setShowDestroyConfirm(false);
     setIsSecretInputInvalid(false);
     setActionError(null);
+    setSecretInput('');
+    setSoftkeyPassphrase('');
     toast.success(t('manage.deliveredToast'));
   };
 

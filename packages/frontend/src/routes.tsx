@@ -66,7 +66,7 @@ function AppShellLayout(): ReactElement {
       className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-x-hidden px-4 py-8 md:px-8 md:py-10"
       data-testid="app-shell"
     >
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="bottom-center" richColors />
       {showInAppWarning ? (
         <div
           className="mb-4 flex items-start gap-3 rounded-xl border border-neon-orange/40 bg-neon-orange/10 px-4 py-3 text-xs text-neon-orange"

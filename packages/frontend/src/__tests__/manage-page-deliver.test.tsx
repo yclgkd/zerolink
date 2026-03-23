@@ -584,6 +584,41 @@ describe('ManagePage – deliver actions', () => {
     expect(screen.queryByTestId('manage-safety-unavailable')).toBeNull();
   });
 
+  it('clears secret input and passphrase after successful delivery', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'top secret payload' },
+    });
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Quick#Manage123' },
+    });
+
+    expect((screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).value).toBe(
+      'top secret payload'
+    );
+    expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe(
+      'Quick#Manage123'
+    );
+
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await screen.findByTestId('manage-state-delivered');
+    expect((screen.getByTestId('manage-secret-input') as HTMLTextAreaElement).value).toBe('');
+    expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
+  });
+
   it('shows action error on deliver failure and keeps non-delivered state', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
