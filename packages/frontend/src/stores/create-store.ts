@@ -20,8 +20,6 @@ import {
 export interface CreateStoreState {
   selectedProfile: SecurityProfile;
   webAuthnSupported: boolean;
-  showCompatibilityConfirm: boolean;
-  compatibilityAccepted: boolean;
   createdProfile: SecurityProfile | null;
   createBegin: AsyncRequestState<CreateBeginResponse>;
   createFinish: AsyncRequestState<CreateFinishResponse>;
@@ -33,8 +31,6 @@ export interface CreateStoreState {
 export interface CreateStoreActions {
   setSelectedProfile: (profile: SecurityProfile) => void;
   setWebAuthnSupported: (supported: boolean) => void;
-  setShowCompatibilityConfirm: (show: boolean) => void;
-  setCompatibilityAccepted: (accepted: boolean) => void;
   startCreateBegin: () => void;
   completeCreateBegin: (payload: CreateBeginResponse) => void;
   failCreateBegin: (errorCode: string) => void;
@@ -52,10 +48,8 @@ export type CreateStore = CreateStoreState & CreateStoreActions;
 
 function createInitialState(): CreateStoreState {
   return {
-    selectedProfile: SECURITY_PROFILE.STANDARD,
+    selectedProfile: SECURITY_PROFILE.QUICK,
     webAuthnSupported: false,
-    showCompatibilityConfirm: false,
-    compatibilityAccepted: false,
     createdProfile: null,
     createBegin: createIdleRequestState<CreateBeginResponse>(),
     createFinish: createIdleRequestState<CreateFinishResponse>(),
@@ -71,18 +65,12 @@ export const useCreateStore = create<CreateStore>((set) => ({
   setSelectedProfile: (profile) =>
     set(() => ({
       selectedProfile: profile,
-      showCompatibilityConfirm: false,
-      compatibilityAccepted: false,
       createdProfile: null,
       createBegin: createIdleRequestState<CreateBeginResponse>(),
       createFinish: createIdleRequestState<CreateFinishResponse>(),
     })),
 
   setWebAuthnSupported: (supported) => set(() => ({ webAuthnSupported: supported })),
-
-  setShowCompatibilityConfirm: (show) => set(() => ({ showCompatibilityConfirm: show })),
-
-  setCompatibilityAccepted: (accepted) => set(() => ({ compatibilityAccepted: accepted })),
 
   startCreateBegin: () => set(() => ({ createBegin: createLoadingState<CreateBeginResponse>() })),
 

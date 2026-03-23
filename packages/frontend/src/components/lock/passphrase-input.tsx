@@ -21,8 +21,6 @@ export type PassphraseInputProps = {
   placeholder?: string;
   /** Shows strength label and progress segments when true. */
   showStrength?: boolean;
-  /** Enables strict mode warning for weak passphrases. */
-  strictMode?: boolean;
   /** Optional class name applied to the component root. */
   className?: string;
   /** Optional ID passed to the underlying input element. */
@@ -58,13 +56,7 @@ const strengthKeyMap: Record<Exclude<PassphraseStrengthLabel, ''>, string> = {
   Strong: 'passphrase.strong',
 };
 
-function PassphraseStrengthIndicator({
-  strength,
-  showWarning,
-}: {
-  strength: PassphraseStrength;
-  showWarning: boolean;
-}) {
+function PassphraseStrengthIndicator({ strength }: { strength: PassphraseStrength }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-2">
@@ -86,11 +78,6 @@ function PassphraseStrengthIndicator({
           />
         ))}
       </div>
-      {showWarning ? (
-        <p className="rounded-lg border border-neon-amber/35 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
-          {t('passphrase.strictWarning')}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -103,7 +90,6 @@ export function PassphraseInput({
   onChange,
   placeholder,
   showStrength = true,
-  strictMode = false,
   className,
   inputId,
   label,
@@ -117,7 +103,6 @@ export function PassphraseInput({
   const resolvedLabel = label ?? t('passphrase.defaultLabel');
   const resolvedPlaceholder = placeholder ?? t('passphrase.defaultPlaceholder');
   const strength = getPassphraseStrength(value);
-  const showWarning = strictMode && Boolean(value) && strength.level === 1;
 
   return (
     <div className={cn('space-y-3', className)} data-testid="passphrase-input-root">
@@ -132,9 +117,7 @@ export function PassphraseInput({
           className={cn(
             'w-full rounded-xl border px-4 py-3 transition focus-visible:outline-none focus-visible:ring-2',
             'border-input bg-input-background text-foreground placeholder:text-muted-foreground',
-            showWarning
-              ? 'border-neon-amber/60 focus-visible:ring-neon-amber/60'
-              : 'focus-visible:ring-ring'
+            'focus-visible:ring-ring'
           )}
           data-testid="passphrase-input-field"
           id={resolvedInputId}
@@ -157,9 +140,7 @@ export function PassphraseInput({
         </button>
       </div>
 
-      {showStrength && value ? (
-        <PassphraseStrengthIndicator showWarning={showWarning} strength={strength} />
-      ) : null}
+      {showStrength && value ? <PassphraseStrengthIndicator strength={strength} /> : null}
     </div>
   );
 }

@@ -38,10 +38,8 @@ describe('useCreateStore', () => {
   it('uses expected defaults', () => {
     const state = useCreateStore.getState();
 
-    expect(state.selectedProfile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(state.selectedProfile).toBe(SECURITY_PROFILE.QUICK);
     expect(state.webAuthnSupported).toBe(false);
-    expect(state.showCompatibilityConfirm).toBe(false);
-    expect(state.compatibilityAccepted).toBe(false);
     expect(state.createdProfile).toBeNull();
     expect(state.createBegin).toEqual(IDLE_REQUEST_STATE);
     expect(state.createFinish).toEqual(IDLE_REQUEST_STATE);
@@ -49,18 +47,14 @@ describe('useCreateStore', () => {
 
   it('resets transient state when changing selected profile', () => {
     const state = useCreateStore.getState();
-    state.setShowCompatibilityConfirm(true);
-    state.setCompatibilityAccepted(true);
-    state.setCreatedProfile(SECURITY_PROFILE.STANDARD);
+    state.setCreatedProfile(SECURITY_PROFILE.QUICK);
     state.completeCreateBegin(buildCreateBeginResponse());
     state.failCreateFinish('PREVIOUS_ERROR');
 
-    state.setSelectedProfile(SECURITY_PROFILE.STRICT);
+    state.setSelectedProfile(SECURITY_PROFILE.SECURE);
 
     const nextState = useCreateStore.getState();
-    expect(nextState.selectedProfile).toBe(SECURITY_PROFILE.STRICT);
-    expect(nextState.showCompatibilityConfirm).toBe(false);
-    expect(nextState.compatibilityAccepted).toBe(false);
+    expect(nextState.selectedProfile).toBe(SECURITY_PROFILE.SECURE);
     expect(nextState.createdProfile).toBeNull();
     expect(nextState.createBegin).toEqual(IDLE_REQUEST_STATE);
     expect(nextState.createFinish).toEqual(IDLE_REQUEST_STATE);
@@ -120,21 +114,17 @@ describe('useCreateStore', () => {
 
   it('resets to initial defaults', () => {
     const state = useCreateStore.getState();
-    state.setSelectedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
+    state.setSelectedProfile(SECURITY_PROFILE.SECURE);
     state.setWebAuthnSupported(true);
-    state.setShowCompatibilityConfirm(true);
-    state.setCompatibilityAccepted(true);
-    state.setCreatedProfile(SECURITY_PROFILE.STRICT);
+    state.setCreatedProfile(SECURITY_PROFILE.SECURE);
     state.startCreateBegin();
     state.startCreateFinish();
 
     state.resetCreateStore();
 
     const nextState = useCreateStore.getState();
-    expect(nextState.selectedProfile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(nextState.selectedProfile).toBe(SECURITY_PROFILE.QUICK);
     expect(nextState.webAuthnSupported).toBe(false);
-    expect(nextState.showCompatibilityConfirm).toBe(false);
-    expect(nextState.compatibilityAccepted).toBe(false);
     expect(nextState.createdProfile).toBeNull();
     expect(nextState.createBegin).toEqual(IDLE_REQUEST_STATE);
     expect(nextState.createFinish).toEqual(IDLE_REQUEST_STATE);
