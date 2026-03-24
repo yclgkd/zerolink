@@ -386,6 +386,13 @@ export class SecretVault implements VaultContext {
           );
         }
 
+        if (!verification.verified && verification.fmt !== 'none') {
+          throw new StateTransitionError(
+            'ATTESTATION_UNVERIFIABLE',
+            `security profile '${record.securityProfile}' requires verified attestation for fmt:'${verification.fmt}'`
+          );
+        }
+
         adminCredential = {
           credentialId: verification.credentialId,
           publicKey: verification.publicKey,

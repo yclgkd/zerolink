@@ -176,6 +176,32 @@ describe('SecretVault create flow', () => {
     expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
   });
 
+  it('rejects SECURE creation when packed attestation does not verify', async () => {
+    const { state } = createMockState();
+    const vault = new SecretVault(state, env);
+    const uuid = asUuid('new-channel-uuid-12345');
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
+
+    const verifyAttestationMock = vi.mocked(verifyAttestation);
+    verifyAttestationMock.mockResolvedValueOnce({
+      verified: false,
+      fmt: 'packed',
+      credentialId: asBase64Url('cred-id'),
+      publicKey: asBase64Url('pub-key'),
+      aaguid: asBase64Url('aaguid'),
+      signCount: 0,
+    });
+
+    await expect(
+      vault.commitCreate({
+        uuid,
+        adminMode: 'webauthn',
+        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+        lockKeyB64u: asBase64Url('lock-key'),
+      })
+    ).rejects.toThrow("requires verified attestation for fmt:'packed'");
+  });
+
   it('allows creation for SECURE with all-zero AAGUID (enforcement removed)', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);

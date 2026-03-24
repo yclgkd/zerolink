@@ -99,6 +99,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --env staging
 
+      - name: Install Playwright browsers
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        working-directory: packages/frontend
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Smoke test staging
         if: "!startsWith(github.ref, 'refs/tags/')"
         env:
