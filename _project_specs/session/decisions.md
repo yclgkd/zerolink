@@ -22,6 +22,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: This keeps the change small and safe: it reduces dead code and stale state in the active UI without breaking old channel reads or protocol compatibility guarantees.
 **Trade-offs**: Direct compatibility coverage now stays concentrated in orchestrator/shared/backend tests rather than in unused create-page UI components.
 **Follow-up (2026-03-24)**: PR193 removes the remaining legacy `standard` / `strict` / `hardware_only` compatibility layer across shared schemas, backend policy handling, frontend mappings, and docs. The repository now treats `quick` and `secure` as the only supported security profiles because the product has not launched and backward compatibility is no longer required.
+**Follow-up (2026-03-24, README sync)**: Root README and README.zh now use the same two-mode product copy so the top-level project description no longer implies any retained legacy profile path.
 
 ## [2026-03-23] Keep `pnpm setup` as the manual deploy secret bootstrap helper
 
