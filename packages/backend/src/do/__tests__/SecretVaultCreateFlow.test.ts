@@ -47,7 +47,7 @@ describe('SecretVault create flow', () => {
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
 
-    const options = (await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY)) as {
+    const options = (await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE)) as {
       challenge: unknown;
       user: { id: unknown };
       attestation: unknown;
@@ -56,10 +56,10 @@ describe('SecretVault create flow', () => {
 
     expect(record.uuid).toBe(uuid);
     expect(record.state).toBe(CHANNEL_STATE.WAITING);
-    expect(record.securityProfile).toBe(SECURITY_PROFILE.HARDWARE_ONLY);
+    expect(record.securityProfile).toBe(SECURITY_PROFILE.SECURE);
     expect(options.challenge).toBeDefined();
     expect(options.user.id).toBeDefined();
-    // attestation is always 'none' now; hardware_only no longer enforces direct attestation
+    // attestation is always 'none' now; secure profile does not enforce direct attestation
     expect(options.attestation).toBe('none');
   });
 
@@ -73,7 +73,7 @@ describe('SecretVault create flow', () => {
     } satisfies StoredTerminalTombstone);
     const vault = new SecretVault(state, env);
 
-    await expect(vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY)).rejects.toMatchObject({
+    await expect(vault.beginCreate(uuid, SECURITY_PROFILE.SECURE)).rejects.toMatchObject({
       code: 'INVALID_TRANSITION',
     });
     expect(readTerminalTombstone(snapshot)).toEqual({
@@ -102,9 +102,7 @@ describe('SecretVault create flow', () => {
     const { state, snapshot, getAlarm } = createMockState(expiredRecord);
     const vault = new SecretVault(state, env);
 
-    await expect(
-      vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY, now)
-    ).rejects.toMatchObject({
+    await expect(vault.beginCreate(uuid, SECURITY_PROFILE.SECURE, now)).rejects.toMatchObject({
       code: 'INVALID_TRANSITION',
     });
 
@@ -119,11 +117,11 @@ describe('SecretVault create flow', () => {
     expect(getAlarm()).toBeNull();
   });
 
-  it('commits creation successfully for HARDWARE_ONLY with valid attestation', async () => {
+  it('commits creation successfully for SECURE with valid attestation', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
     verifyAttestationMock.mockResolvedValueOnce({
@@ -149,11 +147,11 @@ describe('SecretVault create flow', () => {
     expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
   });
 
-  it('rejects creation for HARDWARE_ONLY with unverified attestation', async () => {
+  it('rejects creation for SECURE with unverified attestation', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
     verifyAttestationMock.mockResolvedValueOnce({
@@ -176,11 +174,11 @@ describe('SecretVault create flow', () => {
     ).rejects.toThrow('requires verified attestation');
   });
 
-  it('allows creation for HARDWARE_ONLY with all-zero AAGUID (enforcement removed)', async () => {
+  it('allows creation for SECURE with all-zero AAGUID (enforcement removed)', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
     verifyAttestationMock.mockResolvedValueOnce({
@@ -192,7 +190,7 @@ describe('SecretVault create flow', () => {
       signCount: 0,
     });
 
-    // hardware_only no longer rejects all-zero AAGUID — creation should succeed
+    // secure profile no longer rejects all-zero AAGUID — creation should succeed
     await vault.commitCreate({
       uuid,
       adminMode: 'webauthn',
@@ -201,32 +199,6 @@ describe('SecretVault create flow', () => {
     });
     const updated = await vault.getRecord();
     expect(updated.adminMode).toBe('webauthn');
-  });
-
-  it('rejects creation for STRICT with unverified attestation', async () => {
-    const { state } = createMockState();
-    const vault = new SecretVault(state, env);
-    const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
-
-    const verifyAttestationMock = vi.mocked(verifyAttestation);
-    verifyAttestationMock.mockResolvedValueOnce({
-      verified: false,
-      fmt: 'none',
-      credentialId: asBase64Url('cred-id'),
-      publicKey: asBase64Url('pub-key'),
-      aaguid: asBase64Url('aaguid'),
-      signCount: 0,
-    });
-
-    await expect(
-      vault.commitCreate({
-        uuid,
-        adminMode: 'webauthn',
-        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
-        lockKeyB64u: asBase64Url('lock-key'),
-      })
-    ).rejects.toThrow('requires verified attestation');
   });
 
   it('rejects password adminMode for secure profile (H-1 downgrade prevention)', async () => {
@@ -250,11 +222,11 @@ describe('SecretVault create flow', () => {
     ).rejects.toThrow("security profile 'secure' requires webauthn admin mode");
   });
 
-  it('rejects softkey adminMode for hardware_only profile (H-1 downgrade prevention)', async () => {
+  it('rejects softkey adminMode for secure profile (H-1 downgrade prevention)', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     await expect(
       vault.commitCreate({
@@ -268,14 +240,14 @@ describe('SecretVault create flow', () => {
         } as never,
         lockKeyB64u: asBase64Url('lock-key'),
       })
-    ).rejects.toThrow("security profile 'hardware_only' requires webauthn admin mode");
+    ).rejects.toThrow("security profile 'secure' requires webauthn admin mode");
   });
 
-  it('allows password adminMode for standard profile', async () => {
+  it('allows password adminMode for quick profile', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.STANDARD);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.QUICK);
 
     await vault.commitCreate({
       uuid,
@@ -292,7 +264,7 @@ describe('SecretVault create flow', () => {
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
 
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     const storedChallenge = snapshot.get(CREATION_CHALLENGE_KEY) as string;
     expect(storedChallenge).toBeDefined();
@@ -303,7 +275,7 @@ describe('SecretVault create flow', () => {
     const { state, snapshot } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     const storedChallengeB64u = snapshot.get(CREATION_CHALLENGE_KEY) as string;
     expect(storedChallengeB64u).toBeDefined();
@@ -341,7 +313,7 @@ describe('SecretVault create flow', () => {
     const { state, snapshot } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     // Simulate missing challenge (e.g. already consumed or never set)
     snapshot.delete(CREATION_CHALLENGE_KEY);
@@ -360,7 +332,7 @@ describe('SecretVault create flow', () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     vi.mocked(verifyAttestation).mockRejectedValueOnce(
       new Error('x5c attestation (certificate chain) is not yet supported')
@@ -381,7 +353,7 @@ describe('SecretVault create flow', () => {
     const uuid = 'abcdefghijklmnopqrstu';
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
-    await vault.beginCreate(asUuid(uuid), SECURITY_PROFILE.STANDARD);
+    await vault.beginCreate(asUuid(uuid), SECURITY_PROFILE.QUICK);
 
     // Softkey mode: no attestation needed, simpler setup
     const payload = {
@@ -422,11 +394,11 @@ describe('SecretVault create flow', () => {
     expect(body.manageUrl).not.toContain('fake-internal');
   });
 
-  it('commitCreate passes requireUserVerification:true for STRICT profile', async () => {
+  it('commitCreate passes requireUserVerification:true for SECURE profile', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.STRICT);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE);
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
     verifyAttestationMock.mockResolvedValueOnce({
@@ -450,39 +422,11 @@ describe('SecretVault create flow', () => {
     );
   });
 
-  it('commitCreate passes requireUserVerification:true for HARDWARE_ONLY profile', async () => {
+  it('commitCreate passes requireUserVerification:false for QUICK profile', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.HARDWARE_ONLY);
-
-    const verifyAttestationMock = vi.mocked(verifyAttestation);
-    verifyAttestationMock.mockResolvedValueOnce({
-      verified: true,
-      fmt: 'packed',
-      credentialId: asBase64Url('cred-id'),
-      publicKey: asBase64Url('pub-key'),
-      aaguid: asBase64Url('aaguid'),
-      signCount: 0,
-    });
-
-    await vault.commitCreate({
-      uuid,
-      adminMode: 'webauthn',
-      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
-      lockKeyB64u: asBase64Url('lock-key'),
-    });
-
-    expect(verifyAttestationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ requireUserVerification: true })
-    );
-  });
-
-  it('commitCreate passes requireUserVerification:false for STANDARD profile', async () => {
-    const { state } = createMockState();
-    const vault = new SecretVault(state, env);
-    const uuid = asUuid('new-channel-uuid-12345');
-    await vault.beginCreate(uuid, SECURITY_PROFILE.STANDARD);
+    await vault.beginCreate(uuid, SECURITY_PROFILE.QUICK);
 
     const verifyAttestationMock = vi.mocked(verifyAttestation);
     verifyAttestationMock.mockResolvedValueOnce({

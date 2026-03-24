@@ -73,7 +73,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -89,7 +89,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
 
     const result = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'hello from sender',
     });
 
@@ -99,7 +99,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
     expect(result.data.intentHash).toMatch(/^[0-9a-f]{64}$/u);
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELIVERED);
     expect(vi.mocked(assertWithWebAuthn)).toHaveBeenCalledWith({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: {
         publicKey: expect.objectContaining({
           allowCredentials: VALID_ALLOW_CREDENTIALS,
@@ -133,7 +133,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -152,7 +152,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
 
     const result = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'test aad binding',
     });
 
@@ -192,7 +192,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
 
     const deliverPromise = orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'hello from sender',
     });
 
@@ -210,7 +210,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -237,14 +237,14 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
 
     const result = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'hello from sender',
     });
 
@@ -278,14 +278,14 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
         receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
 
     const result = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: new Uint8Array(MAX_PLAINTEXT_BYTES + 1),
     });
 
@@ -315,12 +315,6 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
     expect(cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_STRICT);
   });
 
-  it('uses 8 KB padding for strict legacy profile delivery', async () => {
-    const cipherBundle = await deliverAndCaptureCipherBundle(SECURITY_PROFILE.STRICT);
-
-    expect(cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_STRICT);
-  });
-
   it('runs delete flow and marks deleted state', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     vi.mocked(apiClient.compoundBegin).mockResolvedValue({
@@ -335,7 +329,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
         },
         allowCredentials: VALID_ALLOW_CREDENTIALS,
         currentVersion: 3,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -351,13 +345,13 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
 
     const result = await orchestrator.deleteChannel({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
     });
 
     expect(result.ok).toBe(true);
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELETED);
     expect(vi.mocked(assertWithWebAuthn)).toHaveBeenCalledWith({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: {
         publicKey: expect.objectContaining({
           allowCredentials: VALID_ALLOW_CREDENTIALS,
@@ -384,7 +378,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
 
     const deletePromise = orchestrator.deleteChannel({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
     });
 
     useDeliverStore.getState().setDeliverUuid(NEXT_UUID_BRANDED);
@@ -399,7 +393,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
           expiresAt: CHALLENGE_EXPIRES_AT,
         },
         currentVersion: 3,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });

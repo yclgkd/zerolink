@@ -310,13 +310,13 @@ describe('generateCreationOptions', () => {
     expect(options.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);
   });
 
-  it('uses non-discoverable credential settings for standard profile', () => {
+  it('uses non-discoverable credential settings for quick profile', () => {
     const options = generateCreationOptions({
       rpId: RP_ID,
       rpName: 'ZeroLink',
       uuid: 'new-channel-uuid-12345',
       challenge: crypto.getRandomValues(new Uint8Array(32)),
-      securityProfile: 'standard',
+      securityProfile: 'quick',
     }) as {
       authenticatorSelection: {
         userVerification: string;

@@ -205,7 +205,6 @@ default PAD_BLOCK = 4096 bytes
 #### Policy
 - Quick Share: 4KB blocks (default)
 - Secure Share: 8KB blocks (higher privacy)
-- Legacy strict/hardware_only: treated at Secure Share level
 - Very large files (>1MB): can be disabled or use larger blocks
 
 ---
@@ -223,11 +222,6 @@ default PAD_BLOCK = 4096 bytes
 - **Admin authority**: WebAuthn, `userVerification = "required"`, `residentKey = "discouraged"`
 - **Padding**: 8KB
 - **Risk boundary**: Still affected by the web-scenario malicious JS boundary, but admin private key is non-exportable
-
-### Legacy (Read-Only Compatible)
-- `standard`: legacy WebAuthn tier with UV=preferred (lower assurance; architecturally distinct from Quick Share, which uses ECDSA)
-- `strict` / `hardware_only`: legacy WebAuthn tier with UV=required (comparable assurance to Secure Share)
-- New channels no longer offer legacy profiles
 
 ---
 
@@ -416,11 +410,10 @@ Attacker controls the server
   - Recommended: m=64MB, t=3, p=1
 - **Salt**: random 128 bits
 - **Output**: 256 bits (used to wrap private key with AES-256)
-- **Fallback**: PBKDF2-SHA256 (legacy compatibility path only, 600,000 iterations)
 
 ### Digital Signatures (Admin Authority)
 - **WebAuthn**: ES256 (ECDSA P-256 + SHA-256)
-- **Quick Share / Legacy Softkey**: ECDSA P-256
+- **Quick Share**: ECDSA P-256
 - **Update Delivery Proof**: `SHA256("GL-delivery-proof" || uuid || intent_hash)` as a deterministic challenge; anchored channels locally re-verify the proof on the receiver side
 
 ### Hashing (Integrity/Fingerprints)

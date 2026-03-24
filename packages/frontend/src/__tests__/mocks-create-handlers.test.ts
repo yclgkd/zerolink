@@ -47,7 +47,7 @@ describe('mock handlers: create contracts', () => {
     const response = await postJson(`/api/create_begin/${VALID_UUID}`, {
       uuid: VALID_UUID,
       timestamp: Date.now(),
-      securityProfile: 'standard',
+      securityProfile: 'quick',
     });
     const payload = (await response.json()) as unknown;
 
@@ -71,7 +71,7 @@ describe('mock handlers: create contracts', () => {
     const response = await postJson(`/api/create_begin/${VALID_UUID}`, {
       uuid: OTHER_UUID,
       timestamp: Date.now(),
-      securityProfile: 'standard',
+      securityProfile: 'quick',
     });
     const payload = (await response.json()) as { ok: false; code: string };
 

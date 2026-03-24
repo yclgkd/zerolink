@@ -376,12 +376,12 @@ describe('ManagePage – deliver actions', () => {
         ok: true,
         state: 'locked',
         adminMode: 'webauthn',
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       })
     );
 
     useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.QUICK);
-    useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
+    useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.QUICK);
 
     renderManagePage();
 
@@ -394,7 +394,7 @@ describe('ManagePage – deliver actions', () => {
     await waitFor(() => {
       expect(deliverSecretMock).toHaveBeenCalledTimes(1);
     });
-    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.SECURE);
   });
 
   it('uses realtime-updated securityProfile for later delivery actions', async () => {
@@ -409,7 +409,7 @@ describe('ManagePage – deliver actions', () => {
         state: 'locked',
         version: 2,
         adminMode: 'webauthn',
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       });
     });
 
@@ -421,7 +421,7 @@ describe('ManagePage – deliver actions', () => {
     await waitFor(() => {
       expect(deliverSecretMock).toHaveBeenCalledTimes(1);
     });
-    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.profile).toBe(SECURITY_PROFILE.SECURE);
   });
 
   it('disables deliver/destroy while deliver request is pending and re-enables after completion', async () => {

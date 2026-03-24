@@ -64,9 +64,6 @@ const en = {
   profile: {
     quick: 'Quick Share',
     secure: 'Secure Share',
-    standard: 'Standard',
-    strict: 'Strict',
-    hardwareOnly: 'Hardware-Only',
   },
 
   manage: {

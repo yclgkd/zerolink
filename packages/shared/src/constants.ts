@@ -32,19 +32,10 @@ export type ChannelState = (typeof CHANNEL_STATE)[keyof typeof CHANNEL_STATE];
  *
  *   quick  → password-protected; no WebAuthn required; Argon2id KDF; 4KB padding
  *   secure → passkey required; UV=required; RK=discouraged; attestation=none; 8KB padding
- *
- * Legacy values (read-side only, for existing channels in storage):
- *   standard      → UV=preferred; RK=discouraged (lower assurance than 'secure')
- *   strict        → UV=required; RK=discouraged (equivalent to 'secure')
- *   hardware_only → UV=required; RK=discouraged; attestation enforcement removed
  */
 export const SECURITY_PROFILE = {
   QUICK: 'quick',
   SECURE: 'secure',
-  // Legacy — retained for backward-compatible reads of existing channel records
-  STANDARD: 'standard',
-  STRICT: 'strict',
-  HARDWARE_ONLY: 'hardware_only',
 } as const;
 
 export type SecurityProfile = (typeof SECURITY_PROFILE)[keyof typeof SECURITY_PROFILE];
@@ -195,7 +186,6 @@ export const ARGON2ID = {
 /**
  * PBKDF2-SHA-256 iteration count for compatibility mode (softkey fallback).
  * OWASP Password Storage Cheat Sheet 2023: minimum 600,000 for SHA-256.
- * Only usable under Standard security profile with explicit user acknowledgment.
  */
 export const PBKDF2_ITERATIONS = 600_000 as const;
 
@@ -306,7 +296,7 @@ export const SAFETY_CODE = {
 
 /**
  * ECDSA P-256 (ES256) constants for the softkey compatibility-mode admin credential.
- * PRD §9: when WebAuthn is unavailable on Standard profile, an ECDSA keypair
+ * PRD §9: when WebAuthn is unavailable (Quick Share profile), an ECDSA keypair
  * is used in place of a hardware authenticator.
  *
  * ALGORITHM_NAME / CURVE / HASH_ALGORITHM → WebCrypto API strings.
@@ -330,11 +320,10 @@ export const ECDSA = {
  *   SECURITY.md / PRD §"WebAuthn": "默认 alg = -7 (ES256)".
  *
  * UV_* strings match WebAuthn UserVerificationRequirement exactly.
- *   preferred     → Standard profile (platform passkey allowed)
- *   required      → Strict and Hardware-Only profiles
+ *   preferred     → platform passkey allowed
+ *   required      → Secure profile
  *
- * ATTACHMENT_CROSS_PLATFORM → Hardware-Only profile requires external key.
- * ATTESTATION_NONE / DIRECT → Standard vs Hardware-Only attestation policy.
+ * ATTESTATION_NONE → no attestation required.
  */
 export const WEBAUTHN = {
   COSE_ALG_ES256: -7 as const,

@@ -409,7 +409,7 @@ describe('ManagePage – public status and waiting state', () => {
         state: 'locked',
         version: 1,
         adminMode: 'webauthn',
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         receiverPubFpr: VALID_HEX,
       });
     });

@@ -132,12 +132,13 @@ export function toCipherBundleTransport(input: {
 export function resolvePadBlockForProfile(profile: SecurityProfile): number {
   switch (profile) {
     case SECURITY_PROFILE.SECURE:
-    case SECURITY_PROFILE.STRICT:
-    case SECURITY_PROFILE.HARDWARE_ONLY:
       return AES_GCM.PAD_BLOCK_STRICT;
     case SECURITY_PROFILE.QUICK:
-    case SECURITY_PROFILE.STANDARD:
       return AES_GCM.PAD_BLOCK_DEFAULT;
+    default: {
+      const _exhaustive: never = profile;
+      throw new Error(`Unknown security profile: ${_exhaustive}`);
+    }
   }
 }
 

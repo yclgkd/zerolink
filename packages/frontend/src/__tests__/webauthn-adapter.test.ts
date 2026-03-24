@@ -158,24 +158,8 @@ describe('detectWebAuthnSupport', () => {
 });
 
 describe('resolveWebAuthnPolicy', () => {
-  it('returns standard profile defaults', () => {
-    expect(resolveWebAuthnPolicy(SECURITY_PROFILE.STANDARD)).toEqual({
-      userVerification: 'preferred',
-      residentKey: 'discouraged',
-      attestation: 'none',
-    });
-  });
-
-  it('returns strict profile defaults', () => {
-    expect(resolveWebAuthnPolicy(SECURITY_PROFILE.STRICT)).toEqual({
-      userVerification: 'required',
-      residentKey: 'discouraged',
-      attestation: 'none',
-    });
-  });
-
-  it('returns hardware-only profile defaults', () => {
-    expect(resolveWebAuthnPolicy(SECURITY_PROFILE.HARDWARE_ONLY)).toEqual({
+  it('returns secure profile defaults', () => {
+    expect(resolveWebAuthnPolicy(SECURITY_PROFILE.SECURE)).toEqual({
       userVerification: 'required',
       residentKey: 'discouraged',
       attestation: 'none',
@@ -184,9 +168,9 @@ describe('resolveWebAuthnPolicy', () => {
 });
 
 describe('evaluateWebAuthnMode', () => {
-  it('returns fallback for unsupported standard profile', () => {
+  it('returns fallback for unsupported quick profile', () => {
     expect(
-      evaluateWebAuthnMode(SECURITY_PROFILE.STANDARD, {
+      evaluateWebAuthnMode(SECURITY_PROFILE.QUICK, {
         supported: false,
         secureContext: false,
         hasPublicKeyCredential: false,
@@ -200,7 +184,7 @@ describe('evaluateWebAuthnMode', () => {
     });
   });
 
-  it('returns blocked for unsupported strict and hardware profiles', () => {
+  it('returns blocked for unsupported secure profile', () => {
     const support = {
       supported: false,
       secureContext: false,
@@ -209,12 +193,7 @@ describe('evaluateWebAuthnMode', () => {
       hasCredentialsGet: false,
     } as const;
 
-    expect(evaluateWebAuthnMode(SECURITY_PROFILE.STRICT, support)).toEqual({
-      mode: 'blocked',
-      allowed: false,
-      reason: 'PROFILE_REQUIRES_WEBAUTHN',
-    });
-    expect(evaluateWebAuthnMode(SECURITY_PROFILE.HARDWARE_ONLY, support)).toEqual({
+    expect(evaluateWebAuthnMode(SECURITY_PROFILE.SECURE, support)).toEqual({
       mode: 'blocked',
       allowed: false,
       reason: 'PROFILE_REQUIRES_WEBAUTHN',
@@ -239,7 +218,7 @@ describe('registerWithWebAuthn', () => {
     } as never);
 
     const result = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       creationOptions: {
         publicKey: VALID_CREATION_PUBLIC_KEY,
       },
@@ -274,7 +253,7 @@ describe('registerWithWebAuthn', () => {
     } as never);
 
     await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.HARDWARE_ONLY,
+      profile: SECURITY_PROFILE.SECURE,
       creationOptions: {
         publicKey: {
           ...VALID_CREATION_PUBLIC_KEY,
@@ -313,7 +292,7 @@ describe('registerWithWebAuthn', () => {
     } as never);
 
     const result = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       creationOptions: VALID_CREATION_PUBLIC_KEY,
     });
 
@@ -325,7 +304,7 @@ describe('registerWithWebAuthn', () => {
 
   it('returns INVALID_OPTIONS without calling webauthn create for invalid options', async () => {
     const result = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       creationOptions: {} as never,
     });
 
@@ -339,12 +318,12 @@ describe('registerWithWebAuthn', () => {
     expect(vi.mocked(webauthnCreate)).not.toHaveBeenCalled();
   });
 
-  it('returns FALLBACK_REQUIRED for unsupported standard profile without calling create', async () => {
+  it('returns FALLBACK_REQUIRED for unsupported quick profile without calling create', async () => {
     setWebAuthnEnvironment({ secureContext: false });
     vi.mocked(webauthnSupported).mockReturnValue(false);
 
     const result = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.QUICK,
       creationOptions: {
         publicKey: VALID_CREATION_PUBLIC_KEY,
       },
@@ -360,27 +339,16 @@ describe('registerWithWebAuthn', () => {
     expect(vi.mocked(webauthnCreate)).not.toHaveBeenCalled();
   });
 
-  it('returns PROFILE_BLOCKED for unsupported strict/hardware profiles without calling create', async () => {
+  it('returns PROFILE_BLOCKED for unsupported secure profile without calling create', async () => {
     setWebAuthnEnvironment({ secureContext: false });
     vi.mocked(webauthnSupported).mockReturnValue(false);
 
-    const strictResult = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.STRICT,
-      creationOptions: { publicKey: VALID_CREATION_PUBLIC_KEY },
-    });
-    const hardwareResult = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.HARDWARE_ONLY,
+    const secureResult = await registerWithWebAuthn({
+      profile: SECURITY_PROFILE.SECURE,
       creationOptions: { publicKey: VALID_CREATION_PUBLIC_KEY },
     });
 
-    expect(strictResult).toEqual({
-      ok: false,
-      error: {
-        ok: false,
-        code: 'PROFILE_BLOCKED',
-      },
-    });
-    expect(hardwareResult).toEqual({
+    expect(secureResult).toEqual({
       ok: false,
       error: {
         ok: false,
@@ -394,7 +362,7 @@ describe('registerWithWebAuthn', () => {
     vi.mocked(webauthnCreate).mockRejectedValue(new DOMException('Denied', 'NotAllowedError'));
 
     const result = await registerWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       creationOptions: { publicKey: VALID_CREATION_PUBLIC_KEY },
     });
 
@@ -426,7 +394,7 @@ describe('assertWithWebAuthn', () => {
     } as never);
 
     const result = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: {
         publicKey: VALID_REQUEST_PUBLIC_KEY,
       },
@@ -463,7 +431,7 @@ describe('assertWithWebAuthn', () => {
     } as never);
 
     await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STRICT,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: {
         publicKey: {
           ...VALID_REQUEST_PUBLIC_KEY,
@@ -496,7 +464,7 @@ describe('assertWithWebAuthn', () => {
     } as never);
 
     const result = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: VALID_REQUEST_PUBLIC_KEY,
     });
 
@@ -508,7 +476,7 @@ describe('assertWithWebAuthn', () => {
 
   it('returns INVALID_OPTIONS without calling webauthn get for invalid options', async () => {
     const result = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: {} as never,
     });
 
@@ -522,12 +490,12 @@ describe('assertWithWebAuthn', () => {
     expect(vi.mocked(webauthnGet)).not.toHaveBeenCalled();
   });
 
-  it('returns FALLBACK_REQUIRED for unsupported standard profile without calling get', async () => {
+  it('returns FALLBACK_REQUIRED for unsupported quick profile without calling get', async () => {
     setWebAuthnEnvironment({ secureContext: false });
     vi.mocked(webauthnSupported).mockReturnValue(false);
 
     const result = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.QUICK,
       requestOptions: { publicKey: VALID_REQUEST_PUBLIC_KEY },
     });
 
@@ -541,27 +509,16 @@ describe('assertWithWebAuthn', () => {
     expect(vi.mocked(webauthnGet)).not.toHaveBeenCalled();
   });
 
-  it('returns PROFILE_BLOCKED for unsupported strict/hardware profiles without calling get', async () => {
+  it('returns PROFILE_BLOCKED for unsupported secure profile without calling get', async () => {
     setWebAuthnEnvironment({ secureContext: false });
     vi.mocked(webauthnSupported).mockReturnValue(false);
 
-    const strictResult = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STRICT,
-      requestOptions: { publicKey: VALID_REQUEST_PUBLIC_KEY },
-    });
-    const hardwareResult = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.HARDWARE_ONLY,
+    const secureResult = await assertWithWebAuthn({
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: { publicKey: VALID_REQUEST_PUBLIC_KEY },
     });
 
-    expect(strictResult).toEqual({
-      ok: false,
-      error: {
-        ok: false,
-        code: 'PROFILE_BLOCKED',
-      },
-    });
-    expect(hardwareResult).toEqual({
+    expect(secureResult).toEqual({
       ok: false,
       error: {
         ok: false,
@@ -575,7 +532,7 @@ describe('assertWithWebAuthn', () => {
     vi.mocked(webauthnGet).mockRejectedValue(new DOMException('Cancelled', 'AbortError'));
 
     const result = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: { publicKey: VALID_REQUEST_PUBLIC_KEY },
     });
 
@@ -593,7 +550,7 @@ describe('assertWithWebAuthn', () => {
     vi.mocked(webauthnGet).mockRejectedValue(new Error('Unexpected failure'));
 
     const result = await assertWithWebAuthn({
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       requestOptions: { publicKey: VALID_REQUEST_PUBLIC_KEY },
     });
 

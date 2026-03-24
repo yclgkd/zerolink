@@ -207,7 +207,6 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 #### 策略
 - Quick Share：4KB 块（默认）
 - Secure Share：8KB 块（更高隐私）
-- Legacy strict/hardware_only：按 Secure Share 级别处理
 - 超大文件（>1MB）：可关闭或使用更大块
 
 ---
@@ -225,11 +224,6 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 - **管理权**：WebAuthn，`userVerification = "required"`，`residentKey = "discouraged"`
 - **Padding**：8KB
 - **风险边界**：依然受 Web 场景恶意 JS 边界影响，但管理私钥不可导出
-
-### Legacy（只读兼容）
-- `standard`：Legacy WebAuthn 档位，UV=preferred（较低保障级别；与使用 ECDSA 的 Quick Share 架构不同）
-- `strict` / `hardware_only`：Legacy WebAuthn 档位，UV=required（保障级别接近 Secure Share）
-- 新建频道不再提供 legacy 档位
 
 ---
 
@@ -418,11 +412,9 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
   - 推荐：m=64MB, t=3, p=1
 - **Salt**：随机 128 bits
 - **输出**：256 bits（用于 AES-256 包裹私钥）
-- **降级**：PBKDF2-SHA256（仅 legacy compatibility 路径，迭代 600,000 次）
-
 ### 数字签名（管理权）
 - **WebAuthn**：ES256（ECDSA P-256 + SHA-256）
-- **Quick Share / Legacy Softkey**：ECDSA P-256
+- **Quick Share**：ECDSA P-256
 - **Update Delivery Proof**：`SHA256("GL-delivery-proof" || uuid || intent_hash)` 作为确定性 challenge；anchored channel 在接收端本地复验 proof
 
 ### 哈希（完整性/指纹）

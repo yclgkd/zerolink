@@ -119,7 +119,7 @@ describe('backend worker routing — lock begin/commit forwarding + cookie signa
     const response = await dispatch(env, `/api/create_begin/${VALID_UUID}`, 'POST', {
       uuid: VALID_UUID,
       timestamp: 1_730_000_000_000,
-      securityProfile: 'standard',
+      securityProfile: 'quick',
     });
     const payload = (await response.json()) as {
       ok: true;

@@ -156,10 +156,6 @@ WebAuthn/ECDSA challenge must === expected_challenge
 - residentKey = "discouraged"
 - Default 8KB padding
 
-### Legacy (Read-Only Compatibility)
-- `standard` / `strict` / `hardware_only` are used only for rendering and operating existing channels
-- These profiles are no longer offered for new channel creation
-
 ## Data Flow Diagrams
 
 ```

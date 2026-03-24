@@ -38,7 +38,6 @@ const UV_FLAG_BIT = 0x04;
 
 /**
  * Generates WebAuthn PublicKeyCredentialCreationOptions.
- * Accepts both new profiles ('secure') and legacy profiles for backward compatibility.
  */
 export function generateCreationOptions(params: {
   rpId: string;
@@ -49,11 +48,7 @@ export function generateCreationOptions(params: {
 }): Record<string, unknown> {
   const { rpId, rpName, uuid, challenge, securityProfile } = params;
 
-  // Require UV for 'secure' and all legacy strict-tier profiles.
-  const requireUserVerification =
-    securityProfile === 'secure' ||
-    securityProfile === 'strict' ||
-    securityProfile === 'hardware_only';
+  const requireUserVerification = securityProfile === 'secure';
 
   return {
     challenge: encodeBase64Url(challenge),

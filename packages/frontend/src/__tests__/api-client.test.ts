@@ -71,7 +71,7 @@ describe('api client', () => {
     const result = await client.createBegin({
       uuid: VALID_UUID,
       timestamp: Date.now(),
-      securityProfile: SECURITY_PROFILE.STANDARD,
+      securityProfile: SECURITY_PROFILE.QUICK,
     });
 
     expect(result.ok).toBe(true);
@@ -265,7 +265,7 @@ describe('api client', () => {
     const result = await client.createBegin({
       uuid: 'bad-uuid',
       timestamp: Date.now(),
-      securityProfile: SECURITY_PROFILE.STANDARD,
+      securityProfile: SECURITY_PROFILE.QUICK,
     });
 
     expect(result.ok).toBe(false);

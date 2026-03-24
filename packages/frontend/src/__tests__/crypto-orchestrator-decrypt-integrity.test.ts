@@ -84,7 +84,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
@@ -170,7 +170,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -189,7 +189,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
 
     const deliverResult = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'fingerprint mismatch payload',
     });
     expect(deliverResult.ok).toBe(true);
@@ -203,7 +203,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
@@ -282,7 +282,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -301,7 +301,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
 
     const deliverResult = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'aad mismatch payload',
     });
     expect(deliverResult.ok).toBe(true);
@@ -316,7 +316,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
@@ -389,7 +389,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
@@ -475,7 +475,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         receiverPubFpr: lockResult.data.receiverPubFpr,
         receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
         currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
         adminMode: 'webauthn',
       },
     });
@@ -494,7 +494,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
 
     const deliverResult = await orchestrator.deliverSecret({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
       plaintext: 'key length test payload',
     });
     expect(deliverResult.ok).toBe(true);
@@ -525,7 +525,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({

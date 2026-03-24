@@ -332,10 +332,7 @@ export class SecretVault implements VaultContext {
       }
 
       // H-1: Enforce securityProfile → adminMode binding (prevent downgrade attack)
-      const requiresWebAuthn =
-        record.securityProfile === 'secure' ||
-        record.securityProfile === 'strict' ||
-        record.securityProfile === 'hardware_only';
+      const requiresWebAuthn = record.securityProfile === 'secure';
       if (requiresWebAuthn && params.adminMode !== 'webauthn') {
         throw new StateTransitionError(
           'LOCK_FORBIDDEN',
@@ -370,11 +367,7 @@ export class SecretVault implements VaultContext {
         }
         await this.ctx.storage.delete(CREATION_CHALLENGE_KEY);
 
-        // Require UV for secure and all legacy strict/hardware_only profiles
-        const requireUV =
-          record.securityProfile === 'secure' ||
-          record.securityProfile === 'strict' ||
-          record.securityProfile === 'hardware_only';
+        const requireUV = record.securityProfile === 'secure';
 
         let verification: AttestationVerificationResult;
         try {

@@ -58,7 +58,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -101,7 +101,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -148,7 +148,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -191,7 +191,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -240,7 +240,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -297,7 +297,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -351,7 +351,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -409,7 +409,7 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'password' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.QUICK,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({

@@ -163,7 +163,7 @@ docs/
 ### Q: What's the difference between Quick Share and Secure Share?
 → [PRD.md § 4. Product Modes and Security Tiers](./PRD.md#4-product-modes-and-security-tiers-externally-clear)
 
-### Q: How are legacy tiers and old softkey channels handled?
+### Q: Why are there only Quick Share and Secure Share modes now?
 → [PRD.md § 4. Product Modes and Security Tiers](./PRD.md#4-product-modes-and-security-tiers-externally-clear)
 
 ### Q: How to initialize the Monorepo?

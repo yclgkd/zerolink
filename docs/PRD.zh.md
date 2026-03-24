@@ -6,7 +6,7 @@
 
 **Security-First / Low-Friction / DO-Atomic / WebAuthn Admin / TOFU-Safe / Padded Ciphertext**
 
-> **v3.0 变更摘要（相对 v2.5）**：将三档安全模式（Standard / Strict / Hardware-Only）统一为两个用户入口：**Quick Share**（密码模式）和 **Secure Share**（Passkey 模式）。移除 Hardware-Only 的 attestation 强制执行（技术可行性差，保留 legacy 向后兼容读取）。Legacy 档位（standard / strict / hardware_only）仅用于已有频道的向后兼容展示，不再作为新建频道的选项。
+> **v3.0 变更摘要（相对 v2.5）**：将安全模式统一为两个用户入口：**Quick Share**（密码模式）和 **Secure Share**（Passkey 模式）。
 
 ---
 
@@ -62,10 +62,9 @@ v3.0 的产品目标：
 
 ### 3.4 两档用户入口（v3.0 简化）
 
-创建时可选两档（Legacy 档位仅用于已有频道的向后兼容）：
+创建时可选两档：
 - **Quick Share**：密码模式，本地生成 ECDSA 管理密钥（Argon2id 包裹），无需 passkey，4KB padding
-- **Secure Share**：Passkey 模式，UV=required / RK=discouraged，8KB padding，合并原 Standard+Strict 的安全级别
-- **Legacy（只读）**：standard / strict / hardware_only 仅渲染已有频道，不作为新建选项
+- **Secure Share**：Passkey 模式，UV=required / RK=discouraged，8KB padding
 
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
@@ -96,14 +95,6 @@ v3.0 的产品目标：
 - **Padding**：8KB 块（更高隐私）
 - **adminMode**：`webauthn`（内部协议字段）
 - **适合**：最高安全需求，passkey 可用的环境
-
-### Legacy 档位（只读，向后兼容）
-
-已有频道可能存储 `standard` / `strict` / `hardware_only` security_profile，系统继续正确渲染和操作。新建频道不提供这些选项。
-
-- **standard**：Legacy WebAuthn 档位，UV=preferred（低于 Secure Share 保障级别；与使用 ECDSA 的 Quick Share 架构不同）
-- **strict**：Legacy WebAuthn 档位，UV=required（保障级别接近 Secure Share），保留向后兼容
-- **hardware_only**：原 cross-platform 强制，已移除 attestation=direct 强制执行（技术原因），现行为与 strict 相同
 
 ---
 
@@ -249,7 +240,7 @@ Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用
 
 - **管理权**：本地生成 ECDSA P-256 私钥（Admin-Priv），用用户密码 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB）
 - **更新/删除授权**：ECDSA 签名 payload 模式（DO 仍负责 version/nonce 原子性）
-- **协议字段**：`adminMode: "password"`（内部）；Legacy 频道可能存 `"softkey"`（向后兼容等价处理）
+- **协议字段**：`adminMode: "password"`（内部）
 - **Padding**：4KB 块（相比 Secure Share 的 8KB，降低流量但稍低隐私）
 - **UI**：不标注"较低安全"，而是作为独立的有效分享模式展示
 
@@ -273,8 +264,8 @@ Response：
 {
   "ok": true,
   "state": "waiting|locked|delivered",
-  "adminMode": "webauthn|password|softkey",
-  "securityProfile": "quick|secure|standard|strict|hardware_only",
+  "adminMode": "webauthn|password",
+  "securityProfile": "quick|secure",
   "receiverPubFpr": "hex..."
 }
 ```
@@ -283,8 +274,6 @@ Response：
 
 - `receiverPubFpr` 仅在接收方已上锁后返回
 - 频道被物理删除或过期后，公共读取返回 `404 NOT_FOUND`
-- mixed-version 回滚/本地 mock 场景下仍可能见到 legacy `deleted` / `expired` 公共状态，前端应统一归一化为 unavailable
-
 ### 10.2 创建（Quick Share / Secure Share）
 
 #### POST /api/create_begin/:uuid
@@ -294,7 +283,7 @@ Request：
 {
   "uuid": "string(21)",
   "timestamp": 1730000000000,
-  "securityProfile": "quick|secure|standard|strict|hardware_only"
+  "securityProfile": "quick|secure"
 }
 ```
 
@@ -326,7 +315,7 @@ WebAuthn 管理模式：
 }
 ```
 
-Quick Share / legacy password 模式：
+Quick Share password 模式：
 ```json
 {
   "adminMode": "password",
@@ -339,7 +328,6 @@ Quick Share / legacy password 模式：
 
 说明：
 
-- legacy `softkey` 与 `password` 协议等价，只保留向后兼容
 - 服务端保存管理凭据、`securityProfile` 和 `lockKeyB64u`
 - `lockKeyB64u` 用于后续验证 `lock_proof`，服务端从不持久化 `lock_secret`
 
@@ -401,19 +389,19 @@ DO 校验：
 
 删除复用 `compound_begin` 获取 challenge，再调用 `delete_commit` 完成管理授权。没有单独的 `delete_begin` 端点。
 
-### 10.6 Quick Share / Legacy Password API
+### 10.6 Quick Share Password API
 
 新增字段：
 
-- adminMode="webauthn"|"password"|"softkey"
-- password / softkey 下 update/delete 需要 sig（ECDSA 签名；softkey 仅 legacy 向后兼容）
+- adminMode="webauthn"|"password"
+- password 模式下 update/delete 需要 sig（ECDSA 签名）
 
 ---
 
 ## 11. WebAuthn 验证（v3.0，继承 v2.4 字节级规范）
 
 - origin、rpIdHash、UV/UP、challenge 精确匹配、COSE ES256 验签
-- Secure Share / strict / hardware_only：
+- Secure Share：
     - userVerification="required"
     - residentKey="discouraged"
     - attestation="none"
@@ -486,7 +474,7 @@ DO 校验：
 2. **lock_challenge 重放**：同 challenge_id 再次 lock_commit 必失败
 3. **padding**：不同长度明文映射到相同桶长度密文（至少 4KB 桶）
 4. **Argon2id 强制**：接收方私钥包裹必须为 Argon2id；Quick Share 管理密钥也必须使用 Argon2id 包裹
-5. **Secure Share Policy**：secure/strict/hardware_only 必须要求 UV=required，且注册使用 non-discoverable credential（`residentKey="discouraged"`）
+5. **Secure Share Policy**：secure 必须要求 UV=required，且注册使用 non-discoverable credential（`residentKey="discouraged"`）
 
 ---
 
@@ -809,24 +797,6 @@ CipherBundle（base64url）：
 - attestation = "none"
 - 适合平台 passkey 和硬件密钥
 
-### G3. Legacy 档位（向后兼容）
-
-#### standard（Legacy WebAuthn 档位，UV=preferred）
-- userVerification = "preferred"
-- residentKey = "discouraged"
-- attestation = "none"
-
-#### strict（Legacy WebAuthn 档位，UV=required）
-- userVerification = "required"
-- residentKey = "discouraged"
-- attestation = "none"
-
-#### hardware_only（Legacy WebAuthn 档位，attestation 强制已移除，行为与 strict 相同）
-- userVerification = "required"
-- residentKey = "discouraged"
-- attestation = "none"（原 "direct" 强制执行已移除，cross-platform 限制已移除）
-- 移除原因：x5c attestation 验证技术实现复杂，且现代 passkey 生态中实际意义有限
-
 ---
 
 ## 附录 H：WebAuthn 验证字节级步骤（延续 v2.4，补充对 lock/profile 的约束点）
@@ -857,8 +827,6 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 - 前端生成 ECDSA P-256 keypair
 - Admin-Priv 用 Argon2id 包裹后编码在管理链接的 URL fragment 中（不存 IndexedDB；密码由用户提供）
 - 服务器存 Admin-Pub（JWK）+ adminMode="password"
-- Legacy 频道可能存 adminMode="softkey"，后端等价处理
-
 ### I2. 写入授权
 
 - update/delete 请求基于 ECDSA sig（Ghost Canon v1 canonical payload）

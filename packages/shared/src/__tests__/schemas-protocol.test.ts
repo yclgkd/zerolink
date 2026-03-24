@@ -64,7 +64,7 @@ describe('schemas - protocol', () => {
         currentVersion: 1,
         receiverPubFpr: hex,
         receiverPubJwk: validJwk,
-        securityProfile: 'standard',
+        securityProfile: 'secure',
         adminMode: 'webauthn',
       });
       expect(result.receiverPubFpr).toBe(hex);

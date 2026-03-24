@@ -119,11 +119,7 @@ describe('schemas - primitives', () => {
   });
 
   describe('SecurityProfileSchema', () => {
-    it.each(['quick', 'secure'])('accepts new profile %s', (profile) => {
-      expect(SecurityProfileSchema.parse(profile)).toBe(profile);
-    });
-
-    it.each(['standard', 'strict', 'hardware_only'])('accepts legacy profile %s', (profile) => {
+    it.each(['quick', 'secure'])('accepts profile %s', (profile) => {
       expect(SecurityProfileSchema.parse(profile)).toBe(profile);
     });
 

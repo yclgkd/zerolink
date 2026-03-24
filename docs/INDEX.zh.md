@@ -165,7 +165,7 @@ docs/
 ### Q: Quick Share 和 Secure Share 有什么区别？
 → [PRD.md § 4. 产品模式与安全档位](./PRD.zh.md#4-产品模式与安全档位对外清晰)
 
-### Q: legacy 档位和旧 softkey 频道怎么处理？
+### Q: 为什么现在只有 Quick Share 和 Secure Share 两种模式？
 → [PRD.md § 4. 产品模式与安全档位](./PRD.zh.md#4-产品模式与安全档位对外清晰)
 
 ### Q: 如何初始化 Monorepo？

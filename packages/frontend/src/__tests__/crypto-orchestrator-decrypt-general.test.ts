@@ -67,7 +67,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
       receiverKeyStorage: storage,
     });
 
-    expect(prepared.cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_DEFAULT);
+    expect(prepared.cipherBundle.padBlock).toBe(AES_GCM.PAD_BLOCK_STRICT);
 
     vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
       ok: true,
@@ -76,7 +76,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
@@ -147,7 +147,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
 
@@ -172,7 +172,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: true,
         state: CHANNEL_STATE.WAITING,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
 
@@ -321,7 +321,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: true,
         state: CHANNEL_STATE.DELIVERED,
         adminMode: 'webauthn' as const,
-        securityProfile: SECURITY_PROFILE.STANDARD,
+        securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
     vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({

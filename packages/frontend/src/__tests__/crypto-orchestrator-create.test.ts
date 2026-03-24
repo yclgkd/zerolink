@@ -84,7 +84,7 @@ describe('crypto orchestrator – createChannel', () => {
 
     const result = await orchestrator.createChannel({
       uuid: VALID_UUID_BRANDED,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
     });
 
     expect(result.ok).toBe(true);
@@ -102,7 +102,7 @@ describe('crypto orchestrator – createChannel', () => {
     expect(vi.mocked(apiClient.createFinish)).toHaveBeenCalledTimes(1);
     expect(useCreateStore.getState().createBegin.status).toBe('success');
     expect(useCreateStore.getState().createFinish.status).toBe('success');
-    expect(useCreateStore.getState().createdProfile).toBe(SECURITY_PROFILE.STANDARD);
+    expect(useCreateStore.getState().createdProfile).toBe(SECURITY_PROFILE.SECURE);
   });
 
   it('fails create channel when webauthn adapter returns FALLBACK_REQUIRED', async () => {
@@ -134,7 +134,7 @@ describe('crypto orchestrator – createChannel', () => {
 
     const result = await orchestrator.createChannel({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.SECURE,
     });
 
     expect(result).toEqual({
@@ -176,7 +176,7 @@ describe('crypto orchestrator – createChannel', () => {
 
     const result = await orchestrator.createChannel({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.HARDWARE_ONLY,
+      profile: SECURITY_PROFILE.SECURE,
     });
 
     expect(result).toEqual({
@@ -211,7 +211,7 @@ describe('crypto orchestrator – createChannel', () => {
 
     const result = await orchestrator.createChannel({
       uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.STANDARD,
+      profile: SECURITY_PROFILE.QUICK,
       useCompatibilityMode: true,
       softkeyPassphrase: 'Compat#Pass123',
     });
