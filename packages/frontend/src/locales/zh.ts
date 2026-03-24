@@ -61,9 +61,6 @@ const zh: Translation = {
   profile: {
     quick: '快速分享',
     secure: '安全分享',
-    standard: '标准',
-    strict: '严格',
-    hardwareOnly: '仅硬件',
   },
 
   manage: {

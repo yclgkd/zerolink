@@ -71,15 +71,7 @@ export const ChannelStateSchema = z.enum([
   CHANNEL_STATE.EXPIRED,
 ]);
 
-/** Accepts new profiles (quick/secure) and legacy values for backward compatibility. */
-export const SecurityProfileSchema = z.enum([
-  SECURITY_PROFILE.QUICK,
-  SECURITY_PROFILE.SECURE,
-  // Legacy — existing channels stored with these values must still parse
-  SECURITY_PROFILE.STANDARD,
-  SECURITY_PROFILE.STRICT,
-  SECURITY_PROFILE.HARDWARE_ONLY,
-]);
+export const SecurityProfileSchema = z.enum([SECURITY_PROFILE.QUICK, SECURITY_PROFILE.SECURE]);
 
 export const ChannelTtlMsSchema = z.union([
   z.literal(3_600_000),

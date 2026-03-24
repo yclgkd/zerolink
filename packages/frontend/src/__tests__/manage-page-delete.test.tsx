@@ -284,8 +284,8 @@ describe('ManagePage – delete / destroy confirm', () => {
       })
     );
 
-    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.STRICT);
-    useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.HARDWARE_ONLY);
+    useCreateStore.getState().setSelectedProfile(SECURITY_PROFILE.SECURE);
+    useCreateStore.getState().setCreatedProfile(SECURITY_PROFILE.SECURE);
 
     renderManagePage();
 

@@ -338,7 +338,7 @@ export async function buildDeliveredDecryptFixtureBase(
       receiverPubFpr: lockResult.data.receiverPubFpr,
       receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
       currentVersion: 0,
-      securityProfile: SECURITY_PROFILE.STANDARD,
+      securityProfile: SECURITY_PROFILE.SECURE,
       adminMode: 'webauthn',
     },
   });
@@ -357,7 +357,7 @@ export async function buildDeliveredDecryptFixtureBase(
 
   const deliverResult = await orchestrator.deliverSecret({
     uuid: VALID_UUID,
-    profile: SECURITY_PROFILE.STANDARD,
+    profile: SECURITY_PROFILE.SECURE,
     plaintext,
   });
   expect(deliverResult.ok).toBe(true);
@@ -481,7 +481,7 @@ export async function buildAnchoredSoftkeyDeliveryBase(
 
   const createResult = await orchestrator.createChannel({
     uuid,
-    profile: SECURITY_PROFILE.STANDARD,
+    profile: SECURITY_PROFILE.QUICK,
     useCompatibilityMode: true,
     softkeyPassphrase: passphrase,
   });
@@ -533,7 +533,7 @@ export async function buildAnchoredSoftkeyDeliveryBase(
       receiverPubFpr: lockResult.data.receiverPubFpr,
       receiverPubJwk: toMutableReceiverJwk(lockResult.data.receiverPubJwk),
       currentVersion: 0,
-      securityProfile: SECURITY_PROFILE.STANDARD,
+      securityProfile: SECURITY_PROFILE.QUICK,
       adminMode: 'password',
     },
   });
@@ -557,7 +557,7 @@ export async function buildAnchoredSoftkeyDeliveryBase(
   }
   const deliverResult = await orchestrator.deliverSecret({
     uuid,
-    profile: SECURITY_PROFILE.STANDARD,
+    profile: SECURITY_PROFILE.QUICK,
     plaintext: params.plaintext ?? 'anchored softkey plaintext',
     softkeyPassphrase: passphrase,
     wrappedPrivateKey: createResult.data.wrappedPrivateKey,

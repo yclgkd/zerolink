@@ -36,7 +36,7 @@ function createRecord(): ChannelRecord {
     createdAt: asUnixMs(1_730_000_000_000),
     expiresAt: asUnixMs(1_730_000_000_000 + CHANNEL_TTL_MS.ONE_DAY),
     ttl: CHANNEL_TTL_MS.ONE_DAY,
-    securityProfile: SECURITY_PROFILE.STANDARD,
+    securityProfile: SECURITY_PROFILE.QUICK,
     adminMode: 'webauthn',
     adminCredential: {
       credentialId: asBase64Url('credential-id'),
@@ -85,7 +85,7 @@ describe('handleWebSocketMessage', () => {
       state: 'locked',
       version: 3,
       adminMode: 'webauthn',
-      securityProfile: SECURITY_PROFILE.STANDARD,
+      securityProfile: SECURITY_PROFILE.QUICK,
       receiverPubFpr: 'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd',
     });
   });

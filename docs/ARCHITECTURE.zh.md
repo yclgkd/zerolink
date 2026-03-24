@@ -156,10 +156,6 @@ WebAuthn/ECDSA challenge 必须 === expected_challenge
 - residentKey = "discouraged"
 - 默认 8KB padding
 
-### Legacy（只读兼容）
-- `standard` / `strict` / `hardware_only` 仅用于已有频道渲染和操作
-- 新建频道不再提供这些档位
-
 ## 数据流图
 
 ```

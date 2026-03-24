@@ -400,10 +400,6 @@ function SuccessSummary({
     () => ({
       [SECURITY_PROFILE.QUICK]: t('profile.quick'),
       [SECURITY_PROFILE.SECURE]: t('profile.secure'),
-      // Legacy labels for existing channels
-      [SECURITY_PROFILE.STANDARD]: t('profile.standard'),
-      [SECURITY_PROFILE.STRICT]: t('profile.strict'),
-      [SECURITY_PROFILE.HARDWARE_ONLY]: t('profile.hardwareOnly'),
     }),
     [t]
   );

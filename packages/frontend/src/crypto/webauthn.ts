@@ -256,34 +256,19 @@ export function detectWebAuthnSupport(): WebAuthnSupportInfo {
 /**
  * Resolves profile-specific WebAuthn policy settings.
  * All passkey registration flows use non-discoverable credentials.
- * New profiles: 'secure' (strict), 'quick' (no WebAuthn).
- * Legacy profiles: 'standard'/'strict'/'hardware_only' are handled for backward compatibility.
+ * 'secure' requires UV; 'quick' never reaches here (password mode, no WebAuthn).
  */
-export function resolveWebAuthnPolicy(profile: SecurityProfile): WebAuthnProfilePolicy {
-  switch (profile) {
-    case SECURITY_PROFILE.SECURE:
-    case SECURITY_PROFILE.STRICT:
-    case SECURITY_PROFILE.HARDWARE_ONLY:
-      return {
-        userVerification: 'required',
-        residentKey: 'discouraged',
-        attestation: 'none',
-      };
-    default:
-      // 'quick' profile never reaches here (password mode, no WebAuthn)
-      // 'standard' falls through to preferred UV
-      return {
-        userVerification: 'preferred',
-        residentKey: 'discouraged',
-        attestation: 'none',
-      };
-  }
+export function resolveWebAuthnPolicy(_profile: SecurityProfile): WebAuthnProfilePolicy {
+  return {
+    userVerification: 'required',
+    residentKey: 'discouraged',
+    attestation: 'none',
+  };
 }
 
 /**
  * Decides whether profile execution should use WebAuthn, fallback, or block.
- * 'secure' profile requires WebAuthn; 'quick' is never routed through WebAuthn.
- * Legacy 'standard' profile allows fallback; 'strict'/'hardware_only' require WebAuthn.
+ * 'secure' profile requires WebAuthn; 'quick' allows password fallback.
  */
 export function evaluateWebAuthnMode(
   profile: SecurityProfile,
@@ -293,8 +278,7 @@ export function evaluateWebAuthnMode(
     return { mode: 'webauthn', allowed: true };
   }
 
-  // Profiles that allow password/softkey fallback
-  if (profile === SECURITY_PROFILE.STANDARD || profile === SECURITY_PROFILE.QUICK) {
+  if (profile === SECURITY_PROFILE.QUICK) {
     return {
       mode: 'fallback',
       allowed: false,

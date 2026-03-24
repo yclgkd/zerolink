@@ -299,7 +299,7 @@ export function createChannelRecord(
     createdAt: FIXTURE_CREATED_AT,
     expiresAt: FIXTURE_EXPIRES_AT,
     ttl: CHANNEL_TTL_MS.ONE_DAY,
-    securityProfile: SECURITY_PROFILE.STANDARD,
+    securityProfile: adminMode === 'softkey' ? SECURITY_PROFILE.QUICK : SECURITY_PROFILE.SECURE,
     adminMode,
     adminCredential:
       adminMode === 'softkey'

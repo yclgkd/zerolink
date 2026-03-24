@@ -65,7 +65,7 @@ describe('backend worker routing — compound begin/commit forwarding + alias ro
             expiresAt: 1_730_000_123_000,
           },
           currentVersion: 1,
-          securityProfile: 'standard',
+          securityProfile: 'quick',
           adminMode: 'webauthn',
         }),
         {

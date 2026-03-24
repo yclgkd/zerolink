@@ -4,7 +4,7 @@
 
 **Security-First / Low-Friction / DO-Atomic / WebAuthn Admin / TOFU-Safe / Padded Ciphertext**
 
-> **v3.0 Change Summary (relative to v2.5)**: Unified the three security tiers (Standard / Strict / Hardware-Only) into two user-facing entry points: **Quick Share** (password mode) and **Secure Share** (Passkey mode). Removed Hardware-Only attestation enforcement (poor technical feasibility; retained legacy backward-compatible reads). Legacy tiers (standard / strict / hardware_only) are used only for backward-compatible display of existing channels and are no longer offered as options for new channels.
+> **v3.0 Change Summary (relative to v2.5)**: Unified security tiers into two user-facing entry points: **Quick Share** (password mode) and **Secure Share** (Passkey mode).
 
 ---
 
@@ -60,10 +60,9 @@ v3.0 product goals:
 
 ### 3.4 Two User-Facing Tiers (v3.0 Simplification)
 
-Two tiers available at creation (legacy tiers are only used for backward compatibility with existing channels):
+Two tiers available at creation:
 - **Quick Share**: Password mode, locally generated ECDSA admin key (Argon2id-wrapped), no passkey required, 4KB padding
-- **Secure Share**: Passkey mode, UV=required / RK=discouraged, 8KB padding, merges the security levels of the original Standard+Strict
-- **Legacy (read-only)**: standard / strict / hardware_only only render existing channels; not offered as new creation options
+- **Secure Share**: Passkey mode, UV=required / RK=discouraged, 8KB padding
 
 ### 3.5 New: Self-Hosting / Verifiable Releases
 
@@ -94,14 +93,6 @@ Selectable `securityProfile` at creation (v3.0 two tiers):
 - **Padding**: 8KB blocks (higher privacy)
 - **adminMode**: `webauthn` (internal protocol field)
 - **Suitable for**: Highest security requirements, environments where passkey is available
-
-### Legacy Tiers (Read-Only, Backward Compatible)
-
-Existing channels may store `standard` / `strict` / `hardware_only` security_profile; the system continues to render and operate on them correctly. These options are not available for new channel creation.
-
-- **standard**: Legacy WebAuthn tier with UV=preferred (lower assurance than Secure Share; architecturally distinct from Quick Share, which uses ECDSA)
-- **strict**: Legacy WebAuthn tier with UV=required (comparable assurance to Secure Share), retained for backward compatibility
-- **hardware_only**: Originally enforced cross-platform; attestation=direct enforcement removed (technical reasons); current behavior is identical to strict
 
 ---
 
@@ -247,7 +238,7 @@ Quick Share is the official user entry point in v3.0, replacing "Compatibility M
 
 - **Admin Authority**: Locally generated ECDSA P-256 private key (Admin-Priv), wrapped via user password Argon2id and encoded in the manage link's URL fragment (not stored in IndexedDB)
 - **Update/Delete Authorization**: ECDSA signature payload mode (DO still handles version/nonce atomicity)
-- **Protocol Field**: `adminMode: "password"` (internal); legacy channels may store `"softkey"` (treated as equivalent for backward compatibility)
+- **Protocol Field**: `adminMode: "password"` (internal)
 - **Padding**: 4KB blocks (compared to Secure Share's 8KB, lower bandwidth but slightly less privacy)
 - **UI**: Not labeled as "lower security"; presented as an independent, valid sharing mode
 
@@ -271,8 +262,8 @@ Response:
 {
   "ok": true,
   "state": "waiting|locked|delivered",
-  "adminMode": "webauthn|password|softkey",
-  "securityProfile": "quick|secure|standard|strict|hardware_only",
+  "adminMode": "webauthn|password",
+  "securityProfile": "quick|secure",
   "receiverPubFpr": "hex..."
 }
 ```
@@ -281,8 +272,6 @@ Notes:
 
 - `receiverPubFpr` is only returned after the receiver has locked
 - After a channel is physically deleted or expired, public reads return `404 NOT_FOUND`
-- In mixed-version rollback/local mock scenarios, legacy `deleted` / `expired` public states may still appear; the frontend should uniformly normalize these to unavailable
-
 ### 10.2 Create (Quick Share / Secure Share)
 
 #### POST /api/create_begin/:uuid
@@ -292,7 +281,7 @@ Request:
 {
   "uuid": "string(21)",
   "timestamp": 1730000000000,
-  "securityProfile": "quick|secure|standard|strict|hardware_only"
+  "securityProfile": "quick|secure"
 }
 ```
 
@@ -324,7 +313,7 @@ WebAuthn admin mode:
 }
 ```
 
-Quick Share / legacy password mode:
+Quick Share password mode:
 ```json
 {
   "adminMode": "password",
@@ -337,7 +326,6 @@ Quick Share / legacy password mode:
 
 Notes:
 
-- Legacy `softkey` is protocol-equivalent to `password`; retained only for backward compatibility
 - The server saves admin credentials, `securityProfile`, and `lockKeyB64u`
 - `lockKeyB64u` is used to verify `lock_proof` subsequently; the server never persists `lock_secret`
 
@@ -399,19 +387,19 @@ Same as v2.4, but the update payload adds:
 
 Delete reuses `compound_begin` for challenge issuance, then calls `delete_commit` with admin authorization. There is no separate `delete_begin` endpoint.
 
-### 10.6 Quick Share / Legacy Password API
+### 10.6 Quick Share Password API
 
 New fields:
 
-- adminMode="webauthn"|"password"|"softkey"
-- Under password / softkey, update/delete requires sig (ECDSA signature; softkey is legacy backward-compatible only)
+- adminMode="webauthn"|"password"
+- Under password mode, update/delete requires sig (ECDSA signature)
 
 ---
 
 ## 11. WebAuthn Verification (v3.0, Inheriting v2.4 Byte-Level Specification)
 
 - origin, rpIdHash, UV/UP, challenge exact matching, COSE ES256 signature verification
-- Secure Share / strict / hardware_only:
+- Secure Share:
     - userVerification="required"
     - residentKey="discouraged"
     - attestation="none"
@@ -484,7 +472,7 @@ New tests required:
 2. **lock_challenge Replay**: Reusing the same challenge_id for lock_commit must fail
 3. **Padding**: Different plaintext lengths map to the same bucket-length ciphertext (at least 4KB buckets)
 4. **Argon2id Enforcement**: Receiver private key wrapping must use Argon2id; Quick Share admin key must also use Argon2id wrapping
-5. **Secure Share Policy**: secure/strict/hardware_only must require UV=required and use non-discoverable credentials for registration (`residentKey="discouraged"`)
+5. **Secure Share Policy**: secure must require UV=required and use non-discoverable credentials for registration (`residentKey="discouraged"`)
 
 ---
 
@@ -807,24 +795,6 @@ Bucket strategy:
 - attestation = "none"
 - Suitable for platform passkeys and hardware security keys
 
-### G3. Legacy Tiers (Backward Compatible)
-
-#### standard (legacy WebAuthn tier, UV=preferred)
-- userVerification = "preferred"
-- residentKey = "discouraged"
-- attestation = "none"
-
-#### strict (legacy WebAuthn tier, UV=required)
-- userVerification = "required"
-- residentKey = "discouraged"
-- attestation = "none"
-
-#### hardware_only (legacy WebAuthn tier; attestation enforcement removed, behavior identical to strict)
-- userVerification = "required"
-- residentKey = "discouraged"
-- attestation = "none" (original "direct" enforcement removed; cross-platform restriction removed)
-- Removal reason: x5c attestation verification is complex to implement, and its practical significance is limited in the modern passkey ecosystem
-
 ---
 
 ## Appendix H: WebAuthn Verification Byte-Level Steps (Continuing v2.4, with Supplementary Constraints for Lock/Profile)
@@ -855,8 +825,6 @@ Quick Share is the official user entry point in v3.0 (no longer a degraded mode)
 - Frontend generates ECDSA P-256 keypair
 - Admin-Priv is Argon2id-wrapped and encoded in the manage link's URL fragment (not stored in IndexedDB; password provided by user)
 - Server stores Admin-Pub (JWK) + adminMode="password"
-- Legacy channels may store adminMode="softkey"; the backend treats them equivalently
-
 ### I2. Write Authorization
 
 - update/delete requests are based on ECDSA sig (Ghost Canon v1 canonical payload)

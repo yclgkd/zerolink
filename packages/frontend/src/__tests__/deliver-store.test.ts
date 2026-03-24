@@ -41,7 +41,7 @@ function buildCompoundBeginResponse(
       key_ops: ['encrypt'],
     },
     currentVersion: 3,
-    securityProfile: SECURITY_PROFILE.STANDARD,
+    securityProfile: SECURITY_PROFILE.SECURE,
     adminMode: 'webauthn',
   });
 
