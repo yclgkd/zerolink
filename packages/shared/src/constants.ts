@@ -296,7 +296,7 @@ export const SAFETY_CODE = {
 
 /**
  * ECDSA P-256 (ES256) constants for the softkey compatibility-mode admin credential.
- * PRD §9: when WebAuthn is unavailable on Standard profile, an ECDSA keypair
+ * PRD §9: when WebAuthn is unavailable (Quick Share profile), an ECDSA keypair
  * is used in place of a hardware authenticator.
  *
  * ALGORITHM_NAME / CURVE / HASH_ALGORITHM → WebCrypto API strings.

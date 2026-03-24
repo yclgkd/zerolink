@@ -135,6 +135,10 @@ export function resolvePadBlockForProfile(profile: SecurityProfile): number {
       return AES_GCM.PAD_BLOCK_STRICT;
     case SECURITY_PROFILE.QUICK:
       return AES_GCM.PAD_BLOCK_DEFAULT;
+    default: {
+      const _exhaustive: never = profile;
+      throw new Error(`Unknown security profile: ${_exhaustive}`);
+    }
   }
 }
 
