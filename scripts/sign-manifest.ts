@@ -10,15 +10,16 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const DIST_DIR = path.resolve(REPO_ROOT, 'packages', 'frontend', 'dist');
 const MANIFEST_PATH = path.resolve(DIST_DIR, 'manifest.json');
 const SIGNATURE_PATH = path.resolve(DIST_DIR, 'manifest.sig');
+const SIGNING_KEY_ENV = 'MANIFEST_SIGNING_KEY' as const;
 
 export function toBase64Url(buffer: Buffer): string {
   return buffer.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
 }
 
 export function getSigningKeyPem(): string {
-  const value = process.env.MANIFEST_SIGNING_KEY;
+  const value = process.env[SIGNING_KEY_ENV];
   if (!value || value.trim().length === 0) {
-    throw new Error('MANIFEST_SIGNING_KEY is required');
+    throw new Error(`${SIGNING_KEY_ENV} is required`);
   }
   return value;
 }

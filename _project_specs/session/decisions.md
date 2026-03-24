@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-24] Align secure WebAuthn semantics and default validation coverage with the two-profile product
+
+**Decision**: Treat `secure` as "passkey required + UV required + attestation context checked" rather than "attestation provenance must be cryptographically verified", preserve explicit `expireAt` overrides on delivered records, and move root script checks plus verification Playwright coverage into the default validation paths.
+**Context**: The current two-profile product already documents `secure` as `attestation: "none"`, but backend `commitCreate()` still rejected `verified: false` attestation results, which made the live create flow internally contradictory. Separately, `UpdateIntent.expireAt` was signed and transmitted but discarded on commit, and the default `pnpm test` / `pnpm typecheck` / PR / deploy paths still missed root script coverage and browser-level verification gating.
+**Options Considered**: Reintroduce stricter attestation modes for `secure`; keep the contradiction and rely on hand-waved test fixtures; preserve `expireAt` only in detached proof metadata; continue to keep verification/root-script coverage on opt-in commands only.
+**Choice**: Keep `attestation: "none"` as the product contract, accept unverified `fmt:"none"` registrations so long as RP/origin/challenge/UV checks pass, write `intent.expireAt` back into `record.expiresAt` when present, extend root validation to cover `scripts/` and root Vitest config, and run verification Playwright coverage in default local, PR, and deploy paths.
+**Reasoning**: This matches the actual shipped two-profile design, removes a self-inflicted registration failure mode, restores end-to-end semantics for signed update intents, and closes the most important validation gaps without reintroducing the legacy multi-profile complexity that was already removed.
+**Trade-offs**: `secure` no longer implies hardware provenance attestation; it is now explicitly "user-verified passkey" security. CI becomes slower because verification Playwright now runs in PR and deploy workflows, but the extra runtime is justified because the release gate is security-sensitive.
+
 ## [2026-03-23] Remove stale create-flow UI residue without touching protocol compatibility
 
 **Decision**: Delete the unused `security-profile-card` UI, remove create-store compatibility-confirm state, default create-store to Quick Share, and drop the unused `PassphraseInput.strictMode` warning path.

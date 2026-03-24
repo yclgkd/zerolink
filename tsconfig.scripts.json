@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "typeRoots": ["./packages/shared/node_modules/@types"],
+    "types": ["node"]
+  },
+  "include": ["scripts/**/*.ts", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", "build"]
+}

@@ -147,7 +147,7 @@ describe('SecretVault create flow', () => {
     expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
   });
 
-  it('rejects creation for SECURE with unverified attestation', async () => {
+  it('accepts SECURE creation when fmt:none passes UV/context checks', async () => {
     const { state } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
@@ -164,14 +164,16 @@ describe('SecretVault create flow', () => {
       warning: 'none attestation is considered unverified',
     });
 
-    await expect(
-      vault.commitCreate({
-        uuid,
-        adminMode: 'webauthn',
-        attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
-        lockKeyB64u: asBase64Url('lock-key'),
-      })
-    ).rejects.toThrow('requires verified attestation');
+    await vault.commitCreate({
+      uuid,
+      adminMode: 'webauthn',
+      attestation: createAssertionFixture(asBase64Url('cred-id')) as unknown as AttestationJSON,
+      lockKeyB64u: asBase64Url('lock-key'),
+    });
+
+    const updated = await vault.getRecord();
+    expect(updated.adminMode).toBe('webauthn');
+    expect((updated.adminCredential as StoredCredential).credentialId).toBe('cred-id');
   });
 
   it('allows creation for SECURE with all-zero AAGUID (enforcement removed)', async () => {

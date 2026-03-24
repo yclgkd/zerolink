@@ -456,6 +456,7 @@ export async function commitCompoundInternal(
       cipherBundle: intent.cipherBundle,
       ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
       deliveredAt: intent.timestamp,
+      ...(intent.expireAt !== null ? { expiresAt: intent.expireAt } : {}),
     });
     const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
     const nonceRecord: NonceRecord = {

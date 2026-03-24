@@ -1,5 +1,6 @@
 import { CHANNEL_STATE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
 import { deserializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { useDeliverStore } from '../../stores/deliver-store';
@@ -10,6 +11,7 @@ import { useManageDeliveryLogic, useManageDestructionLogic } from './use-manage-
 import { usePublicStatusFetcher } from './use-manage-status';
 
 export function useManagePageState(uuid?: string) {
+  const location = useLocation();
   const store = useDeliverStore();
   const mountedRef = useRef(true);
   const actionScopeRef = useRef(0);
@@ -21,10 +23,10 @@ export function useManagePageState(uuid?: string) {
   const [isActionPending, setIsActionPending] = useState(false);
 
   const wrappedPrivateKey = useMemo(() => {
-    const { wrappedKeyCompact } = parseManageFragment(window.location.hash);
+    const { wrappedKeyCompact } = parseManageFragment(location.hash);
     if (!wrappedKeyCompact) return undefined;
     return deserializeWrappedKeyCompact(wrappedKeyCompact) ?? undefined;
-  }, []);
+  }, [location.hash]);
 
   useEffect(() => {
     return () => {

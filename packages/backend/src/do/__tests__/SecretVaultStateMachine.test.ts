@@ -38,6 +38,22 @@ describe('SecretVaultStateMachine', () => {
     expect(delivered.state).toBe(CHANNEL_STATE.DELIVERED);
     expect(delivered.version).toBe(1);
     expect(delivered.cipherBundle).toEqual(createCommitDeliveryParams().cipherBundle);
+    expect(delivered.expiresAt).toBe(locked.expiresAt);
+  });
+
+  it('updates expiresAt when a delivery intent carries an explicit override', () => {
+    const lockParams = createCommitLockParams();
+    const locked = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const nextExpiresAt = asUnixMs(1_730_000_900_000);
+
+    const delivered = new SecretVaultStateMachine(locked).commitDelivery({
+      ...createCommitDeliveryParams(),
+      expiresAt: nextExpiresAt,
+    });
+
+    expect(delivered.expiresAt).toBe(nextExpiresAt);
   });
 
   it('supports delivered to delivered update transition and increments version again', () => {

@@ -386,14 +386,6 @@ export class SecretVault implements VaultContext {
           );
         }
 
-        // M-4: Reject unverifiable attestation for secure profiles
-        if (requiresWebAuthn && !verification.verified) {
-          throw new StateTransitionError(
-            'ATTESTATION_UNVERIFIABLE',
-            `security profile '${record.securityProfile}' requires verified attestation (got fmt:'${verification.fmt}')`
-          );
-        }
-
         adminCredential = {
           credentialId: verification.credentialId,
           publicKey: verification.publicKey,

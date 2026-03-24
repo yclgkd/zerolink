@@ -381,6 +381,7 @@ describe('SharePage – decryptDelivered action', () => {
     expect(callArg?.uuid).toBe(VALID_UUID);
     expect(callArg?.passphrase).toBe('Receiver#Pass1234');
     expect(await screen.findByTestId('share-decrypt-plaintext')).toBeTruthy();
+    expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
   });
 
   it('disables decrypt and burn buttons while decrypt is pending, then restores controls', async () => {
@@ -423,9 +424,10 @@ describe('SharePage – decryptDelivered action', () => {
     });
 
     await waitFor(() => {
-      expect((screen.getByTestId('share-decrypt-button') as HTMLButtonElement).disabled).toBe(
-        false
-      );
+      const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+      expect(decryptButton.disabled).toBe(true);
+      expect(decryptButton.textContent).toBe('Decrypt');
+      expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
     });
   });
 

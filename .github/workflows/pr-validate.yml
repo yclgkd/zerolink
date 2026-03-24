@@ -13,14 +13,10 @@ on:
       - ".agents/**"
       - ".claude/**"
       - ".github/ISSUE_TEMPLATE/**"
-      - ".github/workflows/deploy.yml"
-      - ".github/workflows/e2e-full.yml"
       - ".github/workflows/pr-checklist.yml"
       - ".husky/**"
-      - "scripts/__tests__/**"
       - "biome.json"
       - "commitlint.config.js"
-      - "vitest.config.ts"
       - ".gitignore"
       - ".env.example"
   merge_group:
@@ -69,3 +65,36 @@ jobs:
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"
         run: pnpm --filter @zerolink/frontend build
+
+  pr-e2e-verification:
+    name: PR Verification E2E
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    needs: pr-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run verification E2E tests
+        run: pnpm --filter @zerolink/frontend test:e2e:verification

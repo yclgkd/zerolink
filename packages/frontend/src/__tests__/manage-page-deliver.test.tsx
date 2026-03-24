@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { SECURITY_PROFILE } from '@zerolink/shared';
+import {
+  AES_GCM,
+  ARGON2ID,
+  type Base64Url,
+  SECURITY_PROFILE,
+  type WrappedPrivateKey,
+} from '@zerolink/shared';
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,6 +64,7 @@ vi.mock('../sync/use-channel-sync.ts', async () => {
   };
 });
 
+import { serializeWrappedKeyCompact } from '../crypto/wrapped-key-codec';
 import { ManagePage } from '../pages/ManagePage';
 import { useCreateStore } from '../stores/create-store';
 import { useDeliverStore } from '../stores/deliver-store';
@@ -68,6 +75,30 @@ const originalClipboard = navigator.clipboard;
 const VALID_UUID = 'aaaaaaaaaaaaaaaaaaaaa';
 const NEXT_UUID = 'bbbbbbbbbbbbbbbbbbbbb';
 const VALID_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+function toBase64Url(bytes: Uint8Array): Base64Url {
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '') as Base64Url;
+}
+
+function createWrappedKey(fillByte: number): WrappedPrivateKey {
+  return {
+    encryptedKey: toBase64Url(new Uint8Array(48).fill(fillByte)),
+    iv: toBase64Url(new Uint8Array(AES_GCM.IV_LENGTH).fill(fillByte)),
+    kdf: {
+      kdfType: 'argon2id',
+      version: 19,
+      m: ARGON2ID.MEMORY_COST_KB,
+      t: ARGON2ID.TIME_COST,
+      p: ARGON2ID.PARALLELISM,
+      salt: toBase64Url(new Uint8Array(ARGON2ID.SALT_LENGTH).fill(fillByte)),
+    },
+  };
+}
+
+function createManageHash(fillByte: number): string {
+  return `#wk=${serializeWrappedKeyCompact(createWrappedKey(fillByte))}`;
+}
 
 function renderManagePage(routePath = '/m/:uuid', initialPath = `/m/${VALID_UUID}`) {
   return render(
@@ -562,6 +593,42 @@ describe('ManagePage – deliver actions', () => {
       expect(screen.queryByTestId('manage-action-error')).toBeNull();
       expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
     });
+  });
+
+  it('uses the latest wrapped key after same-uuid hash navigation', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    const { router } = renderManagePageWithRouter(`/m/${VALID_UUID}${createManageHash(0x11)}`);
+
+    await screen.findByTestId('manage-state-locked');
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'payload' },
+    });
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Quick#Manage123' },
+    });
+
+    await router.navigate(`/m/${VALID_UUID}${createManageHash(0x22)}`);
+    await waitFor(() => {
+      expect(router.state.location.hash).toBe(createManageHash(0x22));
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(deliverSecretMock.mock.calls[0]?.[0]?.wrappedPrivateKey?.encryptedKey).toBe(
+      createWrappedKey(0x22).encryptedKey
+    );
   });
 
   it('keeps safety code visible after successful deliver transitions state from locked to delivered', async () => {

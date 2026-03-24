@@ -216,6 +216,7 @@ describe('SecretVault compound/delete flow', () => {
       asBase64Url('nonce_update_01'),
       lockParams.receiverPubFpr
     );
+    intent.expireAt = asUnixMs(1_930_000_000_000);
     const intentHash = await computeIntentHash(toRecord(intent));
     const expectedChallenge = await deriveUpdateProofChallengeB64u({
       uuid: lockedRecord.uuid,
@@ -266,6 +267,7 @@ describe('SecretVault compound/delete flow', () => {
     expect(updated.version).toBe(lockedRecord.version + 1);
     expect(updated.cipherBundle).toEqual(intent.cipherBundle);
     expect(updated.deliveredAt).toBe(intent.timestamp);
+    expect(updated.expiresAt).toBe(intent.expireAt);
     expect(updated.updateDeliveryProof).toEqual({
       adminMode: 'webauthn',
       meta: {
