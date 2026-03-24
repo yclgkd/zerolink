@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Keep `attestation: "none"` as the product contract, accept unverified `fmt:"none"` registrations so long as RP/origin/challenge/UV checks pass, write `intent.expireAt` back into `record.expiresAt` when present, extend root validation to cover `scripts/` and root Vitest config, and run verification Playwright coverage in default local, PR, and deploy paths.
 **Reasoning**: This matches the actual shipped two-profile design, removes a self-inflicted registration failure mode, restores end-to-end semantics for signed update intents, and closes the most important validation gaps without reintroducing the legacy multi-profile complexity that was already removed.
 **Trade-offs**: `secure` no longer implies hardware provenance attestation; it is now explicitly "user-verified passkey" security. CI becomes slower because verification Playwright now runs in PR and deploy workflows, but the extra runtime is justified because the release gate is security-sensitive.
+**Follow-up (2026-03-24, CI budget)**: Verification Playwright remains in the default local command and PR validation workflow, but it is intentionally removed from `.github/workflows/deploy.yml`. The deploy pipeline keeps manifest generate/sign/verify plus staging smoke so release coverage stays meaningful without spending recurring post-merge/tag minutes on an extra browser suite.
 
 ## [2026-03-23] Remove stale create-flow UI residue without touching protocol compatibility
 

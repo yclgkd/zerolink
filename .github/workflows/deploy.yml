@@ -83,13 +83,6 @@ jobs:
       - name: Verify manifest
         run: pnpm manifest:verify
 
-      - name: Install Playwright browsers
-        working-directory: packages/frontend
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run verification E2E tests
-        run: pnpm --filter @zerolink/frontend test:e2e:verification
-
       - name: Deploy (production)
         if: startsWith(github.ref, 'refs/tags/')
         working-directory: packages/backend
