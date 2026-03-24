@@ -81,9 +81,9 @@ describe('schemas - channel', () => {
       const result = CreateBeginRequestSchema.parse({
         uuid: uuid21(),
         timestamp: 1_730_000_000_000,
-        securityProfile: 'standard',
+        securityProfile: 'quick',
       });
-      expect(result.securityProfile).toBe('standard');
+      expect(result.securityProfile).toBe('quick');
     });
 
     it('rejects unknown securityProfile', () => {
@@ -101,7 +101,7 @@ describe('schemas - channel', () => {
         CreateBeginRequestSchema.parse({
           uuid: 'short',
           timestamp: 1000,
-          securityProfile: 'standard',
+          securityProfile: 'quick',
         })
       ).toThrow();
     });
