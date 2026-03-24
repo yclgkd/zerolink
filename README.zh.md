@@ -16,7 +16,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 - **WebAuthn 管理**：Secure Share 使用系统/硬件密钥管理权（不可导出）
 - **TOFU 防护**：URL Fragment + Lock Challenge 防止抢占锁定
 - **密文长度保护**：Padding 降低长度泄露精度
-- **当前产品模式**：Quick Share / Secure Share，legacy 档位仅保留向后兼容
+- **当前产品模式**：仅保留 Quick Share / Secure Share 两种模式
 
 ## 核心流程
 

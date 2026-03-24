@@ -14,7 +14,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 - **WebAuthn Management**: Secure Share uses system/hardware keys for non-exportable management authority
 - **TOFU Protection**: URL Fragment + Lock Challenge prevents race-condition lock hijacking
 - **Ciphertext Length Protection**: Padding reduces length-based information leakage
-- **Current Product Modes**: Quick Share / Secure Share; legacy mode retained only for backward compatibility
+- **Current Product Modes**: Quick Share / Secure Share only
 
 ## Core Flow
 
