@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { getSigningKeyPem, toBase64Url } from '../sign-manifest';
 
+const SIGNING_KEY_ENV = 'MANIFEST_SIGNING_KEY' as const;
+
 function generateEd25519PrivateKeyPem(): string {
   const { privateKey } = generateKeyPairSync('ed25519');
   return privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
@@ -56,17 +58,17 @@ describe('toBase64Url', () => {
 });
 
 describe('getSigningKeyPem', () => {
-  const originalEnv = process.env.MANIFEST_SIGNING_KEY;
+  const originalEnv = process.env[SIGNING_KEY_ENV];
 
   beforeEach(() => {
-    delete process.env.MANIFEST_SIGNING_KEY;
+    delete process.env[SIGNING_KEY_ENV];
   });
 
   afterEach(() => {
     if (originalEnv === undefined) {
-      delete process.env.MANIFEST_SIGNING_KEY;
+      delete process.env[SIGNING_KEY_ENV];
     } else {
-      process.env.MANIFEST_SIGNING_KEY = originalEnv;
+      process.env[SIGNING_KEY_ENV] = originalEnv;
     }
   });
 
@@ -75,18 +77,18 @@ describe('getSigningKeyPem', () => {
   });
 
   it('throws when MANIFEST_SIGNING_KEY is empty string', () => {
-    process.env.MANIFEST_SIGNING_KEY = '';
+    process.env[SIGNING_KEY_ENV] = '';
     expect(() => getSigningKeyPem()).toThrow('MANIFEST_SIGNING_KEY is required');
   });
 
   it('throws when MANIFEST_SIGNING_KEY is whitespace only', () => {
-    process.env.MANIFEST_SIGNING_KEY = '   ';
+    process.env[SIGNING_KEY_ENV] = '   ';
     expect(() => getSigningKeyPem()).toThrow('MANIFEST_SIGNING_KEY is required');
   });
 
   it('returns the PEM string when set', () => {
     const pem = '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----';
-    process.env.MANIFEST_SIGNING_KEY = pem;
+    process.env[SIGNING_KEY_ENV] = pem;
     expect(getSigningKeyPem()).toBe(pem);
   });
 });

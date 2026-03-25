@@ -536,8 +536,9 @@ describe('SharePage – navigation + stale state transitions', () => {
 
     await waitFor(() => {
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
-      expect(decryptButton.disabled).toBe(false);
+      expect(decryptButton.disabled).toBe(true);
       expect(decryptButton.textContent).toBe('Decrypt');
+      expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
     });
   });
 
@@ -650,8 +651,9 @@ describe('SharePage – navigation + stale state transitions', () => {
 
     await waitFor(() => {
       const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
-      expect(decryptButton.disabled).toBe(false);
+      expect(decryptButton.disabled).toBe(true);
       expect(decryptButton.textContent).toBe('Decrypt');
+      expect((screen.getByTestId('passphrase-input-field') as HTMLInputElement).value).toBe('');
     });
   });
 

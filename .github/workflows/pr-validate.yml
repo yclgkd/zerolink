@@ -17,10 +17,8 @@ on:
       - ".github/workflows/e2e-full.yml"
       - ".github/workflows/pr-checklist.yml"
       - ".husky/**"
-      - "scripts/__tests__/**"
       - "biome.json"
       - "commitlint.config.js"
-      - "vitest.config.ts"
       - ".gitignore"
       - ".env.example"
   merge_group:

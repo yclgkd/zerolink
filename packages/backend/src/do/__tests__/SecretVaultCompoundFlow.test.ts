@@ -216,6 +216,7 @@ describe('SecretVault compound/delete flow', () => {
       asBase64Url('nonce_update_01'),
       lockParams.receiverPubFpr
     );
+    intent.expireAt = asUnixMs(1_930_000_000_000);
     const intentHash = await computeIntentHash(toRecord(intent));
     const expectedChallenge = await deriveUpdateProofChallengeB64u({
       uuid: lockedRecord.uuid,
@@ -266,6 +267,7 @@ describe('SecretVault compound/delete flow', () => {
     expect(updated.version).toBe(lockedRecord.version + 1);
     expect(updated.cipherBundle).toEqual(intent.cipherBundle);
     expect(updated.deliveredAt).toBe(intent.timestamp);
+    expect(updated.expiresAt).toBe(intent.expireAt);
     expect(updated.updateDeliveryProof).toEqual({
       adminMode: 'webauthn',
       meta: {
@@ -285,6 +287,51 @@ describe('SecretVault compound/delete flow', () => {
     expect(nonceIndexKey).toBe(createNonceIndexKey(expectedNonceExpiry, intent.nonce));
     expect(consumedChallenge.consumedAt).toBeDefined();
     expect(getAlarm()).toBe(Number(expectedNonceExpiry));
+  });
+
+  it('rejects update intent when expireAt is a past timestamp', async () => {
+    const now = 1_730_001_100_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = {
+      ...createUpdateIntent(
+        lockedRecord.uuid,
+        lockedRecord.version,
+        asUnixMs(now + 1_000),
+        asBase64Url('nonce_past_expire'),
+        lockParams.receiverPubFpr
+      ),
+      expireAt: asUnixMs(1),
+    };
+    const intentHash = await computeIntentHash(toRecord(intent));
+    const assertionFixture = await createMockAssertion({
+      credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: await deriveUpdateProofChallengeB64u({ uuid: lockedRecord.uuid, intentHash }),
+      signCount: 5,
+    });
+
+    snapshot.set(CHANNEL_RECORD_KEY, {
+      ...lockedRecord,
+      adminCredential: {
+        ...lockedRecord.adminCredential,
+        publicKey: assertionFixture.publicKeyCose,
+        signCount: 3,
+      },
+    });
+
+    await expect(
+      vault.commitCompound(
+        { uuid: lockedRecord.uuid, assertion: assertionFixture.assertion, intentHash, intent },
+        now + 1_000
+      )
+    ).rejects.toMatchObject({ code: 'TIMESTAMP_OUT_OF_RANGE' });
   });
 
   it('returns decrypt payload with cipherVersion derived from the delivered record version', async () => {

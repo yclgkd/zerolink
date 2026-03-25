@@ -32,6 +32,7 @@ export interface CommitDeliveryParams {
   cipherBundle: CipherBundle;
   updateDeliveryProof?: StoredUpdateDeliveryProof;
   deliveredAt: UnixMs;
+  expiresAt?: UnixMs;
 }
 
 export interface CommitLockChallengeParams {

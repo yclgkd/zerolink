@@ -51,6 +51,37 @@ describe('App shell routes rendering', () => {
       vi.unstubAllGlobals();
     });
 
+    it('keeps the banner dismissible when sessionStorage writes throw', async () => {
+      const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+      const storageMock = {
+        getItem: vi.fn().mockReturnValue(null),
+        setItem: vi.fn(() => {
+          throw new Error('sessionStorage disabled');
+        }),
+      } as unknown as Storage;
+
+      Object.defineProperty(window, 'sessionStorage', {
+        configurable: true,
+        get: () => storageMock,
+      });
+
+      try {
+        vi.stubGlobal('navigator', { ...navigator, userAgent: IN_APP_UA });
+        renderFrom('/');
+
+        expect(await screen.findByTestId('inapp-browser-warning')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('inapp-browser-warning-dismiss'));
+
+        expect(screen.queryByTestId('inapp-browser-warning')).toBeNull();
+        expect(storageMock.setItem).toHaveBeenCalledWith(DISMISSED_KEY, '1');
+      } finally {
+        vi.unstubAllGlobals();
+        if (originalDescriptor) {
+          Object.defineProperty(window, 'sessionStorage', originalDescriptor);
+        }
+      }
+    });
+
     it('does not show the banner when sessionStorage already has the dismissed key', async () => {
       sessionStorage.setItem(DISMISSED_KEY, '1');
       vi.stubGlobal('navigator', { ...navigator, userAgent: IN_APP_UA });

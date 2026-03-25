@@ -38,6 +38,43 @@ describe('SecretVaultStateMachine', () => {
     expect(delivered.state).toBe(CHANNEL_STATE.DELIVERED);
     expect(delivered.version).toBe(1);
     expect(delivered.cipherBundle).toEqual(createCommitDeliveryParams().cipherBundle);
+    expect(delivered.expiresAt).toBe(locked.expiresAt);
+  });
+
+  it('updates expiresAt when a delivery intent carries an explicit override', () => {
+    const lockParams = createCommitLockParams();
+    const locked = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const nextExpiresAt = asUnixMs(1_730_000_900_000);
+
+    const delivered = new SecretVaultStateMachine(locked).commitDelivery({
+      ...createCommitDeliveryParams(),
+      expiresAt: nextExpiresAt,
+    });
+
+    expect(delivered.expiresAt).toBe(nextExpiresAt);
+  });
+
+  it('restores default expiresAt on delivered-to-delivered when expiresAt is passed explicitly', () => {
+    const lockParams = createCommitLockParams();
+    const locked = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const overrideExpiry = asUnixMs(1_730_000_900_000);
+
+    const firstDelivered = new SecretVaultStateMachine(locked).commitDelivery({
+      ...createCommitDeliveryParams(),
+      expiresAt: overrideExpiry,
+    });
+    expect(firstDelivered.expiresAt).toBe(overrideExpiry);
+
+    const defaultExpiry = asUnixMs(firstDelivered.createdAt + firstDelivered.ttl);
+    const secondDelivered = new SecretVaultStateMachine(firstDelivered).commitDelivery({
+      ...createCommitDeliveryParams(),
+      expiresAt: defaultExpiry,
+    });
+    expect(secondDelivered.expiresAt).toBe(defaultExpiry);
   });
 
   it('supports delivered to delivered update transition and increments version again', () => {

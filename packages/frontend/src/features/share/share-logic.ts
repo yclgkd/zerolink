@@ -738,6 +738,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
 
     setDeliveredAt(result.data.deliveredAt);
     setCipherVersion(result.data.cipherVersion);
+    setPassphrase('');
     clearDecryptError();
   }
 

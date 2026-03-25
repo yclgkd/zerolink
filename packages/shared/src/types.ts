@@ -261,7 +261,7 @@ export interface SafetyCodeDisplay {
 /**
  * Supported authenticator transports.
  */
-export type AuthenticatorTransport = 'usb' | 'nfc' | 'ble' | 'internal' | 'hybrid';
+export type AuthenticatorTransport = 'usb' | 'nfc' | 'ble' | 'smart-card' | 'internal' | 'hybrid';
 
 /**
  * WebAuthn credential record persisted by the Durable Object.

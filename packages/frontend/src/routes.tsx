@@ -47,17 +47,55 @@ function isInAppBrowser(): boolean {
   return false;
 }
 
+function getSessionStorage(): Storage | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readSessionStorage(key: string): string | null {
+  const storage = getSessionStorage();
+  if (!storage) {
+    return null;
+  }
+
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionStorage(key: string, value: string): void {
+  const storage = getSessionStorage();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // Ignore storage failures and keep the UI responsive in restricted WebViews/private modes.
+  }
+}
+
 function AppShellLayout(): ReactElement {
   const { t } = useTranslation();
   const location = useLocation();
   const isTrustRoute = location.pathname === `/${TRUST_PAGE_PATH}`;
   const trustRouteState = createTrustRouteState(location);
   const [showInAppWarning, setShowInAppWarning] = useState(
-    () => isInAppBrowser() && sessionStorage.getItem(IN_APP_BROWSER_DISMISSED_KEY) !== '1'
+    () => isInAppBrowser() && readSessionStorage(IN_APP_BROWSER_DISMISSED_KEY) !== '1'
   );
 
   const handleDismissInAppWarning = () => {
-    sessionStorage.setItem(IN_APP_BROWSER_DISMISSED_KEY, '1');
+    writeSessionStorage(IN_APP_BROWSER_DISMISSED_KEY, '1');
     setShowInAppWarning(false);
   };
 

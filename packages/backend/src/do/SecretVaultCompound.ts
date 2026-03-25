@@ -452,10 +452,21 @@ export async function commitCompoundInternal(
       return;
     }
 
+    if (intent.expireAt !== null && intent.expireAt <= now) {
+      throw new StateTransitionError(
+        'TIMESTAMP_OUT_OF_RANGE',
+        'expireAt must be a future timestamp'
+      );
+    }
+
+    const deliveryExpiresAt =
+      intent.expireAt !== null ? intent.expireAt : asUnixMs(record.createdAt + record.ttl);
+
     const nextRecord = new SecretVaultStateMachine(record).commitDelivery({
       cipherBundle: intent.cipherBundle,
       ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
       deliveredAt: intent.timestamp,
+      expiresAt: deliveryExpiresAt,
     });
     const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
     const nonceRecord: NonceRecord = {
