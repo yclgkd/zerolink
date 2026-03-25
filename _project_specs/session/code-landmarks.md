@@ -54,7 +54,7 @@ UPDATE WHEN:
 | `biome.json` | Lint/format config |
 | `pnpm-workspace.yaml` | Monorepo workspace definition |
 | `packages/backend/src/security-headers.ts` | Worker-applied cache + security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
-| `.github/workflows/pr-validate.yml` | PR CI gates: root/workspace typecheck, root/workspace unit tests, frontend build, and verification Playwright E2E on `pull_request` / `merge_group` |
+| `.github/workflows/pr-validate.yml` | PR CI gates: root/workspace typecheck, root/workspace unit tests, frontend build on `pull_request` / `merge_group` (E2E suites run in `e2e-full.yml` nightly/manual only — PR #184 free-tier budget) |
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |

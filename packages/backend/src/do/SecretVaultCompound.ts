@@ -459,11 +459,14 @@ export async function commitCompoundInternal(
       );
     }
 
+    const deliveryExpiresAt =
+      intent.expireAt !== null ? intent.expireAt : asUnixMs(record.createdAt + record.ttl);
+
     const nextRecord = new SecretVaultStateMachine(record).commitDelivery({
       cipherBundle: intent.cipherBundle,
       ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
       deliveredAt: intent.timestamp,
-      ...(intent.expireAt !== null ? { expiresAt: intent.expireAt } : {}),
+      expiresAt: deliveryExpiresAt,
     });
     const nonceExpiresAt = asUnixMs(now + NONCE_TTL_MS);
     const nonceRecord: NonceRecord = {
