@@ -10,6 +10,8 @@
  */
 import { expect, test } from '@playwright/test';
 
+import { buildSignedManifestForPreview } from './support/verification-fixtures';
+
 // A minimal valid manifest JSON (signature check comes after parsing).
 const VALID_MANIFEST_JSON = JSON.stringify({
   version: '0.0.0-test',
@@ -25,6 +27,43 @@ const VALID_MANIFEST_JSON = JSON.stringify({
 const INVALID_SIGNATURE = 'aW52YWxpZHNpZ25hdHVyZXBhZA';
 
 test.describe('release verification gate', () => {
+  test('loads the app when manifest and signature are valid', async ({ page }) => {
+    const baseUrl = 'http://127.0.0.1:4173';
+    const fixtures = await buildSignedManifestForPreview(baseUrl);
+
+    await page.route('**/manifest.json', (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: fixtures.manifestJson,
+      })
+    );
+    await page.route('**/manifest.sig', (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+        body: fixtures.signature,
+      })
+    );
+    await page.route('**/manifest-hash.txt', (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+        body: fixtures.manifestHash,
+      })
+    );
+
+    await page.goto('/');
+
+    // The verification gate should pass and the React app shell should mount.
+    const appShell = page.getByTestId('app-shell');
+    await expect(appShell).toBeVisible({ timeout: 30_000 });
+
+    // The gate overlay should not remain visible.
+    const gate = page.getByTestId('release-verification-gate');
+    await expect(gate).not.toBeVisible();
+  });
+
   test('shows Verification Unavailable when manifest.json cannot be fetched', async ({ page }) => {
     await page.route('**/manifest.json', (route) => route.fulfill({ status: 404 }));
 
