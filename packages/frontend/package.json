@@ -7,7 +7,7 @@
     "build": "tsc && vite build",
     "build:verification": "tsc && VITE_RELEASE_VERIFICATION_REQUIRED=true vite build --outDir dist-verification",
     "build:e2e": "vite build",
-    "build:verification:e2e": "VITE_E2E_MANIFEST_PUBLIC_KEY_PEM=\"$(cat e2e/support/e2e-test-signing.pub)\" VITE_RELEASE_VERIFICATION_REQUIRED=true vite build --outDir dist-verification",
+    "build:verification:e2e": "VITE_RELEASE_VERIFICATION_REQUIRED=true vite build --config vite.config.e2e-verification.ts --outDir dist-verification",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "pnpm test:e2e:mock && pnpm test:e2e:realtime",

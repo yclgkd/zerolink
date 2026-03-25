@@ -34,13 +34,23 @@ export interface VerificationFixtures {
  * Builds a cryptographically valid manifest + signature for the preview build.
  *
  * 1. Fetches the HTML from the preview server to discover the entry script path
- * 2. Fetches every referenced asset to compute real SHA-256 hashes
+ * 2. Fetches the entry script asset to compute its real SHA-256 hash
  * 3. Constructs a ReleaseManifest JSON and signs it with the test private key
  */
 export async function buildSignedManifestForPreview(
   baseUrl: string
 ): Promise<VerificationFixtures> {
-  const htmlResponse = await fetch(baseUrl);
+  let htmlResponse: Response;
+  try {
+    htmlResponse = await fetch(baseUrl);
+  } catch (error) {
+    throw new Error(
+      `Failed to fetch HTML from ${baseUrl} — is the preview server running? (${error instanceof Error ? error.message : String(error)})`
+    );
+  }
+  if (!htmlResponse.ok) {
+    throw new Error(`Preview server returned HTTP ${htmlResponse.status} for ${baseUrl}`);
+  }
   const html = await htmlResponse.text();
 
   // Extract the entry script src from <script type="module" ...src="...">
@@ -52,7 +62,11 @@ export async function buildSignedManifestForPreview(
   const entryAssetPath = entryScriptSrc.startsWith('/') ? entryScriptSrc.slice(1) : entryScriptSrc;
 
   // Fetch the entry script to get its real content hash
-  const entryResponse = await fetch(new URL(entryScriptSrc, baseUrl).href);
+  const entryUrl = new URL(entryScriptSrc, baseUrl).href;
+  const entryResponse = await fetch(entryUrl);
+  if (!entryResponse.ok) {
+    throw new Error(`Failed to fetch entry script at ${entryUrl} — HTTP ${entryResponse.status}`);
+  }
   const entryBytes = Buffer.from(await entryResponse.arrayBuffer());
   const entryHash = sha256Hex(entryBytes);
 
