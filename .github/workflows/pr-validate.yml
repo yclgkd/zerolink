@@ -13,6 +13,8 @@ on:
       - ".agents/**"
       - ".claude/**"
       - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/e2e-full.yml"
       - ".github/workflows/pr-checklist.yml"
       - ".husky/**"
       - "biome.json"
