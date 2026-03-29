@@ -4,6 +4,7 @@ import 'fake-indexeddb/auto';
 
 import {
   type AttestationJSON,
+  CHANNEL_TTL_MS,
   type CreateBeginResponse,
   computeSenderAuthFingerprintFromAttestation,
   SECURITY_PROFILE,
@@ -85,6 +86,7 @@ describe('crypto orchestrator – createChannel', () => {
     const result = await orchestrator.createChannel({
       uuid: VALID_UUID_BRANDED,
       profile: SECURITY_PROFILE.SECURE,
+      ttl: CHANNEL_TTL_MS.ONE_DAY,
     });
 
     expect(result.ok).toBe(true);
@@ -99,6 +101,9 @@ describe('crypto orchestrator – createChannel', () => {
     expect(senderAuthFpr).toBe(VALID_SENDER_AUTH_FPR);
     expect(result.data.lockKeyB64u).toMatch(/^[A-Za-z0-9_-]+$/u);
     expect(vi.mocked(apiClient.createBegin)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiClient.createBegin)).toHaveBeenCalledWith(
+      expect.objectContaining({ ttl: CHANNEL_TTL_MS.ONE_DAY })
+    );
     expect(vi.mocked(apiClient.createFinish)).toHaveBeenCalledTimes(1);
     expect(useCreateStore.getState().createBegin.status).toBe('success');
     expect(useCreateStore.getState().createFinish.status).toBe('success');

@@ -461,6 +461,7 @@ export interface CreateBeginRequest {
   uuid: UUID;
   timestamp: UnixMs;
   securityProfile: SecurityProfile;
+  ttl?: ChannelTtlMs;
 }
 
 export interface CreateBeginResponse {

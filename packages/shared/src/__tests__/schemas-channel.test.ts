@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHANNEL_TTL_MS } from '../constants.ts';
 
 import {
   CompoundChallengeSchema,
@@ -82,8 +83,19 @@ describe('schemas - channel', () => {
         uuid: uuid21(),
         timestamp: 1_730_000_000_000,
         securityProfile: 'quick',
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
       });
       expect(result.securityProfile).toBe('quick');
+      expect(result.ttl).toBe(CHANNEL_TTL_MS.ONE_DAY);
+    });
+
+    it('defaults ttl to 1 hour when omitted', () => {
+      const result = CreateBeginRequestSchema.parse({
+        uuid: uuid21(),
+        timestamp: 1_730_000_000_000,
+        securityProfile: 'quick',
+      });
+      expect(result.ttl).toBe(CHANNEL_TTL_MS.ONE_HOUR);
     });
 
     it('rejects unknown securityProfile', () => {
@@ -102,6 +114,17 @@ describe('schemas - channel', () => {
           uuid: 'short',
           timestamp: 1000,
           securityProfile: 'quick',
+        })
+      ).toThrow();
+    });
+
+    it('rejects unsupported ttl values', () => {
+      expect(() =>
+        CreateBeginRequestSchema.parse({
+          uuid: uuid21(),
+          timestamp: 1000,
+          securityProfile: 'quick',
+          ttl: 9_999_999,
         })
       ).toThrow();
     });

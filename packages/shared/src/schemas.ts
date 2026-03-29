@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   AES_GCM,
   CHANNEL_STATE,
+  CHANNEL_TTL_MS,
   PBKDF2_ITERATIONS,
   SAFETY_CODE,
   SECURITY_PROFILE,
@@ -338,6 +339,7 @@ export const CreateBeginRequestSchema = z.object({
   uuid: UUIDSchema,
   timestamp: UnixMsSchema,
   securityProfile: SecurityProfileSchema,
+  ttl: ChannelTtlMsSchema.default(CHANNEL_TTL_MS.ONE_HOUR),
 });
 
 export const CreateBeginResponseSchema = z.object({

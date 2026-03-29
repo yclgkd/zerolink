@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHANNEL_TTL_MS } from '../constants.ts';
 
 import {
   AdminModeSchema,
@@ -129,7 +130,11 @@ describe('schemas - primitives', () => {
   });
 
   describe('ChannelTtlMsSchema', () => {
-    it.each([3_600_000, 86_400_000, 604_800_000])('accepts TTL %d', (ttl) => {
+    it.each([
+      CHANNEL_TTL_MS.ONE_HOUR,
+      CHANNEL_TTL_MS.ONE_DAY,
+      CHANNEL_TTL_MS.SEVEN_DAYS,
+    ])('accepts TTL %d', (ttl) => {
       expect(ChannelTtlMsSchema.parse(ttl)).toBe(ttl);
     });
 

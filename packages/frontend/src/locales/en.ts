@@ -38,6 +38,11 @@ const en = {
     passwordPanelTitle: 'Set a Quick Share Password',
     passwordPanelBody:
       'This password protects your channel management key. Choose something strong — it cannot be recovered if lost.',
+    expiryTitle: 'Channel expiry',
+    expiryDescription: 'Choose how long this channel stays available after creation.',
+    ttlOneHour: '1 hour',
+    ttlOneDay: '24 hours',
+    ttlSevenDays: '7 days',
     passwordLabel: 'Channel password',
     passwordPlaceholder: 'Enter a strong password',
     submitButton: 'Create Channel',
@@ -51,7 +56,8 @@ const en = {
     shareLinkWarningBody:
       'Save it now. After you leave this page, ZeroLink cannot recover it. If you lose it, create a new channel.',
     manageLinkLabel: 'Manage link — keep this private',
-    expiryHint: 'Channel expires in 1 hour. Coordinate with the receiver before it disappears.',
+    expiryHint:
+      'Channel expires in {{duration}}. Coordinate with the receiver before it disappears.',
     copyButton: 'Copy',
     copiedButton: 'Copied',
     errorProfileBlocked: 'Secure Share requires WebAuthn support in your environment.',
@@ -222,7 +228,7 @@ const en = {
       'The receiver device keeps a wrapped receiver private key in IndexedDB for that channel. Plaintext appears only on the local device after decrypt. Channel status may surface the receiver fingerprint to the sender, but the receiver page should show a Safety Code only after this device proves it holds the matching local receiver key.',
     section6Title: 'Delete, expiry, local burn, and Verified Release',
     section6Body:
-      'Channels expire after 1 hour. Sender delete purges ciphertext and leaves a tombstone to prevent revival. Local burn removes plaintext from this device only — the channel stays active. Verified Release means the build passed signed release verification; absence means it did not.',
+      'Channels expire after the selected TTL, up to 7 days. Sender delete purges ciphertext and leaves a tombstone to prevent revival. Local burn removes plaintext from this device only — the channel stays active. Verified Release means the build passed signed release verification; absence means it did not.',
     backButton: 'Back',
     createButton: 'Create Secure Channel',
   },
