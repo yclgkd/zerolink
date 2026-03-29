@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHANNEL_TTL_MS } from '../constants.ts';
 
 import {
   CompoundChallengeSchema,
@@ -82,10 +83,10 @@ describe('schemas - channel', () => {
         uuid: uuid21(),
         timestamp: 1_730_000_000_000,
         securityProfile: 'quick',
-        ttl: 86_400_000,
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
       });
       expect(result.securityProfile).toBe('quick');
-      expect(result.ttl).toBe(86_400_000);
+      expect(result.ttl).toBe(CHANNEL_TTL_MS.ONE_DAY);
     });
 
     it('defaults ttl to 1 hour when omitted', () => {
@@ -94,7 +95,7 @@ describe('schemas - channel', () => {
         timestamp: 1_730_000_000_000,
         securityProfile: 'quick',
       });
-      expect(result.ttl).toBe(3_600_000);
+      expect(result.ttl).toBe(CHANNEL_TTL_MS.ONE_HOUR);
     });
 
     it('rejects unknown securityProfile', () => {

@@ -133,13 +133,18 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
-    expect(screen.getByTestId('create-ttl-one-hour').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('create-ttl-one-day').getAttribute('aria-pressed')).toBe('false');
+    const oneHourInput = screen.getByTestId('create-ttl-one-hour') as HTMLInputElement;
+    const oneDayInput = screen.getByTestId('create-ttl-one-day') as HTMLInputElement;
+    const sevenDaysInput = screen.getByTestId('create-ttl-seven-days') as HTMLInputElement;
 
-    fireEvent.click(screen.getByTestId('create-ttl-seven-days'));
+    expect(screen.getByRole('radiogroup')).toBeTruthy();
+    expect(oneHourInput.checked).toBe(true);
+    expect(oneDayInput.checked).toBe(false);
 
-    expect(screen.getByTestId('create-ttl-one-hour').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('create-ttl-seven-days').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(sevenDaysInput);
+
+    expect(oneHourInput.checked).toBe(false);
+    expect(sevenDaysInput.checked).toBe(true);
   });
 
   it('hides password panel when Secure mode is selected', () => {

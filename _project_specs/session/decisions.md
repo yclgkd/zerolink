@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Add a create-time preset selector, keep 1 hour as the default, and preserve backward compatibility by defaulting omitted API TTL input to 1 hour
 **Reasoning**: This unlocks common async and cross-timezone handoff cases without adding calendar UI complexity or weakening the short-lived-secret product posture
 **Trade-offs**: Trust and success-state copy can no longer describe expiry as a single global duration, and longer-lived channels slightly extend the window in which undeleted ciphertext remains retrievable
+**Follow-up (2026-03-29, PR197 review)**: Split `CreatePage` into focused create-page modules so the route component no longer carries the full flow implementation, switched the TTL preset selector to `radiogroup`/`radio` semantics for better a11y, made `getChannelTtlLabel()` use an exhaustive TTL check, and replaced shared-schema TTL millisecond literals in tests with `CHANNEL_TTL_MS` constants.
 
 ## [2026-03-24] Align secure WebAuthn semantics and default validation coverage with the two-profile product
 
