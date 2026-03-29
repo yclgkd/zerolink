@@ -36,7 +36,7 @@ const zh: Translation = {
     passwordPanelTitle: '设置快速分享密码',
     passwordPanelBody: '此密码保护你的频道管理密钥。请选择高强度密码 — 丢失后无法恢复。',
     expiryTitle: '频道有效期',
-    expiryDescription: '选择频道创建后可保持可用的时长。',
+    expiryDescription: '选择频道多久后过期。',
     ttlOneHour: '1 小时',
     ttlOneDay: '24 小时',
     ttlSevenDays: '7 天',
