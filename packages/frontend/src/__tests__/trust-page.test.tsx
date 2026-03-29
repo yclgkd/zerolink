@@ -35,7 +35,7 @@ describe('TrustPage', () => {
     expect(pageText).toContain('ciphertext for the receiver to fetch');
     expect(pageText).toContain('wrapped admin key');
     expect(pageText).toContain('IndexedDB');
-    expect(pageText).toContain('expire after 1 hour');
+    expect(pageText).toContain('selected TTL, up to 7 days');
     expect(pageText).toContain('tombstone');
     expect(pageText).toContain('Local burn removes plaintext from this device only');
     expect(pageText).toContain('Verified Release means the build passed');

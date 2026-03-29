@@ -1,5 +1,6 @@
 import type {
   Base64Url,
+  ChannelTtlMs,
   CipherBundle,
   CompoundBeginResponse,
   DeleteIntent,
@@ -83,6 +84,7 @@ export interface CryptoOrchestratorDeps {
 export interface CreateChannelInput {
   uuid: string;
   profile: SecurityProfile;
+  ttl?: ChannelTtlMs;
   lockSecretB64u?: string;
   useCompatibilityMode?: boolean;
   /** Required when useCompatibilityMode is true. Used as Argon2id passphrase to wrap the softkey private key. Must be a user-supplied secret, never the channel UUID. */

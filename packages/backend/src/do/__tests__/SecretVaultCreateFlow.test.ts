@@ -1,5 +1,5 @@
 import type { AttestationJSON, ChannelRecord, StoredCredential } from '@zerolink/shared';
-import { CHANNEL_STATE, SECURITY_PROFILE } from '@zerolink/shared';
+import { CHANNEL_STATE, CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { verifyAttestation } from '../../crypto/attestation.ts';
@@ -46,8 +46,14 @@ describe('SecretVault create flow', () => {
     const { state, snapshot } = createMockState();
     const vault = new SecretVault(state, env);
     const uuid = asUuid('new-channel-uuid-12345');
+    const now = 1_730_000_000_000;
 
-    const options = (await vault.beginCreate(uuid, SECURITY_PROFILE.SECURE)) as {
+    const options = (await vault.beginCreate(
+      uuid,
+      SECURITY_PROFILE.SECURE,
+      now,
+      CHANNEL_TTL_MS.ONE_DAY
+    )) as {
       challenge: unknown;
       user: { id: unknown };
       attestation: unknown;
@@ -57,6 +63,8 @@ describe('SecretVault create flow', () => {
     expect(record.uuid).toBe(uuid);
     expect(record.state).toBe(CHANNEL_STATE.WAITING);
     expect(record.securityProfile).toBe(SECURITY_PROFILE.SECURE);
+    expect(record.ttl).toBe(CHANNEL_TTL_MS.ONE_DAY);
+    expect(record.expiresAt).toBe(asUnixMs(now + CHANNEL_TTL_MS.ONE_DAY));
     expect(options.challenge).toBeDefined();
     expect(options.user.id).toBeDefined();
     // attestation is always 'none' now; secure profile does not enforce direct attestation

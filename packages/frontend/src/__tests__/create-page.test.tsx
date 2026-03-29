@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { SECURITY_PROFILE } from '@zerolink/shared';
+import { CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -127,6 +127,19 @@ describe('CreatePage integration', () => {
     renderCreatePage();
 
     expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
+  });
+
+  it('defaults to 1 hour TTL and lets the user switch presets', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    expect(screen.getByTestId('create-ttl-one-hour').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('create-ttl-one-day').getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(screen.getByTestId('create-ttl-seven-days'));
+
+    expect(screen.getByTestId('create-ttl-one-hour').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('create-ttl-seven-days').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('hides password panel when Secure mode is selected', () => {
@@ -435,12 +448,28 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
+    fireEvent.click(screen.getByTestId('create-ttl-one-day'));
     fireEvent.click(screen.getByTestId('mode-card-secure'));
     fireEvent.click(screen.getByTestId('create-submit-button'));
 
     const expiryHint = await screen.findByTestId('create-success-expiry-hint');
-    expect(expiryHint.textContent).toContain('Channel expires in 1 hour');
+    expect(expiryHint.textContent).toContain('Channel expires in 24 hours');
     expect(expiryHint.textContent).toContain('Coordinate with the receiver before it disappears.');
+  });
+
+  it('passes selected TTL to the create orchestrator', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('create-ttl-seven-days'));
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(createChannelMock).toHaveBeenCalledWith(
+        expect.objectContaining({ ttl: CHANNEL_TTL_MS.SEVEN_DAYS })
+      );
+    });
   });
 
   it('shows HowItWorks again after clicking Create another', async () => {

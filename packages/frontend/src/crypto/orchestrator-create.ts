@@ -1,6 +1,7 @@
 import type { CredentialCreationOptionsJSON } from '@github/webauthn-json';
 import type { AttestationJSON } from '@zerolink/shared';
 import {
+  CHANNEL_TTL_MS,
   computeSenderAuthFingerprintFromAttestation,
   computeSoftkeyPublicKeyFingerprint,
 } from '@zerolink/shared';
@@ -36,6 +37,7 @@ export async function executeCreateChannel(
     uuid: input.uuid,
     timestamp: deps.now(),
     securityProfile: input.profile,
+    ttl: input.ttl ?? CHANNEL_TTL_MS.ONE_HOUR,
   });
   if (!beginRes.ok) {
     state.failCreateBegin(beginRes.error.code);

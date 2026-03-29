@@ -1,5 +1,7 @@
 import {
   buildManageUrlWithFragment,
+  CHANNEL_TTL_MS,
+  type ChannelTtlMs,
   SECURITY_PROFILE,
   type SecurityProfile,
 } from '@zerolink/shared';
@@ -35,6 +37,25 @@ interface CreatedLinks {
   shareUrlWithFragment: string;
   manageUrl: string;
   isPasswordMode: boolean;
+  ttl: ChannelTtlMs;
+}
+
+const CHANNEL_TTL_OPTIONS = [
+  { value: CHANNEL_TTL_MS.ONE_HOUR, testId: 'create-ttl-one-hour' },
+  { value: CHANNEL_TTL_MS.ONE_DAY, testId: 'create-ttl-one-day' },
+  { value: CHANNEL_TTL_MS.SEVEN_DAYS, testId: 'create-ttl-seven-days' },
+] as const;
+
+function getChannelTtlLabel(t: (key: string) => string, ttl: ChannelTtlMs): string {
+  switch (ttl) {
+    case CHANNEL_TTL_MS.ONE_DAY:
+      return t('create.ttlOneDay');
+    case CHANNEL_TTL_MS.SEVEN_DAYS:
+      return t('create.ttlSevenDays');
+    case CHANNEL_TTL_MS.ONE_HOUR:
+    default:
+      return t('create.ttlOneHour');
+  }
 }
 
 function mapCreateError(code: string): string {
@@ -268,6 +289,47 @@ function QuickSharePasswordPanel({
   );
 }
 
+function ExpirySelector({
+  selected,
+  onSelect,
+}: {
+  selected: ChannelTtlMs;
+  onSelect: (ttl: ChannelTtlMs) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-foreground">{t('create.expiryTitle')}</h3>
+        <p className="text-sm text-muted-foreground">{t('create.expiryDescription')}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {CHANNEL_TTL_OPTIONS.map((option) => {
+          const isSelected = selected === option.value;
+          return (
+            <button
+              aria-pressed={isSelected}
+              className={cn(
+                'rounded-xl border px-4 py-3 text-left transition-all duration-200',
+                'hover:-translate-y-0.5 hover:border-border/60',
+                isSelected
+                  ? 'border-primary/70 bg-primary/5 ring-2 ring-primary/40'
+                  : 'border-border/50 bg-card/60'
+              )}
+              data-testid={option.testId}
+              key={option.value}
+              onClick={() => onSelect(option.value)}
+              type="button"
+            >
+              <p className="font-semibold text-foreground">{getChannelTtlLabel(t, option.value)}</p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ActionFooter({
   onCreate,
   disabled,
@@ -463,7 +525,7 @@ function SuccessSummary({
           url={links.manageUrl}
         />
         <p className="text-xs text-muted-foreground" data-testid="create-success-expiry-hint">
-          {t('create.expiryHint')}
+          {t('create.expiryHint', { duration: getChannelTtlLabel(t, links.ttl) })}
         </p>
       </div>
     </div>
@@ -472,6 +534,7 @@ function SuccessSummary({
 
 interface RunCreateOptions {
   quickPassword: string;
+  ttl: ChannelTtlMs;
   store: CreateStore;
   onError: (message: string) => void;
   onSuccess: (links: CreatedLinks) => void;
@@ -480,6 +543,7 @@ interface RunCreateOptions {
 
 async function runCreate({
   quickPassword,
+  ttl,
   store,
   onError,
   onSuccess,
@@ -494,6 +558,7 @@ async function runCreate({
     result = await cryptoOrchestrator.createChannel({
       uuid: generateChannelUuid(),
       profile: selectedProfile,
+      ttl,
       useCompatibilityMode: selectedProfile === SECURITY_PROFILE.QUICK,
       ...(selectedProfile === SECURITY_PROFILE.QUICK ? { softkeyPassphrase: quickPassword } : {}),
     });
@@ -522,6 +587,7 @@ async function runCreate({
     shareUrlWithFragment: result.data.shareUrlWithFragment,
     manageUrl,
     isPasswordMode: selectedProfile === SECURITY_PROFILE.QUICK,
+    ttl,
   });
   if (selectedProfile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();
 }
@@ -531,6 +597,7 @@ function useCreatePageLogic() {
   const [createdLinks, setCreatedLinks] = useState<CreatedLinks | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [quickPassword, setQuickPassword] = useState('');
+  const [selectedTtl, setSelectedTtl] = useState<ChannelTtlMs>(CHANNEL_TTL_MS.ONE_HOUR);
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
@@ -561,6 +628,7 @@ function useCreatePageLogic() {
     clearLocalFeedback();
     void runCreate({
       quickPassword,
+      ttl: selectedTtl,
       store,
       onError: setSubmitError,
       onSuccess: setCreatedLinks,
@@ -577,10 +645,15 @@ function useCreatePageLogic() {
     createdLinks,
     submitError,
     quickPassword,
+    selectedTtl,
     isQuickMode,
     isSubmitting,
     canSubmit,
     handleSelectProfile,
+    handleSelectTtl: (ttl: ChannelTtlMs) => {
+      setSelectedTtl(ttl);
+      if (submitError) setSubmitError(null);
+    },
     handleCreate,
     handleCreateAnother,
     handleQuickPasswordChange: (value: string) => {
@@ -623,6 +696,7 @@ export function CreatePage(): ReactElement {
               selected={logic.state.selectedProfile}
               webAuthnSupported={logic.state.webAuthnSupported}
             />
+            <ExpirySelector onSelect={logic.handleSelectTtl} selected={logic.selectedTtl} />
             <TrustModelHint />
             {logic.isQuickMode ? (
               <QuickSharePasswordPanel

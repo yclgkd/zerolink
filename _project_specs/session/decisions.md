@@ -679,3 +679,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: URL fragment
 **Reasoning**: Browsers never send fragments to servers (HTTP spec); recipient copies entire URL; zero-knowledge guarantee
 **Trade-offs**: Entire link must be shared intact; no server-side logging of key material (intentional)
+## [2026-03-29] Expose channel TTL as create-time presets
+
+**Decision**: Let senders choose the channel TTL at create time using three presets: 1 hour, 24 hours, or 7 days
+**Context**: The protocol and record model already carried TTL and explicit expiry support, but the create flow hard-coded every new channel to 1 hour and the UI/documentation treated that as a fixed product rule
+**Options Considered**: Keep 1 hour fixed; add free-form custom expiry; add a small preset list
+**Choice**: Add a create-time preset selector, keep 1 hour as the default, and preserve backward compatibility by defaulting omitted API TTL input to 1 hour
+**Reasoning**: This unlocks common async and cross-timezone handoff cases without adding calendar UI complexity or weakening the short-lived-secret product posture
+**Trade-offs**: Trust and success-state copy can no longer describe expiry as a single global duration, and longer-lived channels slightly extend the window in which undeleted ciphertext remains retrievable

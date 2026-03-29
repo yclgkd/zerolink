@@ -82,8 +82,19 @@ describe('schemas - channel', () => {
         uuid: uuid21(),
         timestamp: 1_730_000_000_000,
         securityProfile: 'quick',
+        ttl: 86_400_000,
       });
       expect(result.securityProfile).toBe('quick');
+      expect(result.ttl).toBe(86_400_000);
+    });
+
+    it('defaults ttl to 1 hour when omitted', () => {
+      const result = CreateBeginRequestSchema.parse({
+        uuid: uuid21(),
+        timestamp: 1_730_000_000_000,
+        securityProfile: 'quick',
+      });
+      expect(result.ttl).toBe(3_600_000);
     });
 
     it('rejects unknown securityProfile', () => {
@@ -102,6 +113,17 @@ describe('schemas - channel', () => {
           uuid: 'short',
           timestamp: 1000,
           securityProfile: 'quick',
+        })
+      ).toThrow();
+    });
+
+    it('rejects unsupported ttl values', () => {
+      expect(() =>
+        CreateBeginRequestSchema.parse({
+          uuid: uuid21(),
+          timestamp: 1000,
+          securityProfile: 'quick',
+          ttl: 9_999_999,
         })
       ).toThrow();
     });

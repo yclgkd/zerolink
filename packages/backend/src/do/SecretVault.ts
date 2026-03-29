@@ -265,7 +265,8 @@ export class SecretVault implements VaultContext {
   async beginCreate(
     uuid: string,
     securityProfile: ChannelRecord['securityProfile'],
-    now: number = Date.now()
+    now: number = Date.now(),
+    ttl: ChannelRecord['ttl'] = CHANNEL_TTL_MS.ONE_HOUR
   ): Promise<Record<string, unknown>> {
     return this.ctx.blockConcurrencyWhile(async () => {
       const tombstone = await this.ctx.storage.get<StoredTerminalTombstone>(TERMINAL_TOMBSTONE_KEY);
@@ -284,13 +285,13 @@ export class SecretVault implements VaultContext {
       const cryptoApi = getCryptoApi();
       const challenge = cryptoApi.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
 
-      const expiresAt = asUnixMs(now + CHANNEL_TTL_MS.ONE_HOUR);
+      const expiresAt = asUnixMs(now + ttl);
       const record: ChannelRecord = {
         uuid: uuid as UUID,
         state: CHANNEL_STATE.WAITING,
         createdAt: asUnixMs(now),
         expiresAt,
-        ttl: CHANNEL_TTL_MS.ONE_HOUR,
+        ttl,
         securityProfile,
         adminMode: 'webauthn',
         adminCredential: {
@@ -503,7 +504,12 @@ export class SecretVault implements VaultContext {
     }
 
     try {
-      const creationOptions = await this.beginCreate(parsed.data.uuid, parsed.data.securityProfile);
+      const creationOptions = await this.beginCreate(
+        parsed.data.uuid,
+        parsed.data.securityProfile,
+        Date.now(),
+        parsed.data.ttl
+      );
       return jsonResponse({ ok: true, creationOptions }, 200);
     } catch (error) {
       return mapError(error, { appEnv: this.env.APP_ENV, handler: 'create_begin' });
