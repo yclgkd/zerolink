@@ -37,7 +37,7 @@ const en = {
     trustHintLink: 'Read the trust model',
     passwordPanelTitle: 'Set a Quick Share Password',
     passwordPanelBody:
-      'This password protects your channel management key. Choose something strong — it cannot be recovered if lost.',
+      'This password protects your channel management key. Use 4+ random words or 12+ characters. It cannot be recovered if lost.',
     expiryTitle: 'Channel expiry',
     expiryDescription: 'Choose how long this channel stays available after creation.',
     ttlOneHour: '1 hour',
@@ -262,6 +262,7 @@ const en = {
     defaultPlaceholder: 'Enter passphrase',
     showButton: 'Show passphrase',
     hideButton: 'Hide passphrase',
+    policyHint: 'Use 4+ random words or 12+ characters',
     strengthLabel: 'Passphrase strength',
     weak: 'Weak',
     medium: 'Medium',

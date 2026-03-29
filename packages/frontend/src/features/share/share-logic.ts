@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
+import { getPassphraseValidationError, hasValidPassphrase } from '../../crypto/passphrase-policy';
 import {
   extractLockSecretFromHash,
   extractSenderAuthFprFromHash,
@@ -23,14 +24,14 @@ import { useLockStore } from '../../stores/lock-store';
 import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
 
-export function mapLockError(code: string): string {
+export function mapLockError(code: string, message?: string): string {
   switch (code) {
     case 'NOT_FOUND':
       return 'This channel is no longer available.';
     case 'INVALID_LOCK_SECRET':
       return 'This share link is missing or has an invalid lock secret (#k=...).';
     case 'PASSPHRASE_REQUIRED':
-      return 'Passphrase is required before locking.';
+      return message ?? 'Passphrase is required before locking.';
     case 'MISSING_LOCK_CHALLENGE':
       return 'Unable to fetch lock challenge. Please retry.';
     case 'KEY_STORAGE_ERROR':
@@ -47,12 +48,12 @@ export function mapLockError(code: string): string {
   }
 }
 
-export function mapDecryptError(code: string): string {
+export function mapDecryptError(code: string, message?: string): string {
   switch (code) {
     case 'NOT_FOUND':
       return 'This channel is no longer available.';
     case 'PASSPHRASE_REQUIRED':
-      return 'Passphrase is required to decrypt.';
+      return message ?? 'Passphrase is required to decrypt.';
     case 'CHANNEL_NOT_DELIVERED':
       return 'Channel is not delivered yet. Ask sender to deliver first.';
     case 'KEY_STORAGE_ERROR':
@@ -361,6 +362,7 @@ export function useSharePageLockLogic(
   search: string = '',
   hash?: string
 ) {
+  const { t } = useTranslation();
   const store = useLockStore();
   const [lockError, setLockError] = useState<string | null>(null);
   const [isLockPassphraseInvalid, setIsLockPassphraseInvalid] = useState(false);
@@ -440,7 +442,7 @@ export function useSharePageLockLogic(
   const lockPending = isLockSubmitting;
   const canGenerate =
     Boolean(store.uuid) &&
-    store.passphrase.trim().length > 0 &&
+    hasValidPassphrase(store.passphrase) &&
     Boolean(lockSecretB64u) &&
     !lockPending;
 
@@ -449,8 +451,8 @@ export function useSharePageLockLogic(
     setIsLockPassphraseInvalid(false);
   }
 
-  function setLockErrorFromCode(code: string): void {
-    setLockError(mapLockError(code));
+  function setLockErrorFromCode(code: string, message?: string): void {
+    setLockError(mapLockError(code, message));
     setIsLockPassphraseInvalid(isLockPassphraseErrorCode(code));
   }
 
@@ -466,7 +468,12 @@ export function useSharePageLockLogic(
 
     if (!store.uuid) return setLockErrorFromCode('INVALID_REQUEST');
     if (!lockSecretB64u) return setLockErrorFromCode('INVALID_LOCK_SECRET');
-    if (store.passphrase.trim().length === 0) return setLockErrorFromCode('PASSPHRASE_REQUIRED');
+    const passphraseError = getPassphraseValidationError(store.passphrase, t('share.lockLabel'));
+    if (passphraseError) {
+      setLockError(passphraseError);
+      setIsLockPassphraseInvalid(true);
+      return;
+    }
 
     clearLockError();
     setIsLockSubmitting(true);
@@ -488,7 +495,7 @@ export function useSharePageLockLogic(
 
     if (!mountedRef.current) return;
     setIsLockSubmitting(false);
-    if (!result.ok) return setLockErrorFromCode(result.error.code);
+    if (!result.ok) return setLockErrorFromCode(result.error.code, result.error.message);
     clearLockSecretCache('lock-success');
     clearLockError();
   }
@@ -675,7 +682,10 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   }, [enabled]);
 
   const canDecrypt =
-    Boolean(enabled) && Boolean(store.uuid) && passphrase.trim().length > 0 && !isDecryptSubmitting;
+    Boolean(enabled) &&
+    Boolean(store.uuid) &&
+    hasValidPassphrase(passphrase) &&
+    !isDecryptSubmitting;
 
   const canBurn = Boolean(enabled) && Boolean(store.plaintext) && !isDecryptSubmitting;
 
@@ -705,7 +715,12 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     if (!enabled || isDecryptSubmitting || decryptInFlightRef.current) return;
 
     if (!store.uuid) return setDecryptErrorFromCode('INVALID_REQUEST');
-    if (passphrase.trim().length === 0) return setDecryptErrorFromCode('PASSPHRASE_REQUIRED');
+    const passphraseError = getPassphraseValidationError(passphrase, t('share.decryptLabel'));
+    if (passphraseError) {
+      setDecryptError(passphraseError);
+      setIsDecryptPassphraseInvalid(true);
+      return;
+    }
 
     const actionScope = decryptActionScopeRef.current;
     const actionUuid = store.uuid;
@@ -732,7 +747,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     settleDecryptSubmitting(requestId);
     if (!isActiveDecryptContext(actionScope, actionUuid)) return;
     if (!result.ok) {
-      setDecryptErrorFromCode(result.error.code);
+      setDecryptError(mapDecryptError(result.error.code, result.error.message));
+      setIsDecryptPassphraseInvalid(isDecryptPassphraseErrorCode(result.error.code));
       return;
     }
 

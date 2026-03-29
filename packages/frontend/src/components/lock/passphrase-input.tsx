@@ -2,6 +2,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { MAX_PASSPHRASE_LENGTH, normalizePassphrase } from '../../crypto/passphrase-policy';
 import { cn } from '../../lib/utils';
 import {
   getPassphraseStrength,
@@ -31,6 +32,8 @@ export type PassphraseInputProps = {
   ariaInvalid?: boolean | undefined;
   /** ID reference for contextual error/help text. */
   ariaDescribedBy?: string | undefined;
+  /** Optional helper text shown below the input. */
+  helperText?: string | undefined;
 };
 
 function getLabelClass(level: 0 | 1 | 2 | 3): string {
@@ -95,6 +98,7 @@ export function PassphraseInput({
   label,
   ariaInvalid,
   ariaDescribedBy,
+  helperText,
 }: PassphraseInputProps) {
   const { t } = useTranslation();
   const [showPassphrase, setShowPassphrase] = useState(false);
@@ -121,6 +125,13 @@ export function PassphraseInput({
           )}
           data-testid="passphrase-input-field"
           id={resolvedInputId}
+          maxLength={MAX_PASSPHRASE_LENGTH}
+          onBlur={() => {
+            const normalizedValue = normalizePassphrase(value);
+            if (normalizedValue !== value) {
+              onChange(normalizedValue);
+            }
+          }}
           onChange={(event) => onChange(event.target.value)}
           placeholder={resolvedPlaceholder}
           type={showPassphrase ? 'text' : 'password'}
@@ -139,6 +150,8 @@ export function PassphraseInput({
           )}
         </button>
       </div>
+
+      {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
 
       {showStrength && value ? <PassphraseStrengthIndicator strength={strength} /> : null}
     </div>

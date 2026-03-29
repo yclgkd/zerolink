@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-29] Raise Quick Share passphrase policy to 12+ chars with phrase-friendly whitespace rules
+
+**Decision**: Replace the shared 8-character passphrase minimum with a single frontend policy for Quick Share create, receiver lock, sender manage, and receiver decrypt: minimum 12 characters, maximum 128, allow ordinary spaces between words, trim leading/trailing ordinary spaces, and reject tabs, line breaks, NBSP/full-width/special whitespace.
+**Context**: The product currently positions Quick Share as a legitimate security mode, but the old `min=8` rule still encouraged password-style shortcuts and the strength meter rewarded symbol/digit composition over memorable multi-word passphrases. Product direction now prefers phrase-style secrets that users can realistically enter correctly across devices without adding brittle character-class requirements.
+**Options Considered**: Keep the 8-character minimum; raise the minimum and also require digit/letter/symbol classes; tie the minimum length to channel TTL; adopt a longer minimum plus phrase-style guidance without composition rules.
+**Choice**: Use one static policy across all passphrase entry points: `12 <= length <= 128`, allow only ordinary spaces as separators, and surface "Use 4+ random words or 12+ characters" in the create and receiver-lock setup UI. Do not add legacy-compatibility branches because the product has not launched and there is no real-user data to preserve.
+**Reasoning**: This raises the floor meaningfully above trivial 8-character passwords, keeps the rule easy to explain, supports memorable word-based passphrases, and avoids the predictable weak patterns that composition requirements often create.
+**Trade-offs**: Existing local test fixtures and any prelaunch developer-created links that relied on the old 8-character policy must be recreated. Error handling now needs to distinguish missing, too-short, too-long, and invalid-whitespace inputs instead of collapsing everything into a single minimum-length message.
+
 ## [2026-03-29] Expose channel TTL as create-time presets
 
 **Decision**: Let senders choose the channel TTL at create time using three presets: 1 hour, 24 hours, or 7 days

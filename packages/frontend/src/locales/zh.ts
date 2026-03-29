@@ -34,7 +34,8 @@ const zh: Translation = {
     trustHintBody: '想了解哪些内容留在本地、发送方能做什么、频道数据何时消失？',
     trustHintLink: '阅读信任模型',
     passwordPanelTitle: '设置快速分享密码',
-    passwordPanelBody: '此密码保护你的频道管理密钥。请选择高强度密码 — 丢失后无法恢复。',
+    passwordPanelBody:
+      '此密码保护你的频道管理密钥。请使用 4 个以上随机单词，或至少 12 个字符。丢失后无法恢复。',
     expiryTitle: '频道有效期',
     expiryDescription: '选择频道多久后过期。',
     ttlOneHour: '1 小时',
@@ -242,6 +243,7 @@ const zh: Translation = {
     defaultPlaceholder: '输入密码短语',
     showButton: '显示密码短语',
     hideButton: '隐藏密码短语',
+    policyHint: '使用 4 个以上随机单词，或至少 12 个字符',
     strengthLabel: '密码短语强度',
     weak: '弱',
     medium: '中',

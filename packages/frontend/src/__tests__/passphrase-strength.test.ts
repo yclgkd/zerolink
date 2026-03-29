@@ -17,15 +17,15 @@ describe('getPassphraseStrength', () => {
     });
   });
 
-  it('returns medium for mixed case + digits passphrase', () => {
-    expect(getPassphraseStrength('Password12')).toEqual({
+  it('returns medium for a four-word passphrase', () => {
+    expect(getPassphraseStrength('correct horse battery staple')).toEqual({
       label: 'Medium',
       level: 2,
     });
   });
 
-  it('returns strong for long complex passphrase', () => {
-    expect(getPassphraseStrength('Strong#Pass1234XYZ')).toEqual({
+  it('returns strong for a longer multi-word passphrase', () => {
+    expect(getPassphraseStrength('correct horse battery staple winter lantern')).toEqual({
       label: 'Strong',
       level: 3,
     });

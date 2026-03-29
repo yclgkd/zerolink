@@ -1,3 +1,5 @@
+import { normalizePassphrase } from '../../crypto/passphrase-policy';
+
 /**
  * Human-readable labels for passphrase strength levels.
  */
@@ -13,13 +15,24 @@ export type PassphraseStrength = {
 };
 
 function getScore(passphrase: string): number {
+  const normalized = normalizePassphrase(passphrase);
+  const words = normalized.split(/ +/u).filter(Boolean);
+  const collapsed = normalized.replace(/ /gu, '');
   let score = 0;
-  if (passphrase.length >= 8) score += 1;
-  if (passphrase.length >= 12) score += 1;
-  if (passphrase.length >= 16) score += 1;
-  if (/[a-z]/.test(passphrase) && /[A-Z]/.test(passphrase)) score += 1;
-  if (/[0-9]/.test(passphrase)) score += 1;
-  if (/[^a-zA-Z0-9]/.test(passphrase)) score += 1;
+
+  if (normalized.length >= 12) score += 1;
+  if (normalized.length >= 16) score += 1;
+  if (normalized.length >= 24) score += 1;
+  if (words.length >= 4) score += 1;
+  if (words.length >= 6 || normalized.length >= 32) score += 1;
+
+  const uniqueWords = new Set(words.map((word) => word.toLowerCase()));
+  if (words.length >= 2 && uniqueWords.size === 1) {
+    score = Math.max(1, score - 2);
+  } else if (/(.)\1{4,}/u.test(collapsed)) {
+    score = Math.max(1, score - 1);
+  }
+
   return score;
 }
 

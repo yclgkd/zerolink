@@ -12,6 +12,7 @@ import {
   asUuid,
   ensurePassphrase,
   mapWebAuthnError,
+  normalizePassphrase,
   randomBase64Url,
   signChallengeWithWrappedKey,
   toError,
@@ -69,13 +70,18 @@ export async function executeDeleteChannel(
 
   if (deleteIsPasswordMode) {
     const softkeyPassphrase = input.softkeyPassphrase ?? '';
-    const passphraseError = ensurePassphrase(softkeyPassphrase, 'delete.softkey-passphrase');
+    const passphraseError = ensurePassphrase(
+      softkeyPassphrase,
+      'delete.softkey-passphrase',
+      'Channel password'
+    );
     if (passphraseError) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('PASSPHRASE_REQUIRED');
       });
       return passphraseError;
     }
+    const normalizedSoftkeyPassphrase = normalizePassphrase(softkeyPassphrase);
     if (!input.wrappedPrivateKey) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('CRYPTO_ERROR');
@@ -85,7 +91,7 @@ export async function executeDeleteChannel(
     try {
       softkeySignature = await signChallengeWithWrappedKey(
         input.wrappedPrivateKey,
-        softkeyPassphrase,
+        normalizedSoftkeyPassphrase,
         expectedChallenge as Base64Url,
         deps.kdfParams
       );

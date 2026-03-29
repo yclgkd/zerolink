@@ -1,8 +1,11 @@
 import type { ChannelState } from '@zerolink/shared';
 import { CHANNEL_STATE } from '@zerolink/shared';
-import { getPassphraseLengthMessage, validatePassphrase } from '../../crypto/passphrase-policy';
+import {
+  getPassphraseValidationError as getPassphrasePolicyError,
+  getPassphraseValidationMessage,
+} from '../../crypto/passphrase-policy';
 
-export function mapActionError(code: string): string {
+export function mapActionError(code: string, message?: string): string {
   switch (code) {
     case 'NOT_FOUND':
       return 'This channel is no longer available.';
@@ -15,7 +18,7 @@ export function mapActionError(code: string): string {
     case 'MISSING_RECEIVER_IDENTITY':
       return 'Receiver identity is unavailable. Ask receiver to lock again.';
     case 'PASSPHRASE_REQUIRED':
-      return getPassphraseLengthMessage('Channel password');
+      return message ?? getPassphraseValidationMessage('too_short', 'Channel password');
     case 'NETWORK_ERROR':
       return 'Network error while performing manage action. Please retry.';
     case 'BAD_REQUEST':
@@ -39,9 +42,7 @@ export function requiresChannelPassword(adminMode: string | null): boolean {
 }
 
 export function getChannelPasswordValidationError(passphrase: string): string | null {
-  return validatePassphrase(passphrase) === null
-    ? null
-    : getPassphraseLengthMessage('Channel password');
+  return getPassphrasePolicyError(passphrase, 'Channel password');
 }
 
 export function isTerminalPublicState(state: ChannelState): boolean {

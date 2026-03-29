@@ -22,6 +22,7 @@ import {
   asUuid,
   ensurePassphrase,
   mapWebAuthnError,
+  normalizePassphrase,
   randomBase64Url,
   resolvePadBlockForProfile,
   signChallengeWithWrappedKey,
@@ -155,13 +156,18 @@ export async function executeDeliverSecret(
 
   if (deliverIsPasswordMode) {
     const softkeyPassphrase = input.softkeyPassphrase ?? '';
-    const passphraseError = ensurePassphrase(softkeyPassphrase, 'deliver.softkey-passphrase');
+    const passphraseError = ensurePassphrase(
+      softkeyPassphrase,
+      'deliver.softkey-passphrase',
+      'Channel password'
+    );
     if (passphraseError) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('PASSPHRASE_REQUIRED');
       });
       return passphraseError;
     }
+    const normalizedSoftkeyPassphrase = normalizePassphrase(softkeyPassphrase);
     if (!input.wrappedPrivateKey) {
       applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
         state.failCompoundCommit('CRYPTO_ERROR');
@@ -171,7 +177,7 @@ export async function executeDeliverSecret(
     try {
       softkeySignature = await signChallengeWithWrappedKey(
         input.wrappedPrivateKey,
-        softkeyPassphrase,
+        normalizedSoftkeyPassphrase,
         intentData.expectedChallenge as Base64Url,
         deps.kdfParams
       );

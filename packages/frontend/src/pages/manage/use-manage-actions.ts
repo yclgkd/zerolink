@@ -93,7 +93,7 @@ export function useManageDeliveryLogic(
     setIsActionPending(false);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
-      return setActionError(mapActionError(result.error.code));
+      return setActionError(mapActionError(result.error.code, result.error.message));
     }
 
     store.setShowDestroyConfirm(false);
@@ -183,7 +183,7 @@ export function useManageDestructionLogic(
     setIsActionPending(false);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
-      return setActionError(mapActionError(result.error.code));
+      return setActionError(mapActionError(result.error.code, result.error.message));
     }
     setIsSecretInputInvalid(false);
     setActionError(null);

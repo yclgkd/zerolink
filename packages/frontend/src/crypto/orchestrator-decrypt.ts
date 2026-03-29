@@ -27,6 +27,7 @@ import {
   constantTimeHexEqual,
   ensurePassphrase,
   isDeliveredState,
+  normalizePassphrase,
   resolveRpId,
   resolveRpOrigin,
   toError,
@@ -217,8 +218,9 @@ export async function executeDecryptDelivered(
   deps: ResolvedDeps,
   input: DecryptDeliveredInput
 ): Promise<CryptoOrchestratorResult<DecryptDeliveredOutput>> {
-  const passErrResult = ensurePassphrase(input.passphrase, 'decrypt.validate');
+  const passErrResult = ensurePassphrase(input.passphrase, 'decrypt.validate', 'Passphrase');
   if (passErrResult) return passErrResult;
+  const normalizedPassphrase = normalizePassphrase(input.passphrase);
 
   applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
     state.startPublicStatus();
@@ -267,7 +269,7 @@ export async function executeDecryptDelivered(
 
     const { plaintext } = await performDecryptionPipeline(
       payload,
-      input.passphrase,
+      normalizedPassphrase,
       envelope,
       input.uuid,
       cipherVersion,
