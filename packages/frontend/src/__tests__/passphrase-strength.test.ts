@@ -17,17 +17,52 @@ describe('getPassphraseStrength', () => {
     });
   });
 
-  it('returns medium for mixed case + digits passphrase', () => {
-    expect(getPassphraseStrength('Password12')).toEqual({
+  it('returns strong for a four-word passphrase', () => {
+    expect(getPassphraseStrength('correct horse battery staple')).toEqual({
+      label: 'Strong',
+      level: 3,
+    });
+  });
+
+  it('returns strong for a longer multi-word passphrase', () => {
+    expect(getPassphraseStrength('correct horse battery staple winter lantern')).toEqual({
+      label: 'Strong',
+      level: 3,
+    });
+  });
+
+  it('returns strong for a long mixed-character password', () => {
+    expect(getPassphraseStrength('A8$fK2!mQ9@tZ1#x')).toEqual({
+      label: 'Strong',
+      level: 3,
+    });
+  });
+
+  it('keeps common mixed-case passwords at medium', () => {
+    expect(getPassphraseStrength('Password123!')).toEqual({
       label: 'Medium',
       level: 2,
     });
   });
 
-  it('returns strong for long complex passphrase', () => {
-    expect(getPassphraseStrength('Strong#Pass1234XYZ')).toEqual({
-      label: 'Strong',
-      level: 3,
+  it('downgrades common weak patterns even when they include symbols', () => {
+    expect(getPassphraseStrength('password123!')).toEqual({
+      label: 'Weak',
+      level: 1,
+    });
+  });
+
+  it('downgrades repeated characters', () => {
+    expect(getPassphraseStrength('aaaaaaaaaaaa!!!!')).toEqual({
+      label: 'Weak',
+      level: 1,
+    });
+  });
+
+  it('downgrades repeated words', () => {
+    expect(getPassphraseStrength('hello hello hello hello')).toEqual({
+      label: 'Weak',
+      level: 1,
     });
   });
 });

@@ -624,7 +624,7 @@ describe('SharePage – decryptDelivered action', () => {
 
     await waitForDeliveredDecryptPanel();
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
-      target: { value: 'first-pass' },
+      target: { value: 'first-passphrase' },
     });
     fireEvent.click(screen.getByTestId('share-decrypt-button'));
     expect(await screen.findByTestId('share-decrypt-plaintext')).toBeTruthy();
@@ -633,7 +633,7 @@ describe('SharePage – decryptDelivered action', () => {
     expect(screen.getByTestId('share-decrypt-burned')).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
-      target: { value: 'second-pass' },
+      target: { value: 'second-passphrase' },
     });
     fireEvent.click(screen.getByTestId('share-decrypt-button'));
 

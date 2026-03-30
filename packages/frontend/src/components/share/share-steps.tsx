@@ -281,6 +281,7 @@ export function LockStep({
       <PassphraseInput
         ariaDescribedBy={lockError && isLockPassphraseInvalid ? 'share-lock-error' : undefined}
         ariaInvalid={isLockPassphraseInvalid ? true : undefined}
+        helperText={t('passphrase.policyHint')}
         inputId="share-lock-passphrase"
         label={t('share.lockLabel')}
         onChange={onPassphraseChange}

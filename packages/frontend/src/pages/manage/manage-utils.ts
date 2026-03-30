@@ -1,8 +1,13 @@
 import type { ChannelState } from '@zerolink/shared';
 import { CHANNEL_STATE } from '@zerolink/shared';
-import { getPassphraseLengthMessage, validatePassphrase } from '../../crypto/passphrase-policy';
+import {
+  getPassphraseValidationI18n,
+  getPassphraseValidationMessage,
+  type PassphraseValidationI18n,
+  validatePassphrase,
+} from '../../crypto/passphrase-policy';
 
-export function mapActionError(code: string): string {
+export function mapActionError(code: string, message?: string): string {
   switch (code) {
     case 'NOT_FOUND':
       return 'This channel is no longer available.';
@@ -15,7 +20,7 @@ export function mapActionError(code: string): string {
     case 'MISSING_RECEIVER_IDENTITY':
       return 'Receiver identity is unavailable. Ask receiver to lock again.';
     case 'PASSPHRASE_REQUIRED':
-      return getPassphraseLengthMessage('Channel password');
+      return message ?? getPassphraseValidationMessage('too_short', 'Channel password');
     case 'NETWORK_ERROR':
       return 'Network error while performing manage action. Please retry.';
     case 'BAD_REQUEST':
@@ -38,10 +43,12 @@ export function requiresChannelPassword(adminMode: string | null): boolean {
   return adminMode === 'password' || adminMode === 'softkey';
 }
 
-export function getChannelPasswordValidationError(passphrase: string): string | null {
-  return validatePassphrase(passphrase) === null
-    ? null
-    : getPassphraseLengthMessage('Channel password');
+export function getChannelPasswordValidationErrorI18n(
+  passphrase: string,
+  label: string
+): PassphraseValidationI18n | null {
+  const result = validatePassphrase(passphrase);
+  return result === null ? null : getPassphraseValidationI18n(result, label);
 }
 
 export function isTerminalPublicState(state: ChannelState): boolean {

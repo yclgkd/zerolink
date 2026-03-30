@@ -9,7 +9,7 @@ import i18next from 'i18next';
 import { useEffect, useState } from 'react';
 
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
-import { hasRequiredPassphraseLength } from '../../crypto/passphrase-policy';
+import { getPassphraseValidationI18n, hasValidPassphrase } from '../../crypto/passphrase-policy';
 import { detectWebAuthnSupport } from '../../crypto/webauthn';
 import { serializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { generateChannelUuid } from '../../lib/channel-uuid';
@@ -17,15 +17,15 @@ import type { CreateStore } from '../../stores/create-store';
 import { useCreateStore } from '../../stores/create-store';
 import type { CreatedLinks } from './helpers';
 
-function mapCreateError(code: string): string {
+function mapCreateError(code: string, message?: string): string {
   switch (code) {
     case 'PROFILE_BLOCKED':
       return i18next.t('create.errorProfileBlocked');
-    case 'PASSPHRASE_REQUIRED':
-      return i18next.t('passphrase.lengthMessage', {
-        label: i18next.t('create.passwordLabel'),
-        min: 8,
-      });
+    case 'PASSPHRASE_REQUIRED': {
+      if (message) return message;
+      const i18n = getPassphraseValidationI18n('too_short', i18next.t('create.passwordLabel'));
+      return i18next.t(i18n.key, i18n.params);
+    }
     case 'NOT_ALLOWED':
       return i18next.t('create.errorNotAllowed');
     case 'NETWORK_ERROR':
@@ -75,7 +75,7 @@ async function runCreate({
 
   if (!result.ok) {
     store.failCreateBegin(result.error.code);
-    onError(mapCreateError(result.error.code));
+    onError(mapCreateError(result.error.code, result.error.message));
     return;
   }
 
@@ -113,9 +113,7 @@ export function useCreatePageLogic() {
   const isQuickMode = store.selectedProfile === SECURITY_PROFILE.QUICK;
   const isSubmitting =
     store.createBegin.status === 'loading' || store.createFinish.status === 'loading';
-  const canSubmit = isQuickMode
-    ? hasRequiredPassphraseLength(quickPassword)
-    : store.webAuthnSupported;
+  const canSubmit = isQuickMode ? hasValidPassphrase(quickPassword) : store.webAuthnSupported;
 
   function clearLocalFeedback(): void {
     setSubmitError(null);

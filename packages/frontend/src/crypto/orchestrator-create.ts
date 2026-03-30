@@ -11,7 +11,13 @@ import type {
   CryptoOrchestratorResult,
   ResolvedDeps,
 } from './orchestrator-types';
-import { ensurePassphrase, mapWebAuthnError, randomBase64Url, toError } from './orchestrator-utils';
+import {
+  ensurePassphrase,
+  mapWebAuthnError,
+  normalizePassphrase,
+  randomBase64Url,
+  toError,
+} from './orchestrator-utils';
 import { buildShareUrlWithFragment, deriveLockKeyB64u } from './protocol-utils';
 import { exportSoftkeyPublicJwk, generateSoftkeyPair, wrapSoftkeyPrivateKey } from './softkey';
 import { registerWithWebAuthn } from './webauthn';
@@ -23,7 +29,8 @@ export async function executeCreateChannel(
   if (input.useCompatibilityMode) {
     const passphraseError = ensurePassphrase(
       input.softkeyPassphrase ?? '',
-      'create.softkey-passphrase'
+      'create.softkey-passphrase',
+      'Channel password'
     );
     if (passphraseError) {
       return passphraseError;
@@ -55,7 +62,7 @@ export async function executeCreateChannel(
   }
 
   if (input.useCompatibilityMode) {
-    const softkeyPassphrase = input.softkeyPassphrase ?? '';
+    const normalizedSoftkeyPassphrase = normalizePassphrase(input.softkeyPassphrase ?? '');
     let softkeyPubJwk: import('@zerolink/shared').ECDSAPublicKeyJWK;
     let senderAuthFpr: import('@zerolink/shared').HexString;
     let wrappedPrivateKey: import('@zerolink/shared').WrappedPrivateKey;
@@ -65,7 +72,7 @@ export async function executeCreateChannel(
       senderAuthFpr = await computeSoftkeyPublicKeyFingerprint(softkeyPubJwk);
       wrappedPrivateKey = await wrapSoftkeyPrivateKey(
         keypair.privateKey,
-        softkeyPassphrase,
+        normalizedSoftkeyPassphrase,
         deps.kdfParams
       );
     } catch {
