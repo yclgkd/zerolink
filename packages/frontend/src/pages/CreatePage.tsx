@@ -77,7 +77,7 @@ export function CreatePage(): ReactElement {
               ) : null}
             </div>
 
-            <aside className="space-y-4">
+            <aside className="space-y-4 lg:pt-8">
               <TrustModelHint />
               <HowItWorks />
             </aside>
