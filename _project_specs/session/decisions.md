@@ -37,6 +37,13 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-30, recovery TTL alignment)**: The sender-side share-link recovery cache now stores the selected channel TTL with each entry and expires against that per-entry TTL instead of a fixed one-hour cap, so same-session recovery stays aligned with the actual waiting window of 1 hour, 24 hours, or 7 days.
 **Follow-up (2026-03-30, browser chrome polish)**: Align the inline SVG favicon in `packages/frontend/index.html` with the calmer primary token so the browser tab icon no longer retains the old neon-purple accent after the UI palette shift.
 
+## [2026-03-30] Final UI polish favors bounded reading width
+
+**Decision**: Apply a final cross-page polish pass that normalizes page-header line lengths, keeps Share/Manage state panels within bounded reading widths, enlarges shell warning dismiss targets, and tightens the Trust page into a clearer long-form reference layout.
+**Rationale**: After the broader UI refresh, the remaining roughness was mostly micro-level inconsistency rather than structural problems. The app feels more intentional when descriptive copy stays on a stable measure, utility chrome meets touch expectations, and state-heavy flows do not stretch across the full card width.
+**Status**: Implemented in PR #199 follow-up polish commits.
+**Follow-up**: Passphrase fields now use a slightly looser label-to-input gap, and the label is block-level so shared vertical spacing utilities actually affect the rendered form stack. The create-page TTL preset cards also expose a visible `peer-focus-visible` ring so keyboard users can see when the selected radio has focus.
+
 ## [2026-03-29] Expose channel TTL as create-time presets
 
 **Decision**: Let senders choose the channel TTL at create time using three presets: 1 hour, 24 hours, or 7 days
@@ -669,13 +676,6 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 1. Every `feat` or `fix` commit must bundle updates to the durable session files when needed. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplifications, the practical paths are `decisions.md` and `code-landmarks.md` when rationale or navigation context changes.
 2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
 **Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
-## [2026-03-30] Final UI polish favors bounded reading width
-
-**Decision**: Apply a final cross-page polish pass that normalizes page-header line lengths, keeps Share/Manage state panels within bounded reading widths, enlarges shell warning dismiss targets, and tightens the Trust page into a clearer long-form reference layout.
-**Rationale**: After the broader UI refresh, the remaining roughness was mostly micro-level inconsistency rather than structural problems. The app feels more intentional when descriptive copy stays on a stable measure, utility chrome meets touch expectations, and state-heavy flows do not stretch across the full card width.
-**Status**: Implemented in PR #199 follow-up polish commits.
-**Follow-up**: Passphrase fields now use a slightly looser label-to-input gap, and the label is block-level so shared vertical spacing utilities actually affect the rendered form stack. The create-page TTL preset cards also expose a visible `peer-focus-visible` ring so keyboard users can see when the selected radio has focus.
-
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update
 
 **Decision**: Support Cloudflare Durable Objects Free Tier with SQLite backend.
