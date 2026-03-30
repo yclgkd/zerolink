@@ -128,4 +128,15 @@ describe('SafetyCode', () => {
 
     expect(screen.getByText('Compare over secure voice call.')).toBeTruthy();
   });
+
+  it('supports compact density for tighter verification layouts', () => {
+    render(<SafetyCode density="compact" display={display} />);
+
+    const emojiTab = screen.getByRole('button', { name: 'Emoji' });
+    const colorTab = screen.getByRole('button', { name: 'Colors' });
+
+    expect(emojiTab.className).toContain('text-sm');
+    expect(colorTab.className).toContain('text-sm');
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
+  });
 });

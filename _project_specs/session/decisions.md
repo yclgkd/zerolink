@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-30] Second-round frontend polish keeps safety flows intact while removing neon residue
+
+**Decision**: Finish the calm security-tool retune by replacing the last neon-styled shared surfaces with muted semantic colors, adding a compact `SafetyCode` density for sender/receiver terminal states, and promoting small explanatory copy to stable reading sizes where it affects comprehension.
+**Context**: The first PR199 pass fixed the route hierarchy and the biggest UX errors, but review still found residual cyber-dark cues in shared shell/card/badge/notice surfaces and overly tall verification blocks on mobile `locked` / `delivered` states.
+**Options Considered**: Leave the remaining styling as-is and ship; redesign the pages again around a new mobile-specific layout; keep the current architecture and tighten the shared visual language plus the verification component density.
+**Choice**: Reuse the existing route/component structure, retune shared visual primitives in place, and let `SafetyCode` expose a compact density that can be applied selectively in `manage` and `share` terminal-state flows without changing the verification order.
+**Reasoning**: This removes the remaining style drift and improves mobile execution speed without weakening the security model. Users still see verification before sensitive actions; they just see a denser, calmer version of the same information.
+**Trade-offs**: Shared components now carry slightly more styling nuance, and some compact controls trade visual spaciousness for faster access to the main action on smaller screens.
+
 ## [2026-03-30] Recenter the core frontend on calm, security-tool UX
 
 **Decision**: Rework the four core frontend routes (`create`, `share`, `manage`, `trust`) toward a calmer, more operational security-tool presentation, and add same-session share-link recovery for sender waiting state only.

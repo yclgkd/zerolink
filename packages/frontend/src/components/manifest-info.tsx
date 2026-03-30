@@ -34,7 +34,7 @@ function DetailRow({
     <div className="space-y-1">
       <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
       {code ? (
-        <code className="block break-all rounded bg-secondary/40 px-2 py-1 text-xs text-foreground">
+        <code className="block break-all rounded bg-secondary/40 px-2 py-1 text-sm leading-6 text-foreground">
           {value}
         </code>
       ) : (
@@ -54,14 +54,14 @@ export function ManifestInfo(): ReactElement | null {
   }
 
   return (
-    <Card className="border-neon-cyan/14 bg-card/55 shadow-none" data-testid="manifest-info-card">
+    <Card className="border-sky-300/14 bg-card/55 shadow-none" data-testid="manifest-info-card">
       <CardHeader className="py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle asChild className="text-sm font-semibold text-primary">
             <h2>{t('manifest.title')}</h2>
           </CardTitle>
           <Badge
-            className="border-neon-green/24 bg-neon-green/8 px-3 py-1 text-neon-green"
+            className="border-emerald-300/24 bg-emerald-400/8 px-3 py-1 text-emerald-200"
             variant="secondary"
           >
             {t('manifest.verifiedBadge')}
@@ -70,14 +70,14 @@ export function ManifestInfo(): ReactElement | null {
         <p className="text-sm text-muted-foreground">{t('manifest.body')}</p>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{t('manifest.fingerprintLabel')}</span>
-          <code className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 text-xs text-muted-foreground">
+          <code className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 text-sm text-muted-foreground">
             {snapshot.manifestHash.slice(0, 16)}
           </code>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         <Button
-          className="h-7 text-xs"
+          className="h-8 text-sm"
           onClick={() => setExpanded((current) => !current)}
           size="sm"
           type="button"

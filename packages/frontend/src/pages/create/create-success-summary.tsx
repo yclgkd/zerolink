@@ -54,7 +54,7 @@ function CopyableLinkRow({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         {isManageLink ? (
           <a
-            className="flex-1 break-all rounded-xl border border-border/60 bg-background/35 px-3 py-2 font-mono text-xs text-primary hover:text-foreground hover:underline"
+            className="flex-1 break-all rounded-xl border border-border/60 bg-background/35 px-3 py-2 font-mono text-sm text-primary hover:text-foreground hover:underline"
             data-testid={testId}
             href={url}
           >
@@ -62,7 +62,7 @@ function CopyableLinkRow({
           </a>
         ) : (
           <span
-            className="flex-1 break-all rounded-xl border border-border/60 bg-background/35 px-3 py-2 font-mono text-xs text-primary"
+            className="flex-1 break-all rounded-xl border border-border/60 bg-background/35 px-3 py-2 font-mono text-sm text-primary"
             data-testid={testId}
           >
             {url}
@@ -76,7 +76,7 @@ function CopyableLinkRow({
         >
           {copied ? (
             <>
-              <ClipboardCheck aria-hidden="true" className="size-3.5 text-neon-green" />
+              <ClipboardCheck aria-hidden="true" className="size-3.5 text-emerald-200" />
               {t('create.copiedButton')}
             </>
           ) : (
@@ -114,12 +114,12 @@ export function SuccessSummary({
 
   return (
     <div
-      className="space-y-5 rounded-2xl border border-neon-green/20 bg-neon-green/6 p-5"
+      className="space-y-5 rounded-2xl border border-emerald-300/20 bg-emerald-400/6 p-5"
       data-testid="create-success-summary"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5">
-          <p className="text-base font-semibold text-neon-green">{t('create.successTitle')}</p>
+          <p className="text-base font-semibold text-emerald-200">{t('create.successTitle')}</p>
           <p className="text-sm text-muted-foreground">
             {t('create.successModeLabel')}{' '}
             <span className="font-medium text-foreground">{profileLabelMap[createdProfile]}</span>
@@ -168,7 +168,10 @@ export function SuccessSummary({
           testId="create-success-manage-link"
           url={links.manageUrl}
         />
-        <p className="text-xs text-muted-foreground" data-testid="create-success-expiry-hint">
+        <p
+          className="text-sm leading-6 text-muted-foreground"
+          data-testid="create-success-expiry-hint"
+        >
           {t('create.expiryHint', { duration: getChannelTtlLabel(t, links.ttl) })}
         </p>
       </div>

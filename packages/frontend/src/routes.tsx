@@ -107,7 +107,7 @@ function AppShellLayout(): ReactElement {
       <Toaster position="bottom-center" richColors />
       {showInAppWarning ? (
         <div
-          className="mb-4 flex items-start gap-3 rounded-2xl border border-neon-orange/28 bg-neon-orange/8 px-4 py-3 text-sm text-neon-orange"
+          className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-300/28 bg-amber-400/8 px-4 py-3 text-sm text-amber-200"
           data-testid="inapp-browser-warning"
         >
           <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
@@ -123,11 +123,11 @@ function AppShellLayout(): ReactElement {
           </button>
         </div>
       ) : null}
-      <Card className="sticky top-4 z-50 border-white/8 bg-slate-950/78 backdrop-blur-xl">
+      <Card className="sticky top-4 z-50 border-white/8 bg-slate-950/74 backdrop-blur-lg">
         <CardHeader className="gap-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-gradient-to-br from-primary/95 to-sky-300/70 shadow-[0_12px_24px_rgb(56_189_248_/_0.18)]">
-              <Link2 aria-hidden="true" className="size-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/22 bg-primary/10 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]">
+              <Link2 aria-hidden="true" className="size-5 text-primary" />
             </div>
             <div>
               <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">

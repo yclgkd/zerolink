@@ -15,7 +15,7 @@ export function ChannelUnavailableState({
   return (
     <section className="space-y-2" data-testid={testId}>
       <h3 className="text-base font-semibold text-foreground">{t('channel.unavailableTitle')}</h3>
-      <p className="text-xs text-muted-foreground">{body}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{body}</p>
     </section>
   );
 }

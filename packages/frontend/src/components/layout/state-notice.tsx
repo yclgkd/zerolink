@@ -5,9 +5,9 @@ import { cn } from '../../lib/utils';
 
 const toneClasses = {
   error: 'border-destructive/35 bg-destructive/8 text-destructive',
-  warning: 'border-neon-orange/28 bg-neon-orange/8 text-neon-orange',
-  info: 'border-neon-cyan/25 bg-neon-cyan/7 text-neon-cyan',
-  success: 'border-neon-green/25 bg-neon-green/7 text-neon-green',
+  warning: 'border-amber-300/28 bg-amber-400/8 text-amber-200',
+  info: 'border-sky-300/25 bg-sky-400/7 text-sky-200',
+  success: 'border-emerald-300/25 bg-emerald-400/7 text-emerald-200',
 } as const;
 
 export type StateNoticeTone = keyof typeof toneClasses;

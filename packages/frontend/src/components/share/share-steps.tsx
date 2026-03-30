@@ -28,11 +28,7 @@ export function StepIndicator({
           <div
             className={cn(
               'h-1.5 flex-1 rounded-full transition-colors duration-300',
-              i + 1 < current
-                ? 'bg-neon-cyan/60'
-                : i + 1 === current
-                  ? 'bg-neon-cyan'
-                  : 'bg-border/50'
+              i + 1 < current ? 'bg-primary/45' : i + 1 === current ? 'bg-primary' : 'bg-border/50'
             )}
             key={labels[i]}
           />
@@ -97,7 +93,7 @@ function SafetyCodeSection({
   const { t } = useTranslation();
 
   if (safetyCodeAvailable) {
-    return <SafetyCode display={safetyCodeAvailable} />;
+    return <SafetyCode density="compact" display={safetyCodeAvailable} />;
   }
 
   const effectiveStatus =
@@ -109,7 +105,7 @@ function SafetyCodeSection({
 
   return (
     <StateNotice data-testid="share-safety-unavailable" title={title} tone={tone}>
-      <p className="mt-1 text-xs text-foreground/90">{body}</p>
+      <p className="mt-1 text-sm leading-6 text-foreground/90">{body}</p>
     </StateNotice>
   );
 }
@@ -166,7 +162,7 @@ function DecryptUnavailableNotice({
 
   return (
     <StateNotice data-testid="share-decrypt-unavailable" title={title} tone={tone}>
-      <p className="mt-1 text-xs text-foreground/90">{body}</p>
+      <p className="mt-1 text-sm leading-6 text-foreground/90">{body}</p>
     </StateNotice>
   );
 }
@@ -456,7 +452,7 @@ export function DeliveredStep({
           </p>
           {cipherVersion !== null && cipherVersion >= 1 ? (
             <output
-              className="block text-sm font-medium text-neon-orange"
+              className="block text-sm font-medium text-amber-200"
               data-testid="share-delivery-updated-badge"
             >
               {t('share.updatedBadge', { version: cipherVersion + 1 })}
@@ -524,10 +520,10 @@ export function DeliveredStep({
 
           {plaintext ? (
             <div
-              className="space-y-2 rounded-2xl border border-neon-green/20 bg-neon-green/8 p-4"
+              className="space-y-2 rounded-2xl border border-emerald-300/20 bg-emerald-400/8 p-4"
               data-testid="share-decrypt-plaintext"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neon-green">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
                 {t('share.plaintextLabel')}
               </p>
               <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">

@@ -40,7 +40,7 @@ describe('StateNotice', () => {
 
     const notice = screen.getByRole('status');
     expect(notice.className).toContain('custom-notice-class');
-    expect(notice.className).toContain('border-neon-green/25');
+    expect(notice.className).toContain('border-emerald-300/25');
   });
 
   it('auto-focuses when autoFocusOnMount is enabled', () => {

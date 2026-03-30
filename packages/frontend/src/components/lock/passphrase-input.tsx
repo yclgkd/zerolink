@@ -35,8 +35,8 @@ export type PassphraseInputProps = {
 
 function getLabelClass(level: 0 | 1 | 2 | 3): string {
   if (level === 1) return 'text-destructive';
-  if (level === 2) return 'text-neon-amber';
-  if (level === 3) return 'text-neon-green';
+  if (level === 2) return 'text-amber-200';
+  if (level === 3) return 'text-emerald-200';
   return 'text-muted-foreground';
 }
 
@@ -46,8 +46,8 @@ function getSegmentClass(strengthLevel: 0 | 1 | 2 | 3, segmentLevel: 1 | 2 | 3):
   }
 
   if (strengthLevel === 1) return 'bg-destructive';
-  if (strengthLevel === 2) return 'bg-neon-amber';
-  return 'bg-neon-green';
+  if (strengthLevel === 2) return 'bg-amber-300';
+  return 'bg-emerald-300';
 }
 
 const strengthKeyMap: Record<Exclude<PassphraseStrengthLabel, ''>, string> = {

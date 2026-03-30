@@ -28,7 +28,7 @@ describe('RoleBadge', () => {
 
     const badge = screen.getByText('Owner');
     expect(badge.className).toContain('custom-role-badge');
-    expect(badge.className).toContain('border-neon-purple/22');
+    expect(badge.className).toContain('border-primary/20');
   });
 });
 
@@ -64,6 +64,6 @@ describe('StatusBadge', () => {
 
     const badge = screen.getByText('Delivered').closest('[data-status]');
     expect(badge?.className).toContain('custom-status-badge');
-    expect(badge?.className).toContain('border-neon-green/24');
+    expect(badge?.className).toContain('border-emerald-300/24');
   });
 });

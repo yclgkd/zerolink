@@ -4,10 +4,10 @@ import { cn } from '../../lib/utils';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../ui/card';
 
 const toneClasses = {
-  purple: 'border-neon-purple/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
-  magenta: 'border-neon-magenta/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
-  orange: 'border-neon-orange/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
-  cyan: 'border-neon-cyan/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
+  purple: 'border-primary/16 shadow-[0_20px_56px_rgb(2_8_23_/_0.28)]',
+  magenta: 'border-slate-300/14 shadow-[0_20px_56px_rgb(2_8_23_/_0.28)]',
+  orange: 'border-amber-300/16 shadow-[0_20px_56px_rgb(2_8_23_/_0.28)]',
+  cyan: 'border-sky-300/16 shadow-[0_20px_56px_rgb(2_8_23_/_0.28)]',
 } as const;
 
 export type PageCardTone = keyof typeof toneClasses;

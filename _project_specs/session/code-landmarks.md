@@ -37,6 +37,7 @@ UPDATE WHEN:
 | `packages/backend/src/do/SecretVaultWebSocket.ts` | Durable Object WebSocket accept/broadcast helpers for channel state sync |
 | `packages/frontend/src/crypto/orchestrator.ts` | Frontend crypto orchestration (create / lock / deliver / decrypt) |
 | `packages/frontend/src/pages/create/share-link-session-cache.ts` | Best-effort session-scoped cache for same-session sender recovery of one-time share links while a channel is still waiting; each entry expires against the selected channel TTL |
+| `packages/frontend/src/components/safety/safety-code.tsx` | Shared sender/receiver fingerprint verification card; supports a compact density so terminal-state mobile layouts can stay verification-first without pushing the primary action too far below the fold |
 | `packages/frontend/src/sync/` | Channel sync client: WebSocket-first subscription with `/api/public/:uuid` polling fallback |
 | `packages/frontend/src/stores/` | Zustand stores: `create-store`, `decrypt-store`, `deliver-store`, `lock-store` |
 | `packages/frontend/src/release/verification.ts` | Browser-side signed-manifest verifier |

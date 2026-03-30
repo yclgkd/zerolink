@@ -47,7 +47,7 @@ export function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
     <p className="text-sm text-muted-foreground">
       {t('manage.channelIdLabel')}{' '}
       <code
-        className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 font-mono text-xs text-foreground"
+        className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 font-mono text-sm text-foreground"
         data-testid="manage-uuid"
       >
         {uuid ?? t('manage.channelIdMissing')}
@@ -102,7 +102,7 @@ function ShareLinkRecoveryPanel({ shareUrl }: { shareUrl: string }) {
         >
           {copied ? (
             <>
-              <ClipboardCheck aria-hidden="true" className="size-4 text-neon-green" />
+              <ClipboardCheck aria-hidden="true" className="size-4 text-emerald-200" />
               {t('manage.shareLinkRecoveryCopied')}
             </>
           ) : (
@@ -142,14 +142,14 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.LOCKED) {
     return (
-      <section className="space-y-4" data-testid="manage-state-locked">
+      <section className="space-y-3" data-testid="manage-state-locked">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.lockedTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.lockedBody')}</p>
         </div>
 
         {safetyCode ? (
-          <SafetyCode display={safetyCode} />
+          <SafetyCode density="compact" display={safetyCode} />
         ) : (
           <StateNotice
             data-testid="manage-safety-unavailable"
@@ -165,14 +165,14 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.DELIVERED) {
     return (
-      <section className="space-y-4" data-testid="manage-state-delivered">
+      <section className="space-y-3" data-testid="manage-state-delivered">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.deliveredTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.deliveredBody')}</p>
         </div>
 
         {safetyCode ? (
-          <SafetyCode display={safetyCode} />
+          <SafetyCode density="compact" display={safetyCode} />
         ) : (
           <StateNotice
             data-testid="manage-safety-unavailable"

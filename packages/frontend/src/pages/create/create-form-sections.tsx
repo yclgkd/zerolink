@@ -100,7 +100,7 @@ export function ModeSelectorGrid({
       </div>
       {selected === SECURITY_PROFILE.SECURE ? (
         <div
-          className="rounded-2xl border border-neon-cyan/20 bg-neon-cyan/8 p-4 text-sm leading-6 text-muted-foreground"
+          className="rounded-2xl border border-sky-300/20 bg-sky-400/8 p-4 text-sm leading-6 text-muted-foreground"
           data-testid="create-secure-share-hint"
         >
           {t('create.secureShareHint')}
@@ -112,7 +112,7 @@ export function ModeSelectorGrid({
           title={t('create.webauthnBlockedTitle')}
           tone="warning"
         >
-          <p className="text-neon-orange">{t('create.webauthnBlockedBody')}</p>
+          <p className="text-amber-100/90">{t('create.webauthnBlockedBody')}</p>
         </StateNotice>
       ) : null}
     </section>
@@ -126,25 +126,25 @@ export function HowItWorks() {
     () => [
       {
         number: '01',
-        numberClass: 'text-neon-cyan',
+        numberClass: 'text-sky-200',
         title: t('create.step1Title'),
         description: t('create.step1Desc'),
       },
       {
         number: '02',
-        numberClass: 'text-neon-magenta',
+        numberClass: 'text-slate-200',
         title: t('create.step2Title'),
         description: t('create.step2Desc'),
       },
       {
         number: '03',
-        numberClass: 'text-neon-orange',
+        numberClass: 'text-amber-200',
         title: t('create.step3Title'),
         description: t('create.step3Desc'),
       },
       {
         number: '04',
-        numberClass: 'text-neon-green',
+        numberClass: 'text-emerald-200',
         title: t('create.step4Title'),
         description: t('create.step4Desc'),
       },

@@ -17,22 +17,22 @@ const statusConfig: Record<
   waiting: {
     label: 'Waiting for Lock',
     icon: Clock,
-    className: 'border-neon-amber/24 bg-neon-amber/8 text-neon-amber',
+    className: 'border-amber-300/24 bg-amber-400/8 text-amber-200',
   },
   locked: {
     label: 'Locked by Receiver',
     icon: Lock,
-    className: 'border-neon-cyan/24 bg-neon-cyan/8 text-neon-cyan',
+    className: 'border-sky-300/24 bg-sky-400/8 text-sky-200',
   },
   delivered: {
     label: 'Delivered',
     icon: CheckCircle,
-    className: 'border-neon-green/24 bg-neon-green/8 text-neon-green',
+    className: 'border-emerald-300/24 bg-emerald-400/8 text-emerald-200',
   },
   deleted: {
     label: 'Deleted',
     icon: Trash2,
-    className: 'border-neon-slate/24 bg-neon-slate/8 text-neon-slate',
+    className: 'border-slate-300/20 bg-slate-400/8 text-slate-300',
   },
   expired: {
     label: 'Expired',

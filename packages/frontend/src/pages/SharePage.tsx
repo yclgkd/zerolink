@@ -25,7 +25,7 @@ import {
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   const { t } = useTranslation();
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="text-sm text-muted-foreground">
       {t('share.channelIdLabel')}{' '}
       <code
         className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"

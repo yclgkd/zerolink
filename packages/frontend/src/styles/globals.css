@@ -82,17 +82,17 @@
   --ring: rgb(125 211 252 / 35%);
 
   --chart-1: #7dd3fc;
-  --chart-2: #a78bfa;
+  --chart-2: #94a3b8;
   --chart-3: #f59e0b;
   --chart-4: #67e8f9;
   --chart-5: #34d399;
 
-  --neon-purple: #a78bfa;
-  --neon-magenta: #f472b6;
-  --neon-orange: #f59e0b;
-  --neon-cyan: #67e8f9;
-  --neon-green: #34d399;
-  --neon-amber: #f59e0b;
+  --neon-purple: #8ca9c7;
+  --neon-magenta: #aebdd5;
+  --neon-orange: #d6a55d;
+  --neon-cyan: #7dd3fc;
+  --neon-green: #5dbb9c;
+  --neon-amber: #d6a55d;
   --neon-slate: #94a3b8;
 
   --radius: 1rem;
@@ -121,8 +121,8 @@
     margin: 0;
     background-color: #08111f;
     background-image:
-      radial-gradient(circle at top, rgba(125, 211, 252, 0.16) 0%, transparent 42%),
-      radial-gradient(circle at 80% 20%, rgba(167, 139, 250, 0.09) 0%, transparent 30%),
+      radial-gradient(circle at top, rgba(125, 211, 252, 0.13) 0%, transparent 40%),
+      radial-gradient(circle at 78% 18%, rgba(148, 163, 184, 0.08) 0%, transparent 28%),
       linear-gradient(180deg, rgba(8, 17, 31, 0.96) 0%, rgba(7, 13, 24, 1) 100%);
     background-size: auto, auto, auto;
     background-attachment: fixed;
@@ -201,5 +201,11 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up {
     animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    background-attachment: scroll;
   }
 }
