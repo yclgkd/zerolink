@@ -42,15 +42,15 @@ export function hasValidPassphrase(passphrase: string): boolean {
   return validatePassphrase(passphrase) === null;
 }
 
-export function getPassphraseLengthMessage(label: string = 'passphrase'): string {
+function getPassphraseLengthMessage(label: string): string {
   return `${label} must be at least ${MIN_PASSPHRASE_LENGTH} characters`;
 }
 
-export function getPassphraseTooLongMessage(label: string = 'passphrase'): string {
+function getPassphraseTooLongMessage(label: string): string {
   return `${label} must be ${MAX_PASSPHRASE_LENGTH} characters or fewer`;
 }
 
-export function getPassphraseWhitespaceMessage(label: string = 'passphrase'): string {
+function getPassphraseWhitespaceMessage(label: string): string {
   return `${label} can use ordinary spaces between words, but not tabs, line breaks, or special spaces`;
 }
 

@@ -248,7 +248,6 @@ const zh: Translation = {
     weak: '弱',
     medium: '中',
     strong: '强',
-    lengthMessage: '{{label}} 必须至少 {{min}} 个字符',
   },
 
   safetyCode: {

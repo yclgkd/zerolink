@@ -34,6 +34,13 @@ describe('passphrase policy', () => {
     expect(validatePassphrase('correct horse\u3000battery staple')).toBe('invalid_whitespace');
   });
 
+  it('rejects zero-width and invisible characters', () => {
+    expect(validatePassphrase('correct horse\u200Bbattery staple')).toBe('invalid_whitespace');
+    expect(validatePassphrase('correct horse\u200Cbattery staple')).toBe('invalid_whitespace');
+    expect(validatePassphrase('correct horse\u200Dbattery staple')).toBe('invalid_whitespace');
+    expect(validatePassphrase('correct horse\uFEFFbattery staple')).toBe('invalid_whitespace');
+  });
+
   it('returns a specific invalid whitespace message', () => {
     expect(
       getPassphraseValidationError('correct horse\u00A0battery staple', 'Channel password')

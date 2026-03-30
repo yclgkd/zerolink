@@ -267,7 +267,6 @@ const en = {
     weak: 'Weak',
     medium: 'Medium',
     strong: 'Strong',
-    lengthMessage: '{{label}} must be at least {{min}} characters',
   },
 
   safetyCode: {

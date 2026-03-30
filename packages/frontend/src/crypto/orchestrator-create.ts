@@ -26,8 +26,6 @@ export async function executeCreateChannel(
   deps: ResolvedDeps,
   input: CreateChannelInput
 ): Promise<CryptoOrchestratorResult<CreateChannelOutput>> {
-  const normalizedSoftkeyPassphrase = normalizePassphrase(input.softkeyPassphrase ?? '');
-
   if (input.useCompatibilityMode) {
     const passphraseError = ensurePassphrase(
       input.softkeyPassphrase ?? '',
@@ -64,6 +62,7 @@ export async function executeCreateChannel(
   }
 
   if (input.useCompatibilityMode) {
+    const normalizedSoftkeyPassphrase = normalizePassphrase(input.softkeyPassphrase ?? '');
     let softkeyPubJwk: import('@zerolink/shared').ECDSAPublicKeyJWK;
     let senderAuthFpr: import('@zerolink/shared').HexString;
     let wrappedPrivateKey: import('@zerolink/shared').WrappedPrivateKey;
