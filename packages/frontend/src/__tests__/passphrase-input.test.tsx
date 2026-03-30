@@ -53,7 +53,7 @@ describe('PassphraseInput', () => {
     render(<PassphraseInput onChange={() => {}} value="correct horse battery staple" />);
 
     expect(screen.getByText('Passphrase strength')).toBeTruthy();
-    expect(screen.getByText('Medium')).toBeTruthy();
+    expect(screen.getByText('Strong')).toBeTruthy();
     expect(screen.getAllByTestId(/passphrase-strength-segment-/)).toHaveLength(3);
   });
 

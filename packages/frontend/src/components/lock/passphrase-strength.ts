@@ -17,7 +17,7 @@ export type PassphraseStrength = {
 const COMMON_WEAK_PATTERN_LIST = [
   /^password(?:\d+|[!@#$%^&*]+)*$/u,
   /^qwerty(?:\d+|[!@#$%^&*]+)*$/u,
-  /^abcdef(?:\d+|[!@#$%^&*]+)*$/u,
+  /^abcdef/u,
   /^admin(?:\d+|[!@#$%^&*]+)*$/u,
   /^welcome(?:\d+|[!@#$%^&*]+)*$/u,
   /(123456|654321|012345)/u,
@@ -56,7 +56,7 @@ function getPenalty(words: string[], collapsed: string): number {
     penalty += 2;
   }
 
-  if (/(.)\1{4,}/u.test(collapsed)) {
+  if (/(.)\1{3,}/u.test(collapsed)) {
     penalty += 2;
   }
 
