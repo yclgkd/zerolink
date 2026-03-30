@@ -49,6 +49,10 @@ const en = {
     ttlSevenDays: '7 days',
     passwordLabel: 'Channel password',
     passwordPlaceholder: 'Enter a strong password',
+    footerHintPasswordRequired: 'Enter a channel password with at least 12 characters.',
+    footerHintPasswordInvalid:
+      'Use 4+ random words or at least 12 characters for the channel password.',
+    footerHintReady: 'Ready to create a {{mode}} channel that expires in {{ttl}}.',
     submitButton: 'Create Channel',
     submittingButton: 'Creating\u2026',
     successTitle: 'Channel created successfully',

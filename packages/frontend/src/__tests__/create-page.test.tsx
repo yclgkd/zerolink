@@ -195,6 +195,9 @@ describe('CreatePage integration', () => {
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Enter a channel password with at least 12 characters.'
+    );
     // Button should NOT show spinner/Creating when disabled due to empty form, not submission
     expect(submit.textContent).toContain('Create Channel');
     expect(submit.textContent).not.toContain('Creating');
@@ -211,6 +214,9 @@ describe('CreatePage integration', () => {
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Use 4+ random words or at least 12 characters for the channel password.'
+    );
   });
 
   it('enables submit button in Quick mode when password is at least 12 characters', () => {
@@ -224,6 +230,9 @@ describe('CreatePage integration', () => {
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Ready to create a Quick Share channel that expires in 1 hour.'
+    );
   });
 
   it('shows the passphrase policy hint in Quick mode', () => {
@@ -250,9 +259,13 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
+    fireEvent.click(screen.getByTestId('create-ttl-one-day'));
     fireEvent.click(screen.getByTestId('mode-card-secure'));
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Ready to create a Secure Share channel that expires in 24 hours.'
+    );
   });
 
   it('disables submit button in Secure mode when WebAuthn is unavailable', () => {

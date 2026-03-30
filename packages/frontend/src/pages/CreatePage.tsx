@@ -61,9 +61,13 @@ export function CreatePage(): ReactElement {
               ) : null}
               <ExpirySelector onSelect={logic.handleSelectTtl} selected={logic.selectedTtl} />
               <ActionFooter
+                canSubmit={logic.canSubmit}
                 disabled={logic.isSubmitting || !logic.canSubmit}
                 isLoading={logic.isSubmitting}
+                isQuickMode={logic.isQuickMode}
                 onCreate={logic.handleCreate}
+                quickPassword={logic.quickPassword}
+                selectedTtl={logic.selectedTtl}
               />
               {logic.submitError ? (
                 <StateNotice

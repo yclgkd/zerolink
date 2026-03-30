@@ -304,18 +304,44 @@ export function ExpirySelector({
 export function ActionFooter({
   onCreate,
   disabled,
+  canSubmit,
   isLoading,
+  isQuickMode,
+  quickPassword,
+  selectedTtl,
 }: {
   onCreate: () => void;
   disabled: boolean;
+  canSubmit: boolean;
   isLoading: boolean;
+  isQuickMode: boolean;
+  quickPassword: string;
+  selectedTtl: ChannelTtlMs;
 }) {
   const { t } = useTranslation();
+  const trimmedPassword = quickPassword.trim();
+  const hint = isQuickMode
+    ? trimmedPassword.length === 0
+      ? t('create.footerHintPasswordRequired')
+      : canSubmit
+        ? t('create.footerHintReady', {
+            mode: t('profile.quick'),
+            ttl: getChannelTtlLabel(t, selectedTtl),
+          })
+        : t('create.footerHintPasswordInvalid')
+    : t('create.footerHintReady', {
+        mode: t('profile.secure'),
+        ttl: getChannelTtlLabel(t, selectedTtl),
+      });
+
   return (
     <section className="rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-[28rem] text-sm leading-6 text-muted-foreground">
-          {t('create.step1Desc')}
+        <p
+          className="max-w-[28rem] text-sm leading-6 text-muted-foreground"
+          data-testid="create-action-hint"
+        >
+          {hint}
         </p>
         <Button
           className="w-full sm:w-auto"
