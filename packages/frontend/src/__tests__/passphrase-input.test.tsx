@@ -50,10 +50,10 @@ describe('PassphraseInput', () => {
   });
 
   it('shows strength label and three segments when value is non-empty', () => {
-    render(<PassphraseInput onChange={() => {}} value="Password12" />);
+    render(<PassphraseInput onChange={() => {}} value="correct horse battery staple" />);
 
     expect(screen.getByText('Passphrase strength')).toBeTruthy();
-    expect(screen.getByText('Medium')).toBeTruthy();
+    expect(screen.getByText('Strong')).toBeTruthy();
     expect(screen.getAllByTestId(/passphrase-strength-segment-/)).toHaveLength(3);
   });
 
@@ -113,5 +113,64 @@ describe('PassphraseInput', () => {
 
     const input = screen.getByTestId('passphrase-input-field');
     expect(input.getAttribute('autocomplete')).toBe('off');
+  });
+
+  it('trims leading and trailing ordinary spaces on blur', () => {
+    const onChange = vi.fn();
+    render(<PassphraseInput onChange={onChange} value="  correct horse battery staple  " />);
+
+    fireEvent.blur(screen.getByTestId('passphrase-input-field'));
+
+    expect(onChange).toHaveBeenCalledWith('correct horse battery staple');
+  });
+
+  it('sets the passphrase max length to 128', () => {
+    render(<PassphraseInput onChange={() => {}} value="" />);
+
+    expect(screen.getByTestId('passphrase-input-field').getAttribute('maxlength')).toBe('128');
+  });
+
+  it('renders helper text when provided', () => {
+    render(
+      <PassphraseInput
+        helperText="Use 4+ random words or 12+ characters"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    expect(screen.getByText('Use 4+ random words or 12+ characters')).toBeTruthy();
+  });
+
+  it('connects helper text to input via aria-describedby', () => {
+    render(
+      <PassphraseInput
+        helperText="Use 4+ random words or 12+ characters"
+        inputId="test-passphrase"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('aria-describedby')).toBe('test-passphrase-helper');
+    expect(document.getElementById('test-passphrase-helper')?.textContent).toBe(
+      'Use 4+ random words or 12+ characters'
+    );
+  });
+
+  it('merges external aria-describedby with helper text id', () => {
+    render(
+      <PassphraseInput
+        ariaDescribedBy="external-error"
+        helperText="Use 4+ random words or 12+ characters"
+        inputId="test-passphrase"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('aria-describedby')).toBe('external-error test-passphrase-helper');
   });
 });

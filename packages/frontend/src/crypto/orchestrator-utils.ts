@@ -20,7 +20,11 @@ import type {
   DeliverStore,
   DeliverStoreStateSnapshot,
 } from './orchestrator-types';
-import { getPassphraseLengthMessage, validatePassphrase } from './passphrase-policy';
+import {
+  getPassphraseValidationMessage,
+  normalizePassphrase,
+  validatePassphrase,
+} from './passphrase-policy';
 import { computeSha256Hex, decodeBase64UrlBytes, encodeBase64UrlBytes } from './protocol-utils';
 import { softkeySign, unwrapSoftkeyPrivateKey } from './softkey';
 import type { WebAuthnAdapterErrorCode } from './webauthn';
@@ -56,17 +60,21 @@ export function mapWebAuthnError(
 
 export function ensurePassphrase(
   passphrase: string,
-  stage: string
+  stage: string,
+  label: string = 'passphrase'
 ): CryptoOrchestratorResult<never> | null {
   const validationResult = validatePassphrase(passphrase);
-  if (validationResult === 'missing') {
-    return toError('PASSPHRASE_REQUIRED', stage);
-  }
-  if (validationResult === 'too_short') {
-    return toError('PASSPHRASE_REQUIRED', stage, getPassphraseLengthMessage());
+  if (validationResult !== null) {
+    return toError(
+      'PASSPHRASE_REQUIRED',
+      stage,
+      getPassphraseValidationMessage(validationResult, label)
+    );
   }
   return null;
 }
+
+export { normalizePassphrase };
 
 export function toUtf8Bytes(input: string): Uint8Array {
   return new TextEncoder().encode(input);

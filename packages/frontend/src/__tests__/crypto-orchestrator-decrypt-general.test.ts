@@ -192,7 +192,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
     expect(vi.mocked(apiClient.decryptFetch)).not.toHaveBeenCalled();
   });
 
-  it('returns PASSPHRASE_REQUIRED when passphrase is shorter than 8 characters (L-5)', async () => {
+  it('returns PASSPHRASE_REQUIRED when passphrase is shorter than 12 characters (L-5)', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     const receiverKeyPair = await generateReceiverKeyPair();
     const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
@@ -211,7 +211,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: false,
         code: 'PASSPHRASE_REQUIRED',
         stage: 'create.softkey-passphrase',
-        message: 'passphrase must be at least 8 characters',
+        message: 'Channel password must be at least 12 characters',
       },
     });
     expect(vi.mocked(apiClient.createBegin)).not.toHaveBeenCalled();
@@ -228,7 +228,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: false,
         code: 'PASSPHRASE_REQUIRED',
         stage: 'lock.validate',
-        message: 'passphrase must be at least 8 characters',
+        message: 'Passphrase must be at least 12 characters',
       },
     });
 
@@ -263,7 +263,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: false,
         code: 'PASSPHRASE_REQUIRED',
         stage: 'deliver.softkey-passphrase',
-        message: 'passphrase must be at least 8 characters',
+        message: 'Channel password must be at least 12 characters',
       },
     });
     expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
@@ -280,7 +280,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: false,
         code: 'PASSPHRASE_REQUIRED',
         stage: 'delete.softkey-passphrase',
-        message: 'passphrase must be at least 8 characters',
+        message: 'Channel password must be at least 12 characters',
       },
     });
     expect(vi.mocked(apiClient.deleteCommit)).not.toHaveBeenCalled();
@@ -296,7 +296,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
         ok: false,
         code: 'PASSPHRASE_REQUIRED',
         stage: 'decrypt.validate',
-        message: 'passphrase must be at least 8 characters',
+        message: 'Passphrase must be at least 12 characters',
       },
     });
   });

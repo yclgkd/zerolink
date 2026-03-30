@@ -304,7 +304,7 @@ describe('ManagePage – delete / destroy confirm', () => {
     expect(deleteChannelMock.mock.calls[0]?.[0]?.softkeyPassphrase).toBe('Quick#Manage123');
   });
 
-  it('blocks password-managed delete locally when the channel password is shorter than 8 characters', async () => {
+  it('blocks password-managed delete locally when the channel password is shorter than 12 characters', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({
@@ -325,7 +325,7 @@ describe('ManagePage – delete / destroy confirm', () => {
     fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
     expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
-      'Channel password must be at least 8 characters'
+      'Channel password must be at least 12 characters'
     );
     expect(deleteChannelMock).not.toHaveBeenCalled();
   });

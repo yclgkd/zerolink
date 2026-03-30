@@ -13,6 +13,7 @@ import {
   asUuid,
   computeReceiverPubFingerprint,
   ensurePassphrase,
+  normalizePassphrase,
   parseLockSecret,
   toApiReceiverPubJwk,
   toError,
@@ -67,13 +68,14 @@ export async function executeLockChannel(
   deps: ResolvedDeps,
   input: LockChannelInput
 ): Promise<CryptoOrchestratorResult<LockChannelOutput>> {
-  const errPass = ensurePassphrase(input.passphrase, 'lock.validate');
+  const errPass = ensurePassphrase(input.passphrase, 'lock.validate', 'Passphrase');
   if (errPass) return errPass;
   const errLock = parseLockSecret(input.lockSecretB64u);
   if (errLock) return errLock;
+  const normalizedPassphrase = normalizePassphrase(input.passphrase);
 
   const state = deps.lockStore.getState();
-  state.setPassphrase(input.passphrase);
+  state.setPassphrase(normalizedPassphrase);
   state.startLockBegin();
 
   const beginRes = await deps.client.lockBegin({ uuid: input.uuid });
@@ -92,7 +94,7 @@ export async function executeLockChannel(
     cryptoData = await prepareLockCryptography(
       input.uuid,
       input.lockSecretB64u,
-      input.passphrase,
+      normalizedPassphrase,
       challenge.id,
       challenge.challenge,
       nowMs,

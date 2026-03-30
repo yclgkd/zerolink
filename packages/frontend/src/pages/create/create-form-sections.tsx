@@ -223,6 +223,7 @@ export function QuickSharePasswordPanel({
         <p className="leading-6 text-muted-foreground">{t('create.passwordPanelBody')}</p>
       </div>
       <PassphraseInput
+        helperText={t('passphrase.policyHint')}
         inputId="create-quick-password"
         label={t('create.passwordLabel')}
         onChange={onPasswordChange}

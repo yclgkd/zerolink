@@ -44,6 +44,24 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Status**: Implemented in PR #199 follow-up polish commits.
 **Follow-up**: Passphrase fields now use a slightly looser label-to-input gap, and the label is block-level so shared vertical spacing utilities actually affect the rendered form stack. The create-page TTL preset cards also expose a visible `peer-focus-visible` ring so keyboard users can see when the selected radio has focus.
 
+## [2026-03-30] Use hybrid passphrase strength scoring
+
+**Decision**: Score frontend passphrase strength with a hybrid heuristic that rewards both long multi-word passphrases and long mixed-character passwords, while applying explicit penalties for repeated characters, repeated words, and a small set of common weak patterns.
+**Context**: The first passphrase-strength update over-indexed on word-count and length, which caused strong 16-character mixed passwords to remain only medium strength in the UI.
+**Options Considered**: Keep the passphrase-first heuristic; switch to hard complexity requirements; keep submission policy simple and make the strength meter recognize both password styles.
+**Choice**: Keep the submission policy unchanged (`12-128`, ordinary spaces only) and upgrade only the strength meter to a hybrid scoring model.
+**Reasoning**: This preserves the product decision to avoid hard composition rules while aligning the UI with user expectations for both passphrases and traditional complex passwords.
+**Trade-offs**: The heuristic remains simpler than a dedicated estimator like zxcvbn, so it will not catch every weak password pattern; the small built-in weak-pattern list must be maintained deliberately.
+
+## [2026-03-29] Raise Quick Share passphrase policy to 12+ chars with phrase-friendly whitespace rules
+
+**Decision**: Replace the shared 8-character passphrase minimum with a single frontend policy for Quick Share create, receiver lock, sender manage, and receiver decrypt: minimum 12 characters, maximum 128, allow ordinary spaces between words, trim leading/trailing ordinary spaces, and reject tabs, line breaks, NBSP/full-width/special whitespace.
+**Context**: The product currently positions Quick Share as a legitimate security mode, but the old `min=8` rule still encouraged password-style shortcuts and the strength meter rewarded symbol/digit composition over memorable multi-word passphrases. Product direction now prefers phrase-style secrets that users can realistically enter correctly across devices without adding brittle character-class requirements.
+**Options Considered**: Keep the 8-character minimum; raise the minimum and also require digit/letter/symbol classes; tie the minimum length to channel TTL; adopt a longer minimum plus phrase-style guidance without composition rules.
+**Choice**: Use one static policy across all passphrase entry points: `12 <= length <= 128`, allow only ordinary spaces as separators, and surface "Use 4+ random words or 12+ characters" in the create and receiver-lock setup UI. Do not add legacy-compatibility branches because the product has not launched and there is no real-user data to preserve.
+**Reasoning**: This raises the floor meaningfully above trivial 8-character passwords, keeps the rule easy to explain, supports memorable word-based passphrases, and avoids the predictable weak patterns that composition requirements often create.
+**Trade-offs**: Existing local test fixtures and any prelaunch developer-created links that relied on the old 8-character policy must be recreated. Error handling now needs to distinguish missing, too-short, too-long, and invalid-whitespace inputs instead of collapsing everything into a single minimum-length message.
+
 ## [2026-03-29] Expose channel TTL as create-time presets
 
 **Decision**: Let senders choose the channel TTL at create time using three presets: 1 hour, 24 hours, or 7 days

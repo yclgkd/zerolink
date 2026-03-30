@@ -316,7 +316,7 @@ describe('SharePage – lock flow', () => {
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-describedby'
       )
-    ).toBeNull();
+    ).toBe('share-lock-passphrase-helper');
     const generateButton = screen.getByTestId('share-generate-button') as HTMLButtonElement;
     expect(generateButton.disabled).toBe(true);
 
@@ -556,7 +556,7 @@ describe('SharePage – lock flow', () => {
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-describedby'
       )
-    ).toBeNull();
+    ).toBe('share-lock-passphrase-helper');
     expect(screen.queryByTestId('share-step-locked')).toBeNull();
   });
 
@@ -592,7 +592,7 @@ describe('SharePage – lock flow', () => {
       (screen.getByTestId('passphrase-input-field') as HTMLInputElement).getAttribute(
         'aria-describedby'
       )
-    ).toBe('share-lock-error');
+    ).toBe('share-lock-error share-lock-passphrase-helper');
   });
 
   it('does not update state after unmount during pending lock request', async () => {
