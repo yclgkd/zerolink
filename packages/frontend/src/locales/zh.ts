@@ -101,6 +101,11 @@ const zh: Translation = {
     destroyDeletingButton: '删除中\u2026',
     createNewButton: '创建新频道',
     deliveredToast: '密钥传递成功。',
+    shareLinkRecoveryTitle: '需要重新发送接收方链接？',
+    shareLinkRecoveryBody:
+      '当前浏览器会话里仍保留这条一次性接收方链接。在接收方锁定频道前，你可以再次复制它。',
+    shareLinkRecoveryButton: '复制接收方链接',
+    shareLinkRecoveryCopied: '接收方链接已复制',
   },
 
   share: {

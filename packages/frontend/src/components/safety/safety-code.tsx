@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../lib/utils';
-import { PageCard, PageCardContent, PageCardHeader, PageCardTitle } from '../layout';
+import { PageCardContent, PageCardHeader, PageCardTitle } from '../layout';
+import { Card } from '../ui/card';
 import { resolveSafetyCodeColors } from './safety-code-colors';
 
 /**
@@ -39,17 +40,17 @@ function SafetyCodeHeaderToggle({
     <PageCardHeader className="gap-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <PageCardTitle className="text-xl">{t('safetyCode.title')}</PageCardTitle>
-          <p className="text-sm text-muted-foreground">{verifyHint}</p>
+          <PageCardTitle className="text-lg">{t('safetyCode.title')}</PageCardTitle>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{verifyHint}</p>
         </div>
         <div className="flex gap-2">
           <button
             aria-pressed={view === 'emoji'}
             className={cn(
-              'rounded-lg border px-3 py-1.5 text-xs transition-colors',
+              'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
               view === 'emoji'
-                ? 'border-neon-magenta/50 bg-neon-magenta/15 text-neon-magenta'
-                : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'
+                ? 'border-primary/35 bg-primary/10 text-primary'
+                : 'border-border/70 bg-background/30 text-muted-foreground hover:text-foreground'
             )}
             onClick={() => setView('emoji')}
             type="button"
@@ -59,10 +60,10 @@ function SafetyCodeHeaderToggle({
           <button
             aria-pressed={view === 'color'}
             className={cn(
-              'rounded-lg border px-3 py-1.5 text-xs transition-colors',
+              'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
               view === 'color'
-                ? 'border-neon-magenta/50 bg-neon-magenta/15 text-neon-magenta'
-                : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'
+                ? 'border-primary/35 bg-primary/10 text-primary'
+                : 'border-border/70 bg-background/30 text-muted-foreground hover:text-foreground'
             )}
             onClick={() => setView('color')}
             type="button"
@@ -80,7 +81,7 @@ function EmojiGrid({ cells }: { cells: { id: string; testId: string; emoji: stri
     <div className="flex flex-wrap justify-center gap-2">
       {cells.map((item) => (
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 bg-card/70 text-lg"
+          className="flex h-11 w-11 items-center justify-center rounded-xl border border-border/70 bg-background/35 text-lg"
           data-testid={item.testId}
           key={item.id}
         >
@@ -96,7 +97,7 @@ function ColorGrid({ cells }: { cells: { id: string; testId: string; color: stri
     <div className="mx-auto grid max-w-xs grid-cols-4 gap-2">
       {cells.map((item) => (
         <div
-          className="aspect-square rounded-lg border border-border/70"
+          className="aspect-square rounded-xl border border-border/70"
           data-testid={item.testId}
           key={item.id}
           style={{ backgroundColor: item.color }}
@@ -120,7 +121,7 @@ function AdvancedFingerprintSection({
     <div className="border-t border-border/50 pt-3">
       <button
         aria-expanded={showAdvanced}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         onClick={() => setShowAdvanced((current) => !current)}
         type="button"
       >
@@ -135,11 +136,11 @@ function AdvancedFingerprintSection({
         <div className="mt-3 space-y-2" data-testid="safety-code-advanced-content">
           <div>
             <p className="text-xs text-muted-foreground">{t('safetyCode.shortFprLabel')}</p>
-            <code className="text-xs text-neon-cyan">{display.shortFpr}</code>
+            <code className="text-xs text-primary">{display.shortFpr}</code>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('safetyCode.fullFprLabel')}</p>
-            <code className="break-all text-xs text-neon-cyan">{display.fullFpr}</code>
+            <code className="break-all text-xs text-primary">{display.fullFpr}</code>
           </div>
         </div>
       ) : null}
@@ -176,10 +177,9 @@ export function SafetyCode({
   }));
 
   return (
-    <PageCard
-      className={cn('border-neon-magenta/30 shadow-[0_0_30px] shadow-neon-magenta/15', className)}
+    <Card
+      className={cn('rounded-2xl border-border/70 bg-card/45 shadow-none', className)}
       data-testid="safety-code-root"
-      tone="magenta"
     >
       <SafetyCodeHeaderToggle setView={setView} verifyHint={resolvedVerifyHint} view={view} />
 
@@ -192,6 +192,6 @@ export function SafetyCode({
           showAdvanced={showAdvanced}
         />
       </PageCardContent>
-    </PageCard>
+    </Card>
   );
 }

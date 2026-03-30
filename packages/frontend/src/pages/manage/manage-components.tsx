@@ -1,6 +1,6 @@
 import { CHANNEL_STATE, type ChannelState } from '@zerolink/shared';
-import { PlusCircle, Send, Trash2 } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { ClipboardCheck, Copy, PlusCircle, Send, Trash2 } from 'lucide-react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -44,10 +44,10 @@ export function ManagePageHeader({
 export function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   const { t } = useTranslation();
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="text-sm text-muted-foreground">
       {t('manage.channelIdLabel')}{' '}
       <code
-        className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
+        className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 font-mono text-xs text-foreground"
         data-testid="manage-uuid"
       >
         {uuid ?? t('manage.channelIdMissing')}
@@ -56,20 +56,85 @@ export function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   );
 }
 
+function ShareLinkRecoveryPanel({ shareUrl }: { shareUrl: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  async function handleCopy(): Promise<void> {
+    if (!navigator.clipboard) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(new URL(shareUrl, window.location.origin).href);
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+      setCopied(true);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <StateNotice
+      data-testid="manage-share-link-recovery"
+      title={t('manage.shareLinkRecoveryTitle')}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm leading-6 text-foreground/85">{t('manage.shareLinkRecoveryBody')}</p>
+        <button
+          className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-background/35 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          data-testid="manage-share-link-recovery-copy"
+          onClick={() => void handleCopy()}
+          type="button"
+        >
+          {copied ? (
+            <>
+              <ClipboardCheck aria-hidden="true" className="size-4 text-neon-green" />
+              {t('manage.shareLinkRecoveryCopied')}
+            </>
+          ) : (
+            <>
+              <Copy aria-hidden="true" className="size-4" />
+              {t('manage.shareLinkRecoveryButton')}
+            </>
+          )}
+        </button>
+      </div>
+    </StateNotice>
+  );
+}
+
 export function StatusContent({
   status,
   safetyCode,
+  shareLinkRecoveryUrl,
 }: {
   status: ChannelState;
   safetyCode: ReturnType<typeof deriveSafetyCodeDisplay> | null;
+  shareLinkRecoveryUrl?: string | null;
 }) {
   const { t } = useTranslation();
 
   if (status === CHANNEL_STATE.WAITING) {
     return (
-      <section className="space-y-2" data-testid="manage-state-waiting">
-        <h3 className="text-base font-semibold text-foreground">{t('manage.waitingTitle')}</h3>
-        <p className="text-xs text-muted-foreground">{t('manage.waitingBody')}</p>
+      <section className="space-y-4" data-testid="manage-state-waiting">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold text-foreground">{t('manage.waitingTitle')}</h3>
+          <p className="text-sm leading-6 text-muted-foreground">{t('manage.waitingBody')}</p>
+        </div>
+        {shareLinkRecoveryUrl ? <ShareLinkRecoveryPanel shareUrl={shareLinkRecoveryUrl} /> : null}
       </section>
     );
   }
@@ -79,7 +144,7 @@ export function StatusContent({
       <section className="space-y-4" data-testid="manage-state-locked">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.lockedTitle')}</h3>
-          <p className="text-xs text-muted-foreground">{t('manage.lockedBody')}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{t('manage.lockedBody')}</p>
         </div>
 
         {safetyCode ? (
@@ -90,7 +155,7 @@ export function StatusContent({
             title={t('manage.safetyUnavailableTitle')}
             tone="warning"
           >
-            <p className="mt-1 text-xs text-neon-orange">{t('manage.safetyUnavailableBody')}</p>
+            <p className="mt-1 text-sm text-foreground/85">{t('manage.safetyUnavailableBody')}</p>
           </StateNotice>
         )}
       </section>
@@ -102,7 +167,7 @@ export function StatusContent({
       <section className="space-y-4" data-testid="manage-state-delivered">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.deliveredTitle')}</h3>
-          <p className="text-xs text-muted-foreground">{t('manage.deliveredBody')}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{t('manage.deliveredBody')}</p>
         </div>
 
         {safetyCode ? (
@@ -113,7 +178,7 @@ export function StatusContent({
             title={t('manage.safetyUnavailableTitle')}
             tone="warning"
           >
-            <p className="mt-1 text-xs text-neon-orange">{t('manage.safetyUnavailableBody')}</p>
+            <p className="mt-1 text-sm text-foreground/85">{t('manage.safetyUnavailableBody')}</p>
           </StateNotice>
         )}
       </section>
@@ -124,7 +189,7 @@ export function StatusContent({
     return (
       <section className="space-y-2" data-testid="manage-state-deleted">
         <h3 className="text-base font-semibold text-foreground">{t('manage.deletedTitle')}</h3>
-        <p className="text-xs text-muted-foreground">{t('manage.deletedBody')}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{t('manage.deletedBody')}</p>
       </section>
     );
   }
@@ -132,7 +197,7 @@ export function StatusContent({
   return (
     <section className="space-y-2" data-testid="manage-state-expired">
       <h3 className="text-base font-semibold text-foreground">{t('manage.expiredTitle')}</h3>
-      <p className="text-xs text-muted-foreground">{t('manage.expiredBody')}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{t('manage.expiredBody')}</p>
     </section>
   );
 }
@@ -153,16 +218,13 @@ export function SecretInput({
   const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <label
-        className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-        htmlFor="manage-secret-input"
-      >
+      <label className="text-sm font-medium text-foreground" htmlFor="manage-secret-input">
         {t('manage.secretLabel')}
       </label>
       <textarea
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}
-        className="min-h-24 w-full rounded-xl border border-border/70 bg-card/60 px-3 py-2 text-sm text-foreground outline-none ring-offset-background transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-28 w-full rounded-2xl border border-border/70 bg-card/60 px-4 py-3 text-sm text-foreground outline-none ring-offset-background transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-60"
         data-testid="manage-secret-input"
         disabled={disabled}
         id="manage-secret-input"
@@ -186,12 +248,12 @@ export function DestroyConfirmPanel({
   const { t } = useTranslation();
   return (
     <div
-      className="space-y-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm ring-1 ring-destructive/20"
+      className="space-y-3 rounded-2xl border border-destructive/40 bg-destructive/8 p-4 text-sm ring-1 ring-destructive/15"
       data-testid="manage-destroy-confirm"
     >
       <div className="space-y-1">
         <p className="font-semibold text-destructive">{t('manage.destroyConfirmTitle')}</p>
-        <p className="text-xs text-muted-foreground">{t('manage.destroyConfirmBody')}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{t('manage.destroyConfirmBody')}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button

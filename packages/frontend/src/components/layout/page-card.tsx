@@ -4,10 +4,10 @@ import { cn } from '../../lib/utils';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../ui/card';
 
 const toneClasses = {
-  purple: 'border-neon-purple/30 shadow-[0_0_30px] shadow-neon-purple/15',
-  magenta: 'border-neon-magenta/30 shadow-[0_0_30px] shadow-neon-magenta/15',
-  orange: 'border-neon-orange/30 shadow-[0_0_30px] shadow-neon-orange/15',
-  cyan: 'border-neon-cyan/30 shadow-[0_0_30px] shadow-neon-cyan/15',
+  purple: 'border-neon-purple/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
+  magenta: 'border-neon-magenta/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
+  orange: 'border-neon-orange/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
+  cyan: 'border-neon-cyan/18 shadow-[0_24px_72px_rgb(3_10_24_/_0.34)]',
 } as const;
 
 export type PageCardTone = keyof typeof toneClasses;
@@ -29,7 +29,9 @@ type PageCardTitleProps = ComponentProps<'h3'> & {
 };
 
 function PageCardTitle({ asChild = false, className, ...props }: PageCardTitleProps) {
-  return <CardTitle asChild={asChild} className={cn('text-2xl', className)} {...props} />;
+  return (
+    <CardTitle asChild={asChild} className={cn('text-2xl md:text-[2rem]', className)} {...props} />
+  );
 }
 
 function PageCardDescription({ className, ...props }: ComponentProps<'p'>) {
@@ -37,7 +39,12 @@ function PageCardDescription({ className, ...props }: ComponentProps<'p'>) {
 }
 
 function PageCardContent({ className, ...props }: ComponentProps<'div'>) {
-  return <CardContent className={cn('pt-0 text-sm text-muted-foreground', className)} {...props} />;
+  return (
+    <CardContent
+      className={cn('pt-0 text-sm text-muted-foreground md:text-[0.95rem]', className)}
+      {...props}
+    />
+  );
 }
 
 const PageCardFooter = CardFooter;

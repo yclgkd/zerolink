@@ -109,6 +109,11 @@ const en = {
     destroyDeletingButton: 'Deleting\u2026',
     createNewButton: 'Create New Channel',
     deliveredToast: 'Secret delivered successfully.',
+    shareLinkRecoveryTitle: 'Need to resend the receiver link?',
+    shareLinkRecoveryBody:
+      'This browser session still has the one-time receiver link. You can copy it again until the receiver locks the channel.',
+    shareLinkRecoveryButton: 'Copy receiver link',
+    shareLinkRecoveryCopied: 'Receiver link copied',
   },
 
   share: {

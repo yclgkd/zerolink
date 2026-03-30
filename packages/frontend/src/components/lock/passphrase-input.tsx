@@ -61,8 +61,8 @@ function PassphraseStrengthIndicator({ strength }: { strength: PassphraseStrengt
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{t('passphrase.strengthLabel')}</span>
-        <span className={cn('text-xs font-medium', getLabelClass(strength.level))}>
+        <span className="text-sm text-muted-foreground">{t('passphrase.strengthLabel')}</span>
+        <span className={cn('text-sm font-medium', getLabelClass(strength.level))}>
           {strength.label ? t(strengthKeyMap[strength.label]) : ''}
         </span>
       </div>
@@ -106,7 +106,7 @@ export function PassphraseInput({
 
   return (
     <div className={cn('space-y-3', className)} data-testid="passphrase-input-root">
-      <label className="sr-only" htmlFor={resolvedInputId}>
+      <label className="text-sm font-medium text-foreground" htmlFor={resolvedInputId}>
         {resolvedLabel}
       </label>
       <div className="relative">
@@ -115,7 +115,7 @@ export function PassphraseInput({
           aria-invalid={ariaInvalid}
           autoComplete="off"
           className={cn(
-            'w-full rounded-xl border px-4 py-3 transition focus-visible:outline-none focus-visible:ring-2',
+            'w-full rounded-2xl border px-4 py-3 pr-12 transition focus-visible:outline-none focus-visible:ring-2',
             'border-input bg-input-background text-foreground placeholder:text-muted-foreground',
             'focus-visible:ring-ring'
           )}
@@ -128,7 +128,7 @@ export function PassphraseInput({
         />
         <button
           aria-label={showPassphrase ? t('passphrase.hideButton') : t('passphrase.showButton')}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+          className="absolute right-1.5 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setShowPassphrase((current) => !current)}
           type="button"
         >

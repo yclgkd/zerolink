@@ -7,8 +7,8 @@ function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-xl border border-white/10 bg-slate-900/60 text-card-foreground shadow-[0_20px_64px_rgb(0_0_0_/_0.45)] backdrop-blur-xl',
-        'before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent',
+        'relative overflow-hidden rounded-2xl border border-white/8 bg-slate-950/68 text-card-foreground shadow-[0_24px_80px_rgb(2_8_23_/_0.42)] backdrop-blur-md',
+        'before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/12 before:to-transparent',
         className
       )}
       data-slot="card"
@@ -42,7 +42,7 @@ function CardTitle({ asChild = false, className, ...props }: CardTitleProps) {
 function CardDescription({ className, ...props }: ComponentProps<'p'>) {
   return (
     <p
-      className={cn('text-sm text-muted-foreground', className)}
+      className={cn('text-sm leading-6 text-muted-foreground', className)}
       data-slot="card-description"
       {...props}
     />

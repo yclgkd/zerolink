@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-30] Recenter the core frontend on calm, security-tool UX
+
+**Decision**: Rework the four core frontend routes (`create`, `share`, `manage`, `trust`) toward a calmer, more operational security-tool presentation, and add same-session share-link recovery for sender waiting state only.
+**Context**: The previous frontend passed baseline accessibility checks, but the product still leaned on neon cyber-dark styling, dense card grids, and secondary information appearing before the user’s main task. The sharpest UX gaps were on create-first-run cognitive load, share delivered-state task order, and sender recall when the one-time receiver link was lost while the channel was still waiting.
+**Options Considered**: Keep the existing visual language and only tweak copy; redesign the entire app shell and flows around a new design system; keep the existing component structure but retune layout hierarchy, typography, and token intensity around a professional security-tool baseline.
+**Choice**: Keep the existing route/component architecture, but change the information order, typography, and surface styling across the four core pages. Supportive trust/how-it-works content now sits behind the primary task on create; delivered-share prioritizes decrypt before Safety Code; trust content becomes a scan-friendly ordered list; and manage can re-copy the one-time receiver link only when that link still exists in browser `sessionStorage` for the same session and the channel remains in `waiting`.
+**Reasoning**: This resolves the highest-friction UX issues without reopening protocol or backend scope. Using session-scoped recovery instead of durable storage preserves the zero-knowledge posture better than a long-lived cross-tab cache while still covering the common “same tab / same browser session” sender recovery path.
+**Trade-offs**: Same-session recovery does not help when the sender opens the manage link in a different browser session or after the tab session ends. Some older component tests had to be updated because the visual token values and manage-link navigation expectations changed intentionally.
+
 ## [2026-03-29] Expose channel TTL as create-time presets
 
 **Decision**: Let senders choose the channel TTL at create time using three presets: 1 hour, 24 hours, or 7 days

@@ -4,10 +4,10 @@ import { useEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
 
 const toneClasses = {
-  error: 'border-destructive/40 bg-destructive/10 text-destructive',
-  warning: 'border-neon-orange/40 bg-neon-orange/10 text-neon-orange',
-  info: 'border-neon-cyan/35 bg-neon-cyan/10 text-neon-cyan',
-  success: 'border-neon-green/35 bg-neon-green/10 text-neon-green',
+  error: 'border-destructive/35 bg-destructive/8 text-destructive',
+  warning: 'border-neon-orange/28 bg-neon-orange/8 text-neon-orange',
+  info: 'border-neon-cyan/25 bg-neon-cyan/7 text-neon-cyan',
+  success: 'border-neon-green/25 bg-neon-green/7 text-neon-green',
 } as const;
 
 export type StateNoticeTone = keyof typeof toneClasses;
@@ -46,7 +46,11 @@ export function StateNotice({
   return (
     <div
       aria-live={resolvedAriaLive}
-      className={cn('space-y-1 rounded-xl border p-3 text-xs', toneClasses[tone], className)}
+      className={cn(
+        'space-y-1.5 rounded-2xl border px-4 py-3.5 text-sm leading-6',
+        toneClasses[tone],
+        className
+      )}
       ref={ref}
       role={resolvedRole}
       tabIndex={resolvedTabIndex}

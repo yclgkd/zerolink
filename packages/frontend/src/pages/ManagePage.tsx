@@ -1,10 +1,11 @@
 import { CHANNEL_STATE } from '@zerolink/shared';
-import type { ReactElement } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { ChannelUnavailableState } from '../components/channel/channel-unavailable-state';
 import { PageCard, PageCardContent, StateNotice } from '../components/layout';
 import { PassphraseInput } from '../components/lock/passphrase-input';
+import { clearCreatedShareLink, readCreatedShareLink } from './create/share-link-session-cache';
 import {
   ActionPanel,
   ManagePageHeader,
@@ -31,6 +32,24 @@ export function ManagePage(): ReactElement {
     !isTerminalState &&
     usesPasswordManagedChannel &&
     (showDeliveryComposer || state.showDestroyConfirm);
+  const [cachedShareLink, setCachedShareLink] = useState<string | null>(() =>
+    readCreatedShareLink(uuid)
+  );
+
+  useEffect(() => {
+    setCachedShareLink(readCreatedShareLink(uuid));
+  }, [uuid]);
+
+  useEffect(() => {
+    if (!uuid) {
+      return;
+    }
+
+    if (showUnavailableState || state.status !== CHANNEL_STATE.WAITING) {
+      clearCreatedShareLink(uuid);
+      setCachedShareLink(null);
+    }
+  }, [uuid, showUnavailableState, state.status]);
 
   return (
     <PageCard data-testid="page-manage" tone="orange">
@@ -54,59 +73,98 @@ export function ManagePage(): ReactElement {
             testId="manage-state-unavailable"
           />
         ) : (
-          <StatusContent safetyCode={state.safetyCode} status={state.status} />
+          <StatusContent
+            safetyCode={state.safetyCode}
+            shareLinkRecoveryUrl={cachedShareLink}
+            status={state.status}
+          />
         )}
 
-        {showDeliveryComposer ? (
-          <SecretInput
-            ariaDescribedBy={
-              state.actionError && state.isSecretInputInvalid ? 'manage-action-error' : undefined
-            }
-            ariaInvalid={state.isSecretInputInvalid ? true : undefined}
-            disabled={state.isActionPending}
-            onChange={state.handleSecretChange}
-            value={state.secretInput}
-          />
-        ) : null}
+        {showDeliveryComposer || showPasswordSection ? (
+          <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/18 p-5">
+            {showDeliveryComposer ? (
+              <SecretInput
+                ariaDescribedBy={
+                  state.actionError && state.isSecretInputInvalid
+                    ? 'manage-action-error'
+                    : undefined
+                }
+                ariaInvalid={state.isSecretInputInvalid ? true : undefined}
+                disabled={state.isActionPending}
+                onChange={state.handleSecretChange}
+                value={state.secretInput}
+              />
+            ) : null}
 
-        {showPasswordSection ? (
-          <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
-            <p className="text-xs text-muted-foreground">{t('manage.softkeyPassphraseHint')}</p>
-            <PassphraseInput
-              inputId="manage-softkey-passphrase"
-              label={t('manage.softkeyLabel')}
-              onChange={state.handleSoftkeyPassphraseChange}
-              placeholder={t('manage.softkeyPlaceholder')}
-              showStrength={false}
-              value={state.softkeyPassphrase}
+            {showPasswordSection ? (
+              <section className="space-y-2" data-testid="manage-softkey-passphrase-section">
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {t('manage.softkeyPassphraseHint')}
+                </p>
+                <PassphraseInput
+                  inputId="manage-softkey-passphrase"
+                  label={t('manage.softkeyLabel')}
+                  onChange={state.handleSoftkeyPassphraseChange}
+                  placeholder={t('manage.softkeyPlaceholder')}
+                  showStrength={false}
+                  value={state.softkeyPassphrase}
+                />
+              </section>
+            ) : null}
+
+            {state.actionError ? (
+              <StateNotice
+                autoFocusOnMount
+                data-testid="manage-action-error"
+                id="manage-action-error"
+                tone="error"
+              >
+                {state.actionError}
+              </StateNotice>
+            ) : null}
+
+            <ActionPanel
+              canManageActions={state.canManageActions}
+              canDeliver={state.canDeliver}
+              onCancelDestroy={state.handleCancelDestroy}
+              onConfirmDestroy={state.handleApplyDestroy}
+              onDeliver={state.handleDeliver}
+              onOpenDestroyConfirm={state.handleDestroyConfirm}
+              pending={state.isActionPending}
+              showDeliverAction={showDeliveryComposer}
+              showDestroyConfirm={state.showDestroyConfirm}
+              status={state.status}
+              unavailable={showUnavailableState}
             />
           </section>
         ) : null}
-
-        {state.actionError ? (
-          <StateNotice
-            autoFocusOnMount
-            data-testid="manage-action-error"
-            id="manage-action-error"
-            tone="error"
-          >
-            {state.actionError}
-          </StateNotice>
+        {!showDeliveryComposer && !showPasswordSection ? (
+          <>
+            {state.actionError ? (
+              <StateNotice
+                autoFocusOnMount
+                data-testid="manage-action-error"
+                id="manage-action-error"
+                tone="error"
+              >
+                {state.actionError}
+              </StateNotice>
+            ) : null}
+            <ActionPanel
+              canManageActions={state.canManageActions}
+              canDeliver={state.canDeliver}
+              onCancelDestroy={state.handleCancelDestroy}
+              onConfirmDestroy={state.handleApplyDestroy}
+              onDeliver={state.handleDeliver}
+              onOpenDestroyConfirm={state.handleDestroyConfirm}
+              pending={state.isActionPending}
+              showDeliverAction={showDeliveryComposer}
+              showDestroyConfirm={state.showDestroyConfirm}
+              status={state.status}
+              unavailable={showUnavailableState}
+            />
+          </>
         ) : null}
-
-        <ActionPanel
-          canManageActions={state.canManageActions}
-          canDeliver={state.canDeliver}
-          onCancelDestroy={state.handleCancelDestroy}
-          onConfirmDestroy={state.handleApplyDestroy}
-          onDeliver={state.handleDeliver}
-          onOpenDestroyConfirm={state.handleDestroyConfirm}
-          pending={state.isActionPending}
-          showDeliverAction={showDeliveryComposer}
-          showDestroyConfirm={state.showDestroyConfirm}
-          status={state.status}
-          unavailable={showUnavailableState}
-        />
       </PageCardContent>
     </PageCard>
   );

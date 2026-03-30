@@ -47,29 +47,29 @@ function CopyableLinkRow({
   const { copied, copy } = useCopyLink(url);
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+    <div className="space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+        {label}
+      </p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         {isManageLink ? (
           <a
-            className="flex-1 break-all rounded bg-muted/60 px-2 py-1.5 font-mono text-xs text-neon-cyan hover:underline"
+            className="flex-1 break-all rounded-xl border border-border/60 bg-background/35 px-3 py-2 font-mono text-xs text-primary hover:text-foreground hover:underline"
             data-testid={testId}
             href={url}
-            rel="noopener noreferrer"
-            target="_blank"
           >
             {url}
           </a>
         ) : (
           <span
-            className="flex-1 break-all rounded bg-muted/60 px-2 py-1.5 font-mono text-xs text-neon-cyan"
+            className="flex-1 break-all rounded-xl border border-border/60 bg-background/35 px-3 py-2 font-mono text-xs text-primary"
             data-testid={testId}
           >
             {url}
           </span>
         )}
         <button
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/70 bg-card/60 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-card/60 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           data-testid={copyTestId}
           onClick={() => void copy()}
           type="button"
@@ -114,18 +114,18 @@ export function SuccessSummary({
 
   return (
     <div
-      className="space-y-5 rounded-xl border border-neon-green/30 bg-neon-green/5 p-5"
+      className="space-y-5 rounded-2xl border border-neon-green/20 bg-neon-green/6 p-5"
       data-testid="create-success-summary"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5">
-          <p className="font-semibold text-neon-green">{t('create.successTitle')}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-base font-semibold text-neon-green">{t('create.successTitle')}</p>
+          <p className="text-sm text-muted-foreground">
             {t('create.successModeLabel')}{' '}
             <span className="font-medium text-foreground">{profileLabelMap[createdProfile]}</span>
             {links.isPasswordMode ? (
               <span
-                className="ml-2 inline-block rounded border border-neon-purple/40 bg-neon-purple/10 px-1.5 py-px text-xs font-semibold text-neon-purple"
+                className="ml-2 inline-block rounded-full border border-border/70 bg-background/30 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
                 data-testid="create-password-mode-badge"
               >
                 {t('create.passwordProtectedBadge')}
@@ -134,7 +134,7 @@ export function SuccessSummary({
           </p>
         </div>
         <button
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           data-testid="create-another-button"
           onClick={onCreateAnother}
           type="button"
@@ -156,7 +156,7 @@ export function SuccessSummary({
           title={t('create.shareLinkWarningTitle')}
           tone="warning"
         >
-          <p className="mt-1 text-sm text-neon-orange">
+          <p className="mt-1 text-sm text-foreground/85">
             <AlertTriangle aria-hidden="true" className="mr-1 inline size-4" />
             {t('create.shareLinkWarningBody')}
           </p>

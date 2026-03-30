@@ -16,6 +16,7 @@ import { generateChannelUuid } from '../../lib/channel-uuid';
 import type { CreateStore } from '../../stores/create-store';
 import { useCreateStore } from '../../stores/create-store';
 import type { CreatedLinks } from './helpers';
+import { persistCreatedShareLink } from './share-link-session-cache';
 
 function mapCreateError(code: string): string {
   switch (code) {
@@ -94,6 +95,7 @@ async function runCreate({
     isPasswordMode: selectedProfile === SECURITY_PROFILE.QUICK,
     ttl,
   });
+  persistCreatedShareLink(result.data.shareUrlWithFragment);
   if (selectedProfile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();
 }
 

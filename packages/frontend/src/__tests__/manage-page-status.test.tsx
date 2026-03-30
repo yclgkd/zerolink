@@ -144,6 +144,7 @@ beforeEach(() => {
   useCreateStore.getState().resetCreateStore();
   useDeliverStore.getState().resetDeliverStore();
   syncHarness.latestOptions = null;
+  window.sessionStorage.clear();
 
   vi.clearAllMocks();
   deliverSecretMock.mockReset();
@@ -200,6 +201,31 @@ describe('ManagePage – public status and waiting state', () => {
 
     expect(await screen.findByText('Sender')).toBeTruthy();
     expect(screen.getByTestId('manage-uuid').textContent).toContain(VALID_UUID);
+  });
+
+  it('surfaces same-session share link recovery while waiting', async () => {
+    const fetchSpy = getFetchSpy();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    mockPublicState(fetchSpy, 'waiting');
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${VALID_UUID}`,
+      `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`
+    );
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-share-link-recovery')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('manage-share-link-recovery-copy'));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        new URL(`/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`, window.location.origin).href
+      );
+    });
   });
 
   it('falls back to (missing) label and blocks deliver/delete when uuid is absent', async () => {

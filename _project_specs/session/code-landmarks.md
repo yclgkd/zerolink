@@ -15,6 +15,7 @@ UPDATE WHEN:
 | `GEMINI.md` | Gemini CLI router |
 | `.ai/README.md` | Shared guidance index |
 | `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
+| `.impeccable.md` | Project-specific design baseline for `i-*` design skills; current tone is calm, trustworthy, and security-tool oriented |
 | `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
 | `_project_specs/session/decisions.md` | Newest-first workflow and architecture decision log |
 | `_project_specs/session/code-landmarks.md` | Quick navigation map for key entrypoints and gotchas |
@@ -36,6 +37,7 @@ UPDATE WHEN:
 | `packages/backend/src/do/SecretVault.ts` | Durable Object — atomic channel lifecycle state machine |
 | `packages/backend/src/do/SecretVaultWebSocket.ts` | Durable Object WebSocket accept/broadcast helpers for channel state sync |
 | `packages/frontend/src/crypto/orchestrator.ts` | Frontend crypto orchestration (create / lock / deliver / decrypt) |
+| `packages/frontend/src/pages/create/share-link-session-cache.ts` | Best-effort session-scoped cache for same-session sender recovery of one-time share links while a channel is still waiting |
 | `packages/frontend/src/sync/` | Channel sync client: WebSocket-first subscription with `/api/public/:uuid` polling fallback |
 | `packages/frontend/src/stores/` | Zustand stores: `create-store`, `decrypt-store`, `deliver-store`, `lock-store` |
 | `packages/frontend/src/release/verification.ts` | Browser-side signed-manifest verifier |

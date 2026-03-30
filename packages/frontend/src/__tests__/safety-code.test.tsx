@@ -120,7 +120,7 @@ describe('SafetyCode', () => {
 
     const root = screen.getByTestId('safety-code-root');
     expect(root.className).toContain('custom-safety-card');
-    expect(root.className).toContain('border-neon-magenta/30');
+    expect(root.className).toContain('border-border/70');
   });
 
   it('renders custom verify hint when provided', () => {

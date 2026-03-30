@@ -7,7 +7,7 @@ describe('button variants', () => {
     const classes = buttonVariants({ variant: 'danger' });
 
     expect(classes).toContain('text-destructive');
-    expect(classes).toContain('border-destructive/50');
+    expect(classes).toContain('border-destructive/45');
     expect(classes).toContain('bg-destructive/10');
   });
 

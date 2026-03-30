@@ -107,7 +107,7 @@ function AppShellLayout(): ReactElement {
       <Toaster position="bottom-center" richColors />
       {showInAppWarning ? (
         <div
-          className="mb-4 flex items-start gap-3 rounded-xl border border-neon-orange/40 bg-neon-orange/10 px-4 py-3 text-xs text-neon-orange"
+          className="mb-4 flex items-start gap-3 rounded-2xl border border-neon-orange/28 bg-neon-orange/8 px-4 py-3 text-sm text-neon-orange"
           data-testid="inapp-browser-warning"
         >
           <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
@@ -123,19 +123,21 @@ function AppShellLayout(): ReactElement {
           </button>
         </div>
       ) : null}
-      <Card className="sticky top-4 z-50 border-white/8 bg-slate-900/75 backdrop-blur-2xl">
+      <Card className="sticky top-4 z-50 border-white/8 bg-slate-950/78 backdrop-blur-xl">
         <CardHeader className="gap-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[var(--neon-magenta)] shadow-[0_0_20px_rgb(168_85_247_/_0.45)]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-gradient-to-br from-primary/95 to-sky-300/70 shadow-[0_12px_24px_rgb(56_189_248_/_0.18)]">
               <Link2 aria-hidden="true" className="size-5 text-white" />
             </div>
             <div>
               <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
                 <h1>
-                  Zero<span className="text-[var(--neon-orange)]">Link</span>
+                  Zero<span className="text-primary">Link</span>
                 </h1>
               </CardTitle>
-              <p className="text-xs text-muted-foreground">{t('shell.tagline')}</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                {t('shell.tagline')}
+              </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">

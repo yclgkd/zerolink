@@ -54,14 +54,14 @@ export function ManifestInfo(): ReactElement | null {
   }
 
   return (
-    <Card className="border-neon-cyan/20 bg-card/60" data-testid="manifest-info-card">
+    <Card className="border-neon-cyan/14 bg-card/55 shadow-none" data-testid="manifest-info-card">
       <CardHeader className="py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle asChild className="text-sm font-semibold text-neon-cyan">
+          <CardTitle asChild className="text-sm font-semibold text-primary">
             <h2>{t('manifest.title')}</h2>
           </CardTitle>
           <Badge
-            className="border-neon-green/30 bg-neon-green/10 px-3 py-1 text-neon-green"
+            className="border-neon-green/24 bg-neon-green/8 px-3 py-1 text-neon-green"
             variant="secondary"
           >
             {t('manifest.verifiedBadge')}
@@ -70,7 +70,7 @@ export function ManifestInfo(): ReactElement | null {
         <p className="text-sm text-muted-foreground">{t('manifest.body')}</p>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{t('manifest.fingerprintLabel')}</span>
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+          <code className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 text-xs text-muted-foreground">
             {snapshot.manifestHash.slice(0, 16)}
           </code>
         </div>
@@ -86,7 +86,7 @@ export function ManifestInfo(): ReactElement | null {
           {expanded ? t('manifest.hideDetails') : t('manifest.showDetails')}
         </Button>
         {expanded ? (
-          <div className="grid gap-3 rounded-lg border border-border/60 bg-secondary/20 p-3 md:grid-cols-2">
+          <div className="grid gap-3 rounded-2xl border border-border/60 bg-secondary/20 p-3 md:grid-cols-2">
             <DetailRow label={t('manifest.statusLabel')} value={t('manifest.verifiedBadge')} />
             <DetailRow label={t('manifest.versionLabel')} value={snapshot.version} />
             <DetailRow

@@ -511,7 +511,7 @@ describe('CreatePage integration', () => {
     expect(shareLink.tagName.toLowerCase()).not.toBe('a');
   });
 
-  it('manage link opens in a new tab', async () => {
+  it('keeps manage link in the same tab for session recovery', async () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
@@ -524,7 +524,7 @@ describe('CreatePage integration', () => {
 
     const manageLink = screen.getByTestId('create-success-manage-link');
     expect(manageLink.tagName.toLowerCase()).toBe('a');
-    expect(manageLink.getAttribute('target')).toBe('_blank');
-    expect(manageLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(manageLink.getAttribute('target')).toBeNull();
+    expect(manageLink.getAttribute('rel')).toBeNull();
   });
 });

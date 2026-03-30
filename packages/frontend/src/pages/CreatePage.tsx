@@ -46,37 +46,42 @@ export function CreatePage(): ReactElement {
             onCreateAnother={logic.handleCreateAnother}
           />
         ) : (
-          <>
-            <HowItWorks />
-            <ModeSelectorGrid
-              onSelect={logic.handleSelectProfile}
-              selected={logic.state.selectedProfile}
-              webAuthnSupported={logic.state.webAuthnSupported}
-            />
-            <ExpirySelector onSelect={logic.handleSelectTtl} selected={logic.selectedTtl} />
-            <TrustModelHint />
-            {logic.isQuickMode ? (
-              <QuickSharePasswordPanel
-                onPasswordChange={logic.handleQuickPasswordChange}
-                password={logic.quickPassword}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.9fr)]">
+            <div className="space-y-6">
+              <ModeSelectorGrid
+                onSelect={logic.handleSelectProfile}
+                selected={logic.state.selectedProfile}
+                webAuthnSupported={logic.state.webAuthnSupported}
               />
-            ) : null}
-            <ActionFooter
-              disabled={logic.isSubmitting || !logic.canSubmit}
-              isLoading={logic.isSubmitting}
-              onCreate={logic.handleCreate}
-            />
-            {logic.submitError ? (
-              <StateNotice
-                autoFocusOnMount
-                data-testid="create-submit-error"
-                id="create-submit-error"
-                tone="error"
-              >
-                {logic.submitError}
-              </StateNotice>
-            ) : null}
-          </>
+              {logic.isQuickMode ? (
+                <QuickSharePasswordPanel
+                  onPasswordChange={logic.handleQuickPasswordChange}
+                  password={logic.quickPassword}
+                />
+              ) : null}
+              <ExpirySelector onSelect={logic.handleSelectTtl} selected={logic.selectedTtl} />
+              <ActionFooter
+                disabled={logic.isSubmitting || !logic.canSubmit}
+                isLoading={logic.isSubmitting}
+                onCreate={logic.handleCreate}
+              />
+              {logic.submitError ? (
+                <StateNotice
+                  autoFocusOnMount
+                  data-testid="create-submit-error"
+                  id="create-submit-error"
+                  tone="error"
+                >
+                  {logic.submitError}
+                </StateNotice>
+              ) : null}
+            </div>
+
+            <aside className="space-y-4">
+              <TrustModelHint />
+              <HowItWorks />
+            </aside>
+          </div>
         )}
       </PageCardContent>
     </PageCard>

@@ -7,11 +7,11 @@ import { Badge } from '../ui/badge';
 const roleConfig = {
   sender: {
     label: 'Sender',
-    className: 'border-neon-purple/35 bg-neon-purple/15 text-primary',
+    className: 'border-neon-purple/22 bg-neon-purple/8 text-primary',
   },
   receiver: {
     label: 'Receiver',
-    className: 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan',
+    className: 'border-neon-cyan/22 bg-neon-cyan/8 text-neon-cyan',
   },
 } as const;
 

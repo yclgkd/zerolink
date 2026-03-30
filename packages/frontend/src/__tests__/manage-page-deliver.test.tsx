@@ -617,6 +617,7 @@ describe('ManagePage – deliver actions', () => {
     });
 
     await router.navigate(`/m/${VALID_UUID}${createManageHash(0x22)}`);
+    window.history.replaceState({}, '', `/m/${VALID_UUID}${createManageHash(0x22)}`);
     await waitFor(() => {
       expect(router.state.location.hash).toBe(createManageHash(0x22));
     });

@@ -15,6 +15,7 @@ export function useManagePageState(uuid?: string) {
   const store = useDeliverStore();
   const mountedRef = useRef(true);
   const actionScopeRef = useRef(0);
+  const latestManageHashRef = useRef(location.hash);
 
   const [secretInput, setSecretInput] = useState('');
   const [softkeyPassphrase, setSoftkeyPassphrase] = useState('');
@@ -22,17 +23,28 @@ export function useManagePageState(uuid?: string) {
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
 
-  const wrappedPrivateKey = useMemo(() => {
-    const { wrappedKeyCompact } = parseManageFragment(location.hash);
-    if (!wrappedKeyCompact) return undefined;
+  const getWrappedPrivateKey = useCallback(() => {
+    const currentHash =
+      typeof window !== 'undefined' && window.location.hash
+        ? window.location.hash
+        : latestManageHashRef.current;
+    const { wrappedKeyCompact } = parseManageFragment(currentHash);
+    if (!wrappedKeyCompact) {
+      return undefined;
+    }
+
     return deserializeWrappedKeyCompact(wrappedKeyCompact) ?? undefined;
-  }, [location.hash]);
+  }, []);
 
   useEffect(() => {
     return () => {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    latestManageHashRef.current = location.hash;
+  }, [location.hash]);
 
   const { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable } =
     usePublicStatusFetcher(uuid, mountedRef);
@@ -142,7 +154,7 @@ export function useManagePageState(uuid?: string) {
     secretInput,
     softkeyPassphrase,
     profile,
-    wrappedPrivateKey,
+    getWrappedPrivateKey,
     setSecretInput,
     setSoftkeyPassphrase
   );
@@ -159,7 +171,7 @@ export function useManagePageState(uuid?: string) {
     softkeyPassphrase,
     profile,
     isActiveActionContext,
-    wrappedPrivateKey
+    getWrappedPrivateKey
   );
 
   return {
