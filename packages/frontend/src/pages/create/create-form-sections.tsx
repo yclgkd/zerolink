@@ -138,15 +138,27 @@ export function HowItWorks() {
       },
       {
         number: '03',
-        numberClass: 'text-amber-200',
+        numberClass: 'text-cyan-200',
         title: t('create.step3Title'),
         description: t('create.step3Desc'),
       },
       {
         number: '04',
-        numberClass: 'text-emerald-200',
+        numberClass: 'text-amber-200',
         title: t('create.step4Title'),
         description: t('create.step4Desc'),
+      },
+      {
+        number: '05',
+        numberClass: 'text-emerald-200',
+        title: t('create.step5Title'),
+        description: t('create.step5Desc'),
+      },
+      {
+        number: '06',
+        numberClass: 'text-sky-100',
+        title: t('create.step6Title'),
+        description: t('create.step6Desc'),
       },
     ],
     [t]

@@ -455,19 +455,31 @@ describe('CreatePage integration', () => {
     expect(trustLink.textContent?.toLowerCase()).toContain('trust model');
   });
 
-  it('renders HowItWorks with all 4 steps including Verify Safety Code', () => {
+  it('renders HowItWorks with the full 6-step flow in order', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
     const howItWorks = screen.getByTestId('how-it-works');
+    const text = howItWorks.textContent ?? '';
     expect(howItWorks).toBeTruthy();
-    expect(howItWorks.textContent).toContain('Create');
-    expect(howItWorks.textContent).toContain('Share');
-    expect(howItWorks.textContent).toContain('Verify Safety Code');
-    expect(howItWorks.textContent).toContain(
-      'After receiver locks, compare the Safety Code over a separate channel.'
+    expect(text).toContain('Create');
+    expect(text).toContain('Share');
+    expect(text).toContain('Lock');
+    expect(text).toContain('Verify');
+    expect(text).toContain('Deliver');
+    expect(text).toContain('Decrypt');
+    expect(text).toContain('Receiver sets a passphrase on their device and locks the channel.');
+    expect(text).toContain(
+      'Compare the Safety Code over a separate channel to confirm the receiver identity.'
     );
-    expect(howItWorks.textContent).toContain('Deliver');
+    expect(text).toContain(
+      'The receiver decrypts the secret locally on the device that created the lock.'
+    );
+    expect(text.indexOf('Create')).toBeLessThan(text.indexOf('Share'));
+    expect(text.indexOf('Share')).toBeLessThan(text.indexOf('Lock'));
+    expect(text.indexOf('Lock')).toBeLessThan(text.indexOf('Verify'));
+    expect(text.indexOf('Verify')).toBeLessThan(text.indexOf('Deliver'));
+    expect(text.indexOf('Deliver')).toBeLessThan(text.indexOf('Decrypt'));
   });
 
   it('renders HowItWorks when WebAuthn is unavailable', () => {
