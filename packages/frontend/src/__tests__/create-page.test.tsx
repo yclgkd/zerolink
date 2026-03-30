@@ -255,6 +255,26 @@ describe('CreatePage integration', () => {
     expect(submit.disabled).toBe(false);
   });
 
+  it('shows the passphrase policy hint in Quick mode', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    expect(screen.getByText('Use 4+ random words or 12+ characters')).toBeTruthy();
+  });
+
+  it('enables submit button for a multi-word passphrase with ordinary spaces', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'correct horse battery staple' } });
+
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+  });
+
   it('enables submit button in Secure mode when WebAuthn is available', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
