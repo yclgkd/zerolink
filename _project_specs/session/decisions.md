@@ -22,6 +22,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: This removes the remaining style drift and improves mobile execution speed without weakening the security model. Users still see verification before sensitive actions; they just see a denser, calmer version of the same information.
 **Trade-offs**: Shared components now carry slightly more styling nuance, and some compact controls trade visual spaciousness for faster access to the main action on smaller screens.
 **Follow-up (2026-03-30, create layout alignment)**: On desktop create flow, align the right-hand trust/how-it-works column with the first actionable card row instead of the page-level section heading. This keeps the auxiliary column visually subordinate to the sender’s primary task and removes the impression that the two columns are snapped to different grids.
+**Follow-up (2026-03-30, create final polish)**: Cap the create-page intro line length, give the desktop reference rail a clearer sidebar identity, and replace the repeated footer description with a shorter action-oriented hint so the CTA area reads like the end of a form instead of another explanatory block.
 
 ## [2026-03-30] Recenter the core frontend on calm, security-tool UX
 

@@ -298,10 +298,13 @@ export function ActionFooter({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="rounded-2xl border border-border/60 bg-muted/18 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm leading-6 text-muted-foreground">{t('create.description')}</p>
+    <section className="rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-[28rem] text-sm leading-6 text-muted-foreground">
+          {t('create.step1Desc')}
+        </p>
         <Button
+          className="w-full sm:w-auto"
           data-testid="create-submit-button"
           disabled={disabled}
           onClick={onCreate}

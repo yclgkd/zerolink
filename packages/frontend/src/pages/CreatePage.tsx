@@ -36,7 +36,7 @@ export function CreatePage(): ReactElement {
           </PageCardTitle>
           <RoleBadge party="sender" />
         </div>
-        <PageCardDescription>{t('create.description')}</PageCardDescription>
+        <PageCardDescription className="max-w-2xl">{t('create.description')}</PageCardDescription>
       </PageCardHeader>
       <PageCardContent aria-busy={logic.isSubmitting} className="space-y-6">
         {logic.createdLinks ? (
@@ -46,8 +46,8 @@ export function CreatePage(): ReactElement {
             onCreateAnother={logic.handleCreateAnother}
           />
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.9fr)]">
-            <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.28fr)_minmax(19rem,0.84fr)] lg:items-start lg:gap-8">
+            <div className="space-y-6 lg:pr-2">
               <ModeSelectorGrid
                 onSelect={logic.handleSelectProfile}
                 selected={logic.state.selectedProfile}
@@ -77,7 +77,7 @@ export function CreatePage(): ReactElement {
               ) : null}
             </div>
 
-            <aside className="space-y-4 lg:pt-8">
+            <aside className="space-y-4 lg:max-w-[23rem] lg:border-l lg:border-border/40 lg:pl-6 lg:pt-8">
               <TrustModelHint />
               <HowItWorks />
             </aside>
