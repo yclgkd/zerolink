@@ -669,6 +669,12 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 1. Every `feat` or `fix` commit must bundle updates to the durable session files when needed. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplifications, the practical paths are `decisions.md` and `code-landmarks.md` when rationale or navigation context changes.
 2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
 **Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
+## [2026-03-30] Final UI polish favors bounded reading width
+
+**Decision**: Apply a final cross-page polish pass that normalizes page-header line lengths, keeps Share/Manage state panels within bounded reading widths, enlarges shell warning dismiss targets, and tightens the Trust page into a clearer long-form reference layout.
+**Rationale**: After the broader UI refresh, the remaining roughness was mostly micro-level inconsistency rather than structural problems. The app feels more intentional when descriptive copy stays on a stable measure, utility chrome meets touch expectations, and state-heavy flows do not stretch across the full card width.
+**Status**: Implemented in PR #199 follow-up polish commits.
+
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update
 
 **Decision**: Support Cloudflare Durable Objects Free Tier with SQLite backend.

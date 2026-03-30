@@ -55,7 +55,7 @@ export function ManifestInfo(): ReactElement | null {
 
   return (
     <Card className="border-sky-300/14 bg-card/55 shadow-none" data-testid="manifest-info-card">
-      <CardHeader className="py-3">
+      <CardHeader className="gap-3 py-3 sm:py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle asChild className="text-sm font-semibold text-primary">
             <h2>{t('manifest.title')}</h2>
@@ -67,10 +67,12 @@ export function ManifestInfo(): ReactElement | null {
             {t('manifest.verifiedBadge')}
           </Badge>
         </div>
-        <p className="text-sm text-muted-foreground">{t('manifest.body')}</p>
-        <div className="flex items-center gap-2">
+        <p className="max-w-[42rem] text-sm leading-6 text-muted-foreground">
+          {t('manifest.body')}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{t('manifest.fingerprintLabel')}</span>
-          <code className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 text-sm text-muted-foreground">
+          <code className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 text-sm text-foreground/90">
             {snapshot.manifestHash.slice(0, 16)}
           </code>
         </div>

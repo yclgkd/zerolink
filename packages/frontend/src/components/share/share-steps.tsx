@@ -22,7 +22,7 @@ export function StepIndicator({
 }) {
   const { t } = useTranslation();
   return (
-    <div aria-hidden="true" className="space-y-2">
+    <div aria-hidden="true" className="max-w-[46rem] space-y-2">
       <div className="flex items-center gap-1.5">
         {Array.from({ length: total }, (_, i) => (
           <div
@@ -189,7 +189,7 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   );
 
   return (
-    <section className="space-y-4" data-testid="share-step-onboarding">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-onboarding">
       <h3 className="text-base font-semibold text-foreground">{t('share.onboardingTitle')}</h3>
       <div className="space-y-3">
         {onboardingItems.map((item, index) => (
@@ -198,7 +198,7 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
             data-testid={`share-onboarding-card-${index + 1}`}
             key={item.title}
           >
-            <span className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-full border border-border/70 bg-background/30 text-[11px] font-semibold tracking-[0.18em] text-primary">
+            <span className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-full border border-border/70 bg-background/30 text-xs font-semibold tracking-[0.18em] text-primary">
               {`0${index + 1}`}
             </span>
             <div className="space-y-1">
@@ -208,7 +208,12 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
           </div>
         ))}
       </div>
-      <Button data-testid="share-continue-button" onClick={onContinue} type="button">
+      <Button
+        className="w-full sm:w-auto"
+        data-testid="share-continue-button"
+        onClick={onContinue}
+        type="button"
+      >
         {t('share.continueButton')}
       </Button>
     </section>
@@ -256,7 +261,7 @@ export function LockStep({
   }
 
   return (
-    <section className="space-y-4" data-testid="share-step-lock">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-lock">
       <h3 className="text-base font-semibold text-foreground">{t('share.lockTitle')}</h3>
 
       {originalShareUrl ? (
@@ -304,8 +309,9 @@ export function LockStep({
         </StateNotice>
       ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
+          className="w-full sm:w-auto"
           data-testid="share-back-button"
           disabled={lockPending}
           onClick={onBack}
@@ -315,6 +321,7 @@ export function LockStep({
           {t('share.backButton')}
         </Button>
         <Button
+          className="w-full sm:w-auto"
           data-testid="share-generate-button"
           disabled={!canGenerate || lockPending}
           onClick={onGenerate}
@@ -352,7 +359,7 @@ export function LockedStep({
   );
 
   return (
-    <section className="space-y-4" data-testid="share-step-locked">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">{t('share.lockedTitle')}</h3>
         <p className="text-sm leading-6 text-muted-foreground">{t('share.lockedBody')}</p>
@@ -367,13 +374,13 @@ export function LockedStep({
         className="space-y-2 rounded-2xl border border-border/60 bg-muted/18 p-4"
         data-testid="share-next-steps"
       >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           {t('share.nextStepsLabel')}
         </p>
         <ol className="space-y-2 text-sm leading-6 text-foreground">
           {nextSteps.map((stepText, index) => (
             <li className="flex items-start gap-3" key={stepText}>
-              <span className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full border border-border/70 bg-background/30 text-[11px] font-semibold text-primary">
+              <span className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full border border-border/70 bg-background/30 text-xs font-semibold text-primary">
                 {index + 1}
               </span>
               <span>{stepText}</span>
@@ -439,7 +446,7 @@ export function DeliveredStep({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="space-y-4" data-testid="share-step-delivered">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">{t('share.deliveredTitle')}</h3>
         <p className="text-sm leading-6 text-muted-foreground">{t('share.deliveredBody')}</p>
@@ -470,7 +477,7 @@ export function DeliveredStep({
           ) : null}
           <div
             aria-busy={decryptPending}
-            className="space-y-3 rounded-2xl border border-border/60 bg-muted/18 p-5"
+            className="space-y-4 rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5"
             data-testid="share-decrypt-panel"
           >
             <PassphraseInput
@@ -523,7 +530,7 @@ export function DeliveredStep({
               className="space-y-2 rounded-2xl border border-emerald-300/20 bg-emerald-400/8 p-4"
               data-testid="share-decrypt-plaintext"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
                 {t('share.plaintextLabel')}
               </p>
               <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">

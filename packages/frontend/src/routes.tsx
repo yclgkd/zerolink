@@ -101,7 +101,7 @@ function AppShellLayout(): ReactElement {
 
   return (
     <main
-      className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-x-hidden px-4 py-8 md:px-8 md:py-10"
+      className="relative isolate mx-auto min-h-screen w-full max-w-6xl overflow-x-hidden px-4 py-7 md:px-8 md:py-10"
       data-testid="app-shell"
     >
       <Toaster position="bottom-center" richColors />
@@ -114,7 +114,7 @@ function AppShellLayout(): ReactElement {
           <span className="flex-1">{t('shell.inAppBrowserWarning')}</span>
           <button
             aria-label="Dismiss"
-            className="mt-0.5 shrink-0 opacity-70 hover:opacity-100"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-amber-100/75 transition-colors hover:bg-amber-300/10 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/35"
             data-testid="inapp-browser-warning-dismiss"
             onClick={handleDismissInAppWarning}
             type="button"
@@ -123,14 +123,14 @@ function AppShellLayout(): ReactElement {
           </button>
         </div>
       ) : null}
-      <Card className="sticky top-4 z-50 border-white/8 bg-slate-950/74 backdrop-blur-lg">
-        <CardHeader className="gap-4 py-4 md:flex-row md:items-center md:justify-between">
+      <Card className="sticky top-3 z-50 border-white/8 bg-slate-950/74 shadow-[0_18px_40px_rgb(2_8_23_/_0.22)] backdrop-blur-lg md:top-4">
+        <CardHeader className="gap-3 py-4 md:flex-row md:items-center md:justify-between md:gap-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/22 bg-primary/10 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]">
               <Link2 aria-hidden="true" className="size-5 text-primary" />
             </div>
             <div>
-              <CardTitle asChild className="text-3xl tracking-tight md:text-4xl">
+              <CardTitle asChild className="text-[1.95rem] tracking-tight md:text-[2.35rem]">
                 <h1>
                   Zero<span className="text-primary">Link</span>
                 </h1>

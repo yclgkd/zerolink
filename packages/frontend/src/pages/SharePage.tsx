@@ -96,7 +96,7 @@ export function SharePage(): ReactElement {
         isPublicStatusLoading={publicState.isPublicStatusLoading}
         isUnavailable={isUnavailable}
       />
-      <PageCardContent aria-busy={isPageBusy} className="space-y-6">
+      <PageCardContent aria-busy={isPageBusy} className="space-y-5 sm:space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {publicState.publicStatusError ? (

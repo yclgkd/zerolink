@@ -157,7 +157,7 @@ export function HowItWorks() {
       className="rounded-2xl border border-border/60 bg-muted/18 p-5"
       data-testid="how-it-works"
     >
-      <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+      <p className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
         {t('create.howItWorksLabel')}
       </p>
       <div className="space-y-3">
@@ -165,7 +165,7 @@ export function HowItWorks() {
           <div className="flex items-start gap-3" key={step.number}>
             <span
               className={cn(
-                'mt-0.5 inline-flex min-h-8 min-w-8 items-center justify-center rounded-full border border-border/70 bg-background/30 text-[11px] font-semibold tracking-[0.18em]',
+                'mt-0.5 inline-flex min-h-8 min-w-8 items-center justify-center rounded-full border border-border/70 bg-background/30 text-xs font-semibold tracking-[0.18em]',
                 step.numberClass
               )}
             >
@@ -188,7 +188,7 @@ export function TrustModelHint() {
   return (
     <section className="rounded-2xl border border-border/60 bg-card/55 p-5">
       <div className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
           {t('trust.badge')}
         </p>
         <p className="text-sm leading-6 text-muted-foreground">{t('create.trustHintBody')}</p>

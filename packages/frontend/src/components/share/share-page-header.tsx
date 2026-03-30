@@ -44,7 +44,7 @@ export function SharePageHeader({
         </PageCardTitle>
         <RoleBadge party="receiver" />
       </div>
-      <PageCardDescription>{description}</PageCardDescription>
+      <PageCardDescription className="max-w-2xl">{description}</PageCardDescription>
     </PageCardHeader>
   );
 }

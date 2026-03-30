@@ -52,33 +52,33 @@ export function TrustPage(): ReactElement {
   return (
     <PageCard data-testid="page-trust" tone="cyan">
       <PageCardHeader className="gap-2">
-        <p className="text-[11px] uppercase tracking-[0.32em] text-muted-foreground">
+        <p className="text-xs uppercase tracking-[0.32em] text-muted-foreground">
           {t('trust.badge')}
         </p>
         <PageCardTitle asChild className="text-primary">
           <h2>{t('trust.title')}</h2>
         </PageCardTitle>
-        <PageCardDescription>{t('trust.description')}</PageCardDescription>
+        <PageCardDescription className="max-w-2xl">{t('trust.description')}</PageCardDescription>
       </PageCardHeader>
-      <PageCardContent className="space-y-4">
+      <PageCardContent className="space-y-5">
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/45">
           {trustSections.map((section, index) => (
             <article
-              className="flex flex-col gap-3 border-b border-border/60 px-5 py-5 last:border-b-0"
+              className="flex flex-col gap-3 border-b border-border/60 px-5 py-5 last:border-b-0 sm:px-6"
               key={section.title}
             >
-              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
                 {`0${index + 1}`}
               </p>
               <div className="grid gap-2 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-6">
                 <h3 className="text-lg font-semibold text-foreground">{section.title}</h3>
-                <p className="text-sm leading-7 text-muted-foreground">{section.body}</p>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{section.body}</p>
               </div>
             </article>
           ))}
         </div>
       </PageCardContent>
-      <PageCardFooter className="flex flex-wrap gap-3">
+      <PageCardFooter className="flex flex-wrap justify-between gap-3">
         <Button
           data-testid="trust-back-button"
           onClick={() => {

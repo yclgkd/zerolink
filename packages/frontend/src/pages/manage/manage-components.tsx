@@ -36,7 +36,9 @@ export function ManagePageHeader({
         </div>
         <RoleBadge party="sender" />
       </div>
-      <PageCardDescription>{t('manage.headerDescription')}</PageCardDescription>
+      <PageCardDescription className="max-w-2xl">
+        {t('manage.headerDescription')}
+      </PageCardDescription>
     </PageCardHeader>
   );
 }
@@ -130,7 +132,7 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.WAITING) {
     return (
-      <section className="space-y-4" data-testid="manage-state-waiting">
+      <section className="max-w-[48rem] space-y-4" data-testid="manage-state-waiting">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.waitingTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.waitingBody')}</p>
@@ -142,7 +144,7 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.LOCKED) {
     return (
-      <section className="space-y-3" data-testid="manage-state-locked">
+      <section className="max-w-[48rem] space-y-3" data-testid="manage-state-locked">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.lockedTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.lockedBody')}</p>
@@ -165,7 +167,7 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.DELIVERED) {
     return (
-      <section className="space-y-3" data-testid="manage-state-delivered">
+      <section className="max-w-[48rem] space-y-3" data-testid="manage-state-delivered">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.deliveredTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.deliveredBody')}</p>
@@ -188,7 +190,7 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.DELETED) {
     return (
-      <section className="space-y-2" data-testid="manage-state-deleted">
+      <section className="max-w-[46rem] space-y-2" data-testid="manage-state-deleted">
         <h3 className="text-base font-semibold text-foreground">{t('manage.deletedTitle')}</h3>
         <p className="text-sm leading-6 text-muted-foreground">{t('manage.deletedBody')}</p>
       </section>
@@ -196,7 +198,7 @@ export function StatusContent({
   }
 
   return (
-    <section className="space-y-2" data-testid="manage-state-expired">
+    <section className="max-w-[46rem] space-y-2" data-testid="manage-state-expired">
       <h3 className="text-base font-semibold text-foreground">{t('manage.expiredTitle')}</h3>
       <p className="text-sm leading-6 text-muted-foreground">{t('manage.expiredBody')}</p>
     </section>

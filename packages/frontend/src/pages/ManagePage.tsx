@@ -81,7 +81,7 @@ export function ManagePage(): ReactElement {
   return (
     <PageCard data-testid="page-manage" tone="orange">
       <ManagePageHeader status={state.status} unavailable={showUnavailableState} />
-      <PageCardContent aria-busy={state.isActionPending} className="space-y-6">
+      <PageCardContent aria-busy={state.isActionPending} className="space-y-5 sm:space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {state.publicStatusError ? (
@@ -108,7 +108,7 @@ export function ManagePage(): ReactElement {
         )}
 
         {showDeliveryComposer || showPasswordSection ? (
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/18 p-5">
+          <section className="max-w-[52rem] space-y-4 rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5">
             {showDeliveryComposer ? (
               <SecretInput
                 ariaDescribedBy={

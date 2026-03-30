@@ -38,7 +38,7 @@ export function CreatePage(): ReactElement {
         </div>
         <PageCardDescription className="max-w-2xl">{t('create.description')}</PageCardDescription>
       </PageCardHeader>
-      <PageCardContent aria-busy={logic.isSubmitting} className="space-y-6">
+      <PageCardContent aria-busy={logic.isSubmitting} className="space-y-5 sm:space-y-6">
         {logic.createdLinks ? (
           <SuccessSummary
             createdProfile={logic.state.createdProfile}
@@ -77,7 +77,7 @@ export function CreatePage(): ReactElement {
               ) : null}
             </div>
 
-            <aside className="space-y-4 lg:max-w-[23rem] lg:border-l lg:border-border/40 lg:pl-6 lg:pt-8">
+            <aside className="space-y-5 lg:max-w-[23rem] lg:border-l lg:border-border/40 lg:pl-6 lg:pt-8">
               <TrustModelHint />
               <HowItWorks />
             </aside>
