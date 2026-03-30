@@ -11,33 +11,27 @@ const statusConfig: Record<
   {
     className: string;
     icon: React.ComponentType<{ 'aria-hidden': 'true'; className: string }>;
-    label: string;
   }
 > = {
   waiting: {
-    label: 'Waiting for Lock',
     icon: Clock,
-    className: 'border-neon-amber/30 bg-neon-amber/10 text-neon-amber',
+    className: 'border-amber-300/24 bg-amber-400/8 text-amber-200',
   },
   locked: {
-    label: 'Locked by Receiver',
     icon: Lock,
-    className: 'border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan',
+    className: 'border-sky-300/24 bg-sky-400/8 text-sky-200',
   },
   delivered: {
-    label: 'Delivered',
     icon: CheckCircle,
-    className: 'border-neon-green/30 bg-neon-green/10 text-neon-green',
+    className: 'border-emerald-300/24 bg-emerald-400/8 text-emerald-200',
   },
   deleted: {
-    label: 'Deleted',
     icon: Trash2,
-    className: 'border-neon-slate/30 bg-neon-slate/10 text-neon-slate',
+    className: 'border-slate-300/20 bg-slate-400/8 text-slate-300',
   },
   expired: {
-    label: 'Expired',
     icon: Timer,
-    className: 'border-destructive/30 bg-destructive/10 text-destructive',
+    className: 'border-destructive/24 bg-destructive/8 text-destructive',
   },
 };
 

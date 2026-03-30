@@ -51,49 +51,49 @@
   --font-weight-medium: 500;
   --font-weight-normal: 400;
 
-  --background: #07070c;
-  --foreground: #f8fafc;
+  --background: #08111f;
+  --foreground: #e8eef8;
 
-  --card: rgb(20 20 30 / 40%);
-  --card-foreground: #f8fafc;
+  --card: rgb(8 18 32 / 72%);
+  --card-foreground: #e8eef8;
 
-  --popover: #12121a;
-  --popover-foreground: #f8fafc;
+  --popover: #0d1728;
+  --popover-foreground: #e8eef8;
 
-  --primary: #9333ea;
-  --primary-foreground: #ffffff;
+  --primary: #7dd3fc;
+  --primary-foreground: #06111d;
 
-  --secondary: rgb(139 92 246 / 10%);
-  --secondary-foreground: #a855f7;
+  --secondary: rgb(148 163 184 / 12%);
+  --secondary-foreground: #d9e6f7;
 
-  --muted: rgb(100 116 139 / 20%);
-  --muted-foreground: #94a3b8;
+  --muted: rgb(148 163 184 / 12%);
+  --muted-foreground: #99a9bf;
 
-  --accent: rgb(168 85 247 / 15%);
-  --accent-foreground: #f8fafc;
+  --accent: rgb(56 189 248 / 12%);
+  --accent-foreground: #e8eef8;
 
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
-  --border: rgb(139 92 246 / 20%);
-  --input: rgb(139 92 246 / 30%);
-  --input-background: rgb(139 92 246 / 5%);
-  --switch-background: rgb(139 92 246 / 30%);
-  --ring: rgb(168 85 247 / 50%);
+  --border: rgb(125 211 252 / 16%);
+  --input: rgb(148 163 184 / 22%);
+  --input-background: rgb(10 20 34 / 84%);
+  --switch-background: rgb(148 163 184 / 24%);
+  --ring: rgb(125 211 252 / 35%);
 
-  --chart-1: #a855f7;
-  --chart-2: #ec4899;
-  --chart-3: #f97316;
-  --chart-4: #06b6d4;
-  --chart-5: #10b981;
+  --chart-1: #7dd3fc;
+  --chart-2: #94a3b8;
+  --chart-3: #f59e0b;
+  --chart-4: #67e8f9;
+  --chart-5: #34d399;
 
-  --neon-purple: #a855f7;
-  --neon-magenta: #ec4899;
-  --neon-orange: #f97316;
-  --neon-cyan: #06b6d4;
-  --neon-green: #10b981;
-  --neon-amber: #f59e0b;
-  --neon-slate: #64748b;
+  --neon-purple: #8ca9c7;
+  --neon-magenta: #aebdd5;
+  --neon-orange: #d6a55d;
+  --neon-cyan: #7dd3fc;
+  --neon-green: #5dbb9c;
+  --neon-amber: #d6a55d;
+  --neon-slate: #94a3b8;
 
   --radius: 1rem;
 
@@ -119,29 +119,15 @@
   body {
     @apply bg-background font-sans text-foreground antialiased;
     margin: 0;
-    background-color: #06060b;
+    background-color: #08111f;
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(139, 92, 246, 0.22) 0%, transparent 60%),
-      linear-gradient(rgba(139, 92, 246, 0.055) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(139, 92, 246, 0.055) 1px, transparent 1px);
-    background-size:
-      auto,
-      40px 40px,
-      40px 40px;
+      radial-gradient(circle at top, rgba(125, 211, 252, 0.13) 0%, transparent 40%),
+      radial-gradient(circle at 78% 18%, rgba(148, 163, 184, 0.08) 0%, transparent 28%),
+      linear-gradient(180deg, rgba(8, 17, 31, 0.96) 0%, rgba(7, 13, 24, 1) 100%);
+    background-size: auto, auto, auto;
     background-attachment: fixed;
     min-height: 100vh;
-    line-height: 1.5;
-  }
-
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    background-size: 200px 200px;
+    line-height: 1.6;
   }
 
   h1 {
@@ -215,5 +201,11 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up {
     animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    background-attachment: scroll;
   }
 }

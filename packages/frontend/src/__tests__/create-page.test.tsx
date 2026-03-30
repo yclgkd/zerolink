@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,6 +73,7 @@ describe('CreatePage integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useCreateStore.getState().resetCreateStore();
+    window.sessionStorage.clear();
     mockCreateSuccess();
   });
 
@@ -147,6 +149,23 @@ describe('CreatePage integration', () => {
     expect(sevenDaysInput.checked).toBe(true);
   });
 
+  it('keeps the selected TTL radio in tab order and exposes visible focus classes on the option card', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    const user = userEvent.setup();
+    const oneHourInput = screen.getByTestId('create-ttl-one-hour') as HTMLInputElement;
+    const oneHourCard = oneHourInput.nextElementSibling as HTMLElement | null;
+
+    for (let i = 0; i < 6 && document.activeElement !== oneHourInput; i += 1) {
+      await user.tab();
+    }
+
+    expect(document.activeElement).toBe(oneHourInput);
+    expect(oneHourCard?.className).toContain('peer-focus-visible:ring-2');
+    expect(oneHourCard?.className).toContain('peer-focus-visible:ring-offset-2');
+  });
+
   it('hides password panel when Secure mode is selected', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
@@ -176,6 +195,9 @@ describe('CreatePage integration', () => {
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Enter a channel password with at least 12 characters.'
+    );
     // Button should NOT show spinner/Creating when disabled due to empty form, not submission
     expect(submit.textContent).toContain('Create Channel');
     expect(submit.textContent).not.toContain('Creating');
@@ -192,6 +214,9 @@ describe('CreatePage integration', () => {
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Use 4+ random words or at least 12 characters for the channel password.'
+    );
   });
 
   it('enables submit button in Quick mode when password is at least 12 characters', () => {
@@ -202,6 +227,29 @@ describe('CreatePage integration', () => {
 
     const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'Strong#Pass123' } });
+
+    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Ready to create a Quick Share channel that expires in 1 hour.'
+    );
+  });
+
+  it('shows the passphrase policy hint in Quick mode', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    expect(screen.getByText('Use 4+ random words or 12+ characters')).toBeTruthy();
+  });
+
+  it('enables submit button for a multi-word passphrase with ordinary spaces', () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-quick'));
+
+    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'correct horse battery staple' } });
 
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
@@ -231,9 +279,13 @@ describe('CreatePage integration', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
+    fireEvent.click(screen.getByTestId('create-ttl-one-day'));
     fireEvent.click(screen.getByTestId('mode-card-secure'));
     const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
+    expect(screen.getByTestId('create-action-hint').textContent).toContain(
+      'Ready to create a Secure Share channel that expires in 24 hours.'
+    );
   });
 
   it('disables submit button in Secure mode when WebAuthn is unavailable', () => {
@@ -305,8 +357,12 @@ describe('CreatePage integration', () => {
 
     const warning = await screen.findByTestId('create-success-share-link-warning');
     expect(warning.textContent).toContain('This share link is shown only once.');
-    expect(warning.textContent).toContain('After you leave this page, ZeroLink cannot recover it.');
-    expect(warning.textContent).toContain('If you lose it, create a new channel.');
+    expect(warning.textContent).toContain(
+      'the sender Manage page can re-copy it while the channel is still waiting.'
+    );
+    expect(warning.textContent).toContain(
+      'Outside that window, if you lose it, create a new channel.'
+    );
   });
 
   it('shows password mode badge in success summary for Quick Share', async () => {
@@ -432,19 +488,31 @@ describe('CreatePage integration', () => {
     expect(trustLink.textContent?.toLowerCase()).toContain('trust model');
   });
 
-  it('renders HowItWorks with all 4 steps including Verify Safety Code', () => {
+  it('renders HowItWorks with the full 6-step flow in order', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
     const howItWorks = screen.getByTestId('how-it-works');
+    const text = howItWorks.textContent ?? '';
     expect(howItWorks).toBeTruthy();
-    expect(howItWorks.textContent).toContain('Create');
-    expect(howItWorks.textContent).toContain('Share');
-    expect(howItWorks.textContent).toContain('Verify Safety Code');
-    expect(howItWorks.textContent).toContain(
-      'After receiver locks, compare the Safety Code over a separate channel.'
+    expect(text).toContain('Create');
+    expect(text).toContain('Share');
+    expect(text).toContain('Lock');
+    expect(text).toContain('Verify');
+    expect(text).toContain('Deliver');
+    expect(text).toContain('Decrypt');
+    expect(text).toContain('Receiver sets a passphrase on their device and locks the channel.');
+    expect(text).toContain(
+      'Compare the Safety Code over a separate channel to confirm the receiver identity.'
     );
-    expect(howItWorks.textContent).toContain('Deliver');
+    expect(text).toContain(
+      'The receiver decrypts the secret locally on the device that created the lock.'
+    );
+    expect(text.indexOf('Create')).toBeLessThan(text.indexOf('Share'));
+    expect(text.indexOf('Share')).toBeLessThan(text.indexOf('Lock'));
+    expect(text.indexOf('Lock')).toBeLessThan(text.indexOf('Verify'));
+    expect(text.indexOf('Verify')).toBeLessThan(text.indexOf('Deliver'));
+    expect(text.indexOf('Deliver')).toBeLessThan(text.indexOf('Decrypt'));
   });
 
   it('renders HowItWorks when WebAuthn is unavailable', () => {
@@ -497,6 +565,26 @@ describe('CreatePage integration', () => {
     });
   });
 
+  it('persists the selected TTL in the share-link recovery cache', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('create-ttl-seven-days'));
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    const raw = window.sessionStorage.getItem('zerolink:created-share-link:aaaaaaaaaaaaaaaaaaaaa');
+    expect(raw).toBeTruthy();
+
+    const parsed = JSON.parse(String(raw));
+    expect(parsed.url).toBe('/s/aaaaaaaaaaaaaaaaaaaaa#k=bW9ja19sb2NrX3NlY3JldA');
+    expect(parsed.ttl).toBe(CHANNEL_TTL_MS.SEVEN_DAYS);
+  });
+
   it('shows HowItWorks again after clicking Create another', async () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
@@ -531,7 +619,7 @@ describe('CreatePage integration', () => {
     expect(shareLink.tagName.toLowerCase()).not.toBe('a');
   });
 
-  it('manage link opens in a new tab', async () => {
+  it('keeps manage link in the same tab for session recovery', async () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
 
@@ -544,7 +632,7 @@ describe('CreatePage integration', () => {
 
     const manageLink = screen.getByTestId('create-success-manage-link');
     expect(manageLink.tagName.toLowerCase()).toBe('a');
-    expect(manageLink.getAttribute('target')).toBe('_blank');
-    expect(manageLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(manageLink.getAttribute('target')).toBeNull();
+    expect(manageLink.getAttribute('rel')).toBeNull();
   });
 });

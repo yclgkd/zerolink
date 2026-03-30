@@ -120,12 +120,23 @@ describe('SafetyCode', () => {
 
     const root = screen.getByTestId('safety-code-root');
     expect(root.className).toContain('custom-safety-card');
-    expect(root.className).toContain('border-neon-magenta/30');
+    expect(root.className).toContain('border-border/70');
   });
 
   it('renders custom verify hint when provided', () => {
     render(<SafetyCode display={display} verifyHint="Compare over secure voice call." />);
 
     expect(screen.getByText('Compare over secure voice call.')).toBeTruthy();
+  });
+
+  it('supports compact density for tighter verification layouts', () => {
+    render(<SafetyCode density="compact" display={display} />);
+
+    const emojiTab = screen.getByRole('button', { name: 'Emoji' });
+    const colorTab = screen.getByRole('button', { name: 'Colors' });
+
+    expect(emojiTab.className).toContain('text-sm');
+    expect(colorTab.className).toContain('text-sm');
+    expect(screen.getByTestId('safety-code-root')).toBeTruthy();
   });
 });

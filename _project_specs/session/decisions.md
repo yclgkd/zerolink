@@ -13,6 +13,42 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-30] Second-round frontend polish keeps safety flows intact while removing neon residue
+
+**Decision**: Finish the calm security-tool retune by replacing the last neon-styled shared surfaces with muted semantic colors, adding a compact `SafetyCode` density for sender/receiver terminal states, and promoting small explanatory copy to stable reading sizes where it affects comprehension.
+**Context**: The first PR199 pass fixed the route hierarchy and the biggest UX errors, but review still found residual cyber-dark cues in shared shell/card/badge/notice surfaces and overly tall verification blocks on mobile `locked` / `delivered` states.
+**Options Considered**: Leave the remaining styling as-is and ship; redesign the pages again around a new mobile-specific layout; keep the current architecture and tighten the shared visual language plus the verification component density.
+**Choice**: Reuse the existing route/component structure, retune shared visual primitives in place, and let `SafetyCode` expose a compact density that can be applied selectively in `manage` and `share` terminal-state flows without changing the verification order.
+**Reasoning**: This removes the remaining style drift and improves mobile execution speed without weakening the security model. Users still see verification before sensitive actions; they just see a denser, calmer version of the same information.
+**Trade-offs**: Shared components now carry slightly more styling nuance, and some compact controls trade visual spaciousness for faster access to the main action on smaller screens.
+**Follow-up (2026-03-30, create layout alignment)**: On desktop create flow, align the right-hand trust/how-it-works column with the first actionable card row instead of the page-level section heading. This keeps the auxiliary column visually subordinate to the sender’s primary task and removes the impression that the two columns are snapped to different grids.
+**Follow-up (2026-03-30, create final polish)**: Cap the create-page intro line length, give the desktop reference rail a clearer sidebar identity, and replace the repeated footer description with a shorter action-oriented hint so the CTA area reads like the end of a form instead of another explanatory block.
+**Follow-up (2026-03-30, create flow sidebar semantics)**: Expand the create-page reference rail from four abbreviated sender-side steps to six explicit end-to-end steps: create, share, lock, verify, deliver, decrypt. The rail keeps the compact sidebar format, but its title now matches the actual full journey instead of skipping the receiver lock and decrypt stages.
+**Follow-up (2026-03-30, zh flow copy refinement)**: Shorten the Chinese create-page flow labels to more direct user-facing language: use `密码` instead of `密码短语` in the sidebar copy, describe step 5 as delivering `密文` rather than `加密密钥`, and simplify the verify/decrypt wording so the six-step rail scans faster without changing the underlying security semantics.
+**Follow-up (2026-03-30, create CTA hint)**: Replace the static create-page footer sentence with a state-aware CTA hint. The footer now tells the sender what is missing in Quick Share (`enter a valid channel password`) or, once the form is ready, summarizes the exact channel about to be created (`mode + TTL`) instead of repeating a generic intro sentence.
+**Follow-up (2026-03-30, global polish pass)**: Finish the all-pages polish by normalizing create/share header alignment, enlarging shell/manifest/share/manage secondary control hit areas, aligning Share UUID styling with Manage, and making Trust/Manage footer actions stack to full-width buttons on mobile. These are visual/interaction refinements only; channel semantics stay unchanged.
+
+## [2026-03-30] Recenter the core frontend on calm, security-tool UX
+
+**Decision**: Rework the four core frontend routes (`create`, `share`, `manage`, `trust`) toward a calmer, more operational security-tool presentation, and add same-session share-link recovery for sender waiting state only.
+**Context**: The previous frontend passed baseline accessibility checks, but the product still leaned on neon cyber-dark styling, dense card grids, and secondary information appearing before the user’s main task. The sharpest UX gaps were on create-first-run cognitive load, share delivered-state task order, and sender recall when the one-time receiver link was lost while the channel was still waiting.
+**Options Considered**: Keep the existing visual language and only tweak copy; redesign the entire app shell and flows around a new design system; keep the existing component structure but retune layout hierarchy, typography, and token intensity around a professional security-tool baseline.
+**Choice**: Keep the existing route/component architecture, but change the information order, typography, and surface styling across the four core pages. Supportive trust/how-it-works content now sits behind the primary task on create; delivered-share prioritizes decrypt before Safety Code; trust content becomes a scan-friendly ordered list; and manage can re-copy the one-time receiver link only when that link still exists in browser `sessionStorage` for the same session and the channel remains in `waiting`.
+**Reasoning**: This resolves the highest-friction UX issues without reopening protocol or backend scope. Using session-scoped recovery instead of durable storage preserves the zero-knowledge posture better than a long-lived cross-tab cache while still covering the common “same tab / same browser session” sender recovery path.
+**Trade-offs**: Same-session recovery does not help when the sender opens the manage link in a different browser session or after the tab session ends. Some older component tests had to be updated because the visual token values and manage-link navigation expectations changed intentionally.
+**Follow-up (2026-03-30, docs cleanup)**: Remove the root `.impeccable.md` helper file. The durable design baseline for this UI direction lives in the decision log and project guidance, not in a repo-root tool-specific document.
+**Follow-up (2026-03-30, local artifacts)**: Ignore `output/playwright/` as a local UI-audit screenshot scratch path. These images are transient review artifacts, not source assets or committed test fixtures.
+**Follow-up (2026-03-30, recovery TTL alignment)**: The sender-side share-link recovery cache now stores the selected channel TTL with each entry and expires against that per-entry TTL instead of a fixed one-hour cap, so same-session recovery stays aligned with the actual waiting window of 1 hour, 24 hours, or 7 days.
+**Follow-up (2026-03-30, browser chrome polish)**: Align the inline SVG favicon in `packages/frontend/index.html` with the calmer primary token so the browser tab icon no longer retains the old neon-purple accent after the UI palette shift.
+**Follow-up (2026-03-30, e2e copy sync)**: The happy-path Playwright assertion now checks the same-session recovery wording on the create success warning (`shown once`, `Manage can re-copy while waiting`, `create a new channel if lost outside that window`) instead of the older pre-recovery sentence claiming the link is unrecoverable after leaving the page.
+
+## [2026-03-30] Final UI polish favors bounded reading width
+
+**Decision**: Apply a final cross-page polish pass that normalizes page-header line lengths, keeps Share/Manage state panels within bounded reading widths, enlarges shell warning dismiss targets, and tightens the Trust page into a clearer long-form reference layout.
+**Rationale**: After the broader UI refresh, the remaining roughness was mostly micro-level inconsistency rather than structural problems. The app feels more intentional when descriptive copy stays on a stable measure, utility chrome meets touch expectations, and state-heavy flows do not stretch across the full card width.
+**Status**: Implemented in PR #199 follow-up polish commits.
+**Follow-up**: Passphrase fields now use a slightly looser label-to-input gap, and the label is block-level so shared vertical spacing utilities actually affect the rendered form stack. The create-page TTL preset cards also expose a visible `peer-focus-visible` ring so keyboard users can see when the selected radio has focus.
+
 ## [2026-03-30] Use hybrid passphrase strength scoring
 
 **Decision**: Score frontend passphrase strength with a hybrid heuristic that rewards both long multi-word passphrases and long mixed-character passwords, while applying explicit penalties for repeated characters, repeated words, and a small set of common weak patterns.
@@ -332,6 +368,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Only show the complete share link once, immediately after channel creation.
 **Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
 **Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
+**Follow-up (2026-03-30)**: This is no longer absolute. `ManagePage` now supports best-effort same-session recovery of the original receiver link while the channel is still `waiting`, using browser `sessionStorage` plus waiting-state gating. The original trade-off still applies after that waiting window, after session end, or when the recovery cache is unavailable.
 
 ## [2026-03-12] Receiver Safety Code and realtime copy align with public channel state
 

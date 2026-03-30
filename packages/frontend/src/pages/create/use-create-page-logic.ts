@@ -16,6 +16,7 @@ import { generateChannelUuid } from '../../lib/channel-uuid';
 import type { CreateStore } from '../../stores/create-store';
 import { useCreateStore } from '../../stores/create-store';
 import type { CreatedLinks } from './helpers';
+import { persistCreatedShareLink } from './share-link-session-cache';
 
 function mapCreateError(code: string, message?: string): string {
   switch (code) {
@@ -39,6 +40,7 @@ function mapCreateError(code: string, message?: string): string {
 }
 
 interface RunCreateOptions {
+  profile: SecurityProfile;
   quickPassword: string;
   ttl: ChannelTtlMs;
   store: CreateStore;
@@ -48,6 +50,7 @@ interface RunCreateOptions {
 }
 
 async function runCreate({
+  profile,
   quickPassword,
   ttl,
   store,
@@ -55,17 +58,16 @@ async function runCreate({
   onSuccess,
   onQuickPasswordClear,
 }: RunCreateOptions): Promise<void> {
-  const { selectedProfile } = useCreateStore.getState();
   store.startCreateBegin();
 
   let result: Awaited<ReturnType<typeof cryptoOrchestrator.createChannel>>;
   try {
     result = await cryptoOrchestrator.createChannel({
       uuid: generateChannelUuid(),
-      profile: selectedProfile,
+      profile,
       ttl,
-      useCompatibilityMode: selectedProfile === SECURITY_PROFILE.QUICK,
-      ...(selectedProfile === SECURITY_PROFILE.QUICK ? { softkeyPassphrase: quickPassword } : {}),
+      useCompatibilityMode: profile === SECURITY_PROFILE.QUICK,
+      ...(profile === SECURITY_PROFILE.QUICK ? { softkeyPassphrase: quickPassword } : {}),
     });
   } catch {
     store.failCreateBegin('INTERNAL_ERROR');
@@ -80,10 +82,10 @@ async function runCreate({
   }
 
   store.completeCreateBegin({ ok: true, creationOptions: {} });
-  store.setCreatedProfile(selectedProfile);
+  store.setCreatedProfile(profile);
 
   let manageUrl = result.data.manageUrl;
-  if (selectedProfile === SECURITY_PROFILE.QUICK && result.data.wrappedPrivateKey) {
+  if (profile === SECURITY_PROFILE.QUICK && result.data.wrappedPrivateKey) {
     const compact = serializeWrappedKeyCompact(result.data.wrappedPrivateKey);
     manageUrl = buildManageUrlWithFragment(manageUrl, compact);
   }
@@ -91,10 +93,11 @@ async function runCreate({
   onSuccess({
     shareUrlWithFragment: result.data.shareUrlWithFragment,
     manageUrl,
-    isPasswordMode: selectedProfile === SECURITY_PROFILE.QUICK,
+    isPasswordMode: profile === SECURITY_PROFILE.QUICK,
     ttl,
   });
-  if (selectedProfile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();
+  persistCreatedShareLink(result.data.shareUrlWithFragment, ttl);
+  if (profile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();
 }
 
 export function useCreatePageLogic() {
@@ -106,9 +109,10 @@ export function useCreatePageLogic() {
 
   useEffect(() => {
     const support = detectWebAuthnSupport();
-    store.setWebAuthnSupported(support.supported);
-    store.setSelectedProfile(SECURITY_PROFILE.QUICK);
-  }, [store.setWebAuthnSupported, store.setSelectedProfile]);
+    const { setWebAuthnSupported, setSelectedProfile } = useCreateStore.getState();
+    setWebAuthnSupported(support.supported);
+    setSelectedProfile(SECURITY_PROFILE.QUICK);
+  }, []);
 
   const isQuickMode = store.selectedProfile === SECURITY_PROFILE.QUICK;
   const isSubmitting =
@@ -130,6 +134,7 @@ export function useCreatePageLogic() {
     if (isSubmitting || !canSubmit) return;
     clearLocalFeedback();
     void runCreate({
+      profile: store.selectedProfile,
       quickPassword,
       ttl: selectedTtl,
       store,

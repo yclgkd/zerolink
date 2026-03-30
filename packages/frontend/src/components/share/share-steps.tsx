@@ -1,6 +1,6 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
@@ -22,23 +22,19 @@ export function StepIndicator({
 }) {
   const { t } = useTranslation();
   return (
-    <div aria-hidden="true" className="space-y-1.5">
+    <div aria-hidden="true" className="max-w-[46rem] space-y-2">
       <div className="flex items-center gap-1.5">
         {Array.from({ length: total }, (_, i) => (
           <div
             className={cn(
-              'h-1 flex-1 rounded-full transition-colors duration-300',
-              i + 1 < current
-                ? 'bg-neon-cyan/60'
-                : i + 1 === current
-                  ? 'bg-neon-cyan'
-                  : 'bg-border/50'
+              'h-1.5 flex-1 rounded-full transition-colors duration-300',
+              i + 1 < current ? 'bg-primary/45' : i + 1 === current ? 'bg-primary' : 'bg-border/50'
             )}
             key={labels[i]}
           />
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {t('share.stepIndicator', { current, total, label: labels[current - 1] })}
       </p>
     </div>
@@ -97,7 +93,7 @@ function SafetyCodeSection({
   const { t } = useTranslation();
 
   if (safetyCodeAvailable) {
-    return <SafetyCode display={safetyCodeAvailable} />;
+    return <SafetyCode density="compact" display={safetyCodeAvailable} />;
   }
 
   const effectiveStatus =
@@ -109,7 +105,7 @@ function SafetyCodeSection({
 
   return (
     <StateNotice data-testid="share-safety-unavailable" title={title} tone={tone}>
-      <p className="mt-1 text-xs text-foreground/90">{body}</p>
+      <p className="mt-1 text-sm leading-6 text-foreground/90">{body}</p>
     </StateNotice>
   );
 }
@@ -166,7 +162,7 @@ function DecryptUnavailableNotice({
 
   return (
     <StateNotice data-testid="share-decrypt-unavailable" title={title} tone={tone}>
-      <p className="mt-1 text-xs text-foreground/90">{body}</p>
+      <p className="mt-1 text-sm leading-6 text-foreground/90">{body}</p>
     </StateNotice>
   );
 }
@@ -177,17 +173,14 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   const onboardingItems = useMemo(
     () => [
       {
-        emoji: '🔐',
         title: t('share.onboarding1Title'),
         description: t('share.onboarding1Desc'),
       },
       {
-        emoji: '🗝️',
         title: t('share.onboarding2Title'),
         description: t('share.onboarding2Desc'),
       },
       {
-        emoji: '🔒',
         title: t('share.onboarding3Title'),
         description: t('share.onboarding3Desc'),
       },
@@ -196,24 +189,31 @@ export function OnboardingStep({ onContinue }: { onContinue: () => void }) {
   );
 
   return (
-    <section className="space-y-4" data-testid="share-step-onboarding">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-onboarding">
       <h3 className="text-base font-semibold text-foreground">{t('share.onboardingTitle')}</h3>
       <div className="space-y-3">
         {onboardingItems.map((item, index) => (
           <div
-            className="rounded-xl border border-border/60 bg-card/50 p-4"
+            className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card/50 p-4"
             data-testid={`share-onboarding-card-${index + 1}`}
             key={item.title}
           >
-            <p className="flex items-center gap-2 text-foreground">
-              <span>{item.emoji}</span>
-              <span className="font-medium">{item.title}</span>
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+            <span className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-full border border-border/70 bg-background/30 text-xs font-semibold tracking-[0.18em] text-primary">
+              {`0${index + 1}`}
+            </span>
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">{item.title}</p>
+              <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
+            </div>
           </div>
         ))}
       </div>
-      <Button data-testid="share-continue-button" onClick={onContinue} type="button">
+      <Button
+        className="w-full sm:w-auto"
+        data-testid="share-continue-button"
+        onClick={onContinue}
+        type="button"
+      >
         {t('share.continueButton')}
       </Button>
     </section>
@@ -245,6 +245,13 @@ export function LockStep({
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   function handleCopyLink(): void {
     if (!originalShareUrl || !navigator.clipboard) return;
@@ -252,7 +259,8 @@ export function LockStep({
     void navigator.clipboard.writeText(absolute).then(
       () => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
       },
       () => {
         // Clipboard write failed (permission denied or unsupported); leave button label unchanged
@@ -261,14 +269,14 @@ export function LockStep({
   }
 
   return (
-    <section className="space-y-4" data-testid="share-step-lock">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-lock">
       <h3 className="text-base font-semibold text-foreground">{t('share.lockTitle')}</h3>
 
       {originalShareUrl ? (
         <StateNotice data-testid="share-private-mode-notice" tone="warning">
-          <p className="text-xs">{t('share.privateModeNoticeBody')}</p>
+          <p className="text-sm leading-6">{t('share.privateModeNoticeBody')}</p>
           <button
-            className="mt-2 text-xs font-medium underline underline-offset-2 hover:opacity-80"
+            className="mt-2 inline-flex min-h-10 items-center rounded-lg px-1 text-sm font-medium text-amber-50 underline underline-offset-2 transition-colors hover:text-white"
             data-testid="share-private-mode-copy"
             onClick={handleCopyLink}
             type="button"
@@ -310,8 +318,9 @@ export function LockStep({
         </StateNotice>
       ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
+          className="w-full sm:w-auto"
           data-testid="share-back-button"
           disabled={lockPending}
           onClick={onBack}
@@ -321,6 +330,7 @@ export function LockStep({
           {t('share.backButton')}
         </Button>
         <Button
+          className="w-full sm:w-auto"
           data-testid="share-generate-button"
           disabled={!canGenerate || lockPending}
           onClick={onGenerate}
@@ -358,10 +368,10 @@ export function LockedStep({
   );
 
   return (
-    <section className="space-y-4" data-testid="share-step-locked">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-locked">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">{t('share.lockedTitle')}</h3>
-        <p className="text-xs text-muted-foreground">{t('share.lockedBody')}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{t('share.lockedBody')}</p>
       </div>
 
       <SafetyCodeSection
@@ -370,15 +380,20 @@ export function LockedStep({
       />
 
       <div
-        className="space-y-2 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 p-4"
+        className="space-y-2 rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5"
         data-testid="share-next-steps"
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-neon-cyan">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           {t('share.nextStepsLabel')}
         </p>
-        <ol className="space-y-1 text-sm text-foreground">
-          {nextSteps.map((stepText) => (
-            <li key={stepText}>{stepText}</li>
+        <ol className="space-y-2 text-sm leading-6 text-foreground">
+          {nextSteps.map((stepText, index) => (
+            <li className="flex items-start gap-3" key={stepText}>
+              <span className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full border border-border/70 bg-background/30 text-xs font-semibold text-primary">
+                {index + 1}
+              </span>
+              <span>{stepText}</span>
+            </li>
           ))}
         </ol>
       </div>
@@ -440,20 +455,20 @@ export function DeliveredStep({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="space-y-4" data-testid="share-step-delivered">
+    <section className="max-w-[52rem] space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-foreground">{t('share.deliveredTitle')}</h3>
-        <p className="text-xs text-muted-foreground">{t('share.deliveredBody')}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{t('share.deliveredBody')}</p>
       </div>
 
       {deliveredAt !== null ? (
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground" data-testid="share-delivery-timestamp">
+          <p className="text-sm text-muted-foreground" data-testid="share-delivery-timestamp">
             {t('share.deliveredAtLabel')} {formatDeliveredAt(deliveredAt)}
           </p>
           {cipherVersion !== null && cipherVersion >= 1 ? (
             <output
-              className="block text-xs font-medium text-neon-orange"
+              className="block text-sm font-medium text-amber-200"
               data-testid="share-delivery-updated-badge"
             >
               {t('share.updatedBadge', { version: cipherVersion + 1 })}
@@ -462,19 +477,18 @@ export function DeliveredStep({
         </div>
       ) : null}
 
-      <SafetyCodeSection
-        safetyCodeAvailable={safetyCodeAvailable}
-        safetyCodeStatus={safetyCodeStatus}
-      />
-
       {canDecryptLocally ? (
         <>
           {cipherVersion !== null && cipherVersion >= 1 && !plaintext ? (
             <StateNotice data-testid="share-cipher-version-notice" tone="info">
-              <p className="text-xs">{t('share.cipherVersionNotice')}</p>
+              <p className="text-sm">{t('share.cipherVersionNotice')}</p>
             </StateNotice>
           ) : null}
-          <div aria-busy={decryptPending} className="space-y-3" data-testid="share-decrypt-panel">
+          <div
+            aria-busy={decryptPending}
+            className="space-y-4 rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5"
+            data-testid="share-decrypt-panel"
+          >
             <PassphraseInput
               ariaDescribedBy={
                 decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
@@ -522,13 +536,13 @@ export function DeliveredStep({
 
           {plaintext ? (
             <div
-              className="space-y-2 rounded-xl border border-neon-green/35 bg-neon-green/10 p-4"
+              className="space-y-2 rounded-2xl border border-emerald-300/20 bg-emerald-400/8 p-4"
               data-testid="share-decrypt-plaintext"
             >
-              <p className="text-xs font-medium uppercase tracking-wide text-neon-green">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
                 {t('share.plaintextLabel')}
               </p>
-              <pre className="whitespace-pre-wrap break-words text-sm text-foreground">
+              <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
                 {plaintext}
               </pre>
             </div>
@@ -540,13 +554,18 @@ export function DeliveredStep({
               title={t('share.burnedTitle')}
               tone="warning"
             >
-              <p className="mt-1 text-xs text-neon-orange">{t('share.burnedBody')}</p>
+              <p className="mt-1 text-sm text-foreground/85">{t('share.burnedBody')}</p>
             </StateNotice>
           ) : null}
         </>
       ) : (
         <DecryptUnavailableNotice safetyCodeStatus={safetyCodeStatus} />
       )}
+
+      <SafetyCodeSection
+        safetyCodeAvailable={safetyCodeAvailable}
+        safetyCodeStatus={safetyCodeStatus}
+      />
     </section>
   );
 }
@@ -560,7 +579,7 @@ export function LoadingStep() {
       title={t('share.loadingTitle')}
       tone="info"
     >
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <Spinner className="size-3" />
         {t('share.loadingBody')}
       </p>

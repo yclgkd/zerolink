@@ -25,10 +25,10 @@ import {
 function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
   const { t } = useTranslation();
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="text-sm text-muted-foreground">
       {t('share.channelIdLabel')}{' '}
       <code
-        className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
+        className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 font-mono text-sm text-foreground"
         data-testid="share-uuid"
       >
         {uuid ?? t('share.channelIdMissing')}
@@ -96,7 +96,7 @@ export function SharePage(): ReactElement {
         isPublicStatusLoading={publicState.isPublicStatusLoading}
         isUnavailable={isUnavailable}
       />
-      <PageCardContent aria-busy={isPageBusy} className="space-y-6">
+      <PageCardContent aria-busy={isPageBusy} className="space-y-5 sm:space-y-6">
         <UuidDisplay uuid={uuid} />
 
         {publicState.publicStatusError ? (

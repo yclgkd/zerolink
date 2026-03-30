@@ -20,7 +20,7 @@ export function useManageDeliveryLogic(
   secretInput: string,
   softkeyPassphrase: string,
   profile: SecurityProfile | null,
-  wrappedPrivateKey: WrappedPrivateKey | undefined,
+  getWrappedPrivateKey: () => WrappedPrivateKey | undefined,
   setSecretInput: (value: string) => void,
   setSoftkeyPassphrase: (value: string) => void
 ) {
@@ -67,6 +67,7 @@ export function useManageDeliveryLogic(
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.deliverSecret>>;
     try {
+      const wrappedPrivateKey = getWrappedPrivateKey();
       result = await cryptoOrchestrator.deliverSecret({
         uuid: actionUuid,
         profile,
@@ -122,7 +123,7 @@ export function useManageDestructionLogic(
   softkeyPassphrase: string,
   profile: SecurityProfile | null,
   isActiveActionContext: (scope: number, actionUuid: string) => boolean,
-  wrappedPrivateKey: WrappedPrivateKey | undefined
+  getWrappedPrivateKey: () => WrappedPrivateKey | undefined
 ) {
   const { t } = useTranslation();
   const store = useDeliverStore();
@@ -168,6 +169,7 @@ export function useManageDestructionLogic(
 
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.deleteChannel>>;
     try {
+      const wrappedPrivateKey = getWrappedPrivateKey();
       result = await cryptoOrchestrator.deleteChannel({
         uuid: actionUuid,
         profile,

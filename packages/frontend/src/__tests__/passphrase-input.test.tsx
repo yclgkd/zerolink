@@ -79,6 +79,20 @@ describe('PassphraseInput', () => {
     expect(input.getAttribute('id')).toBe('lock-passphrase');
   });
 
+  it('renders the label as a block element so vertical spacing applies', () => {
+    render(
+      <PassphraseInput
+        inputId="lock-passphrase"
+        label="Lock passphrase"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    const label = screen.getByText('Lock passphrase');
+    expect(label.className).toContain('block');
+  });
+
   it('forwards aria-invalid and aria-describedby to the input', () => {
     render(
       <PassphraseInput

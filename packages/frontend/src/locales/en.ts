@@ -28,10 +28,14 @@ const en = {
     step1Desc: 'Choose a mode and create the encrypted channel.',
     step2Title: 'Share',
     step2Desc: 'Send the share link to your receiver.',
-    step3Title: 'Verify Safety Code',
-    step3Desc: 'After receiver locks, compare the Safety Code over a separate channel.',
-    step4Title: 'Deliver',
-    step4Desc: 'Deliver the encrypted secret to the locked receiver.',
+    step3Title: 'Lock',
+    step3Desc: 'Receiver sets a passphrase on their device and locks the channel.',
+    step4Title: 'Verify',
+    step4Desc: 'Compare the Safety Code over a separate channel to confirm the receiver identity.',
+    step5Title: 'Deliver',
+    step5Desc: 'Deliver the encrypted secret to the locked receiver.',
+    step6Title: 'Decrypt',
+    step6Desc: 'The receiver decrypts the secret locally on the device that created the lock.',
     trustHintBody:
       'Need a plain-language summary of what stays local, what the sender can do, and when channel data disappears?',
     trustHintLink: 'Read the trust model',
@@ -45,6 +49,10 @@ const en = {
     ttlSevenDays: '7 days',
     passwordLabel: 'Channel password',
     passwordPlaceholder: 'Enter a strong password',
+    footerHintPasswordRequired: 'Enter a channel password with at least 12 characters.',
+    footerHintPasswordInvalid:
+      'Use 4+ random words or at least 12 characters for the channel password.',
+    footerHintReady: 'Ready to create a {{mode}} channel that expires in {{ttl}}.',
     submitButton: 'Create Channel',
     submittingButton: 'Creating\u2026',
     successTitle: 'Channel created successfully',
@@ -54,7 +62,7 @@ const en = {
     shareLinkLabel: 'Share link — send to receiver',
     shareLinkWarningTitle: 'This share link is shown only once.',
     shareLinkWarningBody:
-      'Save it now. After you leave this page, ZeroLink cannot recover it. If you lose it, create a new channel.',
+      'Save it now. In this browser session, the sender Manage page can re-copy it while the channel is still waiting. Outside that window, if you lose it, create a new channel.',
     manageLinkLabel: 'Manage link — keep this private',
     expiryHint:
       'Channel expires in {{duration}}. Coordinate with the receiver before it disappears.',
@@ -109,6 +117,11 @@ const en = {
     destroyDeletingButton: 'Deleting\u2026',
     createNewButton: 'Create New Channel',
     deliveredToast: 'Secret delivered successfully.',
+    shareLinkRecoveryTitle: 'Need to resend the receiver link?',
+    shareLinkRecoveryBody:
+      'This browser session still has the one-time receiver link. You can copy it again until the receiver locks the channel.',
+    shareLinkRecoveryButton: 'Copy receiver link',
+    shareLinkRecoveryCopied: 'Receiver link copied',
   },
 
   share: {
@@ -282,6 +295,26 @@ const en = {
     advancedToggle: 'Advanced fingerprint',
     shortFprLabel: 'Short fingerprint',
     fullFprLabel: 'Full hex fingerprint',
+  },
+
+  lang: {
+    switcherLabel: 'Select language',
+    menuLabel: 'Language',
+  },
+
+  manageError: {
+    notFound: 'This channel is no longer available.',
+    fallbackRequired:
+      'Password-managed channels are unavailable for this action in the current build.',
+    profileBlocked: 'Selected security profile requires WebAuthn support.',
+    missingLockChallenge: 'Unable to fetch challenge from server. Please retry.',
+    missingReceiverIdentity: 'Receiver identity is unavailable. Ask receiver to lock again.',
+    networkError: 'Network error while performing manage action. Please retry.',
+    badRequest: 'Manage request was rejected. Please retry.',
+    webauthnError: 'WebAuthn verification was not completed.',
+    cryptoError: 'Incorrect channel password. Please try again.',
+    internalError: 'Unexpected internal error. Please retry.',
+    default: 'An unexpected error occurred. Please try again.',
   },
 
   manifest: {

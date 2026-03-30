@@ -11,7 +11,7 @@ const SUPPORTED_LANGUAGES = [
 ] as const;
 
 export function LanguageSwitcher() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const currentLang = i18n.resolvedLanguage ?? i18n.language;
   const isZh = currentLang.startsWith('zh');
   const activeLang = isZh ? 'zh' : 'en';
@@ -105,7 +105,8 @@ export function LanguageSwitcher() {
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-transparent px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+        aria-label={t('lang.switcherLabel')}
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border/50 bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
         data-testid="lang-switcher-trigger"
         onClick={() => setOpen((prev) => !prev)}
         onKeyDown={(e) => {
@@ -117,7 +118,7 @@ export function LanguageSwitcher() {
         ref={triggerRef}
         type="button"
       >
-        <Languages aria-hidden="true" className="size-3.5" />
+        <Languages aria-hidden="true" className="size-4" />
         {activeLabel}
       </button>
 
@@ -127,6 +128,7 @@ export function LanguageSwitcher() {
               className="fixed z-[9999] min-w-[7rem] overflow-hidden rounded-xl border border-border/60 bg-slate-900/95 py-1 shadow-xl shadow-black/40 backdrop-blur-sm"
               onKeyDown={handleMenuKeyDown}
               ref={dropdownRef}
+              aria-label={t('lang.menuLabel')}
               role="menu"
               style={{ top: dropdownStyle.top, right: dropdownStyle.right }}
             >

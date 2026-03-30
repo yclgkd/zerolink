@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { SECURITY_PROFILE } from '@zerolink/shared';
+import { CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -144,6 +144,7 @@ beforeEach(() => {
   useCreateStore.getState().resetCreateStore();
   useDeliverStore.getState().resetDeliverStore();
   syncHarness.latestOptions = null;
+  window.sessionStorage.clear();
 
   vi.clearAllMocks();
   deliverSecretMock.mockReset();
@@ -200,6 +201,75 @@ describe('ManagePage – public status and waiting state', () => {
 
     expect(await screen.findByText('Sender')).toBeTruthy();
     expect(screen.getByTestId('manage-uuid').textContent).toContain(VALID_UUID);
+  });
+
+  it('surfaces same-session share link recovery while waiting', async () => {
+    const fetchSpy = getFetchSpy();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    mockPublicState(fetchSpy, 'waiting');
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${VALID_UUID}`,
+      JSON.stringify({
+        url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`,
+        ts: Date.now(),
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
+      })
+    );
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderManagePage();
+
+    expect(await screen.findByTestId('manage-share-link-recovery')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('manage-share-link-recovery-copy'));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        new URL(`/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`, window.location.origin).href
+      );
+    });
+  });
+
+  it('hides share link recovery when public status fetch fails', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockRejectedValueOnce(new Error('network error'));
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${VALID_UUID}`,
+      JSON.stringify({
+        url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`,
+        ts: Date.now(),
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
+      })
+    );
+
+    renderManagePage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-public-status-error')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('manage-share-link-recovery')).toBeNull();
+  });
+
+  it('hides share link recovery when channel is not in waiting state', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${VALID_UUID}`,
+      JSON.stringify({
+        url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`,
+        ts: Date.now(),
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
+      })
+    );
+
+    renderManagePage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-state-locked')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('manage-share-link-recovery')).toBeNull();
   });
 
   it('falls back to (missing) label and blocks deliver/delete when uuid is absent', async () => {

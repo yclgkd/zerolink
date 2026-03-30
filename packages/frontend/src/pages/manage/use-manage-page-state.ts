@@ -15,6 +15,7 @@ export function useManagePageState(uuid?: string) {
   const store = useDeliverStore();
   const mountedRef = useRef(true);
   const actionScopeRef = useRef(0);
+  const latestManageHashRef = useRef(location.hash);
 
   const [secretInput, setSecretInput] = useState('');
   const [softkeyPassphrase, setSoftkeyPassphrase] = useState('');
@@ -22,11 +23,18 @@ export function useManagePageState(uuid?: string) {
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
 
-  const wrappedPrivateKey = useMemo(() => {
-    const { wrappedKeyCompact } = parseManageFragment(location.hash);
-    if (!wrappedKeyCompact) return undefined;
+  const getWrappedPrivateKey = useCallback(() => {
+    const currentHash =
+      typeof window !== 'undefined' && window.location.hash
+        ? window.location.hash
+        : latestManageHashRef.current;
+    const { wrappedKeyCompact } = parseManageFragment(currentHash);
+    if (!wrappedKeyCompact) {
+      return undefined;
+    }
+
     return deserializeWrappedKeyCompact(wrappedKeyCompact) ?? undefined;
-  }, [location.hash]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -34,8 +42,18 @@ export function useManagePageState(uuid?: string) {
     };
   }, []);
 
-  const { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable } =
-    usePublicStatusFetcher(uuid, mountedRef);
+  useEffect(() => {
+    latestManageHashRef.current = location.hash;
+  }, [location.hash]);
+
+  const {
+    isUnavailable,
+    publicStatusError,
+    statusConfirmed,
+    setPublicStatusError,
+    setIsUnavailable,
+    setStatusConfirmed,
+  } = usePublicStatusFetcher(uuid, mountedRef);
 
   // Real-time sync: auto-update when receiver locks or channel state changes
   useChannelSync(uuid, {
@@ -44,6 +62,7 @@ export function useManagePageState(uuid?: string) {
         if (!mountedRef.current) return;
         setIsUnavailable(false);
         setPublicStatusError(null);
+        setStatusConfirmed(true);
         store.setChannelState(update.state);
         store.setAdminMode(update.adminMode);
         store.setSecurityProfile(update.securityProfile);
@@ -52,6 +71,7 @@ export function useManagePageState(uuid?: string) {
       [
         setIsUnavailable,
         setPublicStatusError,
+        setStatusConfirmed,
         store.setChannelState,
         store.setAdminMode,
         store.setSecurityProfile,
@@ -142,7 +162,7 @@ export function useManagePageState(uuid?: string) {
     secretInput,
     softkeyPassphrase,
     profile,
-    wrappedPrivateKey,
+    getWrappedPrivateKey,
     setSecretInput,
     setSoftkeyPassphrase
   );
@@ -159,7 +179,7 @@ export function useManagePageState(uuid?: string) {
     softkeyPassphrase,
     profile,
     isActiveActionContext,
-    wrappedPrivateKey
+    getWrappedPrivateKey
   );
 
   return {
@@ -173,6 +193,7 @@ export function useManagePageState(uuid?: string) {
     isSecretInputInvalid,
     isUnavailable,
     publicStatusError,
+    statusConfirmed,
     isActionPending,
     canManageActions,
     canDeliver,

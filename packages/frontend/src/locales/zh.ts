@@ -27,10 +27,14 @@ const zh: Translation = {
     step1Desc: '选择模式，创建加密频道。',
     step2Title: '分享',
     step2Desc: '将分享链接发送给接收方。',
-    step3Title: '验证安全码',
-    step3Desc: '接收方锁定后，通过独立渠道比对安全码。',
-    step4Title: '传递',
-    step4Desc: '将加密密钥传递给已锁定的接收方。',
+    step3Title: '锁定',
+    step3Desc: '接收方设置密码并锁定频道。',
+    step4Title: '验证',
+    step4Desc: '通过独立渠道对比安全码来确认接收方身份。',
+    step5Title: '传递',
+    step5Desc: '将密文传递给已锁定的接收方。',
+    step6Title: '解密',
+    step6Desc: '接收方在本地设备上解密密文。',
     trustHintBody: '想了解哪些内容留在本地、发送方能做什么、频道数据何时消失？',
     trustHintLink: '阅读信任模型',
     passwordPanelTitle: '设置快速分享密码',
@@ -43,6 +47,9 @@ const zh: Translation = {
     ttlSevenDays: '7 天',
     passwordLabel: '频道密码',
     passwordPlaceholder: '输入高强度密码',
+    footerHintPasswordRequired: '请输入至少 12 位的频道密码。',
+    footerHintPasswordInvalid: '频道密码请使用 4 个以上随机单词，或至少 12 个字符。',
+    footerHintReady: '将创建一个{{mode}}频道，有效期为{{ttl}}。',
     submitButton: '创建频道',
     submittingButton: '创建中\u2026',
     successTitle: '频道创建成功',
@@ -52,7 +59,7 @@ const zh: Translation = {
     shareLinkLabel: '分享链接 — 发送给接收方',
     shareLinkWarningTitle: '此分享链接仅显示一次。',
     shareLinkWarningBody:
-      '请立即保存。离开此页面后，ZeroLink 无法恢复该链接。如果丢失，请重新创建频道。',
+      '请立即保存。在当前浏览器会话中，只要频道仍处于等待锁定状态，发送方仍可在管理页再次复制它。超出这个范围后，如果丢失，请重新创建频道。',
     manageLinkLabel: '管理链接 — 请妥善保管',
     expiryHint: '频道将在 {{duration}} 后过期，请在过期前与接收方协调。',
     copyButton: '复制',
@@ -102,6 +109,11 @@ const zh: Translation = {
     destroyDeletingButton: '删除中\u2026',
     createNewButton: '创建新频道',
     deliveredToast: '密钥传递成功。',
+    shareLinkRecoveryTitle: '需要重新发送接收方链接？',
+    shareLinkRecoveryBody:
+      '当前浏览器会话里仍保留这条一次性接收方链接。在接收方锁定频道前，你可以再次复制它。',
+    shareLinkRecoveryButton: '复制接收方链接',
+    shareLinkRecoveryCopied: '接收方链接已复制',
   },
 
   share: {
@@ -262,6 +274,25 @@ const zh: Translation = {
     advancedToggle: '高级指纹',
     shortFprLabel: '短指纹',
     fullFprLabel: '完整十六进制指纹',
+  },
+
+  lang: {
+    switcherLabel: '选择语言',
+    menuLabel: '语言',
+  },
+
+  manageError: {
+    notFound: '该频道已不可用。',
+    fallbackRequired: '当前版本不支持密码管理频道执行此操作。',
+    profileBlocked: '所选安全模式需要 WebAuthn 支持。',
+    missingLockChallenge: '无法从服务器获取挑战数据，请重试。',
+    missingReceiverIdentity: '接收方身份不可用，请让接收方重新锁定。',
+    networkError: '执行管理操作时发生网络错误，请重试。',
+    badRequest: '管理请求被拒绝，请重试。',
+    webauthnError: 'WebAuthn 验证未完成。',
+    cryptoError: '频道密码错误，请重试。',
+    internalError: '发生意外内部错误，请重试。',
+    default: '发生意外错误，请重试。',
   },
 
   manifest: {
