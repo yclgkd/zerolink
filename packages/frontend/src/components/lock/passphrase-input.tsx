@@ -106,7 +106,7 @@ export function PassphraseInput({
 
   return (
     <div className={cn('space-y-4', className)} data-testid="passphrase-input-root">
-      <label className="text-sm font-medium text-foreground" htmlFor={resolvedInputId}>
+      <label className="block text-sm font-medium text-foreground" htmlFor={resolvedInputId}>
         {resolvedLabel}
       </label>
       <div className="relative">
