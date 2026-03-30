@@ -105,7 +105,7 @@ export function PassphraseInput({
   const strength = getPassphraseStrength(value);
 
   return (
-    <div className={cn('space-y-3', className)} data-testid="passphrase-input-root">
+    <div className={cn('space-y-4', className)} data-testid="passphrase-input-root">
       <label className="text-sm font-medium text-foreground" htmlFor={resolvedInputId}>
         {resolvedLabel}
       </label>
