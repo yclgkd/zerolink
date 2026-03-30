@@ -90,6 +90,7 @@ function ShareLinkRecoveryPanel({ shareUrl }: { shareUrl: string }) {
     <StateNotice
       data-testid="manage-share-link-recovery"
       title={t('manage.shareLinkRecoveryTitle')}
+      tone="info"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm leading-6 text-foreground/85">{t('manage.shareLinkRecoveryBody')}</p>

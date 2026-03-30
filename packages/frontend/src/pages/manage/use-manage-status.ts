@@ -8,6 +8,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
   const store = useDeliverStore();
   const [publicStatusError, setPublicStatusError] = useState<string | null>(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
+  const [statusConfirmed, setStatusConfirmed] = useState(false);
 
   useEffect(() => {
     let canceled = false;
@@ -15,10 +16,12 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
       store.setChannelState(CHANNEL_STATE.WAITING);
       setPublicStatusError(null);
       setIsUnavailable(false);
+      setStatusConfirmed(false);
       return;
     }
 
     setIsUnavailable(false);
+    setStatusConfirmed(false);
     const loadPublicStatus = async () => {
       try {
         const response = await fetch(`/api/public/${uuid}`);
@@ -36,6 +39,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
           store.setChannelState(CHANNEL_STATE.WAITING);
           setPublicStatusError(null);
           setIsUnavailable(true);
+          setStatusConfirmed(true);
           return;
         }
 
@@ -52,11 +56,13 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
           store.setChannelState(CHANNEL_STATE.WAITING);
           setPublicStatusError(null);
           setIsUnavailable(true);
+          setStatusConfirmed(true);
           return;
         }
 
         setPublicStatusError(null);
         setIsUnavailable(false);
+        setStatusConfirmed(true);
         store.setShowDestroyConfirm(false);
         store.setChannelState(parsedPayload.data.state);
         store.setAdminMode(parsedPayload.data.adminMode);
@@ -72,6 +78,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
         store.setReceiverPubFpr(null);
         store.setChannelState(CHANNEL_STATE.WAITING);
         setIsUnavailable(false);
+        setStatusConfirmed(false);
         setPublicStatusError('Unable to load channel state right now. Showing safe default state.');
       }
     };
@@ -90,5 +97,12 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
     mountedRef,
   ]);
 
-  return { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable };
+  return {
+    isUnavailable,
+    publicStatusError,
+    statusConfirmed,
+    setPublicStatusError,
+    setIsUnavailable,
+    setStatusConfirmed,
+  };
 }

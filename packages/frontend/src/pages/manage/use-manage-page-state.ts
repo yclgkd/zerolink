@@ -46,8 +46,14 @@ export function useManagePageState(uuid?: string) {
     latestManageHashRef.current = location.hash;
   }, [location.hash]);
 
-  const { isUnavailable, publicStatusError, setPublicStatusError, setIsUnavailable } =
-    usePublicStatusFetcher(uuid, mountedRef);
+  const {
+    isUnavailable,
+    publicStatusError,
+    statusConfirmed,
+    setPublicStatusError,
+    setIsUnavailable,
+    setStatusConfirmed,
+  } = usePublicStatusFetcher(uuid, mountedRef);
 
   // Real-time sync: auto-update when receiver locks or channel state changes
   useChannelSync(uuid, {
@@ -56,6 +62,7 @@ export function useManagePageState(uuid?: string) {
         if (!mountedRef.current) return;
         setIsUnavailable(false);
         setPublicStatusError(null);
+        setStatusConfirmed(true);
         store.setChannelState(update.state);
         store.setAdminMode(update.adminMode);
         store.setSecurityProfile(update.securityProfile);
@@ -64,6 +71,7 @@ export function useManagePageState(uuid?: string) {
       [
         setIsUnavailable,
         setPublicStatusError,
+        setStatusConfirmed,
         store.setChannelState,
         store.setAdminMode,
         store.setSecurityProfile,
@@ -185,6 +193,7 @@ export function useManagePageState(uuid?: string) {
     isSecretInputInvalid,
     isUnavailable,
     publicStatusError,
+    statusConfirmed,
     isActionPending,
     canManageActions,
     canDeliver,

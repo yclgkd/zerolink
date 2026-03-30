@@ -1,5 +1,13 @@
 const SHARE_LINK_SESSION_STORAGE_PREFIX = 'zerolink:created-share-link:';
 
+/** Maximum age of a cached share link before it is considered expired (1 hour). */
+export const SHARE_LINK_TTL_MS = 60 * 60 * 1000;
+
+interface CachedEntry {
+  url: string;
+  ts: number;
+}
+
 function getSessionStorage(): Storage | null {
   if (typeof window === 'undefined') {
     return null;
@@ -38,7 +46,8 @@ export function persistCreatedShareLink(shareUrlWithFragment: string): void {
   }
 
   try {
-    storage.setItem(getShareLinkSessionStorageKey(uuid), shareUrlWithFragment);
+    const entry: CachedEntry = { url: shareUrlWithFragment, ts: Date.now() };
+    storage.setItem(getShareLinkSessionStorageKey(uuid), JSON.stringify(entry));
   } catch {
     // Ignore storage failures so create success stays usable in restricted environments.
   }
@@ -55,8 +64,38 @@ export function readCreatedShareLink(uuid?: string): string | null {
   }
 
   try {
-    return storage.getItem(getShareLinkSessionStorageKey(uuid));
+    const raw = storage.getItem(getShareLinkSessionStorageKey(uuid));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'url' in parsed &&
+      'ts' in parsed &&
+      typeof (parsed as CachedEntry).url === 'string' &&
+      typeof (parsed as CachedEntry).ts === 'number'
+    ) {
+      const entry = parsed as CachedEntry;
+      if (Date.now() - entry.ts > SHARE_LINK_TTL_MS) {
+        storage.removeItem(getShareLinkSessionStorageKey(uuid));
+        return null;
+      }
+      return entry.url;
+    }
+
+    // Legacy plain-string fallback: treat as expired / invalid.
+    storage.removeItem(getShareLinkSessionStorageKey(uuid));
+    return null;
   } catch {
+    // Entry is corrupted or unparseable; best-effort cleanup.
+    try {
+      storage.removeItem(getShareLinkSessionStorageKey(uuid));
+    } catch {
+      // Ignore cleanup failures.
+    }
     return null;
   }
 }

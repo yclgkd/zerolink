@@ -51,6 +51,33 @@ export function ManagePage(): ReactElement {
     }
   }, [uuid, showUnavailableState, state.status]);
 
+  const actionErrorNotice = state.actionError ? (
+    <StateNotice
+      autoFocusOnMount
+      data-testid="manage-action-error"
+      id="manage-action-error"
+      tone="error"
+    >
+      {state.actionError}
+    </StateNotice>
+  ) : null;
+
+  const actionPanel = (
+    <ActionPanel
+      canManageActions={state.canManageActions}
+      canDeliver={state.canDeliver}
+      onCancelDestroy={state.handleCancelDestroy}
+      onConfirmDestroy={state.handleApplyDestroy}
+      onDeliver={state.handleDeliver}
+      onOpenDestroyConfirm={state.handleDestroyConfirm}
+      pending={state.isActionPending}
+      showDeliverAction={showDeliveryComposer}
+      showDestroyConfirm={state.showDestroyConfirm}
+      status={state.status}
+      unavailable={showUnavailableState}
+    />
+  );
+
   return (
     <PageCard data-testid="page-manage" tone="orange">
       <ManagePageHeader status={state.status} unavailable={showUnavailableState} />
@@ -75,7 +102,7 @@ export function ManagePage(): ReactElement {
         ) : (
           <StatusContent
             safetyCode={state.safetyCode}
-            shareLinkRecoveryUrl={cachedShareLink}
+            shareLinkRecoveryUrl={state.statusConfirmed ? cachedShareLink : null}
             status={state.status}
           />
         )}
@@ -112,57 +139,14 @@ export function ManagePage(): ReactElement {
               </section>
             ) : null}
 
-            {state.actionError ? (
-              <StateNotice
-                autoFocusOnMount
-                data-testid="manage-action-error"
-                id="manage-action-error"
-                tone="error"
-              >
-                {state.actionError}
-              </StateNotice>
-            ) : null}
-
-            <ActionPanel
-              canManageActions={state.canManageActions}
-              canDeliver={state.canDeliver}
-              onCancelDestroy={state.handleCancelDestroy}
-              onConfirmDestroy={state.handleApplyDestroy}
-              onDeliver={state.handleDeliver}
-              onOpenDestroyConfirm={state.handleDestroyConfirm}
-              pending={state.isActionPending}
-              showDeliverAction={showDeliveryComposer}
-              showDestroyConfirm={state.showDestroyConfirm}
-              status={state.status}
-              unavailable={showUnavailableState}
-            />
+            {actionErrorNotice}
+            {actionPanel}
           </section>
         ) : null}
         {!showDeliveryComposer && !showPasswordSection ? (
           <>
-            {state.actionError ? (
-              <StateNotice
-                autoFocusOnMount
-                data-testid="manage-action-error"
-                id="manage-action-error"
-                tone="error"
-              >
-                {state.actionError}
-              </StateNotice>
-            ) : null}
-            <ActionPanel
-              canManageActions={state.canManageActions}
-              canDeliver={state.canDeliver}
-              onCancelDestroy={state.handleCancelDestroy}
-              onConfirmDestroy={state.handleApplyDestroy}
-              onDeliver={state.handleDeliver}
-              onOpenDestroyConfirm={state.handleDestroyConfirm}
-              pending={state.isActionPending}
-              showDeliverAction={showDeliveryComposer}
-              showDestroyConfirm={state.showDestroyConfirm}
-              status={state.status}
-              unavailable={showUnavailableState}
-            />
+            {actionErrorNotice}
+            {actionPanel}
           </>
         ) : null}
       </PageCardContent>
