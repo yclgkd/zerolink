@@ -22,6 +22,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: This resolves the highest-friction UX issues without reopening protocol or backend scope. Using session-scoped recovery instead of durable storage preserves the zero-knowledge posture better than a long-lived cross-tab cache while still covering the common “same tab / same browser session” sender recovery path.
 **Trade-offs**: Same-session recovery does not help when the sender opens the manage link in a different browser session or after the tab session ends. Some older component tests had to be updated because the visual token values and manage-link navigation expectations changed intentionally.
 **Follow-up (2026-03-30, docs cleanup)**: Remove the root `.impeccable.md` helper file. The durable design baseline for this UI direction lives in the decision log and project guidance, not in a repo-root tool-specific document.
+**Follow-up (2026-03-30, local artifacts)**: Ignore `output/playwright/` as a local UI-audit screenshot scratch path. These images are transient review artifacts, not source assets or committed test fixtures.
 
 ## [2026-03-29] Expose channel TTL as create-time presets
 
