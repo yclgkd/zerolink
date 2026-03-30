@@ -14,26 +14,66 @@ export type PassphraseStrength = {
   label: PassphraseStrengthLabel;
 };
 
+const COMMON_WEAK_PATTERN_LIST = [
+  /^password(?:\d+|[!@#$%^&*]+)*$/u,
+  /^qwerty(?:\d+|[!@#$%^&*]+)*$/u,
+  /^abcdef(?:\d+|[!@#$%^&*]+)*$/u,
+  /^admin(?:\d+|[!@#$%^&*]+)*$/u,
+  /^welcome(?:\d+|[!@#$%^&*]+)*$/u,
+  /(123456|654321|012345)/u,
+];
+
+function getLengthScore(normalizedLength: number): number {
+  let score = 0;
+  if (normalizedLength >= 12) score += 1;
+  if (normalizedLength >= 16) score += 1;
+  if (normalizedLength >= 24) score += 1;
+  return score;
+}
+
+function getWordScore(words: string[]): number {
+  let score = 0;
+  if (words.length >= 4) score += 1;
+  if (words.length >= 6) score += 1;
+  return score;
+}
+
+function getCharacterClassScore(collapsed: string): number {
+  let score = 0;
+  if (/[a-z]/u.test(collapsed)) score += 1;
+  if (/[A-Z]/u.test(collapsed)) score += 1;
+  if (/[0-9]/u.test(collapsed)) score += 1;
+  if (/[^A-Za-z0-9]/u.test(collapsed)) score += 1;
+  return score;
+}
+
+function getPenalty(words: string[], collapsed: string): number {
+  const collapsedLower = collapsed.toLowerCase();
+  let penalty = 0;
+
+  const uniqueWords = new Set(words.map((word) => word.toLowerCase()));
+  if (words.length >= 2 && uniqueWords.size === 1) {
+    penalty += 2;
+  }
+
+  if (/(.)\1{4,}/u.test(collapsed)) {
+    penalty += 2;
+  }
+
+  if (COMMON_WEAK_PATTERN_LIST.some((pattern) => pattern.test(collapsedLower))) {
+    penalty += 2;
+  }
+
+  return penalty;
+}
+
 function getScore(passphrase: string): number {
   const normalized = normalizePassphrase(passphrase);
   const words = normalized.split(/ +/u).filter(Boolean);
   const collapsed = normalized.replace(/ /gu, '');
-  let score = 0;
-
-  if (normalized.length >= 12) score += 1;
-  if (normalized.length >= 16) score += 1;
-  if (normalized.length >= 24) score += 1;
-  if (words.length >= 4) score += 1;
-  if (words.length >= 6 || normalized.length >= 32) score += 1;
-
-  const uniqueWords = new Set(words.map((word) => word.toLowerCase()));
-  if (words.length >= 2 && uniqueWords.size === 1) {
-    score = Math.max(1, score - 2);
-  } else if (/(.)\1{4,}/u.test(collapsed)) {
-    score = Math.max(1, score - 1);
-  }
-
-  return score;
+  const positiveScore =
+    getLengthScore(normalized.length) + getWordScore(words) + getCharacterClassScore(collapsed);
+  return Math.max(0, positiveScore - getPenalty(words, collapsed));
 }
 
 function getLevel(score: number): 1 | 2 | 3 {
@@ -49,7 +89,7 @@ function getLabel(level: 1 | 2 | 3): Exclude<PassphraseStrengthLabel, ''> {
 }
 
 /**
- * Calculates passphrase strength using the Figma-aligned heuristic.
+ * Calculates passphrase strength using a hybrid passphrase/password heuristic.
  */
 export function getPassphraseStrength(passphrase: string): PassphraseStrength {
   if (!passphrase) {

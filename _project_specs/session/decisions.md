@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-30] Use hybrid passphrase strength scoring
+
+**Decision**: Score frontend passphrase strength with a hybrid heuristic that rewards both long multi-word passphrases and long mixed-character passwords, while applying explicit penalties for repeated characters, repeated words, and a small set of common weak patterns.
+**Context**: The first passphrase-strength update over-indexed on word-count and length, which caused strong 16-character mixed passwords to remain only medium strength in the UI.
+**Options Considered**: Keep the passphrase-first heuristic; switch to hard complexity requirements; keep submission policy simple and make the strength meter recognize both password styles.
+**Choice**: Keep the submission policy unchanged (`12-128`, ordinary spaces only) and upgrade only the strength meter to a hybrid scoring model.
+**Reasoning**: This preserves the product decision to avoid hard composition rules while aligning the UI with user expectations for both passphrases and traditional complex passwords.
+**Trade-offs**: The heuristic remains simpler than a dedicated estimator like zxcvbn, so it will not catch every weak password pattern; the small built-in weak-pattern list must be maintained deliberately.
+
 ## [2026-03-29] Raise Quick Share passphrase policy to 12+ chars with phrase-friendly whitespace rules
 
 **Decision**: Replace the shared 8-character passphrase minimum with a single frontend policy for Quick Share create, receiver lock, sender manage, and receiver decrypt: minimum 12 characters, maximum 128, allow ordinary spaces between words, trim leading/trailing ordinary spaces, and reject tabs, line breaks, NBSP/full-width/special whitespace.
