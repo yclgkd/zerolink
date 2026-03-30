@@ -24,6 +24,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-30, create layout alignment)**: On desktop create flow, align the right-hand trust/how-it-works column with the first actionable card row instead of the page-level section heading. This keeps the auxiliary column visually subordinate to the sender’s primary task and removes the impression that the two columns are snapped to different grids.
 **Follow-up (2026-03-30, create final polish)**: Cap the create-page intro line length, give the desktop reference rail a clearer sidebar identity, and replace the repeated footer description with a shorter action-oriented hint so the CTA area reads like the end of a form instead of another explanatory block.
 **Follow-up (2026-03-30, create flow sidebar semantics)**: Expand the create-page reference rail from four abbreviated sender-side steps to six explicit end-to-end steps: create, share, lock, verify, deliver, decrypt. The rail keeps the compact sidebar format, but its title now matches the actual full journey instead of skipping the receiver lock and decrypt stages.
+**Follow-up (2026-03-30, zh flow copy refinement)**: Shorten the Chinese create-page flow labels to more direct user-facing language: use `密码` instead of `密码短语` in the sidebar copy, describe step 5 as delivering `密文` rather than `加密密钥`, and simplify the verify/decrypt wording so the six-step rail scans faster without changing the underlying security semantics.
 
 ## [2026-03-30] Recenter the core frontend on calm, security-tool UX
 
