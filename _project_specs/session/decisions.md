@@ -40,6 +40,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-03-30, local artifacts)**: Ignore `output/playwright/` as a local UI-audit screenshot scratch path. These images are transient review artifacts, not source assets or committed test fixtures.
 **Follow-up (2026-03-30, recovery TTL alignment)**: The sender-side share-link recovery cache now stores the selected channel TTL with each entry and expires against that per-entry TTL instead of a fixed one-hour cap, so same-session recovery stays aligned with the actual waiting window of 1 hour, 24 hours, or 7 days.
 **Follow-up (2026-03-30, browser chrome polish)**: Align the inline SVG favicon in `packages/frontend/index.html` with the calmer primary token so the browser tab icon no longer retains the old neon-purple accent after the UI palette shift.
+**Follow-up (2026-03-30, e2e copy sync)**: The happy-path Playwright assertion now checks the same-session recovery wording on the create success warning (`shown once`, `Manage can re-copy while waiting`, `create a new channel if lost outside that window`) instead of the older pre-recovery sentence claiming the link is unrecoverable after leaving the page.
 
 ## [2026-03-30] Final UI polish favors bounded reading width
 

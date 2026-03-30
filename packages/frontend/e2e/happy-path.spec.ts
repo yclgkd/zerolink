@@ -32,7 +32,10 @@ test.describe('ZL-032 e2e happy path', () => {
         { timeout: 15_000 }
       );
       await expect(page.getByTestId('create-success-share-link-warning')).toContainText(
-        'After you leave this page, ZeroLink cannot recover it.'
+        'the sender Manage page can re-copy it while the channel is still waiting.'
+      );
+      await expect(page.getByTestId('create-success-share-link-warning')).toContainText(
+        'Outside that window, if you lose it, create a new channel.'
       );
 
       const shareUrl = (await shareLinkLocator.textContent())?.trim() ?? null;
