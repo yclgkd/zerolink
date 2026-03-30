@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -146,6 +147,23 @@ describe('CreatePage integration', () => {
 
     expect(oneHourInput.checked).toBe(false);
     expect(sevenDaysInput.checked).toBe(true);
+  });
+
+  it('keeps the selected TTL radio in tab order and exposes visible focus classes on the option card', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    const user = userEvent.setup();
+    const oneHourInput = screen.getByTestId('create-ttl-one-hour') as HTMLInputElement;
+    const oneHourCard = oneHourInput.nextElementSibling as HTMLElement | null;
+
+    for (let i = 0; i < 6 && document.activeElement !== oneHourInput; i += 1) {
+      await user.tab();
+    }
+
+    expect(document.activeElement).toBe(oneHourInput);
+    expect(oneHourCard?.className).toContain('peer-focus-visible:ring-2');
+    expect(oneHourCard?.className).toContain('peer-focus-visible:ring-offset-2');
   });
 
   it('hides password panel when Secure mode is selected', () => {

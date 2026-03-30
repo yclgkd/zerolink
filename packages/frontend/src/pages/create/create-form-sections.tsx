@@ -259,7 +259,7 @@ export function ExpirySelector({
             <label className="block cursor-pointer" key={option.value}>
               <input
                 checked={isSelected}
-                className="sr-only"
+                className="peer sr-only"
                 data-testid={option.testId}
                 name="channel-ttl"
                 onChange={() => onSelect(option.value)}
@@ -268,7 +268,8 @@ export function ExpirySelector({
               />
               <span
                 className={cn(
-                  'block rounded-2xl border px-4 py-3 text-left transition-colors duration-200',
+                  'block rounded-2xl border px-4 py-3 text-left transition-[border-color,box-shadow,background-color] duration-200',
+                  'peer-focus-visible:border-primary/70 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/35 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background',
                   'hover:border-border/80',
                   isSelected
                     ? 'border-primary/55 bg-primary/8 ring-1 ring-primary/25'

@@ -674,7 +674,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Decision**: Apply a final cross-page polish pass that normalizes page-header line lengths, keeps Share/Manage state panels within bounded reading widths, enlarges shell warning dismiss targets, and tightens the Trust page into a clearer long-form reference layout.
 **Rationale**: After the broader UI refresh, the remaining roughness was mostly micro-level inconsistency rather than structural problems. The app feels more intentional when descriptive copy stays on a stable measure, utility chrome meets touch expectations, and state-heavy flows do not stretch across the full card width.
 **Status**: Implemented in PR #199 follow-up polish commits.
-**Follow-up**: Passphrase fields now use a slightly looser label-to-input gap, and the label is block-level so shared vertical spacing utilities actually affect the rendered form stack.
+**Follow-up**: Passphrase fields now use a slightly looser label-to-input gap, and the label is block-level so shared vertical spacing utilities actually affect the rendered form stack. The create-page TTL preset cards also expose a visible `peer-focus-visible` ring so keyboard users can see when the selected radio has focus.
 
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update
 
