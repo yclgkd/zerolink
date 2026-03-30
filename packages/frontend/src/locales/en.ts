@@ -297,6 +297,26 @@ const en = {
     fullFprLabel: 'Full hex fingerprint',
   },
 
+  lang: {
+    switcherLabel: 'Select language',
+    menuLabel: 'Language',
+  },
+
+  manageError: {
+    notFound: 'This channel is no longer available.',
+    fallbackRequired:
+      'Password-managed channels are unavailable for this action in the current build.',
+    profileBlocked: 'Selected security profile requires WebAuthn support.',
+    missingLockChallenge: 'Unable to fetch challenge from server. Please retry.',
+    missingReceiverIdentity: 'Receiver identity is unavailable. Ask receiver to lock again.',
+    networkError: 'Network error while performing manage action. Please retry.',
+    badRequest: 'Manage request was rejected. Please retry.',
+    webauthnError: 'WebAuthn verification was not completed.',
+    cryptoError: 'Incorrect channel password. Please try again.',
+    internalError: 'Unexpected internal error. Please retry.',
+    default: 'An unexpected error occurred. Please try again.',
+  },
+
   manifest: {
     title: 'Verified Release',
     verifiedBadge: 'Verified',

@@ -17,6 +17,7 @@ type ModeCardProps = {
   description: string;
   icon: typeof Lock;
   selected: boolean;
+  disabled?: boolean;
   onClick: () => void;
   'data-testid'?: string;
 };
@@ -26,21 +27,23 @@ function ModeCard({
   description,
   icon: Icon,
   selected,
+  disabled = false,
   onClick,
   'data-testid': testId,
 }: ModeCardProps) {
   return (
     <button
+      aria-disabled={disabled || undefined}
       aria-pressed={selected}
       className={cn(
         'flex w-full flex-col items-start gap-3 rounded-2xl border p-5 text-left transition-colors duration-200',
-        'hover:border-border/80',
+        disabled ? 'cursor-not-allowed opacity-50' : 'hover:border-border/80',
         selected
           ? 'border-primary/55 bg-primary/8 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)] ring-1 ring-primary/25'
           : 'border-border/60 bg-card/55'
       )}
       data-testid={testId}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       type="button"
     >
       <div
@@ -90,10 +93,9 @@ export function ModeSelectorGrid({
               ? t('create.secureShareDescriptionAvailable')
               : t('create.secureShareDescriptionUnavailable')
           }
+          disabled={!webAuthnSupported}
           icon={Shield}
-          onClick={() => {
-            if (webAuthnSupported) onSelect(SECURITY_PROFILE.SECURE);
-          }}
+          onClick={() => onSelect(SECURITY_PROFILE.SECURE)}
           selected={selected === SECURITY_PROFILE.SECURE}
           title={t('create.secureShareTitle')}
         />

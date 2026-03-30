@@ -1,6 +1,6 @@
 import type { SafetyCodeDisplay } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StateNotice } from '../../components/layout';
 import { PassphraseInput } from '../../components/lock/passphrase-input';
@@ -245,6 +245,13 @@ export function LockStep({
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   function handleCopyLink(): void {
     if (!originalShareUrl || !navigator.clipboard) return;
@@ -252,7 +259,8 @@ export function LockStep({
     void navigator.clipboard.writeText(absolute).then(
       () => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
       },
       () => {
         // Clipboard write failed (permission denied or unsupported); leave button label unchanged

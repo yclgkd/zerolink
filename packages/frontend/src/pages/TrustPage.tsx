@@ -68,7 +68,7 @@ export function TrustPage(): ReactElement {
               key={section.title}
             >
               <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-                {`0${index + 1}`}
+                {String(index + 1).padStart(2, '0')}
               </p>
               <div className="grid gap-2 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-6">
                 <h3 className="text-lg font-semibold text-foreground">{section.title}</h3>

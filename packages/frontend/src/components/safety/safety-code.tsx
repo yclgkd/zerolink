@@ -160,7 +160,7 @@ function AdvancedFingerprintSection({
         aria-expanded={showAdvanced}
         className={cn(
           'flex items-center gap-1.5 font-medium text-muted-foreground transition-colors hover:text-foreground',
-          compact ? 'text-sm' : 'text-sm'
+          compact ? 'text-xs' : 'text-sm'
         )}
         onClick={() => setShowAdvanced((current) => !current)}
         type="button"

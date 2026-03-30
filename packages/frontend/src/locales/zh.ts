@@ -276,6 +276,25 @@ const zh: Translation = {
     fullFprLabel: '完整十六进制指纹',
   },
 
+  lang: {
+    switcherLabel: '选择语言',
+    menuLabel: '语言',
+  },
+
+  manageError: {
+    notFound: '该频道已不可用。',
+    fallbackRequired: '当前版本不支持密码管理频道执行此操作。',
+    profileBlocked: '所选安全模式需要 WebAuthn 支持。',
+    missingLockChallenge: '无法从服务器获取挑战数据，请重试。',
+    missingReceiverIdentity: '接收方身份不可用，请让接收方重新锁定。',
+    networkError: '执行管理操作时发生网络错误，请重试。',
+    badRequest: '管理请求被拒绝，请重试。',
+    webauthnError: 'WebAuthn 验证未完成。',
+    cryptoError: '频道密码错误，请重试。',
+    internalError: '发生意外内部错误，请重试。',
+    default: '发生意外错误，请重试。',
+  },
+
   manifest: {
     title: '已验证发布',
     verifiedBadge: '已验证',
