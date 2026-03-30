@@ -11,6 +11,7 @@ docs/
 ├── INDEX.md           # This file - Quick index
 ├── QUICK_START.md     # Quick start guide (zero to running)
 ├── DEPLOYMENT.md      # Deployment guide (Cloudflare Workers manual deploy)
+├── SELF_HOSTED_CONTRACT.md # Self-hosted backend contract freeze
 ├── TECH_STACK.md      # Tech stack specification (toolchain, Monorepo, testing)
 ├── PRD.md             # Full product requirements document (main document)
 ├── ARCHITECTURE.md    # Architecture overview
@@ -57,6 +58,7 @@ docs/
 
 #### API Protocol
 - **Full API definition** → [PRD.md § 10. API](./PRD.md#10-api-v30-current)
+- **Self-hosted backend contract freeze** → [SELF_HOSTED_CONTRACT.md](./SELF_HOSTED_CONTRACT.md)
 - **Lock API** → [PRD.md § Appendix D](./PRD.md#appendix-d-lock-api-schema-v25)
 - **Protocol diagrams (Mermaid)** → [PRD.md § 15. Protocol Diagrams](./PRD.md#15-protocol-diagram-mermaid)
 
@@ -73,6 +75,7 @@ docs/
 
 #### Testing
 - **Test vectors** → [PRD.md § 14. Test Vectors and Acceptance](./PRD.md#14-test-vectors-and-acceptance-v30)
+- **Cross-runtime self-host fixtures** → [SELF_HOSTED_CONTRACT.md § Fixture Consumption Rules](./SELF_HOSTED_CONTRACT.md#fixture-consumption-rules)
 - **Security checklist** → [SECURITY.md § Security Checklist](./SECURITY.md#security-checklist-implementation)
 
 #### Build Integrity
@@ -101,9 +104,10 @@ docs/
 1. [QUICK_START.md](./QUICK_START.md) - Initialize project
 2. [TECH_STACK.md § Deployment & Release](./TECH_STACK.md#deployment--release) - Cloudflare Workers configuration
 3. [ARCHITECTURE.md § Technology Stack](./ARCHITECTURE.md#3-technology-stack) - Backend architecture
-4. [PRD.md § 10](./PRD.md#10-api-v30-current) - Full API
-5. [PRD.md § Appendix D](./PRD.md#appendix-d-lock-api-schema-v25) - Lock API Schema
-6. [PRD.md § Appendix H](./PRD.md#appendix-h-webauthn-verification-byte-level-steps-continuing-v24-with-supplementary-constraints-for-lockprofile) - WebAuthn verification
+4. [SELF_HOSTED_CONTRACT.md](./SELF_HOSTED_CONTRACT.md) - Self-hosted backend contract freeze
+5. [PRD.md § 10](./PRD.md#10-api-v30-current) - Full API
+6. [PRD.md § Appendix D](./PRD.md#appendix-d-lock-api-schema-v25) - Lock API Schema
+7. [PRD.md § Appendix H](./PRD.md#appendix-h-webauthn-verification-byte-level-steps-continuing-v24-with-supplementary-constraints-for-lockprofile) - WebAuthn verification
 
 ### Security Auditor
 1. [SECURITY.md](./SECURITY.md) - Full security model
@@ -217,6 +221,6 @@ docs/
 
 ---
 
-**Last Updated**: 2026-03-21
+**Last Updated**: 2026-03-30
 **Current Version**: v3.0
 **Maintainer**: ZeroLink Team

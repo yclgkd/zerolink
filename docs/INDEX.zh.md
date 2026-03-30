@@ -13,6 +13,7 @@ docs/
 ├── INDEX.md           # 本文件 - 快速索引
 ├── QUICK_START.md    # 快速启动指南（从零到运行）
 ├── DEPLOYMENT.md     # 部署指南（Cloudflare Workers 手动部署）
+├── SELF_HOSTED_CONTRACT.md # 自部署后端契约冻结
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
 ├── PRD.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
@@ -59,6 +60,7 @@ docs/
 
 #### API 协议
 - **完整 API 定义** → [PRD.md § 10. API](./PRD.zh.md)
+- **自部署后端契约冻结** → [SELF_HOSTED_CONTRACT.zh.md](./SELF_HOSTED_CONTRACT.zh.md)
 - **Lock API** → [PRD.md § 附录 D](./PRD.zh.md#附录-dlock-api-schemav25)
 - **协议图（Mermaid）** → [PRD.md § 15. 协议图](./PRD.zh.md#15-协议图mermaid)
 
@@ -75,6 +77,7 @@ docs/
 
 #### 测试
 - **测试向量** → [PRD.md § 14. 测试向量与验收](./PRD.zh.md)
+- **跨运行时自部署 fixture** → [SELF_HOSTED_CONTRACT.zh.md § Fixture 使用规则](./SELF_HOSTED_CONTRACT.zh.md#fixture-使用规则)
 - **安全检查清单** → [SECURITY.md § 安全检查清单](./SECURITY.zh.md#安全检查清单implementation)
 
 #### 构建完整性
@@ -103,9 +106,10 @@ docs/
 1. [QUICK_START.md](./QUICK_START.zh.md) - 初始化项目
 2. [TECH_STACK.md § 后端部署](./TECH_STACK.zh.md#部署与发布) - Cloudflare Workers 配置
 3. [ARCHITECTURE.md § 技术栈](./ARCHITECTURE.zh.md#3-技术栈) - 后端架构
-4. [PRD.md § 10](./PRD.zh.md) - 完整 API
-5. [PRD.md § 附录 D](./PRD.zh.md#附录-dlock-api-schemav25) - Lock API Schema
-6. [PRD.md § 附录 H](./PRD.zh.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点) - WebAuthn 验证
+4. [SELF_HOSTED_CONTRACT.zh.md](./SELF_HOSTED_CONTRACT.zh.md) - 自部署后端契约冻结
+5. [PRD.md § 10](./PRD.zh.md) - 完整 API
+6. [PRD.md § 附录 D](./PRD.zh.md#附录-dlock-api-schemav25) - Lock API Schema
+7. [PRD.md § 附录 H](./PRD.zh.md#附录-hwebauthn-验证字节级步骤延续-v24补充对-lockprofile-的约束点) - WebAuthn 验证
 
 ### 安全审计
 1. [SECURITY.md](./SECURITY.zh.md) - 完整安全模型
@@ -214,6 +218,6 @@ docs/
 
 ---
 
-**最后更新**：2026-03-11
+**最后更新**：2026-03-30
 **当前版本**：v3.0
 **维护者**：ZeroLink Team

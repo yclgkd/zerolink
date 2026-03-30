@@ -13,6 +13,16 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-30] Freeze the self-hosted backend contract before starting the Go port
+
+**Decision**: Add an explicit self-hosted backend contract document plus versioned cross-runtime fixtures that lock the current protocol-facing behavior before any Go implementation begins.
+**Context**: The self-hosted backend track replaces a Cloudflare Worker + Durable Object implementation whose correctness depends on exact protocol outputs, not just route names. The largest migration risk is silent drift in canonical JSON, `intentHash`, AAD bytes, lock/compound challenge derivation, WebSocket message shapes, and frontend-visible error semantics.
+**Options Considered**: Start implementing the Go service and rely on the existing TypeScript code as an informal reference; freeze only the HTTP route list and leave crypto helpers implicit; document the contract and back it with reusable fixtures that both TypeScript and Go can consume.
+**Choice**: Introduce `docs/SELF_HOSTED_CONTRACT.md`, `docs/SELF_HOSTED_CONTRACT.zh.md`, and `protocol-fixtures/selfhost-contract-v1.json`, then verify those fixtures from both `packages/shared` and `packages/frontend` tests.
+**Reasoning**: The Go port will otherwise re-implement protocol behavior across package boundaries with no single machine-checkable baseline. Freezing both the route/error contract and the exact-match byte surfaces creates a stable handoff for M1/M2 while keeping frontend behavior unchanged.
+**Trade-offs**: Fixture maintenance now becomes part of any protocol change, and the current contract intentionally leaves backend-internal policy details such as exact rate-limit windows and commit-cookie replacement strategy unresolved until later milestones.
+**Follow-up (2026-03-30, milestone handoff)**: M1 and M2 must treat `protocol-fixtures/selfhost-contract-v1.json` as the first cross-runtime compatibility asset. If a Go helper cannot reproduce a locked fixture exactly, the implementation is wrong unless the contract doc and fixtures are updated together in a separate contract-change PR.
+
 ## [2026-03-30] Second-round frontend polish keeps safety flows intact while removing neon residue
 
 **Decision**: Finish the calm security-tool retune by replacing the last neon-styled shared surfaces with muted semantic colors, adding a compact `SafetyCode` density for sender/receiver terminal states, and promoting small explanatory copy to stable reading sizes where it affects comprehension.
