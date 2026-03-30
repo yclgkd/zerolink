@@ -23,6 +23,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Trade-offs**: Same-session recovery does not help when the sender opens the manage link in a different browser session or after the tab session ends. Some older component tests had to be updated because the visual token values and manage-link navigation expectations changed intentionally.
 **Follow-up (2026-03-30, docs cleanup)**: Remove the root `.impeccable.md` helper file. The durable design baseline for this UI direction lives in the decision log and project guidance, not in a repo-root tool-specific document.
 **Follow-up (2026-03-30, local artifacts)**: Ignore `output/playwright/` as a local UI-audit screenshot scratch path. These images are transient review artifacts, not source assets or committed test fixtures.
+**Follow-up (2026-03-30, recovery TTL alignment)**: The sender-side share-link recovery cache now stores the selected channel TTL with each entry and expires against that per-entry TTL instead of a fixed one-hour cap, so same-session recovery stays aligned with the actual waiting window of 1 hour, 24 hours, or 7 days.
 
 ## [2026-03-29] Expose channel TTL as create-time presets
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { SECURITY_PROFILE } from '@zerolink/shared';
+import { CHANNEL_TTL_MS, SECURITY_PROFILE } from '@zerolink/shared';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -209,7 +209,11 @@ describe('ManagePage – public status and waiting state', () => {
     mockPublicState(fetchSpy, 'waiting');
     window.sessionStorage.setItem(
       `zerolink:created-share-link:${VALID_UUID}`,
-      JSON.stringify({ url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`, ts: Date.now() })
+      JSON.stringify({
+        url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`,
+        ts: Date.now(),
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
+      })
     );
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -233,7 +237,11 @@ describe('ManagePage – public status and waiting state', () => {
     fetchSpy.mockRejectedValueOnce(new Error('network error'));
     window.sessionStorage.setItem(
       `zerolink:created-share-link:${VALID_UUID}`,
-      JSON.stringify({ url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`, ts: Date.now() })
+      JSON.stringify({
+        url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`,
+        ts: Date.now(),
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
+      })
     );
 
     renderManagePage();
@@ -249,7 +257,11 @@ describe('ManagePage – public status and waiting state', () => {
     mockPublicState(fetchSpy, 'locked');
     window.sessionStorage.setItem(
       `zerolink:created-share-link:${VALID_UUID}`,
-      JSON.stringify({ url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`, ts: Date.now() })
+      JSON.stringify({
+        url: `/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`,
+        ts: Date.now(),
+        ttl: CHANNEL_TTL_MS.ONE_DAY,
+      })
     );
 
     renderManagePage();

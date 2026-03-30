@@ -72,6 +72,7 @@ describe('CreatePage integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useCreateStore.getState().resetCreateStore();
+    window.sessionStorage.clear();
     mockCreateSuccess();
   });
 
@@ -475,6 +476,26 @@ describe('CreatePage integration', () => {
         expect.objectContaining({ ttl: CHANNEL_TTL_MS.SEVEN_DAYS })
       );
     });
+  });
+
+  it('persists the selected TTL in the share-link recovery cache', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('create-ttl-seven-days'));
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    const raw = window.sessionStorage.getItem('zerolink:created-share-link:aaaaaaaaaaaaaaaaaaaaa');
+    expect(raw).toBeTruthy();
+
+    const parsed = JSON.parse(String(raw));
+    expect(parsed.url).toBe('/s/aaaaaaaaaaaaaaaaaaaaa#k=bW9ja19sb2NrX3NlY3JldA');
+    expect(parsed.ttl).toBe(CHANNEL_TTL_MS.SEVEN_DAYS);
   });
 
   it('shows HowItWorks again after clicking Create another', async () => {

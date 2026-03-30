@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
 
+import { CHANNEL_TTL_MS } from '@zerolink/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCreatedShareLink,
   persistCreatedShareLink,
   readCreatedShareLink,
-  SHARE_LINK_TTL_MS,
 } from '../pages/create/share-link-session-cache';
 
 const UUID = '550e8400-e29b-41d4-a716-446655440000';
 const SHARE_URL = `/s/${UUID}#k=bW9ja19sb2NrX3NlY3JldA`;
+const ENTRY_TTL = CHANNEL_TTL_MS.SEVEN_DAYS;
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -21,22 +22,23 @@ afterEach(() => {
 
 describe('persistCreatedShareLink', () => {
   it('writes a JSON entry keyed by uuid extracted from the share URL', () => {
-    persistCreatedShareLink(SHARE_URL);
+    persistCreatedShareLink(SHARE_URL, ENTRY_TTL);
 
     const raw = window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(String(raw));
     expect(parsed.url).toBe(SHARE_URL);
     expect(typeof parsed.ts).toBe('number');
+    expect(parsed.ttl).toBe(ENTRY_TTL);
   });
 
   it('ignores URLs that do not match the /s/:uuid pattern', () => {
-    persistCreatedShareLink('/invalid/path');
+    persistCreatedShareLink('/invalid/path', ENTRY_TTL);
     expect(window.sessionStorage.length).toBe(0);
   });
 
   it('ignores completely invalid URLs', () => {
-    persistCreatedShareLink(':::not-a-url');
+    persistCreatedShareLink(':::not-a-url', ENTRY_TTL);
     expect(window.sessionStorage.length).toBe(0);
   });
 
@@ -45,13 +47,13 @@ describe('persistCreatedShareLink', () => {
       throw new DOMException('QuotaExceededError');
     });
 
-    expect(() => persistCreatedShareLink(SHARE_URL)).not.toThrow();
+    expect(() => persistCreatedShareLink(SHARE_URL, ENTRY_TTL)).not.toThrow();
   });
 });
 
 describe('readCreatedShareLink', () => {
   it('returns the URL when a valid non-expired entry exists', () => {
-    persistCreatedShareLink(SHARE_URL);
+    persistCreatedShareLink(SHARE_URL, ENTRY_TTL);
     expect(readCreatedShareLink(UUID)).toBe(SHARE_URL);
   });
 
@@ -63,12 +65,20 @@ describe('readCreatedShareLink', () => {
     expect(readCreatedShareLink(undefined)).toBeNull();
   });
 
-  it('returns null and removes the entry when TTL has expired', () => {
-    persistCreatedShareLink(SHARE_URL);
+  it('keeps a long-lived entry until its own channel TTL expires', () => {
+    persistCreatedShareLink(SHARE_URL, CHANNEL_TTL_MS.SEVEN_DAYS);
 
-    // Advance past TTL
     const now = Date.now();
-    vi.spyOn(Date, 'now').mockReturnValue(now + SHARE_LINK_TTL_MS + 1);
+    vi.spyOn(Date, 'now').mockReturnValue(now + CHANNEL_TTL_MS.ONE_HOUR + 1);
+
+    expect(readCreatedShareLink(UUID)).toBe(SHARE_URL);
+  });
+
+  it('returns null and removes the entry when TTL has expired', () => {
+    persistCreatedShareLink(SHARE_URL, CHANNEL_TTL_MS.ONE_DAY);
+
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now + CHANNEL_TTL_MS.ONE_DAY + 1);
 
     expect(readCreatedShareLink(UUID)).toBeNull();
     expect(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)).toBeNull();
@@ -76,6 +86,16 @@ describe('readCreatedShareLink', () => {
 
   it('returns null and removes legacy plain-string entries', () => {
     window.sessionStorage.setItem(`zerolink:created-share-link:${UUID}`, SHARE_URL);
+
+    expect(readCreatedShareLink(UUID)).toBeNull();
+    expect(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)).toBeNull();
+  });
+
+  it('returns null and removes JSON entries missing ttl', () => {
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${UUID}`,
+      JSON.stringify({ url: SHARE_URL, ts: Date.now() })
+    );
 
     expect(readCreatedShareLink(UUID)).toBeNull();
     expect(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)).toBeNull();
@@ -98,7 +118,7 @@ describe('readCreatedShareLink', () => {
 
 describe('clearCreatedShareLink', () => {
   it('removes the entry for the given uuid', () => {
-    persistCreatedShareLink(SHARE_URL);
+    persistCreatedShareLink(SHARE_URL, ENTRY_TTL);
     expect(window.sessionStorage.length).toBe(1);
 
     clearCreatedShareLink(UUID);
@@ -106,7 +126,7 @@ describe('clearCreatedShareLink', () => {
   });
 
   it('does nothing when uuid is undefined', () => {
-    persistCreatedShareLink(SHARE_URL);
+    persistCreatedShareLink(SHARE_URL, ENTRY_TTL);
     clearCreatedShareLink(undefined);
     expect(window.sessionStorage.length).toBe(1);
   });

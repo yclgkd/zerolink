@@ -95,7 +95,7 @@ async function runCreate({
     isPasswordMode: selectedProfile === SECURITY_PROFILE.QUICK,
     ttl,
   });
-  persistCreatedShareLink(result.data.shareUrlWithFragment);
+  persistCreatedShareLink(result.data.shareUrlWithFragment, ttl);
   if (selectedProfile === SECURITY_PROFILE.QUICK) onQuickPasswordClear();
 }
 
