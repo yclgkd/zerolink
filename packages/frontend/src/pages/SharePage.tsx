@@ -28,7 +28,7 @@ function UuidDisplay({ uuid }: { uuid?: string | undefined }) {
     <p className="text-sm text-muted-foreground">
       {t('share.channelIdLabel')}{' '}
       <code
-        className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground"
+        className="rounded-lg border border-border/60 bg-background/35 px-2 py-1 font-mono text-sm text-foreground"
         data-testid="share-uuid"
       >
         {uuid ?? t('share.channelIdMissing')}

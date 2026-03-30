@@ -114,7 +114,7 @@ function AppShellLayout(): ReactElement {
           <span className="flex-1">{t('shell.inAppBrowserWarning')}</span>
           <button
             aria-label="Dismiss"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-amber-100/75 transition-colors hover:bg-amber-300/10 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/35"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-amber-100/75 transition-colors hover:bg-amber-300/10 hover:text-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/35"
             data-testid="inapp-browser-warning-dismiss"
             onClick={handleDismissInAppWarning}
             type="button"
@@ -140,7 +140,7 @@ function AppShellLayout(): ReactElement {
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 self-center">
+          <div className="flex shrink-0 items-center gap-2 self-start md:self-center">
             <LanguageSwitcher />
             <Button asChild size="sm" variant="outline">
               {isTrustRoute ? (

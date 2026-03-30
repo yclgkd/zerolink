@@ -97,7 +97,7 @@ function ShareLinkRecoveryPanel({ shareUrl }: { shareUrl: string }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm leading-6 text-foreground/85">{t('manage.shareLinkRecoveryBody')}</p>
         <button
-          className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-background/35 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 bg-background/35 px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           data-testid="manage-share-link-recovery-copy"
           onClick={() => void handleCopy()}
           type="button"
@@ -301,6 +301,7 @@ export function TerminalActions(): ReactElement {
   return (
     <section data-testid="manage-terminal-actions">
       <Button
+        className="w-full sm:w-auto"
         data-testid="manage-create-new-button"
         onClick={() => void navigate('/')}
         type="button"
@@ -346,9 +347,10 @@ export function ActionPanel({
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {showDeliverAction ? (
           <Button
+            className="w-full sm:w-auto"
             data-testid="manage-deliver-button"
             disabled={pending || !canDeliver}
             onClick={onDeliver}
@@ -368,6 +370,7 @@ export function ActionPanel({
           </Button>
         ) : null}
         <Button
+          className="w-full sm:w-auto"
           data-testid="manage-destroy-button"
           disabled={pending || !canManageActions}
           onClick={onOpenDestroyConfirm}

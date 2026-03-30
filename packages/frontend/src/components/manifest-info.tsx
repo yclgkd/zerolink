@@ -79,7 +79,7 @@ export function ManifestInfo(): ReactElement | null {
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         <Button
-          className="h-8 text-sm"
+          className="w-full text-sm sm:w-auto"
           onClick={() => setExpanded((current) => !current)}
           size="sm"
           type="button"

@@ -38,7 +38,7 @@ export function SharePageHeader({
 
   return (
     <PageCardHeader>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <PageCardTitle asChild className="text-primary">
           <h2>{title}</h2>
         </PageCardTitle>

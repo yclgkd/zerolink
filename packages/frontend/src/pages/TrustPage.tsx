@@ -78,8 +78,9 @@ export function TrustPage(): ReactElement {
           ))}
         </div>
       </PageCardContent>
-      <PageCardFooter className="flex flex-wrap justify-between gap-3">
+      <PageCardFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-between">
         <Button
+          className="w-full sm:w-auto"
           data-testid="trust-back-button"
           onClick={() => {
             if (canReturnToPreviousRoute) {
@@ -94,7 +95,7 @@ export function TrustPage(): ReactElement {
         >
           {t('trust.backButton')}
         </Button>
-        <Button asChild data-testid="trust-create-button">
+        <Button asChild className="w-full sm:w-auto" data-testid="trust-create-button">
           <Link to="/">{t('trust.createButton')}</Link>
         </Button>
       </PageCardFooter>

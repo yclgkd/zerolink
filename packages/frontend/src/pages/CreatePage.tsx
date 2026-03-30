@@ -30,7 +30,7 @@ export function CreatePage(): ReactElement {
   return (
     <PageCard data-testid="page-create" tone="purple">
       <PageCardHeader>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <PageCardTitle asChild className="text-primary">
             <h2>{t('create.title')}</h2>
           </PageCardTitle>

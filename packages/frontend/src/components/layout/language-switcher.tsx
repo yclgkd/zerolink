@@ -105,7 +105,7 @@ export function LanguageSwitcher() {
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-transparent px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border/50 bg-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
         data-testid="lang-switcher-trigger"
         onClick={() => setOpen((prev) => !prev)}
         onKeyDown={(e) => {
@@ -117,7 +117,7 @@ export function LanguageSwitcher() {
         ref={triggerRef}
         type="button"
       >
-        <Languages aria-hidden="true" className="size-3.5" />
+        <Languages aria-hidden="true" className="size-4" />
         {activeLabel}
       </button>
 

@@ -268,7 +268,7 @@ export function LockStep({
         <StateNotice data-testid="share-private-mode-notice" tone="warning">
           <p className="text-sm leading-6">{t('share.privateModeNoticeBody')}</p>
           <button
-            className="mt-2 text-sm font-medium underline underline-offset-2 hover:opacity-80"
+            className="mt-2 inline-flex min-h-10 items-center rounded-lg px-1 text-sm font-medium text-amber-50 underline underline-offset-2 transition-colors hover:text-white"
             data-testid="share-private-mode-copy"
             onClick={handleCopyLink}
             type="button"
@@ -372,7 +372,7 @@ export function LockedStep({
       />
 
       <div
-        className="space-y-2 rounded-2xl border border-border/60 bg-muted/18 p-4"
+        className="space-y-2 rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5"
         data-testid="share-next-steps"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
