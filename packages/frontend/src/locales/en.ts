@@ -263,6 +263,11 @@ const en = {
     showButton: 'Show passphrase',
     hideButton: 'Hide passphrase',
     policyHint: 'Use 4+ random words or 12+ characters',
+    errorRequired: '{{label}} is required',
+    errorTooShort: '{{label}} must be at least {{min}} characters',
+    errorTooLong: '{{label}} must be {{max}} characters or fewer',
+    errorInvalidWhitespace:
+      '{{label}} can use ordinary spaces between words, but not tabs, line breaks, or special spaces',
     strengthLabel: 'Passphrase strength',
     weak: 'Weak',
     medium: 'Medium',

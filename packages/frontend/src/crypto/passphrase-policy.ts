@@ -12,6 +12,12 @@ export type PassphraseValidationResult =
   | 'invalid_whitespace'
   | null;
 
+/** i18n key + interpolation params for a validation error. */
+export type PassphraseValidationI18n = {
+  key: string;
+  params: { label: string; min: number; max: number };
+};
+
 export function normalizePassphrase(passphrase: string): string {
   return passphrase.replace(EDGE_SPACE_PATTERN, '');
 }
@@ -42,18 +48,42 @@ export function hasValidPassphrase(passphrase: string): boolean {
   return validatePassphrase(passphrase) === null;
 }
 
-function getPassphraseLengthMessage(label: string): string {
-  return `${label} must be at least ${MIN_PASSPHRASE_LENGTH} characters`;
+const I18N_KEY_MAP: Record<Exclude<PassphraseValidationResult, null>, string> = {
+  missing: 'passphrase.errorRequired',
+  too_short: 'passphrase.errorTooShort',
+  too_long: 'passphrase.errorTooLong',
+  invalid_whitespace: 'passphrase.errorInvalidWhitespace',
+};
+
+/**
+ * Returns a `{ key, params }` pair for use with `t(key, params)`.
+ * Keeps the crypto layer free of i18n runtime dependencies.
+ */
+export function getPassphraseValidationI18n(
+  result: Exclude<PassphraseValidationResult, null>,
+  label: string
+): PassphraseValidationI18n {
+  return {
+    key: I18N_KEY_MAP[result],
+    params: { label, min: MIN_PASSPHRASE_LENGTH, max: MAX_PASSPHRASE_LENGTH },
+  };
 }
 
-function getPassphraseTooLongMessage(label: string): string {
-  return `${label} must be ${MAX_PASSPHRASE_LENGTH} characters or fewer`;
+/**
+ * Validates and returns `{ key, params }` for the first error, or `null` if valid.
+ */
+export function getPassphraseValidationErrorI18n(
+  passphrase: string,
+  label: string
+): PassphraseValidationI18n | null {
+  const result = validatePassphrase(passphrase);
+  return result === null ? null : getPassphraseValidationI18n(result, label);
 }
 
-function getPassphraseWhitespaceMessage(label: string): string {
-  return `${label} can use ordinary spaces between words, but not tabs, line breaks, or special spaces`;
-}
-
+/**
+ * Returns a hard-coded English validation message.
+ * Used by orchestrator internals that have no access to `t()`.
+ */
 export function getPassphraseValidationMessage(
   result: Exclude<PassphraseValidationResult, null>,
   label: string = 'passphrase'
@@ -62,14 +92,18 @@ export function getPassphraseValidationMessage(
     case 'missing':
       return `${label} is required`;
     case 'too_short':
-      return getPassphraseLengthMessage(label);
+      return `${label} must be at least ${MIN_PASSPHRASE_LENGTH} characters`;
     case 'too_long':
-      return getPassphraseTooLongMessage(label);
+      return `${label} must be ${MAX_PASSPHRASE_LENGTH} characters or fewer`;
     case 'invalid_whitespace':
-      return getPassphraseWhitespaceMessage(label);
+      return `${label} can use ordinary spaces between words, but not tabs, line breaks, or special spaces`;
   }
 }
 
+/**
+ * Validates and returns a hard-coded English error message, or `null` if valid.
+ * Used by orchestrator internals that have no access to `t()`.
+ */
 export function getPassphraseValidationError(
   passphrase: string,
   label: string = 'passphrase'

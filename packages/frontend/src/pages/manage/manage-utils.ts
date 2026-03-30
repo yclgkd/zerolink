@@ -1,8 +1,10 @@
 import type { ChannelState } from '@zerolink/shared';
 import { CHANNEL_STATE } from '@zerolink/shared';
 import {
-  getPassphraseValidationError as getPassphrasePolicyError,
+  getPassphraseValidationI18n,
   getPassphraseValidationMessage,
+  type PassphraseValidationI18n,
+  validatePassphrase,
 } from '../../crypto/passphrase-policy';
 
 export function mapActionError(code: string, message?: string): string {
@@ -41,8 +43,12 @@ export function requiresChannelPassword(adminMode: string | null): boolean {
   return adminMode === 'password' || adminMode === 'softkey';
 }
 
-export function getChannelPasswordValidationError(passphrase: string): string | null {
-  return getPassphrasePolicyError(passphrase, 'Channel password');
+export function getChannelPasswordValidationErrorI18n(
+  passphrase: string,
+  label: string
+): PassphraseValidationI18n | null {
+  const result = validatePassphrase(passphrase);
+  return result === null ? null : getPassphraseValidationI18n(result, label);
 }
 
 export function isTerminalPublicState(state: ChannelState): boolean {

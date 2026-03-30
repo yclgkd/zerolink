@@ -107,6 +107,8 @@ export function PassphraseInput({
   const resolvedLabel = label ?? t('passphrase.defaultLabel');
   const resolvedPlaceholder = placeholder ?? t('passphrase.defaultPlaceholder');
   const strength = getPassphraseStrength(value);
+  const helperTextId = helperText ? `${resolvedInputId}-helper` : undefined;
+  const describedBy = [ariaDescribedBy, helperTextId].filter(Boolean).join(' ') || undefined;
 
   return (
     <div className={cn('space-y-3', className)} data-testid="passphrase-input-root">
@@ -115,7 +117,7 @@ export function PassphraseInput({
       </label>
       <div className="relative">
         <input
-          aria-describedby={ariaDescribedBy}
+          aria-describedby={describedBy}
           aria-invalid={ariaInvalid}
           autoComplete="off"
           className={cn(
@@ -151,7 +153,11 @@ export function PassphraseInput({
         </button>
       </div>
 
-      {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
+      {helperText ? (
+        <p className="text-xs text-muted-foreground" id={helperTextId}>
+          {helperText}
+        </p>
+      ) : null}
 
       {showStrength && value ? <PassphraseStrengthIndicator strength={strength} /> : null}
     </div>

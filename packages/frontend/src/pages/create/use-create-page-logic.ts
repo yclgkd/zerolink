@@ -9,7 +9,7 @@ import i18next from 'i18next';
 import { useEffect, useState } from 'react';
 
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
-import { getPassphraseValidationMessage, hasValidPassphrase } from '../../crypto/passphrase-policy';
+import { getPassphraseValidationI18n, hasValidPassphrase } from '../../crypto/passphrase-policy';
 import { detectWebAuthnSupport } from '../../crypto/webauthn';
 import { serializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { generateChannelUuid } from '../../lib/channel-uuid';
@@ -21,10 +21,11 @@ function mapCreateError(code: string, message?: string): string {
   switch (code) {
     case 'PROFILE_BLOCKED':
       return i18next.t('create.errorProfileBlocked');
-    case 'PASSPHRASE_REQUIRED':
-      return (
-        message ?? getPassphraseValidationMessage('too_short', i18next.t('create.passwordLabel'))
-      );
+    case 'PASSPHRASE_REQUIRED': {
+      if (message) return message;
+      const i18n = getPassphraseValidationI18n('too_short', i18next.t('create.passwordLabel'));
+      return i18next.t(i18n.key, i18n.params);
+    }
     case 'NOT_ALLOWED':
       return i18next.t('create.errorNotAllowed');
     case 'NETWORK_ERROR':

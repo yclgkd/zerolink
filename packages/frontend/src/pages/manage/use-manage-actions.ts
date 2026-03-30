@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { useDeliverStore } from '../../stores/deliver-store';
 import {
-  getChannelPasswordValidationError,
+  getChannelPasswordValidationErrorI18n,
   mapActionError,
   requiresChannelPassword,
 } from './manage-utils';
@@ -49,10 +49,13 @@ export function useManageDeliveryLogic(
     }
     const needsChannelPassword = requiresChannelPassword(store.adminMode);
     if (needsChannelPassword) {
-      const passwordError = getChannelPasswordValidationError(softkeyPassphrase);
-      if (passwordError) {
+      const passErr = getChannelPasswordValidationErrorI18n(
+        softkeyPassphrase,
+        t('manage.softkeyLabel')
+      );
+      if (passErr) {
         setIsSecretInputInvalid(false);
-        return setActionError(passwordError);
+        return setActionError(t(passErr.key, passErr.params));
       }
     }
 
@@ -121,6 +124,7 @@ export function useManageDestructionLogic(
   isActiveActionContext: (scope: number, actionUuid: string) => boolean,
   wrappedPrivateKey: WrappedPrivateKey | undefined
 ) {
+  const { t } = useTranslation();
   const store = useDeliverStore();
 
   const handleDestroyConfirm = () => {
@@ -146,10 +150,13 @@ export function useManageDestructionLogic(
     }
     const needsChannelPassword = requiresChannelPassword(store.adminMode);
     if (needsChannelPassword) {
-      const passwordError = getChannelPasswordValidationError(softkeyPassphrase);
-      if (passwordError) {
+      const passErr = getChannelPasswordValidationErrorI18n(
+        softkeyPassphrase,
+        t('manage.softkeyLabel')
+      );
+      if (passErr) {
         setIsSecretInputInvalid(false);
-        return setActionError(passwordError);
+        return setActionError(t(passErr.key, passErr.params));
       }
     }
 

@@ -127,4 +127,36 @@ describe('PassphraseInput', () => {
 
     expect(screen.getByText('Use 4+ random words or 12+ characters')).toBeTruthy();
   });
+
+  it('connects helper text to input via aria-describedby', () => {
+    render(
+      <PassphraseInput
+        helperText="Use 4+ random words or 12+ characters"
+        inputId="test-passphrase"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('aria-describedby')).toBe('test-passphrase-helper');
+    expect(document.getElementById('test-passphrase-helper')?.textContent).toBe(
+      'Use 4+ random words or 12+ characters'
+    );
+  });
+
+  it('merges external aria-describedby with helper text id', () => {
+    render(
+      <PassphraseInput
+        ariaDescribedBy="external-error"
+        helperText="Use 4+ random words or 12+ characters"
+        inputId="test-passphrase"
+        onChange={() => {}}
+        value=""
+      />
+    );
+
+    const input = screen.getByTestId('passphrase-input-field');
+    expect(input.getAttribute('aria-describedby')).toBe('external-error test-passphrase-helper');
+  });
 });

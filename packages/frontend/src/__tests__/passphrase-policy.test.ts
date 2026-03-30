@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getPassphraseValidationError,
+  getPassphraseValidationErrorI18n,
+  getPassphraseValidationI18n,
   hasValidPassphrase,
   normalizePassphrase,
   validatePassphrase,
@@ -41,11 +43,31 @@ describe('passphrase policy', () => {
     expect(validatePassphrase('correct horse\uFEFFbattery staple')).toBe('invalid_whitespace');
   });
 
-  it('returns a specific invalid whitespace message', () => {
+  it('returns English fallback from getPassphraseValidationError', () => {
     expect(
       getPassphraseValidationError('correct horse\u00A0battery staple', 'Channel password')
     ).toBe(
       'Channel password can use ordinary spaces between words, but not tabs, line breaks, or special spaces'
     );
+  });
+
+  it('returns i18n key and params from getPassphraseValidationI18n', () => {
+    expect(getPassphraseValidationI18n('too_short', 'Passphrase')).toEqual({
+      key: 'passphrase.errorTooShort',
+      params: { label: 'Passphrase', min: 12, max: 128 },
+    });
+  });
+
+  it('returns i18n data for invalid passphrase via getPassphraseValidationErrorI18n', () => {
+    expect(getPassphraseValidationErrorI18n('short', 'Passphrase')).toEqual({
+      key: 'passphrase.errorTooShort',
+      params: { label: 'Passphrase', min: 12, max: 128 },
+    });
+  });
+
+  it('returns null from getPassphraseValidationErrorI18n for valid passphrase', () => {
+    expect(
+      getPassphraseValidationErrorI18n('correct horse battery staple', 'Passphrase')
+    ).toBeNull();
   });
 });

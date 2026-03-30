@@ -12,7 +12,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
-import { getPassphraseValidationError, hasValidPassphrase } from '../../crypto/passphrase-policy';
+import {
+  getPassphraseValidationErrorI18n,
+  hasValidPassphrase,
+} from '../../crypto/passphrase-policy';
 import {
   extractLockSecretFromHash,
   extractSenderAuthFprFromHash,
@@ -468,9 +471,9 @@ export function useSharePageLockLogic(
 
     if (!store.uuid) return setLockErrorFromCode('INVALID_REQUEST');
     if (!lockSecretB64u) return setLockErrorFromCode('INVALID_LOCK_SECRET');
-    const passphraseError = getPassphraseValidationError(store.passphrase, t('share.lockLabel'));
-    if (passphraseError) {
-      setLockError(passphraseError);
+    const lockPassErr = getPassphraseValidationErrorI18n(store.passphrase, t('share.lockLabel'));
+    if (lockPassErr) {
+      setLockError(t(lockPassErr.key, lockPassErr.params));
       setIsLockPassphraseInvalid(true);
       return;
     }
@@ -715,9 +718,9 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     if (!enabled || isDecryptSubmitting || decryptInFlightRef.current) return;
 
     if (!store.uuid) return setDecryptErrorFromCode('INVALID_REQUEST');
-    const passphraseError = getPassphraseValidationError(passphrase, t('share.decryptLabel'));
-    if (passphraseError) {
-      setDecryptError(passphraseError);
+    const decryptPassErr = getPassphraseValidationErrorI18n(passphrase, t('share.decryptLabel'));
+    if (decryptPassErr) {
+      setDecryptError(t(decryptPassErr.key, decryptPassErr.params));
       setIsDecryptPassphraseInvalid(true);
       return;
     }
