@@ -51,7 +51,7 @@ const zh: Translation = {
     shareLinkLabel: '分享链接 — 发送给接收方',
     shareLinkWarningTitle: '此分享链接仅显示一次。',
     shareLinkWarningBody:
-      '请立即保存。离开此页面后，ZeroLink 无法恢复该链接。如果丢失，请重新创建频道。',
+      '请立即保存。在当前浏览器会话中，只要频道仍处于等待锁定状态，发送方仍可在管理页再次复制它。超出这个范围后，如果丢失，请重新创建频道。',
     manageLinkLabel: '管理链接 — 请妥善保管',
     expiryHint: '频道将在 {{duration}} 后过期，请在过期前与接收方协调。',
     copyButton: '复制',

@@ -326,6 +326,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Only show the complete share link once, immediately after channel creation.
 **Reasoning**: The create flow already has the full `shareUrlWithFragment`, so it can display the correct receiver URL without storing the fragment anywhere else. Removing the share link from `ManagePage` avoids distributing broken links and keeps lock material out of longer-lived local storage.
 **Trade-offs**: Senders must save the share link before leaving the create success screen. If they lose it afterward, they need to create a new channel.
+**Follow-up (2026-03-30)**: This is no longer absolute. `ManagePage` now supports best-effort same-session recovery of the original receiver link while the channel is still `waiting`, using browser `sessionStorage` plus waiting-state gating. The original trade-off still applies after that waiting window, after session end, or when the recovery cache is unavailable.
 
 ## [2026-03-12] Receiver Safety Code and realtime copy align with public channel state
 

@@ -54,7 +54,7 @@ const en = {
     shareLinkLabel: 'Share link — send to receiver',
     shareLinkWarningTitle: 'This share link is shown only once.',
     shareLinkWarningBody:
-      'Save it now. After you leave this page, ZeroLink cannot recover it. If you lose it, create a new channel.',
+      'Save it now. In this browser session, the sender Manage page can re-copy it while the channel is still waiting. Outside that window, if you lose it, create a new channel.',
     manageLinkLabel: 'Manage link — keep this private',
     expiryHint:
       'Channel expires in {{duration}}. Coordinate with the receiver before it disappears.',
