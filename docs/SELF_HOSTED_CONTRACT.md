@@ -36,7 +36,7 @@ The frozen JSON fixtures live at `protocol-fixtures/selfhost-contract-v1.json`.
 | `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | Current backend may set a commit-cookie via response headers |
 | `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | Returns current admin mode, security profile, version, and optional receiver identity |
 | `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` or `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | Handles update delivery flow |
-| `/api/delete_commit/:uuid` | `POST` | `DeleteIntent` wrapped in the same commit unions | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path |
+| `/api/delete_commit/:uuid` | `POST` | Same commit unions with `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path |
 | `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Public state snapshot only |
 | `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |

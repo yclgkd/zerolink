@@ -1,37 +1,16 @@
 import { readFile } from 'node:fs/promises';
-
+import type { SelfHostContractFixture } from '@zerolink/shared/selfhost-contract-fixture.types';
 import { describe, expect, it } from 'vitest';
-
 import {
   deriveExpectedCompoundChallengeB64u,
   deriveLockKeyB64u,
   deriveLockProofHex,
 } from '../crypto/protocol-utils';
 
-interface FrontendContractFixture {
-  challengeDerivation: {
-    lock: {
-      uuid: string;
-      lockSecretB64u: string;
-      lockChallengeId: string;
-      lockChallengeB64u: string;
-      lockKeyB64u: string;
-      lockProofHex: string;
-    };
-    compound: {
-      uuid: string;
-      challengeId: string;
-      challengeSeedB64u: string;
-      intentHash: string;
-      expectedChallengeB64u: string;
-    };
-  };
-}
-
-async function loadFixture(): Promise<FrontendContractFixture> {
+async function loadFixture(): Promise<SelfHostContractFixture> {
   const path = new URL('../../../../protocol-fixtures/selfhost-contract-v1.json', import.meta.url);
   const raw = await readFile(path, 'utf8');
-  return JSON.parse(raw) as FrontendContractFixture;
+  return JSON.parse(raw) as SelfHostContractFixture;
 }
 
 describe('self-hosted frontend contract fixtures', () => {

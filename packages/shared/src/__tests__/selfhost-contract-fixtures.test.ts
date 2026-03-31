@@ -1,42 +1,11 @@
 import { readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
-
 import { canonicalJsonStringify, computeIntentHash } from '../canonical.ts';
 import { buildCipherBundleAadBytes, buildCipherBundleAadString } from '../protocol.ts';
+import type { SelfHostContractFixture } from '../selfhost-contract-fixture.types.ts';
 import { deriveUpdateProofChallengeB64u } from '../senderAuth.ts';
 import { WsClientMessageSchema, WsServerMessageSchema } from '../ws.ts';
-
-interface SelfHostContractFixture {
-  version: number;
-  canonicalJson: Array<{
-    name: string;
-    input: Record<string, unknown>;
-    canonical: string;
-    sha256Hex: string;
-  }>;
-  aad: Array<{
-    name: string;
-    parts: {
-      uuid: string;
-      version: number;
-      receiverPubFpr: string;
-    };
-    string: string;
-    utf8Hex: string;
-  }>;
-  challengeDerivation: {
-    deliveryProof: {
-      uuid: string;
-      intentHash: string;
-      expectedChallengeB64u: string;
-    };
-  };
-  ws: {
-    serverMessages: Array<{ name: string; payload: unknown }>;
-    clientMessages: Array<{ name: string; payload: unknown }>;
-  };
-}
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
