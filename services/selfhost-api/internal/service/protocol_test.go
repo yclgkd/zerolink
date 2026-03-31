@@ -533,8 +533,11 @@ type stubVerifier struct {
 	verifyAttestation func(context.Context, webauthn.AttestationInput) (webauthn.AttestationResult, error)
 }
 
-func (s stubVerifier) VerifyAssertion(context.Context, webauthn.AssertionInput) error {
-	return webauthn.ErrNotImplemented
+func (s stubVerifier) VerifyAssertion(
+	context.Context,
+	webauthn.AssertionInput,
+) (webauthn.AssertionResult, error) {
+	return webauthn.AssertionResult{}, webauthn.ErrNotImplemented
 }
 
 func (s stubVerifier) VerifyAttestation(

@@ -22,9 +22,14 @@ type stubChecker struct {
 }
 
 type stubProtocol struct {
-	createBegin  func(context.Context, service.CreateBeginInput) (service.CreateBeginOutput, error)
-	createFinish func(context.Context, service.CreateFinishInput) (service.CreateFinishOutput, error)
-	publicStatus func(context.Context, string) (service.PublicStatusOutput, error)
+	createBegin    func(context.Context, service.CreateBeginInput) (service.CreateBeginOutput, error)
+	createFinish   func(context.Context, service.CreateFinishInput) (service.CreateFinishOutput, error)
+	lockBegin      func(context.Context, service.LockBeginInput) (service.LockBeginOutput, error)
+	lockCommit     func(context.Context, service.LockCommitInput) (service.LockCommitOutput, error)
+	compoundBegin  func(context.Context, service.CompoundBeginInput) (service.CompoundBeginOutput, error)
+	compoundCommit func(context.Context, service.CompoundCommitInput) (service.CompoundCommitOutput, error)
+	publicStatus   func(context.Context, string) (service.PublicStatusOutput, error)
+	decryptFetch   func(context.Context, string) (service.DecryptFetchOutput, error)
 }
 
 func (s stubChecker) Ping(context.Context) error {
@@ -53,6 +58,50 @@ func (s stubProtocol) CreateFinish(ctx context.Context, input service.CreateFini
 	return s.createFinish(ctx, input)
 }
 
+func (s stubProtocol) LockBegin(ctx context.Context, input service.LockBeginInput) (service.LockBeginOutput, error) {
+	if s.lockBegin == nil {
+		return service.LockBeginOutput{}, &service.ProtocolError{
+			Code:    "NOT_IMPLEMENTED",
+			Status:  http.StatusNotImplemented,
+			Message: "lock_begin is not implemented yet",
+		}
+	}
+	return s.lockBegin(ctx, input)
+}
+
+func (s stubProtocol) LockCommit(ctx context.Context, input service.LockCommitInput) (service.LockCommitOutput, error) {
+	if s.lockCommit == nil {
+		return service.LockCommitOutput{}, &service.ProtocolError{
+			Code:    "NOT_IMPLEMENTED",
+			Status:  http.StatusNotImplemented,
+			Message: "lock_commit is not implemented yet",
+		}
+	}
+	return s.lockCommit(ctx, input)
+}
+
+func (s stubProtocol) CompoundBegin(ctx context.Context, input service.CompoundBeginInput) (service.CompoundBeginOutput, error) {
+	if s.compoundBegin == nil {
+		return service.CompoundBeginOutput{}, &service.ProtocolError{
+			Code:    "NOT_IMPLEMENTED",
+			Status:  http.StatusNotImplemented,
+			Message: "compound_begin is not implemented yet",
+		}
+	}
+	return s.compoundBegin(ctx, input)
+}
+
+func (s stubProtocol) CompoundCommit(ctx context.Context, input service.CompoundCommitInput) (service.CompoundCommitOutput, error) {
+	if s.compoundCommit == nil {
+		return service.CompoundCommitOutput{}, &service.ProtocolError{
+			Code:    "NOT_IMPLEMENTED",
+			Status:  http.StatusNotImplemented,
+			Message: "compound_commit is not implemented yet",
+		}
+	}
+	return s.compoundCommit(ctx, input)
+}
+
 func (s stubProtocol) PublicStatus(ctx context.Context, uuid string) (service.PublicStatusOutput, error) {
 	if s.publicStatus == nil {
 		return service.PublicStatusOutput{}, &service.ProtocolError{
@@ -62,6 +111,17 @@ func (s stubProtocol) PublicStatus(ctx context.Context, uuid string) (service.Pu
 		}
 	}
 	return s.publicStatus(ctx, uuid)
+}
+
+func (s stubProtocol) DecryptFetch(ctx context.Context, uuid string) (service.DecryptFetchOutput, error) {
+	if s.decryptFetch == nil {
+		return service.DecryptFetchOutput{}, &service.ProtocolError{
+			Code:    "NOT_IMPLEMENTED",
+			Status:  http.StatusNotImplemented,
+			Message: "decrypt_fetch is not implemented yet",
+		}
+	}
+	return s.decryptFetch(ctx, uuid)
 }
 
 func newTestRouter(checker stubChecker, protocol stubProtocol) http.Handler {
@@ -141,7 +201,7 @@ func TestReadyzLogsDatabaseFailure(t *testing.T) {
 func TestProtocolRouteReturnsNotImplemented(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/lock_begin/abcdefghijklmnopqrstu", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/decrypt_fetch/abcdefghijklmnopqrstu", nil)
 	res := httptest.NewRecorder()
 
 	newTestRouter(stubChecker{}, stubProtocol{}).ServeHTTP(res, req)

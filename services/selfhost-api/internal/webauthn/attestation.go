@@ -44,10 +44,6 @@ func NewVerifier() Verifier {
 	return NativeVerifier{}
 }
 
-func (NativeVerifier) VerifyAssertion(context.Context, AssertionInput) error {
-	return ErrNotImplemented
-}
-
 func (NativeVerifier) VerifyAttestation(_ context.Context, input AttestationInput) (AttestationResult, error) {
 	attestation, clientDataJSON, parsedClient, authData, err := parseAttestation(input)
 	if err != nil {

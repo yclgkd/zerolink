@@ -117,8 +117,20 @@ func protocolHandler(routeName string, protocolService service.Protocol, logger 
 		return createBeginHandler(protocolService, logger)
 	case "create_finish":
 		return createFinishHandler(protocolService, logger)
+	case "lock_begin":
+		return lockBeginHandler(protocolService, logger)
+	case "lock_commit":
+		return lockCommitHandler(protocolService, logger)
+	case "compound_begin":
+		return compoundBeginHandler(protocolService, logger)
+	case "compound_commit":
+		return compoundCommitHandler(protocolService, logger, false)
+	case "delete_commit":
+		return compoundCommitHandler(protocolService, logger, true)
 	case "public_status":
 		return publicStatusHandler(protocolService, logger)
+	case "decrypt_fetch":
+		return decryptFetchHandler(protocolService, logger)
 	default:
 		return protocolPlaceholder(routeName, logger)
 	}
@@ -221,6 +233,114 @@ func createFinishHandler(protocolService service.Protocol, logger *slog.Logger) 
 func publicStatusHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		output, err := protocolService.PublicStatus(r.Context(), r.PathValue("uuid"))
+		if err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+
+		writeJSON(logger, w, http.StatusOK, output)
+	}
+}
+
+func lockBeginHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input service.LockBeginInput
+		if !decodeJSONBody(w, r, &input, logger) {
+			return
+		}
+
+		if input.UUID != r.PathValue("uuid") {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+
+		output, err := protocolService.LockBegin(r.Context(), input)
+		if err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+
+		writeJSON(logger, w, http.StatusOK, output)
+	}
+}
+
+func lockCommitHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input service.LockCommitInput
+		if !decodeJSONBody(w, r, &input, logger) {
+			return
+		}
+
+		if input.UUID != r.PathValue("uuid") {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+
+		output, err := protocolService.LockCommit(r.Context(), input)
+		if err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+
+		writeJSON(logger, w, http.StatusOK, output)
+	}
+}
+
+func compoundBeginHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input service.CompoundBeginInput
+		if !decodeJSONBody(w, r, &input, logger) {
+			return
+		}
+
+		if input.UUID != r.PathValue("uuid") {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+
+		output, err := protocolService.CompoundBegin(r.Context(), input)
+		if err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+
+		writeJSON(logger, w, http.StatusOK, output)
+	}
+}
+
+func compoundCommitHandler(
+	protocolService service.Protocol,
+	logger *slog.Logger,
+	deleteOnly bool,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input service.CompoundCommitInput
+		if !decodeJSONBody(w, r, &input, logger) {
+			return
+		}
+
+		if input.UUID != r.PathValue("uuid") || input.Intent.UUID != r.PathValue("uuid") {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+		if deleteOnly && input.Intent.Op != "delete" {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "delete alias requires delete intent")
+			return
+		}
+
+		output, err := protocolService.CompoundCommit(r.Context(), input)
+		if err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+
+		writeJSON(logger, w, http.StatusOK, output)
+	}
+}
+
+func decryptFetchHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		output, err := protocolService.DecryptFetch(r.Context(), r.PathValue("uuid"))
 		if err != nil {
 			writeProtocolError(logger, w, err)
 			return
