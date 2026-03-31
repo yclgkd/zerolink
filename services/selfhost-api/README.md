@@ -156,3 +156,4 @@ docker run --rm -v "$PWD:/src" -w /src sqlc/sqlc:1.27.0 generate
 
 PostgreSQL-backed store tests run automatically in CI. To run them locally, point
 `SELFHOST_API_TEST_DATABASE_URL` at a disposable PostgreSQL instance before `go test ./...`.
+The store suite intentionally refuses to fall back to `SELFHOST_API_DATABASE_URL`, because the tests truncate persistence tables.

@@ -175,30 +175,31 @@ DELETE FROM active_challenges
 WHERE channel_id = $1
   AND kind = $2;
 
--- name: DeleteExpiredChallenges :execrows
+-- name: DeleteExpiredChallengesForChannel :execrows
 DELETE FROM active_challenges
-WHERE expires_at IS NOT NULL
-  AND expires_at <= $1;
+WHERE channel_id = $1
+  AND expires_at IS NOT NULL
+  AND expires_at <= $2;
 
--- name: FinalizeExpiredChannels :execrows
-WITH expired_channels AS (
-  DELETE FROM channels
-  WHERE expires_at <= $1
-  RETURNING uuid
-)
-INSERT INTO terminal_tombstones (
-  channel_id,
-  reason,
-  finalized_at
-)
-SELECT
-  uuid,
-  'expired',
-  $1
-FROM expired_channels
-ON CONFLICT (channel_id) DO UPDATE SET
-  reason = EXCLUDED.reason,
-  finalized_at = EXCLUDED.finalized_at;
+-- name: ListExpiredChannelIDs :many
+SELECT uuid
+FROM channels
+WHERE expires_at <= $1
+ORDER BY uuid;
+
+-- name: ListExpiredEphemeraChannelIDs :many
+SELECT channel_id
+FROM (
+  SELECT active_challenges.channel_id
+  FROM active_challenges
+  WHERE active_challenges.expires_at IS NOT NULL
+    AND active_challenges.expires_at <= $1
+  UNION
+  SELECT used_nonces.channel_id
+  FROM used_nonces
+  WHERE used_nonces.expires_at <= $1
+) AS expired_ephemera
+ORDER BY channel_id;
 
 -- name: GetUsedNonce :one
 SELECT
@@ -232,9 +233,10 @@ RETURNING
   used_at,
   expires_at;
 
--- name: DeleteExpiredUsedNonces :execrows
+-- name: DeleteExpiredUsedNoncesForChannel :execrows
 DELETE FROM used_nonces
-WHERE expires_at <= $1;
+WHERE channel_id = $1
+  AND expires_at <= $2;
 
 -- name: GetTerminalTombstone :one
 SELECT

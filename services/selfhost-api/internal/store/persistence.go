@@ -293,22 +293,32 @@ func (tx *ChannelTx) FinalizeTerminalState(
 }
 
 func (d *Database) SweepExpiredChannels(ctx context.Context, now time.Time) (int64, error) {
-	tx, err := d.pool.BeginTx(ctx, pgx.TxOptions{})
+	now = now.UTC()
+	queries := sqlcgen.New(d.pool)
+
+	channelIDs, err := queries.ListExpiredChannelIDs(ctx, requiredTimestamp(now))
 	if err != nil {
-		return 0, fmt.Errorf("begin expired channel sweep transaction: %w", err)
+		return 0, fmt.Errorf("list expired channels: %w", err)
 	}
 
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
-
-	deletedChannels, err := sqlcgen.New(tx).FinalizeExpiredChannels(ctx, requiredTimestamp(now.UTC()))
-	if err != nil {
-		return 0, fmt.Errorf("finalize expired channels: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit expired channel sweep transaction: %w", err)
+	var deletedChannels int64
+	for _, channelID := range channelIDs {
+		if err := d.WithChannelTx(ctx, channelID, func(ctx context.Context, tx *ChannelTx) error {
+			channel, err := tx.GetChannel(ctx)
+			if err != nil {
+				return err
+			}
+			if channel == nil || !channel.Expired(now) {
+				return nil
+			}
+			if _, err := tx.FinalizeTerminalState(ctx, TerminalReasonExpired, now); err != nil {
+				return err
+			}
+			deletedChannels++
+			return nil
+		}); err != nil {
+			return deletedChannels, fmt.Errorf("sweep expired channel %s: %w", channelID, err)
+		}
 	}
 
 	return deletedChannels, nil
@@ -318,30 +328,44 @@ func (d *Database) SweepExpiredEphemera(
 	ctx context.Context,
 	now time.Time,
 ) (deletedChallenges int64, deletedNonces int64, err error) {
-	tx, err := d.pool.BeginTx(ctx, pgx.TxOptions{})
+	now = now.UTC()
+	queries := sqlcgen.New(d.pool)
+
+	channelIDs, err := queries.ListExpiredEphemeraChannelIDs(ctx, requiredTimestamp(now))
 	if err != nil {
-		return 0, 0, fmt.Errorf("begin ephemera sweep transaction: %w", err)
+		return 0, 0, fmt.Errorf("list expired ephemera channels: %w", err)
 	}
 
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
+	for _, channelID := range channelIDs {
+		if err := d.WithChannelTx(ctx, channelID, func(ctx context.Context, tx *ChannelTx) error {
+			challengesDeleted, err := tx.queries.DeleteExpiredChallengesForChannel(
+				ctx,
+				sqlcgen.DeleteExpiredChallengesForChannelParams{
+					ChannelID: channelID,
+					ExpiresAt: requiredTimestamp(now),
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("delete expired challenges for channel: %w", err)
+			}
 
-	queries := sqlcgen.New(tx)
-	marker := requiredTimestamp(now.UTC())
+			noncesDeleted, err := tx.queries.DeleteExpiredUsedNoncesForChannel(
+				ctx,
+				sqlcgen.DeleteExpiredUsedNoncesForChannelParams{
+					ChannelID: channelID,
+					ExpiresAt: requiredTimestamp(now),
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("delete expired used nonces for channel: %w", err)
+			}
 
-	deletedChallenges, err = queries.DeleteExpiredChallenges(ctx, marker)
-	if err != nil {
-		return 0, 0, fmt.Errorf("delete expired challenges: %w", err)
-	}
-
-	deletedNonces, err = queries.DeleteExpiredUsedNonces(ctx, marker)
-	if err != nil {
-		return 0, 0, fmt.Errorf("delete expired used nonces: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, 0, fmt.Errorf("commit ephemera sweep transaction: %w", err)
+			deletedChallenges += challengesDeleted
+			deletedNonces += noncesDeleted
+			return nil
+		}); err != nil {
+			return deletedChallenges, deletedNonces, fmt.Errorf("sweep expired ephemera for channel %s: %w", channelID, err)
+		}
 	}
 
 	return deletedChallenges, deletedNonces, nil

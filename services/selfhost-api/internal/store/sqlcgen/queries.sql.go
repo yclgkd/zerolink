@@ -46,56 +46,39 @@ func (q *Queries) DeleteChannel(ctx context.Context, uuid string) error {
 	return err
 }
 
-const deleteExpiredChallenges = `-- name: DeleteExpiredChallenges :execrows
+const deleteExpiredChallengesForChannel = `-- name: DeleteExpiredChallengesForChannel :execrows
 DELETE FROM active_challenges
-WHERE expires_at IS NOT NULL
-  AND expires_at <= $1
+WHERE channel_id = $1
+  AND expires_at IS NOT NULL
+  AND expires_at <= $2
 `
 
-func (q *Queries) DeleteExpiredChallenges(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredChallenges, expiresAt)
+type DeleteExpiredChallengesForChannelParams struct {
+	ChannelID string
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteExpiredChallengesForChannel(ctx context.Context, arg DeleteExpiredChallengesForChannelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredChallengesForChannel, arg.ChannelID, arg.ExpiresAt)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const deleteExpiredUsedNonces = `-- name: DeleteExpiredUsedNonces :execrows
+const deleteExpiredUsedNoncesForChannel = `-- name: DeleteExpiredUsedNoncesForChannel :execrows
 DELETE FROM used_nonces
-WHERE expires_at <= $1
+WHERE channel_id = $1
+  AND expires_at <= $2
 `
 
-func (q *Queries) DeleteExpiredUsedNonces(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredUsedNonces, expiresAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type DeleteExpiredUsedNoncesForChannelParams struct {
+	ChannelID string
+	ExpiresAt pgtype.Timestamptz
 }
 
-const finalizeExpiredChannels = `-- name: FinalizeExpiredChannels :execrows
-WITH expired_channels AS (
-  DELETE FROM channels
-  WHERE expires_at <= $1
-  RETURNING uuid
-)
-INSERT INTO terminal_tombstones (
-  channel_id,
-  reason,
-  finalized_at
-)
-SELECT
-  uuid,
-  'expired',
-  $1
-FROM expired_channels
-ON CONFLICT (channel_id) DO UPDATE SET
-  reason = EXCLUDED.reason,
-  finalized_at = EXCLUDED.finalized_at
-`
-
-func (q *Queries) FinalizeExpiredChannels(ctx context.Context, finalizedAt pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, finalizeExpiredChannels, finalizedAt)
+func (q *Queries) DeleteExpiredUsedNoncesForChannel(ctx context.Context, arg DeleteExpiredUsedNoncesForChannelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredUsedNoncesForChannel, arg.ChannelID, arg.ExpiresAt)
 	if err != nil {
 		return 0, err
 	}
@@ -232,6 +215,68 @@ func (q *Queries) GetUsedNonce(ctx context.Context, arg GetUsedNonceParams) (Use
 		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const listExpiredChannelIDs = `-- name: ListExpiredChannelIDs :many
+SELECT uuid
+FROM channels
+WHERE expires_at <= $1
+ORDER BY uuid
+`
+
+func (q *Queries) ListExpiredChannelIDs(ctx context.Context, expiresAt pgtype.Timestamptz) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExpiredChannelIDs, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var uuid string
+		if err := rows.Scan(&uuid); err != nil {
+			return nil, err
+		}
+		items = append(items, uuid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExpiredEphemeraChannelIDs = `-- name: ListExpiredEphemeraChannelIDs :many
+SELECT channel_id
+FROM (
+  SELECT active_challenges.channel_id
+  FROM active_challenges
+  WHERE active_challenges.expires_at IS NOT NULL
+    AND active_challenges.expires_at <= $1
+  UNION
+  SELECT used_nonces.channel_id
+  FROM used_nonces
+  WHERE used_nonces.expires_at <= $1
+) AS expired_ephemera
+ORDER BY channel_id
+`
+
+func (q *Queries) ListExpiredEphemeraChannelIDs(ctx context.Context, expiresAt pgtype.Timestamptz) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExpiredEphemeraChannelIDs, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var channel_id string
+		if err := rows.Scan(&channel_id); err != nil {
+			return nil, err
+		}
+		items = append(items, channel_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markChallengeConsumed = `-- name: MarkChallengeConsumed :one
