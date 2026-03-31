@@ -8,8 +8,22 @@ import (
 var ErrNotImplemented = errors.New("webauthn verification not implemented")
 
 type AssertionInput struct {
-	ChannelID string
-	Payload   []byte
+	ChannelID               string
+	AssertionID             string
+	ClientDataJSONB64u      string
+	AuthenticatorDataB64u   string
+	SignatureB64u           string
+	ExpectedRPID            string
+	ExpectedOrigin          string
+	ExpectedChallenge       []byte
+	StoredCredentialID      string
+	StoredPublicKey         string
+	StoredSignCount         int64
+	RequireUserVerification bool
+}
+
+type AssertionResult struct {
+	NewSignCount int64
 }
 
 type AttestationInput struct {
@@ -33,14 +47,14 @@ type AttestationResult struct {
 }
 
 type Verifier interface {
-	VerifyAssertion(ctx context.Context, input AssertionInput) error
+	VerifyAssertion(ctx context.Context, input AssertionInput) (AssertionResult, error)
 	VerifyAttestation(ctx context.Context, input AttestationInput) (AttestationResult, error)
 }
 
 type NoopVerifier struct{}
 
-func (NoopVerifier) VerifyAssertion(context.Context, AssertionInput) error {
-	return ErrNotImplemented
+func (NoopVerifier) VerifyAssertion(context.Context, AssertionInput) (AssertionResult, error) {
+	return AssertionResult{}, ErrNotImplemented
 }
 
 func (NoopVerifier) VerifyAttestation(context.Context, AttestationInput) (AttestationResult, error) {

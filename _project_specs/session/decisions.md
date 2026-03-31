@@ -763,6 +763,14 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Shared skills stay agent-neutral, Claude-specific automation remains local to `.claude/skills/`, and `CLAUDE.md` continues to load Claude-local mandatory skills explicitly.
 **Reasoning**: This preserves the multi-agent guidance layer without pretending Claude-only commands are portable, while keeping the original Claude workflow guarantees intact.
 **Trade-offs**: The shared and Claude-local skill directories can now diverge intentionally, so future changes must update the correct layer instead of assuming one copy fits every agent.
+## [2026-03-31] Self-hosted manage/decrypt flows live in the Go service layer
+
+**Decision**: Implement the self-hosted `lock_*`, `compound_*`, `delete_commit`, and `decrypt_fetch` flows in `services/selfhost-api/internal/service/` with `store.WithChannelTx(...)` as the correctness boundary, while keeping `internal/httpapi/` limited to contract validation and route alias handling.
+**Context**: Issue #209 needed the Go self-hosted backend to reproduce the Worker/Durable Object manage-flow semantics, including version checks, nonce replay rejection, terminal tombstones, decrypt payload reads, and the `delete_commit` alias over compound commit. `origin/main` still lacked these self-hosted paths end-to-end.
+**Options Considered**: Recreate state transitions in HTTP handlers; keep WebAuthn verification stubbed and only support password mode; centralize all protocol transitions in the service layer and extend the native verifier to support assertion validation.
+**Choice**: Route parsing stays in `httpapi`, state transitions stay in `service`, transactional ordering stays in `store`, and WebAuthn manage-path verification is handled by the native verifier so both password/softkey and WebAuthn admin modes share the same self-hosted protocol surface.
+**Reasoning**: This matches the existing package boundaries, keeps protocol drift localized, and preserves the Durable Object ordering model by reusing the advisory-lock transaction helper instead of scattering correctness checks across handlers.
+**Trade-offs**: Realtime caller-binding parity is still outside this milestone, and the DB-backed integration tests require `SELFHOST_API_TEST_DATABASE_URL` to run in environments that do not provision PostgreSQL automatically.
 ## [2026-03-03] Follow-up fixes must stay on the existing open PR branch
 
 **Decision**: When the current branch already maps to an open PR and the task is addressing that PR's review, comments, or follow-up regressions, continue on that branch instead of creating a new branch and PR.
@@ -834,3 +842,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: URL fragment
 **Reasoning**: Browsers never send fragments to servers (HTTP spec); recipient copies entire URL; zero-knowledge guarantee
 **Trade-offs**: Entire link must be shared intact; no server-side logging of key material (intentional)
+## [2026-03-31] Mirror Worker hardening in self-hosted manage flows
+
+**Decision**: Enforce per-channel manage rate limits and strict compound_commit auth payload shapes in the Go self-hosted service
+**Context**: PR #219 added self-hosted lock/manage flows but initially missed the Worker abuse controls and request-union hardening
+**Options Considered**: Leave validation to callers, add HTTP-only middleware, enforce in the protocol service
+**Choice**: Enforce in the protocol service
+**Reasoning**: The service layer already owns protocol state transitions, so it is the narrowest place to preserve Worker parity across HTTP handlers and future callers
+**Trade-offs**: Rate limiting is process-local instead of Durable Object-local, so multi-instance deployments still need edge or infra throttling for global enforcement

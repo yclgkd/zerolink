@@ -33,14 +33,20 @@ var (
 type Protocol interface {
 	CreateBegin(context.Context, CreateBeginInput) (CreateBeginOutput, error)
 	CreateFinish(context.Context, CreateFinishInput) (CreateFinishOutput, error)
+	LockBegin(context.Context, LockBeginInput) (LockBeginOutput, error)
+	LockCommit(context.Context, LockCommitInput) (LockCommitOutput, error)
+	CompoundBegin(context.Context, CompoundBeginInput) (CompoundBeginOutput, error)
+	CompoundCommit(context.Context, CompoundCommitInput) (CompoundCommitOutput, error)
 	PublicStatus(context.Context, string) (PublicStatusOutput, error)
+	DecryptFetch(context.Context, string) (DecryptFetchOutput, error)
 }
 
 type ProtocolError struct {
-	Code    string
-	Status  int
-	Message string
-	Cause   error
+	Code              string
+	Status            int
+	Message           string
+	Cause             error
+	RetryAfterSeconds int
 }
 
 func (e *ProtocolError) Error() string {
@@ -67,12 +73,13 @@ type ProtocolConfig struct {
 }
 
 type ProtocolService struct {
-	db         *store.Database
-	verifier   webauthn.Verifier
-	rpID       string
-	rpOrigin   string
-	now        func() time.Time
-	randomRead func([]byte) (int, error)
+	db          *store.Database
+	verifier    webauthn.Verifier
+	rpID        string
+	rpOrigin    string
+	now         func() time.Time
+	randomRead  func([]byte) (int, error)
+	rateLimiter *protocolRateLimiter
 }
 
 type CreateBeginInput struct {
@@ -152,12 +159,13 @@ func NewProtocolService(db *store.Database, cfg ProtocolConfig) Protocol {
 	}
 
 	return &ProtocolService{
-		db:         db,
-		verifier:   verifier,
-		rpID:       cfg.RPID,
-		rpOrigin:   strings.TrimRight(cfg.RPOrigin, "/"),
-		now:        func() time.Time { return time.Now().UTC() },
-		randomRead: rand.Read,
+		db:          db,
+		verifier:    verifier,
+		rpID:        cfg.RPID,
+		rpOrigin:    strings.TrimRight(cfg.RPOrigin, "/"),
+		now:         func() time.Time { return time.Now().UTC() },
+		randomRead:  rand.Read,
+		rateLimiter: newProtocolRateLimiter(),
 	}
 }
 
@@ -466,6 +474,9 @@ func mapProtocolError(err error) error {
 	if errors.As(err, &protocolErr) {
 		return protocolErr
 	}
+	if errors.Is(err, store.ErrNonceReplay) {
+		return nonceReplay("nonce already consumed")
+	}
 	if errors.Is(err, store.ErrChannelNotFound) || errors.Is(err, store.ErrChannelTombstoned) {
 		return notFound("channel not found")
 	}
@@ -480,12 +491,56 @@ func challengeInvalid(message string) error {
 	return &ProtocolError{Code: "CHALLENGE_INVALID", Status: 401, Message: message}
 }
 
+func challengeConsumed(message string) error {
+	return &ProtocolError{Code: "CHALLENGE_CONSUMED", Status: 409, Message: message}
+}
+
 func lockForbidden(message string) error {
 	return &ProtocolError{Code: "LOCK_FORBIDDEN", Status: 403, Message: message}
 }
 
+func versionMismatch(message string) error {
+	return &ProtocolError{Code: "VERSION_MISMATCH", Status: 409, Message: message}
+}
+
+func nonceReplay(message string) error {
+	return &ProtocolError{Code: "NONCE_REPLAY", Status: 409, Message: message}
+}
+
+func timestampOutOfRange(message string) error {
+	return &ProtocolError{Code: "TIMESTAMP_OUT_OF_RANGE", Status: 400, Message: message}
+}
+
+func intentHashMismatch(message string) error {
+	return &ProtocolError{Code: "INTENT_HASH_MISMATCH", Status: 400, Message: message}
+}
+
+func cipherBundleInvalid(message string) error {
+	return &ProtocolError{Code: "CIPHER_BUNDLE_INVALID", Status: 400, Message: message}
+}
+
+func assertionInvalid(message string) error {
+	return &ProtocolError{Code: "ASSERTION_INVALID", Status: 403, Message: message}
+}
+
+func rateLimited(message string, retryAfterSeconds int) error {
+	if retryAfterSeconds < 1 {
+		retryAfterSeconds = 1
+	}
+	return &ProtocolError{
+		Code:              "RATE_LIMITED",
+		Status:            429,
+		Message:           message,
+		RetryAfterSeconds: retryAfterSeconds,
+	}
+}
+
 func attestationUnverifiable(message string) error {
 	return &ProtocolError{Code: "ATTESTATION_UNVERIFIABLE", Status: 403, Message: message}
+}
+
+func channelNotDelivered(message string) error {
+	return &ProtocolError{Code: "CHANNEL_NOT_DELIVERED", Status: 409, Message: message}
 }
 
 func notFound(message string) error {
