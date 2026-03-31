@@ -32,9 +32,69 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect Changes
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_node: ${{ steps.filter.outputs.run_node }}
+      run_go: ${{ steps.filter.outputs.run_go }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed areas
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run_node=true" >> "$GITHUB_OUTPUT"
+            echo "run_go=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          run_node=false
+          run_go=false
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+
+            if [ "$file" = ".github/workflows/pr-validate.yml" ]; then
+              run_node=true
+              run_go=true
+              continue
+            fi
+
+            if [[ "$file" == services/selfhost-api/* ]]; then
+              case "$file" in
+                *.md|services/selfhost-api/.env.example)
+                  ;;
+                *)
+                  run_go=true
+                  ;;
+              esac
+            fi
+
+            case "$file" in
+              packages/*|protocol-fixtures/*|scripts/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|vitest.config.ts|biome.json)
+                run_node=true
+                ;;
+            esac
+          done < <(git diff --name-only "$base_sha" "$head_sha")
+
+          echo "run_node=$run_node" >> "$GITHUB_OUTPUT"
+          echo "run_go=$run_go" >> "$GITHUB_OUTPUT"
+
   pr-quality:
     name: PR Quality
-    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    needs: changes
+    if: (github.event_name == 'merge_group' || !github.event.pull_request.draft) && needs.changes.outputs.run_node == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -70,7 +130,8 @@ jobs:
 
   selfhost-store:
     name: Self-Hosted Store
-    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    needs: changes
+    if: (github.event_name == 'merge_group' || !github.event.pull_request.draft) && needs.changes.outputs.run_go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
