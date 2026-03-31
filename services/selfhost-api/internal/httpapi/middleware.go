@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -86,6 +87,7 @@ func recoverMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
 				logger.Error(
 					"panic recovered",
 					"panic", fmt.Sprint(recovered),
+					"stack", string(debug.Stack()),
 					"method", r.Method,
 					"path", r.URL.Path,
 				)
