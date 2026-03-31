@@ -33,6 +33,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Add a lightweight `changes` job in `.github/workflows/pr-validate.yml` that diffs the PR base/head SHAs on `pull_request`, forces both jobs on `merge_group`, runs the Node/TS job only for package/root JS-TS-fixture changes, runs the Go job only for `services/selfhost-api/**`, and runs both when the workflow itself changes.
 **Reasoning**: Job-level gating preserves straightforward branch protection because the same workflow still reports status, while eliminating obviously unnecessary cross-stack validation. For merge queue, forcing both jobs stays conservative and avoids under-validating combined batches.
 **Trade-offs**: Path-based gating requires ongoing maintenance as new shared files or toolchain entrypoints appear. If the path map becomes stale, CI can under-run checks until the workflow is updated.
+**Follow-up (2026-03-31, trigger boundary fix)**: `biome.json` must not stay in the workflow-level `paths-ignore` list because the `changes` job treats it as part of the Node validation surface. The workflow now always triggers for `biome.json` edits so the Node gate can make the decision instead of suppressing the entire workflow.
 
 ## [2026-03-31] Bootstrap the self-hosted Go API around explicit boundaries before protocol code lands
 

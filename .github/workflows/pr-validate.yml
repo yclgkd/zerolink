@@ -17,7 +17,6 @@ on:
       - ".github/workflows/e2e-full.yml"
       - ".github/workflows/pr-checklist.yml"
       - ".husky/**"
-      - "biome.json"
       - "commitlint.config.js"
       - ".gitignore"
       - ".env.example"
