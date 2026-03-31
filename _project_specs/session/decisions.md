@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Bootstrap the self-hosted Go API around explicit boundaries before protocol code lands
+
+**Decision**: Start the self-hosted Go backend as a separate nested module under `services/selfhost-api/`, using standard-library HTTP + `slog`, `pgxpool` for PostgreSQL connectivity, and an embedded SQL migration runner instead of pulling in a full framework or external migration CLI at M1.
+**Context**: Issue #214 needs a local-development-ready service skeleton with config validation, health endpoints, DB bootstrap, and stable package boundaries for later milestones. The repo does not currently ship any Go runtime, local `go` is not guaranteed on every workstation, and M2-M6 will need room to add transaction semantics, protocol routes, WebAuthn verification, and realtime delivery without rewriting the foundation.
+**Options Considered**: Introduce a heavier HTTP framework plus a third-party migration tool now; keep everything as docs-only placeholders and defer real runtime wiring to M2; create the smallest runnable service with explicit boundaries and embedded migrations while leaving protocol logic for later milestones.
+**Choice**: Add `services/selfhost-api/` as a standalone Go module with `cmd/selfhost-api`, `cmd/selfhost-migrate`, `internal/{app,config,httpapi,service,store,protocol,webauthn,realtime}`, and `migrations/`. Register the frozen protocol routes as `501 NOT_IMPLEMENTED` placeholders, provide `healthz` / `readyz`, and make readiness depend on a real PostgreSQL ping.
+**Reasoning**: This keeps the change reviewable while still producing a runnable service. Embedded migrations avoid an extra binary/CLI dependency in the first milestone, placeholder routes freeze the surface area that later milestones will fill in, and a nested module prevents the existing pnpm-based TypeScript build from being entangled with Go-specific tooling prematurely.
+**Trade-offs**: Root CI does not automatically execute Go tests yet, and the first migration only bootstraps service metadata rather than the full channel schema. Those pieces are deliberate follow-up work for M2 and later milestones.
+
 ## [2026-03-30] Freeze the self-hosted backend contract before starting the Go port
 
 **Decision**: Add an explicit self-hosted backend contract document plus versioned cross-runtime fixtures that lock the current protocol-facing behavior before any Go implementation begins.

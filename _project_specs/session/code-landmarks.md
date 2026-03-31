@@ -30,6 +30,8 @@ UPDATE WHEN:
 | `packages/backend/src/index.staging.ts` | Staging-only Worker entry — mirrors production exports while keeping staging on its own Worker and namespace |
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
+| `services/selfhost-api/cmd/selfhost-api/main.go` | Self-hosted Go API entrypoint — loads config, opens PostgreSQL, and serves health plus placeholder protocol routes |
+| `services/selfhost-api/cmd/selfhost-migrate/main.go` | Self-hosted Go migration entrypoint — runs embedded SQL migrations against PostgreSQL |
 
 ## Core Business Logic
 | Location | Purpose |
@@ -62,6 +64,8 @@ UPDATE WHEN:
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
+| `services/selfhost-api/.env.example` | Self-hosted Go service env template — bind address, log level, pool sizing, and PostgreSQL DSN |
+| `services/selfhost-api/go.mod` | Nested Go module for the self-hosted backend track |
 | `.github/workflows/deploy.yml` | Post-merge CI/CD: resolve `ZEROLINK_VERSION`, frontend build, manifest generate/sign/verify, then Worker deploy; staging adds a post-deploy smoke test |
 | `version.txt` | Root release state tracked by Release Please's `simple` strategy; seed value is the last manual release (`0.2.0`) |
 
@@ -90,6 +94,8 @@ UPDATE WHEN:
 | `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | Shared frontend crypto test helpers — defaults orchestrator tests to fast Argon2id params and provides seeded immutable decrypt fixtures for heavy flows |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
 | `packages/shared/src/__tests__/selfhost-contract-fixtures.test.ts` | Shared cross-runtime fixture verification for canonical JSON, intent hashes, AAD, delivery-proof challenge, and WS message schemas |
+| `services/selfhost-api/internal/httpapi/router_test.go` | Self-hosted Go HTTP smoke tests for health, readiness, placeholder protocol routes, and websocket upgrade gating |
+| `services/selfhost-api/internal/config/config_test.go` | Self-hosted Go config validation tests for required env vars and pool bounds |
 | `packages/frontend/e2e/` | Playwright E2E: happy-path, mocked realtime fallback/cross-device coverage, realtime WebSocket smoke, expiration, rate-limit, fragment cleanup, manifest-verification |
 | `packages/frontend/playwright.config.ts` | Regular Playwright suite using a single non-verification build/server |
 | `packages/frontend/playwright.realtime.config.ts` | Realtime smoke Playwright suite that starts frontend preview plus local `wrangler dev` with test-only env vars |
