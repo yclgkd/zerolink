@@ -29,15 +29,17 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	}
 
 	realtimeHub := realtime.NopHub{}
+	verifier := webauthn.NewVerifier()
 	services := service.New(
 		db,
-		webauthn.NoopVerifier{},
+		verifier,
 		realtimeHub,
 		service.NewProtocolService(
 			db,
 			service.ProtocolConfig{
 				RPID:     cfg.RP.ID,
 				RPOrigin: cfg.RP.Origin,
+				Verifier: verifier,
 			},
 		),
 	)

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"os"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/config"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
 func TestProtocolServiceCreateQuickChannelAndReadPublicStatus(t *testing.T) {
@@ -19,6 +21,7 @@ func TestProtocolServiceCreateQuickChannelAndReadPublicStatus(t *testing.T) {
 	svc := NewProtocolService(db, ProtocolConfig{
 		RPID:     "localhost",
 		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
 	})
 
 	ctx := context.Background()
@@ -93,13 +96,27 @@ func TestProtocolServiceCreateQuickChannelAndReadPublicStatus(t *testing.T) {
 	}
 }
 
-func TestProtocolServiceCreateSecureChannelPersistsWebAuthnMetadata(t *testing.T) {
+func TestProtocolServiceCreateSecureChannelPersistsVerifiedCredential(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
 
+	var captured webauthn.AttestationInput
 	svc := NewProtocolService(db, ProtocolConfig{
 		RPID:     "localhost",
 		RPOrigin: "http://localhost:5173",
+		Verifier: stubVerifier{
+			verifyAttestation: func(_ context.Context, input webauthn.AttestationInput) (webauthn.AttestationResult, error) {
+				captured = input
+				return webauthn.AttestationResult{
+					Verified:     false,
+					Format:       "none",
+					CredentialID: encodeBase64URL([]byte("stored-credential")),
+					PublicKey:    encodeBase64URL([]byte("cose-public-key")),
+					SignCount:    7,
+					AAGUID:       encodeBase64URL([]byte("0123456789abcdef")),
+				}, nil
+			},
+		},
 	})
 
 	ctx := context.Background()
@@ -107,12 +124,13 @@ func TestProtocolServiceCreateSecureChannelPersistsWebAuthnMetadata(t *testing.T
 	ttl := channelTTLOneHourMS
 	uuid := "bbbbbbbbbbbbbbbbbbbbb"
 
-	if _, err := svc.CreateBegin(ctx, CreateBeginInput{
+	beginOutput, err := svc.CreateBegin(ctx, CreateBeginInput{
 		UUID:            uuid,
 		Timestamp:       &timestamp,
 		SecurityProfile: string(store.SecurityProfileSecure),
 		TTL:             &ttl,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("CreateBegin() error = %v", err)
 	}
 
@@ -136,6 +154,26 @@ func TestProtocolServiceCreateSecureChannelPersistsWebAuthnMetadata(t *testing.T
 	if status.SecurityProfile != string(store.SecurityProfileSecure) {
 		t.Fatalf("securityProfile = %q, want secure", status.SecurityProfile)
 	}
+	if captured.ExpectedRPID != "localhost" {
+		t.Fatalf("ExpectedRPID = %q, want localhost", captured.ExpectedRPID)
+	}
+	if captured.ExpectedOrigin != "http://localhost:5173" {
+		t.Fatalf("ExpectedOrigin = %q, want http://localhost:5173", captured.ExpectedOrigin)
+	}
+	if !captured.RequireUserVerification {
+		t.Fatal("RequireUserVerification = false, want true")
+	}
+	if challenge, _ := beginOutput.CreationOptions["challenge"].(string); challenge != "" {
+		wantChallenge, err := base64.RawURLEncoding.DecodeString(challenge)
+		if err != nil {
+			t.Fatalf("decode creation challenge: %v", err)
+		}
+		if !bytes.Equal(captured.ExpectedChallenge, wantChallenge) {
+			t.Fatalf("ExpectedChallenge = %q, want %q", captured.ExpectedChallenge, wantChallenge)
+		}
+	} else {
+		t.Fatal("creationOptions.challenge missing")
+	}
 
 	if err := db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.GetChannel(ctx)
@@ -145,11 +183,24 @@ func TestProtocolServiceCreateSecureChannelPersistsWebAuthnMetadata(t *testing.T
 		if channel == nil {
 			t.Fatal("expected channel row to exist")
 		}
-		if !bytes.Contains(channel.AdminCredential, []byte(`"credentialId":"Y3JlZC1pZA"`)) {
+		if !bytes.Contains(channel.AdminCredential, []byte(`"credentialId":"c3RvcmVkLWNyZWRlbnRpYWw"`)) {
 			t.Fatalf("admin credential = %s, want stored credential id", string(channel.AdminCredential))
 		}
-		if !bytes.Contains(channel.AdminCredential, []byte(`"attestationObject":"YXR0ZXN0YXRpb24tb2JqZWN0"`)) {
-			t.Fatalf("admin credential = %s, want attestation metadata", string(channel.AdminCredential))
+		if !bytes.Contains(channel.AdminCredential, []byte(`"publicKey":"Y29zZS1wdWJsaWMta2V5"`)) {
+			t.Fatalf("admin credential = %s, want stored public key", string(channel.AdminCredential))
+		}
+		if !bytes.Contains(channel.AdminCredential, []byte(`"aaguid":"MDEyMzQ1Njc4OWFiY2RlZg"`)) {
+			t.Fatalf("admin credential = %s, want stored aaguid", string(channel.AdminCredential))
+		}
+		if bytes.Contains(channel.AdminCredential, []byte(`"attestationObject"`)) {
+			t.Fatalf("admin credential = %s, did not expect raw attestation metadata", string(channel.AdminCredential))
+		}
+		challenge, err := tx.GetChallenge(ctx, store.ChallengeKindCreate)
+		if err != nil {
+			return err
+		}
+		if challenge != nil {
+			t.Fatal("expected create challenge to be removed after successful webauthn finalize")
 		}
 		return nil
 	}); err != nil {
@@ -164,6 +215,7 @@ func TestProtocolServiceRejectsSecurePasswordDowngrade(t *testing.T) {
 	svc := NewProtocolService(db, ProtocolConfig{
 		RPID:     "localhost",
 		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
 	})
 
 	ctx := context.Background()
@@ -195,6 +247,7 @@ func TestProtocolServicePublicStatusFinalizesExpiredChannel(t *testing.T) {
 	svc := NewProtocolService(db, ProtocolConfig{
 		RPID:     "localhost",
 		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
 	})
 
 	ctx := context.Background()
@@ -204,7 +257,7 @@ func TestProtocolServicePublicStatusFinalizesExpiredChannel(t *testing.T) {
 	lockKey := ""
 
 	if err := db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
-		placeholderCredential := []byte(`{"credentialId":"","publicKey":"","signCount":0,"aaguid":"","attestation":{"response":{}}}`)
+		placeholderCredential := []byte(`{"credentialId":"","publicKey":"","signCount":0,"aaguid":""}`)
 		_, err := tx.SaveChannel(ctx, store.Channel{
 			UUID:            uuid,
 			State:           store.ChannelStateWaiting,
@@ -239,6 +292,112 @@ func TestProtocolServicePublicStatusFinalizesExpiredChannel(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("inspect expired tombstone: %v", err)
+	}
+}
+
+func TestProtocolServiceRejectsWebAuthnCreateWithoutChallenge(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	verifierCalled := false
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: stubVerifier{
+			verifyAttestation: func(context.Context, webauthn.AttestationInput) (webauthn.AttestationResult, error) {
+				verifierCalled = true
+				return webauthn.AttestationResult{}, nil
+			},
+		},
+	})
+
+	ctx := context.Background()
+	timestamp := int64(1_730_000_000_000)
+	uuid := "eeeeeeeeeeeeeeeeeeeee"
+
+	if _, err := svc.CreateBegin(ctx, CreateBeginInput{
+		UUID:            uuid,
+		Timestamp:       &timestamp,
+		SecurityProfile: string(store.SecurityProfileSecure),
+	}); err != nil {
+		t.Fatalf("CreateBegin() error = %v", err)
+	}
+
+	if err := db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
+		return tx.DeleteChallenge(ctx, store.ChallengeKindCreate)
+	}); err != nil {
+		t.Fatalf("delete create challenge: %v", err)
+	}
+
+	_, err := svc.CreateFinish(ctx, CreateFinishInput{
+		AdminMode:   string(store.AdminModeWebAuthn),
+		UUID:        uuid,
+		Attestation: sampleAttestation(),
+		LockKeyB64u: encodeBase64URL([]byte("secure-lock-key")),
+		Timestamp:   &timestamp,
+	})
+	requireProtocolError(t, err, "CHALLENGE_INVALID", 401)
+	if verifierCalled {
+		t.Fatal("expected verifier to be skipped when creation challenge is missing")
+	}
+}
+
+func TestProtocolServiceMapsAttestationVerifierFailure(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: stubVerifier{
+			verifyAttestation: func(context.Context, webauthn.AttestationInput) (webauthn.AttestationResult, error) {
+				return webauthn.AttestationResult{}, errors.New("packed attestation missing sig")
+			},
+		},
+	})
+
+	ctx := context.Background()
+	timestamp := int64(1_730_000_000_000)
+	uuid := "fffffffffffffffffffff"
+
+	if _, err := svc.CreateBegin(ctx, CreateBeginInput{
+		UUID:            uuid,
+		Timestamp:       &timestamp,
+		SecurityProfile: string(store.SecurityProfileSecure),
+	}); err != nil {
+		t.Fatalf("CreateBegin() error = %v", err)
+	}
+
+	_, err := svc.CreateFinish(ctx, CreateFinishInput{
+		AdminMode:   string(store.AdminModeWebAuthn),
+		UUID:        uuid,
+		Attestation: sampleAttestation(),
+		LockKeyB64u: encodeBase64URL([]byte("secure-lock-key")),
+		Timestamp:   &timestamp,
+	})
+	requireProtocolError(t, err, "ATTESTATION_UNVERIFIABLE", 403)
+
+	if err := db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
+		channel, err := tx.GetChannel(ctx)
+		if err != nil {
+			return err
+		}
+		if channel == nil {
+			t.Fatal("expected channel row to remain after failed attestation")
+		}
+		if channel.LockKey == nil || *channel.LockKey != "" {
+			t.Fatalf("lockKey = %v, want placeholder empty string", channel.LockKey)
+		}
+		challenge, err := tx.GetChallenge(ctx, store.ChallengeKindCreate)
+		if err != nil {
+			return err
+		}
+		if challenge != nil {
+			t.Fatal("expected create challenge to be consumed after verifier failure")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("inspect failed attestation state: %v", err)
 	}
 }
 
@@ -283,6 +442,24 @@ func sampleAttestation() *AttestationJSON {
 			Transports:        []string{"internal"},
 		},
 	}
+}
+
+type stubVerifier struct {
+	verifyAttestation func(context.Context, webauthn.AttestationInput) (webauthn.AttestationResult, error)
+}
+
+func (s stubVerifier) VerifyAssertion(context.Context, webauthn.AssertionInput) error {
+	return webauthn.ErrNotImplemented
+}
+
+func (s stubVerifier) VerifyAttestation(
+	ctx context.Context,
+	input webauthn.AttestationInput,
+) (webauthn.AttestationResult, error) {
+	if s.verifyAttestation == nil {
+		return webauthn.AttestationResult{}, webauthn.ErrNotImplemented
+	}
+	return s.verifyAttestation(ctx, input)
 }
 
 func openTestDatabase(t *testing.T) *store.Database {

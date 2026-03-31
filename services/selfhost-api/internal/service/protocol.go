@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
 const (
@@ -23,9 +24,10 @@ const (
 )
 
 var (
-	uuidPattern      = regexp.MustCompile(`^[A-Za-z0-9_-]{21}$`)
-	base64URLPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-	errProtocolNilDB = errors.New("protocol database is not configured")
+	uuidPattern            = regexp.MustCompile(`^[A-Za-z0-9_-]{21}$`)
+	base64URLPattern       = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	errProtocolNilDB       = errors.New("protocol database is not configured")
+	errProtocolNilVerifier = errors.New("protocol verifier is not configured")
 )
 
 type Protocol interface {
@@ -53,10 +55,12 @@ func (e *ProtocolError) Error() string {
 type ProtocolConfig struct {
 	RPID     string
 	RPOrigin string
+	Verifier webauthn.Verifier
 }
 
 type ProtocolService struct {
 	db         *store.Database
+	verifier   webauthn.Verifier
 	rpID       string
 	rpOrigin   string
 	now        func() time.Time
@@ -121,12 +125,11 @@ type ECDSAPublicKeyJWK struct {
 }
 
 type webAuthnStoredCredential struct {
-	CredentialID string          `json:"credentialId"`
-	PublicKey    string          `json:"publicKey"`
-	SignCount    int64           `json:"signCount"`
-	AAGUID       string          `json:"aaguid"`
-	Transports   []string        `json:"transports,omitempty"`
-	Attestation  AttestationJSON `json:"attestation"`
+	CredentialID string   `json:"credentialId"`
+	PublicKey    string   `json:"publicKey"`
+	SignCount    int64    `json:"signCount"`
+	AAGUID       string   `json:"aaguid"`
+	Transports   []string `json:"transports,omitempty"`
 }
 
 type softkeyStoredCredential struct {
@@ -135,8 +138,14 @@ type softkeyStoredCredential struct {
 }
 
 func NewProtocolService(db *store.Database, cfg ProtocolConfig) Protocol {
+	verifier := cfg.Verifier
+	if verifier == nil {
+		verifier = webauthn.NewVerifier()
+	}
+
 	return &ProtocolService{
 		db:         db,
+		verifier:   verifier,
 		rpID:       cfg.RPID,
 		rpOrigin:   strings.TrimRight(cfg.RPOrigin, "/"),
 		now:        func() time.Time { return time.Now().UTC() },
@@ -191,7 +200,6 @@ func (s *ProtocolService) CreateBegin(ctx context.Context, input CreateBeginInpu
 			PublicKey:    "",
 			SignCount:    0,
 			AAGUID:       "",
-			Attestation:  AttestationJSON{},
 		})
 		if err != nil {
 			return err
@@ -257,14 +265,21 @@ func (s *ProtocolService) CreateFinish(ctx context.Context, input CreateFinishIn
 	if s.db == nil {
 		return CreateFinishOutput{}, internalError(errProtocolNilDB)
 	}
+	if s.verifier == nil {
+		return CreateFinishOutput{}, internalError(errProtocolNilVerifier)
+	}
 
 	if err := validateCreateFinishInput(input); err != nil {
 		return CreateFinishOutput{}, err
 	}
 
 	now := s.now().UTC()
+	adminCredential, err := s.resolveAdminCredential(ctx, input, now)
+	if err != nil {
+		return CreateFinishOutput{}, err
+	}
 
-	err := s.db.WithChannelTx(ctx, input.UUID, func(ctx context.Context, tx *store.ChannelTx) error {
+	err = s.db.WithChannelTx(ctx, input.UUID, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.LoadActiveChannel(ctx, now)
 		if err != nil {
 			return err
@@ -281,11 +296,6 @@ func (s *ProtocolService) CreateFinish(ctx context.Context, input CreateFinishIn
 			return lockForbidden("secure channels require webauthn")
 		}
 
-		adminCredential, err := buildAdminCredential(input)
-		if err != nil {
-			return err
-		}
-
 		adminMode := store.AdminMode(input.AdminMode)
 		channel.AdminMode = &adminMode
 		channel.AdminCredential = adminCredential
@@ -298,6 +308,9 @@ func (s *ProtocolService) CreateFinish(ctx context.Context, input CreateFinishIn
 			return err
 		}
 
+		if input.AdminMode == string(store.AdminModeWebAuthn) {
+			return nil
+		}
 		return tx.DeleteChallenge(ctx, store.ChallengeKindCreate)
 	})
 	if err != nil {
@@ -439,35 +452,6 @@ func (j ECDSAPublicKeyJWK) Valid() bool {
 	return true
 }
 
-func buildAdminCredential(input CreateFinishInput) (json.RawMessage, error) {
-	switch input.AdminMode {
-	case string(store.AdminModeWebAuthn):
-		payload, err := json.Marshal(webAuthnStoredCredential{
-			CredentialID: input.Attestation.ID,
-			PublicKey:    "",
-			SignCount:    0,
-			AAGUID:       "",
-			Transports:   append([]string(nil), input.Attestation.Response.Transports...),
-			Attestation:  *input.Attestation,
-		})
-		if err != nil {
-			return nil, badRequest("invalid attestation payload")
-		}
-		return payload, nil
-	case string(store.AdminModePassword), string(store.AdminModeSoftkey):
-		payload, err := json.Marshal(softkeyStoredCredential{
-			Type:          "softkey",
-			SoftkeyPubJWK: *input.SoftkeyPubJWK,
-		})
-		if err != nil {
-			return nil, badRequest("invalid softkey payload")
-		}
-		return payload, nil
-	default:
-		return nil, badRequest("invalid adminMode")
-	}
-}
-
 func mapProtocolError(err error) error {
 	if err == nil {
 		return nil
@@ -487,8 +471,16 @@ func badRequest(message string) error {
 	return &ProtocolError{Code: "BAD_REQUEST", Status: 400, Message: message}
 }
 
+func challengeInvalid(message string) error {
+	return &ProtocolError{Code: "CHALLENGE_INVALID", Status: 401, Message: message}
+}
+
 func lockForbidden(message string) error {
 	return &ProtocolError{Code: "LOCK_FORBIDDEN", Status: 403, Message: message}
+}
+
+func attestationUnverifiable(message string) error {
+	return &ProtocolError{Code: "ATTESTATION_UNVERIFIABLE", Status: 403, Message: message}
 }
 
 func notFound(message string) error {

@@ -139,7 +139,7 @@ docker run --rm \
 - `GET /healthz`: process liveness only
 - `GET /readyz`: readiness including PostgreSQL ping
 - `POST /api/create_begin/:uuid`: creates a waiting channel row and returns WebAuthn-compatible creation options
-- `POST /api/create_finish/:uuid`: persists admin credential metadata and lock key, then returns share/manage URLs
+- `POST /api/create_finish/:uuid`: verifies the stored create challenge for WebAuthn mode, persists the finalized admin credential plus lock key, then returns share/manage URLs
 - `GET /api/public/:uuid`: returns active-channel public status for frontend sync fallback
 
 All remaining frozen protocol routes still return `501 NOT_IMPLEMENTED`. `GET /api/ws/:uuid` continues to return `426 BAD_REQUEST` when called without a websocket upgrade request.
