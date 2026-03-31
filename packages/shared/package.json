@@ -9,6 +9,7 @@
     "./crypto/kdf": "./src/crypto/kdf.ts",
     "./crypto/rsa": "./src/crypto/rsa.ts",
     "./schemas": "./src/schemas.ts",
+    "./selfhost-contract-fixture.types": "./src/selfhost-contract-fixture.types.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

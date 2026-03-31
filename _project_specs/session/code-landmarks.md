@@ -15,6 +15,8 @@ UPDATE WHEN:
 | `GEMINI.md` | Gemini CLI router |
 | `.ai/README.md` | Shared guidance index |
 | `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
+| `docs/SELF_HOSTED_CONTRACT.md` | Self-hosted backend contract freeze: exact-match protocol surfaces, route matrix, error semantics, and open ambiguities |
+| `docs/SELF_HOSTED_CONTRACT.zh.md` | Chinese mirror of the self-hosted backend contract freeze |
 | `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
 | `_project_specs/session/decisions.md` | Newest-first workflow and architecture decision log |
 | `_project_specs/session/code-landmarks.md` | Quick navigation map for key entrypoints and gotchas |
@@ -84,12 +86,15 @@ UPDATE WHEN:
 |----------|---------|
 | `packages/shared/src/**/__tests__/` | Vitest unit tests for shared schemas/crypto |
 | `packages/frontend/src/__tests__/` | React component and integration tests (Vitest + Testing Library) |
+| `packages/frontend/src/__tests__/selfhost-contract-fixtures.test.ts` | Frontend-side deterministic fixtures for lock-key, lock-proof, and compound challenge derivation |
 | `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | Shared frontend crypto test helpers — defaults orchestrator tests to fast Argon2id params and provides seeded immutable decrypt fixtures for heavy flows |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
+| `packages/shared/src/__tests__/selfhost-contract-fixtures.test.ts` | Shared cross-runtime fixture verification for canonical JSON, intent hashes, AAD, delivery-proof challenge, and WS message schemas |
 | `packages/frontend/e2e/` | Playwright E2E: happy-path, mocked realtime fallback/cross-device coverage, realtime WebSocket smoke, expiration, rate-limit, fragment cleanup, manifest-verification |
 | `packages/frontend/playwright.config.ts` | Regular Playwright suite using a single non-verification build/server |
 | `packages/frontend/playwright.realtime.config.ts` | Realtime smoke Playwright suite that starts frontend preview plus local `wrangler dev` with test-only env vars |
 | `packages/frontend/playwright.verification.config.ts` | Manifest-verification-only Playwright suite using the verification-enabled build/server |
+| `protocol-fixtures/selfhost-contract-v1.json` | Versioned language-agnostic protocol fixtures for the self-hosted backend contract freeze |
 | `scripts/__tests__/` | Vitest unit tests for build scripts (manifest generation/verification) |
 
 ## Gotchas & Non-Obvious Behavior

@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "canonicalJson": [
+    {
+      "name": "delete-intent-basic",
+      "input": {
+        "op": "delete",
+        "uuid": "abcdefghijklmnopqrstu",
+        "version": 0,
+        "timestamp": 1730000000000,
+        "nonce": "test-nonce"
+      },
+      "canonical": "{\"nonce\":\"test-nonce\",\"op\":\"delete\",\"timestamp\":1730000000000,\"uuid\":\"abcdefghijklmnopqrstu\",\"version\":0}",
+      "sha256Hex": "0ea235de32c40be56b13316b1383c6abc04a50b25a8732967463c237ac210e78"
+    },
+    {
+      "name": "update-intent-basic",
+      "input": {
+        "op": "update",
+        "uuid": "abcdefghijklmnopqrstu",
+        "version": 0,
+        "timestamp": 1730000300000,
+        "nonce": "nonce-value-base64url",
+        "receiverPubFpr": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "cipherBundle": {
+          "ciphertext": "ct-value",
+          "iv": "iv-value-12b",
+          "aad": "aad-value",
+          "encContentKey": "eck-value",
+          "ciphertextHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "padBlock": 4096
+        },
+        "expireAt": null
+      },
+      "canonical": "{\"cipherBundle\":{\"aad\":\"aad-value\",\"ciphertext\":\"ct-value\",\"ciphertextHash\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"encContentKey\":\"eck-value\",\"iv\":\"iv-value-12b\",\"padBlock\":4096},\"expireAt\":null,\"nonce\":\"nonce-value-base64url\",\"op\":\"update\",\"receiverPubFpr\":\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\"timestamp\":1730000300000,\"uuid\":\"abcdefghijklmnopqrstu\",\"version\":0}",
+      "sha256Hex": "10f52a86cf77b1b890463d4307c8171162bf03a32a2af7cb3339f75a2b49abe7"
+    }
+  ],
+  "aad": [
+    {
+      "name": "cipher-bundle-aad-v1",
+      "parts": {
+        "uuid": "bbbbbbbbbbbbbbbbbbbbb",
+        "version": 0,
+        "receiverPubFpr": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "string": "bbbbbbbbbbbbbbbbbbbbb||0||fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "utf8Hex": "6262626262626262626262626262626262626262627c7c307c7c66656463626139383736353433323130666564636261393837363534333231306665646362613938373635343332313066656463626139383736353433323130"
+    }
+  ],
+  "challengeDerivation": {
+    "lock": {
+      "uuid": "aaaaaaaaaaaaaaaaaaaaa",
+      "lockSecretB64u": "bW9ja19sb2NrX3NlY3JldF8xMjM0NTY3ODkwMTIzNDU",
+      "lockChallengeId": "bW9ja19jaGFsbGVuZ2VfaWQ",
+      "lockChallengeB64u": "Y2hhbGxlbmdlX2RhdGFfZm9yX3Rlc3Rpbmc",
+      "lockKeyB64u": "Tp5Lm9xQvvLp_nlAbeI7rpT8iPmbsp4161HaZOvsfzw",
+      "lockProofHex": "9f45bd6f7742b0f90afe30fbda99071c6ffe19ab8d73565b875ce4b813ab94b4"
+    },
+    "compound": {
+      "uuid": "aaaaaaaaaaaaaaaaaaaaa",
+      "challengeId": "bW9ja19jaGFsbGVuZ2VfaWQ",
+      "challengeSeedB64u": "c2VlZF9mb3JfY29tcG91bmRfY2hhbGxlbmdl",
+      "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "expectedChallengeB64u": "ElSvIYDCPR7bM0n5N1jqf-4nSHwlKljClgwBNHletWA"
+    },
+    "deliveryProof": {
+      "uuid": "aaaaaaaaaaaaaaaaaaaaa",
+      "intentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "expectedChallengeB64u": "PJp8cMUtJN7S8Ml_9gddY7a2_ski10pcvxAxO-Yz2XE"
+    }
+  },
+  "ws": {
+    "serverMessages": [
+      {
+        "name": "state-changed-minimal",
+        "payload": {
+          "type": "state_changed",
+          "state": "waiting",
+          "version": 0,
+          "adminMode": "password",
+          "securityProfile": "quick"
+        }
+      },
+      {
+        "name": "state-changed-with-fingerprint",
+        "payload": {
+          "type": "state_changed",
+          "state": "locked",
+          "version": 3,
+          "adminMode": "webauthn",
+          "securityProfile": "secure",
+          "receiverPubFpr": "ab01cd02"
+        }
+      },
+      {
+        "name": "state-changed-softkey-legacy",
+        "payload": {
+          "type": "state_changed",
+          "state": "delivered",
+          "version": 1,
+          "adminMode": "softkey",
+          "securityProfile": "quick"
+        }
+      },
+      {
+        "name": "channel-closed-deleted",
+        "payload": {
+          "type": "channel_closed",
+          "reason": "deleted"
+        }
+      },
+      {
+        "name": "channel-closed-expired",
+        "payload": {
+          "type": "channel_closed",
+          "reason": "expired"
+        }
+      },
+      {
+        "name": "pong",
+        "payload": {
+          "type": "pong"
+        }
+      }
+    ],
+    "clientMessages": [
+      {
+        "name": "subscribe",
+        "payload": {
+          "type": "subscribe",
+          "uuid": "abcdefghijklmnopqrstu"
+        }
+      },
+      {
+        "name": "ping",
+        "payload": {
+          "type": "ping"
+        }
+      }
+    ]
+  }
+}
