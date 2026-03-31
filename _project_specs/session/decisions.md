@@ -23,6 +23,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Trade-offs**: Fixture maintenance now becomes part of any protocol change, and the current contract intentionally leaves backend-internal policy details such as exact rate-limit windows and commit-cookie replacement strategy unresolved until later milestones.
 **Follow-up (2026-03-30, milestone handoff)**: M1 and M2 must treat `protocol-fixtures/selfhost-contract-v1.json` as the first cross-runtime compatibility asset. If a Go helper cannot reproduce a locked fixture exactly, the implementation is wrong unless the contract doc and fixtures are updated together in a separate contract-change PR.
 **Follow-up (2026-03-31, review fixes)**: The frozen error matrix now explicitly includes the shipped `decrypt_fetch` read-path error `CHANNEL_NOT_DELIVERED`. Chinese mirrors for contract-freeze docs must also carry accurate `synced-with` markers so bilingual maintenance stays diff-based instead of heuristic.
+**Follow-up (2026-03-31, contract precision)**: The contract matrix now states that commit-cookie caller binding can be established on `lock_begin` and `compound_begin`, then cleared or rotated on commit routes. The shared `SelfHostContractFixture` type is also exposed through an explicit package subpath so cross-package tests stop relying on repo-local path aliasing.
 
 ## [2026-03-30] Second-round frontend polish keeps safety flows intact while removing neon residue
 
