@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ type Config struct {
 	LogLevel slog.Level
 	HTTP     HTTPConfig
 	Database DatabaseConfig
+	RP       RPConfig
 }
 
 type HTTPConfig struct {
@@ -31,6 +34,11 @@ type DatabaseConfig struct {
 	MinConns       int32
 	ConnectTimeout time.Duration
 	HealthTimeout  time.Duration
+}
+
+type RPConfig struct {
+	ID     string
+	Origin string
 }
 
 func Load() (Config, error) {
@@ -63,11 +71,17 @@ func LoadFromEnv(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, err
 	}
 
+	rpCfg, err := loadRPConfig(lookup)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		AppEnv:   appEnv,
 		LogLevel: logLevel,
 		HTTP:     httpCfg,
 		Database: dbCfg,
+		RP:       rpCfg,
 	}, nil
 }
 
@@ -139,6 +153,70 @@ func loadDatabaseConfig(lookup func(string) (string, bool), url string) (Databas
 		ConnectTimeout: connectTimeout,
 		HealthTimeout:  healthTimeout,
 	}, nil
+}
+
+func loadRPConfig(lookup func(string) (string, bool)) (RPConfig, error) {
+	rpID, ok := lookup("SELFHOST_API_RP_ID")
+	if !ok || strings.TrimSpace(rpID) == "" {
+		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ID is required")
+	}
+
+	rpOrigin, ok := lookup("SELFHOST_API_RP_ORIGIN")
+	if !ok || strings.TrimSpace(rpOrigin) == "" {
+		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ORIGIN is required")
+	}
+
+	normalizedOrigin, err := normalizeRPOrigin(rpOrigin)
+	if err != nil {
+		return RPConfig{}, err
+	}
+
+	return RPConfig{
+		ID:     strings.TrimSpace(rpID),
+		Origin: normalizedOrigin,
+	}, nil
+}
+
+func normalizeRPOrigin(value string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must be a valid URL: %w", err)
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must start with http:// or https://")
+	}
+	if parsed.Host == "" || parsed.Hostname() == "" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must include a host")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include user info")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include a path")
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include a query string")
+	}
+	if parsed.Fragment != "" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include a fragment")
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	port := parsed.Port()
+	if port == "" || isDefaultOriginPort(scheme, port) {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		return scheme + "://" + host, nil
+	}
+
+	return scheme + "://" + net.JoinHostPort(host, port), nil
+}
+
+func isDefaultOriginPort(scheme, port string) bool {
+	return (scheme == "http" && port == "80") || (scheme == "https" && port == "443")
 }
 
 func validateAppEnv(value string) error {

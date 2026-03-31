@@ -14,12 +14,21 @@ import (
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status      int
+	wroteHeader bool
 }
 
 func (r *statusRecorder) WriteHeader(status int) {
+	r.wroteHeader = true
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Write(body []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	return r.ResponseWriter.Write(body)
 }
 
 func (r *statusRecorder) Flush() {
@@ -91,7 +100,10 @@ func recoverMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
 					"method", r.Method,
 					"path", r.URL.Path,
 				)
-				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "unexpected internal error")
+				if recorder, ok := w.(*statusRecorder); ok && recorder.wroteHeader {
+					return
+				}
+				writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "unexpected internal error")
 			}
 		}()
 

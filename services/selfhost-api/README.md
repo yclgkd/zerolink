@@ -1,4 +1,4 @@
-# Self-Hosted API (M1-M2)
+# Self-Hosted API (M1-M3)
 
 This module bootstraps the Go-based self-hosted backend for ZeroLink.
 
@@ -12,11 +12,12 @@ Current scope:
 - Embedded SQL migration runner
 - PostgreSQL persistence schema for channels, active challenges, used nonces, and terminal tombstones
 - `sqlc` query definitions plus a channel-scoped transaction layer built around PostgreSQL advisory locks
+- Implemented `create_begin`, `create_finish`, and `public_status` protocol routes
 - Reserved package boundaries for `httpapi`, `service`, `store`, `protocol`, `webauthn`, and `realtime`
 
 Out of scope:
 
-- Protocol route implementations
+- Lock / deliver / delete / decrypt-fetch protocol routes
 - WebAuthn verification
 - Realtime delivery
 - Docker Compose / Caddy packaging
@@ -52,6 +53,8 @@ The service does not auto-load `.env`, so local `go run` commands must source it
 | `SELFHOST_API_APP_ENV` | no | `development` | `development`, `test`, `production` |
 | `SELFHOST_API_BIND_ADDR` | no | `:8788` | HTTP bind address |
 | `SELFHOST_API_LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` |
+| `SELFHOST_API_RP_ID` | yes | none | WebAuthn RP ID, usually the frontend host name |
+| `SELFHOST_API_RP_ORIGIN` | yes | none | Frontend origin only, used for WebAuthn, exact CORS matching, and returned share/manage URLs; must not include path/query/fragment |
 | `SELFHOST_API_DATABASE_URL` | yes | none | PostgreSQL DSN |
 | `SELFHOST_API_DB_MAX_CONNS` | no | `8` | Pool upper bound |
 | `SELFHOST_API_DB_MIN_CONNS` | no | `0` | Pool lower bound |
@@ -135,8 +138,11 @@ docker run --rm \
 
 - `GET /healthz`: process liveness only
 - `GET /readyz`: readiness including PostgreSQL ping
+- `POST /api/create_begin/:uuid`: creates a waiting channel row and returns WebAuthn-compatible creation options
+- `POST /api/create_finish/:uuid`: verifies the stored create challenge for WebAuthn mode, persists the finalized admin credential plus lock key, then returns share/manage URLs
+- `GET /api/public/:uuid`: returns active-channel public status for frontend sync fallback
 
-All frozen protocol routes already exist as placeholders and currently return `501 NOT_IMPLEMENTED`. `GET /api/ws/:uuid` returns `426 BAD_REQUEST` when called without a websocket upgrade request.
+All remaining frozen protocol routes still return `501 NOT_IMPLEMENTED`. `GET /api/ws/:uuid` continues to return `426 BAD_REQUEST` when called without a websocket upgrade request.
 
 ## Validation
 

@@ -20,6 +20,7 @@ type Runtime struct {
 	shutdownTimeout time.Duration
 	db              *store.Database
 	realtime        realtime.Publisher
+	logger          *slog.Logger
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
@@ -29,11 +30,26 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	}
 
 	realtimeHub := realtime.NopHub{}
-	services := service.New(db, webauthn.NoopVerifier{}, realtimeHub)
+	verifier := webauthn.NewVerifier()
+	services := service.New(
+		db,
+		verifier,
+		realtimeHub,
+		service.NewProtocolService(
+			db,
+			service.ProtocolConfig{
+				RPID:     cfg.RP.ID,
+				RPOrigin: cfg.RP.Origin,
+				Verifier: verifier,
+			},
+		),
+		logger,
+	)
 
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:   logger,
-		Services: services,
+		Logger:        logger,
+		Services:      services,
+		AllowedOrigin: cfg.RP.Origin,
 	})
 
 	server := &http.Server{
@@ -50,6 +66,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		shutdownTimeout: cfg.HTTP.ShutdownTimeout,
 		db:              db,
 		realtime:        realtimeHub,
+		logger:          logger,
 	}, nil
 }
 
@@ -70,8 +87,15 @@ func (r *Runtime) Run(ctx context.Context) error {
 }
 
 func (r *Runtime) Close() {
+	logger := r.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	if r.realtime != nil {
-		_ = r.realtime.Close()
+		if err := r.realtime.Close(); err != nil {
+			logger.Error("close realtime publisher", "error", err)
+		}
 	}
 	if r.db != nil {
 		r.db.Close()
