@@ -52,6 +52,7 @@ The frozen JSON fixtures live at `protocol-fixtures/selfhost-contract-v1.json`.
 | `NOT_IMPLEMENTED` | `501` | Worker router | Placeholder route matched but no implementation exists |
 | `INTERNAL_ERROR` | `500` | Worker or DO | Unexpected exception or invalid upstream response |
 | `RATE_LIMITED` | `429` | DO | Application-layer throttling; `Retry-After` may be present |
+| `CHANNEL_NOT_DELIVERED` | `409` | DO decrypt-fetch read path | Channel exists, but ciphertext is not yet available for decrypt |
 | `CHALLENGE_INVALID` | `401` | DO | Challenge missing, expired, or otherwise invalid |
 | `CHALLENGE_CONSUMED` | `409` | DO | Challenge already used |
 | `LOCK_FORBIDDEN` | `403` | DO | Invalid transition, terminal state, or lock not allowed |
