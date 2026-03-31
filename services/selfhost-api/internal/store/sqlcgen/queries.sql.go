@@ -73,20 +73,33 @@ func (q *Queries) DeleteExpiredUsedNonces(ctx context.Context, expiresAt pgtype.
 	return result.RowsAffected(), nil
 }
 
-const deleteUsedNonce = `-- name: DeleteUsedNonce :exec
-DELETE FROM used_nonces
-WHERE channel_id = $1
-  AND nonce = $2
+const finalizeExpiredChannels = `-- name: FinalizeExpiredChannels :execrows
+WITH expired_channels AS (
+  DELETE FROM channels
+  WHERE expires_at <= $1
+  RETURNING uuid
+)
+INSERT INTO terminal_tombstones (
+  channel_id,
+  reason,
+  finalized_at
+)
+SELECT
+  uuid,
+  'expired',
+  $1
+FROM expired_channels
+ON CONFLICT (channel_id) DO UPDATE SET
+  reason = EXCLUDED.reason,
+  finalized_at = EXCLUDED.finalized_at
 `
 
-type DeleteUsedNonceParams struct {
-	ChannelID string
-	Nonce     string
-}
-
-func (q *Queries) DeleteUsedNonce(ctx context.Context, arg DeleteUsedNonceParams) error {
-	_, err := q.db.Exec(ctx, deleteUsedNonce, arg.ChannelID, arg.Nonce)
-	return err
+func (q *Queries) FinalizeExpiredChannels(ctx context.Context, finalizedAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, finalizeExpiredChannels, finalizedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getActiveChallenge = `-- name: GetActiveChallenge :one

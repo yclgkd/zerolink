@@ -99,6 +99,74 @@ func TestRegisterNonceRejectsActiveReplay(t *testing.T) {
 	}
 }
 
+func TestRegisterNonceReusesExpiredEntryWithoutDuplicateRows(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	channel := Channel{
+		UUID:            "channel-nonce-expired-reuse",
+		State:           ChannelStateWaiting,
+		CreatedAt:       now.Add(-time.Minute),
+		ExpiresAt:       now.Add(time.Hour),
+		TTLMS:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: SecurityProfileSecure,
+		Version:         0,
+	}
+
+	initialUsedAt := now.Add(-10 * time.Minute)
+	initialExpiresAt := now.Add(-5 * time.Minute)
+
+	if err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		if _, err := tx.SaveChannel(ctx, channel); err != nil {
+			return err
+		}
+		return tx.RegisterNonce(ctx, "nonce-expired-reuse", initialUsedAt, initialExpiresAt)
+	}); err != nil {
+		t.Fatalf("seed expired nonce: %v", err)
+	}
+
+	reusedAt := now
+	reusedExpiresAt := now.Add(15 * time.Minute)
+	if err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		return tx.RegisterNonce(ctx, "nonce-expired-reuse", reusedAt, reusedExpiresAt)
+	}); err != nil {
+		t.Fatalf("reuse expired nonce: %v", err)
+	}
+
+	var (
+		rowCount        int
+		storedUsedAt    time.Time
+		storedExpiresAt time.Time
+	)
+	if err := db.pool.QueryRow(
+		ctx,
+		`SELECT COUNT(*), MIN(used_at), MIN(expires_at)
+FROM used_nonces
+WHERE channel_id = $1
+  AND nonce = $2`,
+		channel.UUID,
+		"nonce-expired-reuse",
+	).Scan(&rowCount, &storedUsedAt, &storedExpiresAt); err != nil {
+		t.Fatalf("query reused nonce row: %v", err)
+	}
+
+	if rowCount != 1 {
+		t.Fatalf("used nonce row count = %d, want 1", rowCount)
+	}
+	if !storedUsedAt.UTC().Equal(reusedAt.UTC().Truncate(time.Microsecond)) {
+		t.Fatalf("used_at = %s, want %s", storedUsedAt.UTC(), reusedAt.UTC().Truncate(time.Microsecond))
+	}
+	if !storedExpiresAt.UTC().Equal(reusedExpiresAt.UTC().Truncate(time.Microsecond)) {
+		t.Fatalf(
+			"expires_at = %s, want %s",
+			storedExpiresAt.UTC(),
+			reusedExpiresAt.UTC().Truncate(time.Microsecond),
+		)
+	}
+}
+
 func TestLoadActiveChannelFinalizesExpiredRecordIntoExpiredTombstone(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
@@ -288,6 +356,140 @@ func TestDirectUpsertRejectsTombstonedUUID(t *testing.T) {
 	}
 }
 
+func TestSweepExpiredChannelsFinalizesExpiredRows(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	expiredChannel := Channel{
+		UUID:            "channel-expired-sweep",
+		State:           ChannelStateLocked,
+		CreatedAt:       now.Add(-2 * time.Hour),
+		ExpiresAt:       now.Add(-time.Minute),
+		TTLMS:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: SecurityProfileQuick,
+		ReceiverPubJWK:  json.RawMessage(`{"kty":"RSA"}`),
+		ReceiverPubFpr:  stringPtrValue("receiver-fingerprint"),
+		LockedAt:        timePtrValue(now.Add(-90 * time.Minute)),
+		Version:         1,
+	}
+	activeChannel := Channel{
+		UUID:            "channel-active-sweep",
+		State:           ChannelStateWaiting,
+		CreatedAt:       now.Add(-time.Minute),
+		ExpiresAt:       now.Add(time.Hour),
+		TTLMS:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: SecurityProfileSecure,
+		Version:         0,
+	}
+
+	if err := db.WithChannelTx(ctx, expiredChannel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		if _, err := tx.SaveChannel(ctx, expiredChannel); err != nil {
+			return err
+		}
+		if _, err := tx.SaveChallenge(ctx, ActiveChallenge{
+			Kind:           ChallengeKindLock,
+			ChallengeID:    stringPtrValue("lock-challenge"),
+			ChallengeValue: stringPtrValue("challenge-value"),
+			IssuedAt:       timePtrValue(now.Add(-10 * time.Minute)),
+			ExpiresAt:      timePtrValue(now.Add(-time.Minute)),
+		}); err != nil {
+			return err
+		}
+		return tx.RegisterNonce(ctx, "expired-sweep-nonce", now.Add(-10*time.Minute), now.Add(-time.Minute))
+	}); err != nil {
+		t.Fatalf("seed expired channel for sweep: %v", err)
+	}
+
+	if err := db.WithChannelTx(ctx, activeChannel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		_, err := tx.SaveChannel(ctx, activeChannel)
+		return err
+	}); err != nil {
+		t.Fatalf("seed active channel for sweep: %v", err)
+	}
+
+	deletedChannels, err := db.SweepExpiredChannels(ctx, now)
+	if err != nil {
+		t.Fatalf("SweepExpiredChannels() error = %v", err)
+	}
+	if deletedChannels != 1 {
+		t.Fatalf("SweepExpiredChannels() deletedChannels = %d, want 1", deletedChannels)
+	}
+
+	assertNoChannelRow(t, db, expiredChannel.UUID)
+	assertNoChallengeRow(t, db, expiredChannel.UUID)
+	assertNoNonceRow(t, db, expiredChannel.UUID, "expired-sweep-nonce")
+	assertChannelRow(t, db, activeChannel.UUID)
+	assertTombstoneReason(t, db, expiredChannel.UUID, TerminalReasonExpired)
+}
+
+func TestSweepExpiredEphemeraDeletesOnlyExpiredRows(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	channel := Channel{
+		UUID:            "channel-ephemera-sweep",
+		State:           ChannelStateLocked,
+		CreatedAt:       now.Add(-time.Hour),
+		ExpiresAt:       now.Add(time.Hour),
+		TTLMS:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: SecurityProfileQuick,
+		ReceiverPubJWK:  json.RawMessage(`{"kty":"RSA"}`),
+		ReceiverPubFpr:  stringPtrValue("receiver-fingerprint"),
+		LockedAt:        timePtrValue(now.Add(-30 * time.Minute)),
+		Version:         1,
+	}
+
+	if err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		if _, err := tx.SaveChannel(ctx, channel); err != nil {
+			return err
+		}
+		if _, err := tx.SaveChallenge(ctx, ActiveChallenge{
+			Kind:           ChallengeKindLock,
+			ChallengeID:    stringPtrValue("expired-lock"),
+			ChallengeValue: stringPtrValue("expired-value"),
+			IssuedAt:       timePtrValue(now.Add(-10 * time.Minute)),
+			ExpiresAt:      timePtrValue(now.Add(-time.Minute)),
+		}); err != nil {
+			return err
+		}
+		if _, err := tx.SaveChallenge(ctx, ActiveChallenge{
+			Kind:          ChallengeKindCompound,
+			ChallengeID:   stringPtrValue("active-compound"),
+			ChallengeSeed: stringPtrValue("seed"),
+			IssuedAt:      timePtrValue(now.Add(-time.Minute)),
+			ExpiresAt:     timePtrValue(now.Add(10 * time.Minute)),
+		}); err != nil {
+			return err
+		}
+		if err := tx.RegisterNonce(ctx, "expired-ephemera-nonce", now.Add(-5*time.Minute), now.Add(-time.Minute)); err != nil {
+			return err
+		}
+		return tx.RegisterNonce(ctx, "active-ephemera-nonce", now, now.Add(10*time.Minute))
+	}); err != nil {
+		t.Fatalf("seed ephemera rows: %v", err)
+	}
+
+	deletedChallenges, deletedNonces, err := db.SweepExpiredEphemera(ctx, now)
+	if err != nil {
+		t.Fatalf("SweepExpiredEphemera() error = %v", err)
+	}
+	if deletedChallenges != 1 {
+		t.Fatalf("SweepExpiredEphemera() deletedChallenges = %d, want 1", deletedChallenges)
+	}
+	if deletedNonces != 1 {
+		t.Fatalf("SweepExpiredEphemera() deletedNonces = %d, want 1", deletedNonces)
+	}
+
+	assertNoChallengeKindRow(t, db, channel.UUID, ChallengeKindLock)
+	assertChallengeKindRow(t, db, channel.UUID, ChallengeKindCompound)
+	assertNoNonceRow(t, db, channel.UUID, "expired-ephemera-nonce")
+	assertNonceRow(t, db, channel.UUID, "active-ephemera-nonce")
+}
+
 func openTestDatabase(t *testing.T) *Database {
 	t.Helper()
 
@@ -349,6 +551,22 @@ func assertNoChannelRow(t *testing.T, db *Database, channelID string) {
 	}
 }
 
+func assertChannelRow(t *testing.T, db *Database, channelID string) {
+	t.Helper()
+
+	var count int
+	if err := db.pool.QueryRow(
+		context.Background(),
+		"SELECT COUNT(*) FROM channels WHERE uuid = $1",
+		channelID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count channel rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("channel row count = %d, want 1", count)
+	}
+}
+
 func assertNoChallengeRow(t *testing.T, db *Database, channelID string) {
 	t.Helper()
 
@@ -362,6 +580,40 @@ func assertNoChallengeRow(t *testing.T, db *Database, channelID string) {
 	}
 	if count != 0 {
 		t.Fatalf("active challenge row count = %d, want 0", count)
+	}
+}
+
+func assertNoChallengeKindRow(t *testing.T, db *Database, channelID string, kind ChallengeKind) {
+	t.Helper()
+
+	var count int
+	if err := db.pool.QueryRow(
+		context.Background(),
+		"SELECT COUNT(*) FROM active_challenges WHERE channel_id = $1 AND kind = $2",
+		channelID,
+		string(kind),
+	).Scan(&count); err != nil {
+		t.Fatalf("count active challenge rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("active challenge row count = %d, want 0", count)
+	}
+}
+
+func assertChallengeKindRow(t *testing.T, db *Database, channelID string, kind ChallengeKind) {
+	t.Helper()
+
+	var count int
+	if err := db.pool.QueryRow(
+		context.Background(),
+		"SELECT COUNT(*) FROM active_challenges WHERE channel_id = $1 AND kind = $2",
+		channelID,
+		string(kind),
+	).Scan(&count); err != nil {
+		t.Fatalf("count active challenge rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("active challenge row count = %d, want 1", count)
 	}
 }
 
@@ -379,6 +631,39 @@ func assertNoNonceRow(t *testing.T, db *Database, channelID string, nonce string
 	}
 	if count != 0 {
 		t.Fatalf("used nonce row count = %d, want 0", count)
+	}
+}
+
+func assertNonceRow(t *testing.T, db *Database, channelID string, nonce string) {
+	t.Helper()
+
+	var count int
+	if err := db.pool.QueryRow(
+		context.Background(),
+		"SELECT COUNT(*) FROM used_nonces WHERE channel_id = $1 AND nonce = $2",
+		channelID,
+		nonce,
+	).Scan(&count); err != nil {
+		t.Fatalf("count used nonce rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("used nonce row count = %d, want 1", count)
+	}
+}
+
+func assertTombstoneReason(t *testing.T, db *Database, channelID string, reason TerminalReason) {
+	t.Helper()
+
+	var storedReason string
+	if err := db.pool.QueryRow(
+		context.Background(),
+		"SELECT reason FROM terminal_tombstones WHERE channel_id = $1",
+		channelID,
+	).Scan(&storedReason); err != nil {
+		t.Fatalf("query tombstone reason: %v", err)
+	}
+	if TerminalReason(storedReason) != reason {
+		t.Fatalf("tombstone reason = %s, want %s", storedReason, reason)
 	}
 }
 

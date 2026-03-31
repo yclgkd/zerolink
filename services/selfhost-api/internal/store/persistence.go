@@ -243,12 +243,6 @@ func (tx *ChannelTx) RegisterNonce(
 		if existingNonce.ExpiresAt.After(now) {
 			return ErrNonceReplay
 		}
-		if err := tx.queries.DeleteUsedNonce(ctx, sqlcgen.DeleteUsedNonceParams{
-			ChannelID: tx.channelID,
-			Nonce:     nonce,
-		}); err != nil {
-			return fmt.Errorf("delete expired used nonce: %w", err)
-		}
 	}
 
 	if _, err := tx.queries.UpsertUsedNonce(ctx, sqlcgen.UpsertUsedNonceParams{
@@ -298,12 +292,43 @@ func (tx *ChannelTx) FinalizeTerminalState(
 	return &tombstone, nil
 }
 
+func (d *Database) SweepExpiredChannels(ctx context.Context, now time.Time) (int64, error) {
+	tx, err := d.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("begin expired channel sweep transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	deletedChannels, err := sqlcgen.New(tx).FinalizeExpiredChannels(ctx, requiredTimestamp(now.UTC()))
+	if err != nil {
+		return 0, fmt.Errorf("finalize expired channels: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit expired channel sweep transaction: %w", err)
+	}
+
+	return deletedChannels, nil
+}
+
 func (d *Database) SweepExpiredEphemera(
 	ctx context.Context,
 	now time.Time,
 ) (deletedChallenges int64, deletedNonces int64, err error) {
-	queries := sqlcgen.New(d.pool)
-	marker := requiredTimestamp(now)
+	tx, err := d.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin ephemera sweep transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	queries := sqlcgen.New(tx)
+	marker := requiredTimestamp(now.UTC())
 
 	deletedChallenges, err = queries.DeleteExpiredChallenges(ctx, marker)
 	if err != nil {
@@ -312,7 +337,11 @@ func (d *Database) SweepExpiredEphemera(
 
 	deletedNonces, err = queries.DeleteExpiredUsedNonces(ctx, marker)
 	if err != nil {
-		return deletedChallenges, 0, fmt.Errorf("delete expired used nonces: %w", err)
+		return 0, 0, fmt.Errorf("delete expired used nonces: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, fmt.Errorf("commit ephemera sweep transaction: %w", err)
 	}
 
 	return deletedChallenges, deletedNonces, nil
