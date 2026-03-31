@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
@@ -13,14 +12,15 @@ import (
 
 func (s *ProtocolService) resolveAdminCredential(
 	ctx context.Context,
+	tx *store.ChannelTx,
+	channel *store.Channel,
 	input CreateFinishInput,
-	now time.Time,
 ) (json.RawMessage, error) {
 	if input.AdminMode != string(store.AdminModeWebAuthn) {
 		return buildSoftkeyAdminCredential(input)
 	}
 
-	attestationInput, profile, err := s.consumeCreateChallenge(ctx, input.UUID, now, input.Attestation)
+	attestationInput, err := s.loadAttestationInput(ctx, tx, channel, input)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (s *ProtocolService) resolveAdminCredential(
 	if !result.Verified && result.Format != "none" {
 		message := fmt.Sprintf(
 			"security profile '%s' requires verified attestation for fmt:'%s'",
-			profile,
+			channel.SecurityProfile,
 			result.Format,
 		)
 		return nil, attestationUnverifiable(message)
@@ -41,62 +41,34 @@ func (s *ProtocolService) resolveAdminCredential(
 	return buildWebAuthnAdminCredential(result, input.Attestation.Response.Transports)
 }
 
-func (s *ProtocolService) consumeCreateChallenge(
+func (s *ProtocolService) loadAttestationInput(
 	ctx context.Context,
-	uuid string,
-	now time.Time,
-	attestation *AttestationJSON,
-) (webauthn.AttestationInput, store.SecurityProfile, error) {
-	var (
-		verificationInput webauthn.AttestationInput
-		profile           store.SecurityProfile
-	)
-
-	err := s.db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
-		channel, err := tx.LoadActiveChannel(ctx, now)
-		if err != nil {
-			return err
-		}
-		if channel == nil {
-			return notFound("channel not found")
-		}
-		if channel.LockKey != nil && *channel.LockKey != "" {
-			return lockForbidden("channel already finalized")
-		}
-
-		challenge, err := tx.GetChallenge(ctx, store.ChallengeKindCreate)
-		if err != nil {
-			return err
-		}
-		if challenge == nil || challenge.ChallengeValue == nil || *challenge.ChallengeValue == "" {
-			return challengeInvalid("creation challenge not found")
-		}
-
-		expectedChallenge, err := base64.RawURLEncoding.DecodeString(*challenge.ChallengeValue)
-		if err != nil {
-			return challengeInvalid("creation challenge is invalid")
-		}
-		if err := tx.DeleteChallenge(ctx, store.ChallengeKindCreate); err != nil {
-			return err
-		}
-
-		profile = channel.SecurityProfile
-		verificationInput = webauthn.AttestationInput{
-			ChannelID:               uuid,
-			AttestationObjectB64u:   attestation.Response.AttestationObject,
-			ClientDataJSONB64u:      attestation.Response.ClientDataJSON,
-			ExpectedRPID:            s.rpID,
-			ExpectedOrigin:          s.rpOrigin,
-			ExpectedChallenge:       expectedChallenge,
-			RequireUserVerification: channel.SecurityProfile == store.SecurityProfileSecure,
-		}
-		return nil
-	})
+	tx *store.ChannelTx,
+	channel *store.Channel,
+	input CreateFinishInput,
+) (webauthn.AttestationInput, error) {
+	challenge, err := tx.GetChallenge(ctx, store.ChallengeKindCreate)
 	if err != nil {
-		return webauthn.AttestationInput{}, "", mapProtocolError(err)
+		return webauthn.AttestationInput{}, err
+	}
+	if challenge == nil || challenge.ChallengeValue == nil || *challenge.ChallengeValue == "" {
+		return webauthn.AttestationInput{}, challengeInvalid("creation challenge not found")
 	}
 
-	return verificationInput, profile, nil
+	expectedChallenge, err := base64.RawURLEncoding.DecodeString(*challenge.ChallengeValue)
+	if err != nil {
+		return webauthn.AttestationInput{}, challengeInvalid("creation challenge is invalid")
+	}
+
+	return webauthn.AttestationInput{
+		ChannelID:               channel.UUID,
+		AttestationObjectB64u:   input.Attestation.Response.AttestationObject,
+		ClientDataJSONB64u:      input.Attestation.Response.ClientDataJSON,
+		ExpectedRPID:            s.rpID,
+		ExpectedOrigin:          s.rpOrigin,
+		ExpectedChallenge:       expectedChallenge,
+		RequireUserVerification: channel.SecurityProfile == store.SecurityProfileSecure,
+	}, nil
 }
 
 func buildWebAuthnAdminCredential(

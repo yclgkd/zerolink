@@ -274,12 +274,7 @@ func (s *ProtocolService) CreateFinish(ctx context.Context, input CreateFinishIn
 	}
 
 	now := s.now().UTC()
-	adminCredential, err := s.resolveAdminCredential(ctx, input, now)
-	if err != nil {
-		return CreateFinishOutput{}, err
-	}
-
-	err = s.db.WithChannelTx(ctx, input.UUID, func(ctx context.Context, tx *store.ChannelTx) error {
+	err := s.db.WithChannelTx(ctx, input.UUID, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.LoadActiveChannel(ctx, now)
 		if err != nil {
 			return err
@@ -296,6 +291,11 @@ func (s *ProtocolService) CreateFinish(ctx context.Context, input CreateFinishIn
 			return lockForbidden("secure channels require webauthn")
 		}
 
+		adminCredential, err := s.resolveAdminCredential(ctx, tx, channel, input)
+		if err != nil {
+			return err
+		}
+
 		adminMode := store.AdminMode(input.AdminMode)
 		channel.AdminMode = &adminMode
 		channel.AdminCredential = adminCredential
@@ -308,9 +308,6 @@ func (s *ProtocolService) CreateFinish(ctx context.Context, input CreateFinishIn
 			return err
 		}
 
-		if input.AdminMode == string(store.AdminModeWebAuthn) {
-			return nil
-		}
 		return tx.DeleteChallenge(ctx, store.ChallengeKindCreate)
 	})
 	if err != nil {

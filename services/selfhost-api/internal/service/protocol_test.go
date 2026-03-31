@@ -392,12 +392,80 @@ func TestProtocolServiceMapsAttestationVerifierFailure(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if challenge != nil {
-			t.Fatal("expected create challenge to be consumed after verifier failure")
+		if challenge == nil {
+			t.Fatal("expected create challenge to remain after verifier failure rollback")
 		}
 		return nil
 	}); err != nil {
 		t.Fatalf("inspect failed attestation state: %v", err)
+	}
+}
+
+func TestProtocolServiceRetainsChallengeWhenPersistAfterVerificationFails(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	finishCtx, cancel := context.WithCancel(context.Background())
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: stubVerifier{
+			verifyAttestation: func(context.Context, webauthn.AttestationInput) (webauthn.AttestationResult, error) {
+				cancel()
+				return webauthn.AttestationResult{
+					Verified:     false,
+					Format:       "none",
+					CredentialID: encodeBase64URL([]byte("stored-credential")),
+					PublicKey:    encodeBase64URL([]byte("cose-public-key")),
+					SignCount:    7,
+					AAGUID:       encodeBase64URL([]byte("0123456789abcdef")),
+				}, nil
+			},
+		},
+	})
+
+	inspectCtx := context.Background()
+	timestamp := int64(1_730_000_000_000)
+	uuid := "ggggggggggggggggggggg"
+
+	if _, err := svc.CreateBegin(inspectCtx, CreateBeginInput{
+		UUID:            uuid,
+		Timestamp:       &timestamp,
+		SecurityProfile: string(store.SecurityProfileSecure),
+	}); err != nil {
+		t.Fatalf("CreateBegin() error = %v", err)
+	}
+
+	_, err := svc.CreateFinish(finishCtx, CreateFinishInput{
+		AdminMode:   string(store.AdminModeWebAuthn),
+		UUID:        uuid,
+		Attestation: sampleAttestation(),
+		LockKeyB64u: encodeBase64URL([]byte("secure-lock-key")),
+		Timestamp:   &timestamp,
+	})
+	requireProtocolError(t, err, "INTERNAL_ERROR", 500)
+
+	if err := db.WithChannelTx(inspectCtx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
+		channel, err := tx.GetChannel(ctx)
+		if err != nil {
+			return err
+		}
+		if channel == nil {
+			t.Fatal("expected waiting channel to remain after persist failure")
+		}
+		if channel.LockKey == nil || *channel.LockKey != "" {
+			t.Fatalf("lockKey = %v, want placeholder empty string", channel.LockKey)
+		}
+		challenge, err := tx.GetChallenge(ctx, store.ChallengeKindCreate)
+		if err != nil {
+			return err
+		}
+		if challenge == nil {
+			t.Fatal("expected create challenge to remain after persist failure rollback")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("inspect post-rollback channel: %v", err)
 	}
 }
 

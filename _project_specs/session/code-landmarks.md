@@ -52,7 +52,7 @@ UPDATE WHEN:
 | `scripts/verify-manifest.ts` | CLI manifest verifier — enforces entry binding + file hashes |
 | `packages/frontend/e2e/happy-path.spec.ts` | Canonical end-to-end coverage for create-only share-link visibility and ManagePage sender flow |
 | `services/selfhost-api/internal/service/protocol.go` | Self-hosted M3 protocol layer — validates create/public requests, generates WebAuthn-compatible creation options, delegates `create_finish` credential finalization, and maps store semantics to frontend-compatible HTTP errors |
-| `services/selfhost-api/internal/service/protocol_create_finish.go` | Self-hosted WebAuthn/softkey create-finalize flow — consumes the stored create challenge, invokes the verifier, persists finalized admin credentials, and translates verifier failures into contract error codes |
+| `services/selfhost-api/internal/service/protocol_create_finish.go` | Self-hosted WebAuthn/softkey create-finalize flow — loads the stored create challenge and persists finalized admin credentials inside one channel transaction, so verifier/save failures roll back cleanly instead of stranding waiting links |
 | `services/selfhost-api/internal/webauthn/attestation.go` | Go-native WebAuthn attestation verifier for self-hosted create flows — validates RP ID/origin/challenge, parses attested credential data, supports `fmt:none` and packed self-attestation, and returns `StoredCredential` fields for persistence |
 
 ## Configuration
@@ -98,7 +98,7 @@ UPDATE WHEN:
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
 | `packages/shared/src/__tests__/selfhost-contract-fixtures.test.ts` | Shared cross-runtime fixture verification for canonical JSON, intent hashes, AAD, delivery-proof challenge, and WS message schemas |
 | `services/selfhost-api/internal/httpapi/router_test.go` | Self-hosted Go HTTP smoke tests for health, readiness, M3 create/public routes, remaining placeholders, and websocket upgrade gating |
-| `services/selfhost-api/internal/service/protocol_test.go` | Self-hosted Go M3 service tests covering quick/secure create flows, downgrade rejection, WebAuthn challenge consumption, attestation failure mapping, and expired public-status tombstoning |
+| `services/selfhost-api/internal/service/protocol_test.go` | Self-hosted Go M3 service tests covering quick/secure create flows, downgrade rejection, transactional WebAuthn finalize rollback, attestation failure mapping, and expired public-status tombstoning |
 | `services/selfhost-api/internal/config/config_test.go` | Self-hosted Go config validation tests for required env vars and pool bounds |
 | `services/selfhost-api/internal/webauthn/attestation_test.go` | Self-hosted Go WebAuthn verifier tests for challenge validation, `fmt:none` credential extraction, and packed self-attestation verification |
 | `packages/frontend/e2e/` | Playwright E2E: happy-path, mocked realtime fallback/cross-device coverage, realtime WebSocket smoke, expiration, rate-limit, fragment cleanup, manifest-verification |
