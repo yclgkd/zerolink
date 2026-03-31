@@ -41,7 +41,8 @@ services/selfhost-api/
 
 ## Configuration
 
-Copy `.env.example` and set at least `SELFHOST_API_DATABASE_URL`.
+Copy `.env.example` to `.env`, then set at least `SELFHOST_API_DATABASE_URL`.
+The service does not auto-load `.env`, so local `go run` commands must source it first. Docker examples below pass it explicitly with `--env-file`.
 
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
@@ -71,28 +72,35 @@ docker run --name zerolink-selfhost-postgres \
 
 ### 2. Run migrations
 
+Run the commands below from `services/selfhost-api/`.
+
 With a local Go toolchain:
 
 ```bash
 cd services/selfhost-api
 cp .env.example .env
+set -a
+. ./.env
+set +a
 go run ./cmd/selfhost-migrate
 ```
 
 Without a local Go toolchain, run inside Docker:
 
 ```bash
-export SELFHOST_API_DATABASE_URL='postgres://postgres:postgres@host.docker.internal:5432/zerolink_selfhost?sslmode=disable'
+cd services/selfhost-api
+cp .env.example .env
+# edit .env if your PostgreSQL DSN differs from the default example
 
 docker run --rm \
-  -v "$PWD:/workspace" \
-  -w /workspace/services/selfhost-api \
-  -e SELFHOST_API_DATABASE_URL="$SELFHOST_API_DATABASE_URL" \
+  -v "$PWD:/app" \
+  -w /app \
+  --env-file .env \
   golang:1.24 \
   go run ./cmd/selfhost-migrate
 ```
 
-If PostgreSQL is running in another container instead of on the host, replace `host.docker.internal` with that container or Compose service name.
+If PostgreSQL is running in another container instead of on the host, replace `127.0.0.1` in `.env` with that container or Compose service name.
 
 ### 3. Start the API
 
@@ -100,20 +108,22 @@ With a local Go toolchain:
 
 ```bash
 cd services/selfhost-api
+set -a
+. ./.env
+set +a
 go run ./cmd/selfhost-api
 ```
 
 With Docker:
 
 ```bash
-export SELFHOST_API_DATABASE_URL='postgres://postgres:postgres@host.docker.internal:5432/zerolink_selfhost?sslmode=disable'
+cd services/selfhost-api
 
 docker run --rm \
-  -v "$PWD:/workspace" \
-  -w /workspace/services/selfhost-api \
+  -v "$PWD:/app" \
+  -w /app \
   -p 8788:8788 \
-  -e SELFHOST_API_BIND_ADDR=:8788 \
-  -e SELFHOST_API_DATABASE_URL="$SELFHOST_API_DATABASE_URL" \
+  --env-file .env \
   golang:1.24 \
   go run ./cmd/selfhost-api
 ```
