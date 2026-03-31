@@ -2,6 +2,8 @@
 
 # ZeroLink Deployment Guide
 
+For Docker Compose self-hosting, see [SELF_HOSTED_DEPLOYMENT.md](./SELF_HOSTED_DEPLOYMENT.md).
+
 > This document covers the complete steps to deploy ZeroLink to Cloudflare.
 
 ---

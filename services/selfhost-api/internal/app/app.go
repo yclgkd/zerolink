@@ -29,20 +29,22 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	realtimeHub := realtime.NopHub{}
+	realtimeHub := realtime.NewHub(logger)
 	verifier := webauthn.NewVerifier()
+	protocolService := service.NewProtocolService(
+		db,
+		service.ProtocolConfig{
+			RPID:      cfg.RP.ID,
+			RPOrigin:  cfg.RP.Origin,
+			Verifier:  verifier,
+			Publisher: realtimeHub,
+		},
+	)
 	services := service.New(
 		db,
 		verifier,
 		realtimeHub,
-		service.NewProtocolService(
-			db,
-			service.ProtocolConfig{
-				RPID:     cfg.RP.ID,
-				RPOrigin: cfg.RP.Origin,
-				Verifier: verifier,
-			},
-		),
+		protocolService,
 		logger,
 	)
 
@@ -50,6 +52,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		Logger:        logger,
 		Services:      services,
 		AllowedOrigin: cfg.RP.Origin,
+		Realtime:      realtimeHub,
 	})
 
 	server := &http.Server{

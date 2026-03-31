@@ -4,6 +4,8 @@
 
 # ZeroLink 部署指南 / Deployment Guide
 
+如需 Docker Compose 自部署，请参见 [SELF_HOSTED_DEPLOYMENT.zh.md](./SELF_HOSTED_DEPLOYMENT.zh.md)。
+
 > 本文档涵盖将 ZeroLink 部署到 Cloudflare 的完整步骤。
 > This document covers the complete steps to deploy ZeroLink to Cloudflare.
 

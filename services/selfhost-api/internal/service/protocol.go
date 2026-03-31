@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
@@ -39,6 +40,7 @@ type Protocol interface {
 	CompoundCommit(context.Context, CompoundCommitInput) (CompoundCommitOutput, error)
 	PublicStatus(context.Context, string) (PublicStatusOutput, error)
 	DecryptFetch(context.Context, string) (DecryptFetchOutput, error)
+	RealtimeState(context.Context, string) (RealtimeStateOutput, error)
 }
 
 type ProtocolError struct {
@@ -67,9 +69,10 @@ func (e *ProtocolError) Unwrap() error {
 }
 
 type ProtocolConfig struct {
-	RPID     string
-	RPOrigin string
-	Verifier webauthn.Verifier
+	RPID      string
+	RPOrigin  string
+	Verifier  webauthn.Verifier
+	Publisher realtime.Publisher
 }
 
 type ProtocolService struct {
@@ -77,6 +80,7 @@ type ProtocolService struct {
 	verifier    webauthn.Verifier
 	rpID        string
 	rpOrigin    string
+	publisher   realtime.Publisher
 	now         func() time.Time
 	randomRead  func([]byte) (int, error)
 	rateLimiter *protocolRateLimiter
@@ -115,6 +119,16 @@ type PublicStatusOutput struct {
 	AdminMode       string `json:"adminMode"`
 	SecurityProfile string `json:"securityProfile"`
 	ReceiverPubFpr  string `json:"receiverPubFpr,omitempty"`
+}
+
+type RealtimeStateOutput struct {
+	ChannelID       string
+	State           string
+	Version         int64
+	AdminMode       string
+	SecurityProfile string
+	ReceiverPubFpr  string
+	ExpiresAt       time.Time
 }
 
 type AttestationJSON struct {
@@ -163,6 +177,7 @@ func NewProtocolService(db *store.Database, cfg ProtocolConfig) Protocol {
 		verifier:    verifier,
 		rpID:        cfg.RPID,
 		rpOrigin:    strings.TrimRight(cfg.RPOrigin, "/"),
+		publisher:   cfg.Publisher,
 		now:         func() time.Time { return time.Now().UTC() },
 		randomRead:  rand.Read,
 		rateLimiter: newProtocolRateLimiter(),
@@ -380,6 +395,33 @@ func (s *ProtocolService) PublicStatus(ctx context.Context, uuid string) (Public
 	return output, nil
 }
 
+func (s *ProtocolService) RealtimeState(ctx context.Context, uuid string) (RealtimeStateOutput, error) {
+	if s.db == nil {
+		return RealtimeStateOutput{}, internalError(errProtocolNilDB)
+	}
+	if !isValidUUID(uuid) {
+		return RealtimeStateOutput{}, badRequest("invalid uuid")
+	}
+
+	now := s.now().UTC()
+	var output RealtimeStateOutput
+
+	err := s.db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
+		channel, err := tx.LoadActiveChannel(ctx, now)
+		if err != nil {
+			return err
+		}
+
+		output = buildRealtimeState(*channel)
+		return nil
+	})
+	if err != nil {
+		return RealtimeStateOutput{}, mapProtocolError(err)
+	}
+
+	return output, nil
+}
+
 func validateCreateBeginInput(input CreateBeginInput) (int64, error) {
 	if !isValidUUID(input.UUID) {
 		return 0, badRequest("invalid uuid")
@@ -584,4 +626,23 @@ func ternary[T any](condition bool, left T, right T) T {
 		return left
 	}
 	return right
+}
+
+func buildRealtimeState(channel store.Channel) RealtimeStateOutput {
+	return RealtimeStateOutput{
+		ChannelID:       channel.UUID,
+		State:           string(channel.State),
+		Version:         channel.Version,
+		AdminMode:       string(resolveChannelAdminMode(&channel)),
+		SecurityProfile: string(channel.SecurityProfile),
+		ReceiverPubFpr:  stringValue(channel.ReceiverPubFpr),
+		ExpiresAt:       channel.ExpiresAt.UTC(),
+	}
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

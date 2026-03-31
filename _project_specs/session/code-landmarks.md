@@ -30,7 +30,7 @@ UPDATE WHEN:
 | `packages/backend/src/index.staging.ts` | Staging-only Worker entry — mirrors production exports while keeping staging on its own Worker and namespace |
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
-| `services/selfhost-api/cmd/selfhost-api/main.go` | Self-hosted Go API entrypoint — loads config, opens PostgreSQL, and serves health plus the currently implemented M3 protocol routes |
+| `services/selfhost-api/cmd/selfhost-api/main.go` | Self-hosted Go API entrypoint — loads config, opens PostgreSQL, boots the in-memory realtime hub, and serves health, protocol routes, and `/api/ws/:uuid` |
 | `services/selfhost-api/cmd/selfhost-migrate/main.go` | Self-hosted Go migration entrypoint — runs embedded SQL migrations against PostgreSQL |
 
 ## Core Business Logic
@@ -53,6 +53,8 @@ UPDATE WHEN:
 | `packages/frontend/e2e/happy-path.spec.ts` | Canonical end-to-end coverage for create-only share-link visibility and ManagePage sender flow |
 | `services/selfhost-api/internal/service/protocol.go` | Self-hosted M3 protocol layer — validates create/public requests, generates WebAuthn-compatible creation options, delegates `create_finish` credential finalization, and maps store semantics to frontend-compatible HTTP errors |
 | `services/selfhost-api/internal/service/protocol_create_finish.go` | Self-hosted WebAuthn/softkey create-finalize flow — loads the stored create challenge and persists finalized admin credentials inside one channel transaction, so verifier/save failures roll back cleanly instead of stranding waiting links |
+| `services/selfhost-api/internal/httpapi/websocket.go` | Self-hosted WebSocket route — upgrades `/api/ws/:uuid`, validates subscribe payloads, sends the initial snapshot, and preserves the shared close-code/message contract |
+| `services/selfhost-api/internal/realtime/hub.go` | Self-hosted single-node realtime hub — tracks subscribed websocket clients, fan-outs `state_changed` / `channel_closed`, replies to pings, and auto-closes expired channels |
 | `services/selfhost-api/internal/webauthn/attestation.go` | Go-native WebAuthn attestation verifier for self-hosted create flows — validates RP ID/origin/challenge, parses attested credential data, supports `fmt:none` and packed self-attestation, and returns `StoredCredential` fields for persistence |
 
 ## Configuration
@@ -67,6 +69,10 @@ UPDATE WHEN:
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
+| `deploy/selfhost/docker-compose.yml` | Self-hosted local stack bundle — starts PostgreSQL, migration job, Go API, and Caddy-served frontend with `.env` fallback to `.env.example` |
+| `deploy/selfhost/Caddyfile` | Self-hosted reverse-proxy and SPA fallback config — `/api/*`, `/healthz`, and `/readyz` must route before static fallback |
+| `deploy/selfhost/api.Dockerfile` | Multi-stage image build for `selfhost-api` and `selfhost-migrate` |
+| `deploy/selfhost/frontend.Dockerfile` | Frontend build + Caddy runtime image for the self-hosted local stack |
 | `services/selfhost-api/.env.example` | Self-hosted Go service env template — bind address, RP ID/origin, pool sizing, and PostgreSQL DSN |
 | `services/selfhost-api/go.mod` | Nested Go module for the self-hosted backend track |
 | `.github/workflows/deploy.yml` | Post-merge CI/CD: resolve `ZEROLINK_VERSION`, frontend build, manifest generate/sign/verify, then Worker deploy; staging adds a post-deploy smoke test |
@@ -98,6 +104,7 @@ UPDATE WHEN:
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
 | `packages/shared/src/__tests__/selfhost-contract-fixtures.test.ts` | Shared cross-runtime fixture verification for canonical JSON, intent hashes, AAD, delivery-proof challenge, and WS message schemas |
 | `services/selfhost-api/internal/httpapi/router_test.go` | Self-hosted Go HTTP smoke tests for health, readiness, M3 create/public routes, remaining placeholders, and websocket upgrade gating |
+| `services/selfhost-api/internal/httpapi/websocket_test.go` | Self-hosted websocket route tests for subscribe bootstrap, ping/pong, state fan-out, and channel close notifications |
 | `services/selfhost-api/internal/service/protocol_test.go` | Self-hosted Go M3 service tests covering quick/secure create flows, downgrade rejection, transactional WebAuthn finalize rollback, attestation failure mapping, and expired public-status tombstoning |
 | `services/selfhost-api/internal/config/config_test.go` | Self-hosted Go config validation tests for required env vars and pool bounds |
 | `services/selfhost-api/internal/webauthn/attestation_test.go` | Self-hosted Go WebAuthn verifier tests for challenge validation, `fmt:none` credential extraction, and packed self-attestation verification |
@@ -123,3 +130,5 @@ UPDATE WHEN:
 | `packages/backend/src/do/SecretVaultHttp.ts` | Production observability intentionally omits raw exception text | `mapError()` keeps staging stacks/messages for debugging, but production emits only a structured error name + handler + fingerprint payload; `stack_fingerprint` is based on a normalized handler + error-name + frame signature, not raw stack text or bundle offsets; use `APP_ENV` from `packages/backend/wrangler.toml`, not hostnames, to reason about log detail |
 | `packages/backend/src/security-headers.ts` | `Cache-Control: no-store` on SPA entry paths is intentional | Changing to `no-cache` causes stale HTML replay across signed deployments and breaks the Verified Release gate — see decisions.md [2026-03-10] |
 | `packages/frontend/e2e/support/mock-api.ts` | Stateful mock E2E helper intentionally disables `window.WebSocket` before navigation | Mocked suites should exercise HTTP route mocks and the explicit polling fallback path without generating Vite proxy noise; real WebSocket transport coverage belongs in `realtime-smoke.spec.ts` |
+| `deploy/selfhost/Caddyfile` | Handler order is a correctness boundary | Keep `/api/*`, `/healthz`, and `/readyz` inside the proxy route before `try_files` / `file_server`, or the SPA fallback will swallow API traffic and make the local stack look healthy while realtime and health checks are broken |
+| `services/selfhost-api/internal/realtime/hub.go` | Self-hosted websocket fan-out is intentionally process-local | The frontend sync client still works because it already falls back to HTTP polling, but only connections attached to the same API process receive live pushes until a future shared pubsub layer exists |

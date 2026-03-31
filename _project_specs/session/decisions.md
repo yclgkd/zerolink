@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Self-hosted local packaging ships as single-node realtime plus Caddy compose bundle
+
+**Decision**: The self-hosted path now ships a first-party local deployment bundle under `deploy/selfhost/` and exposes `/api/ws/:uuid` from the Go API using an in-memory single-node realtime hub, while keeping the frontend's existing HTTP polling fallback unchanged.
+**Context**: Issue #208 required the self-hosted track to stop being a partial backend spike and become an executable local deployment story. The missing gaps were realtime compatibility for the frontend sync client, an opinionated local packaging path, and operator-facing documentation/templates.
+**Options Considered**: Keep `/api/ws/:uuid` unimplemented and document polling-only behavior; add Redis/pubsub and multi-node fan-out immediately; implement the frozen WebSocket contract in-process for one-node deployments and defer cross-node broadcast until there is a concrete scaling requirement.
+**Choice**: Implement the exact WebSocket contract now with a process-local hub, wire service-layer state transitions to publish `state_changed` / `channel_closed`, package the stack as `db + migrate + api + web` via Docker Compose, and front it with Caddy for SPA fallback plus `/api/*` proxying.
+**Reasoning**: This satisfies frontend compatibility and gives operators a runnable self-hosted path without prematurely committing to Redis or a distributed topology. The frontend already has polling fallback, so single-node realtime is a strict improvement over the previous placeholder while preserving a safe degradation path.
+**Trade-offs**: Realtime fan-out is intentionally limited to a single API process. Operators who scale the API horizontally will need a later shared pubsub layer to preserve cross-node websocket delivery semantics.
+
 ## [2026-03-31] Self-hosted RP_ORIGIN must be stored as a canonical origin, not an arbitrary URL
 
 **Decision**: Self-hosted config loading now parses `SELFHOST_API_RP_ORIGIN` as an origin-only URL, rejects path/query/fragment/userinfo, lowercases scheme and host, and strips default ports before storing it.

@@ -30,6 +30,7 @@ type stubProtocol struct {
 	compoundCommit func(context.Context, service.CompoundCommitInput) (service.CompoundCommitOutput, error)
 	publicStatus   func(context.Context, string) (service.PublicStatusOutput, error)
 	decryptFetch   func(context.Context, string) (service.DecryptFetchOutput, error)
+	realtimeState  func(context.Context, string) (service.RealtimeStateOutput, error)
 }
 
 func (s stubChecker) Ping(context.Context) error {
@@ -124,19 +125,32 @@ func (s stubProtocol) DecryptFetch(ctx context.Context, uuid string) (service.De
 	return s.decryptFetch(ctx, uuid)
 }
 
+func (s stubProtocol) RealtimeState(ctx context.Context, uuid string) (service.RealtimeStateOutput, error) {
+	if s.realtimeState == nil {
+		return service.RealtimeStateOutput{}, &service.ProtocolError{
+			Code:    "NOT_IMPLEMENTED",
+			Status:  http.StatusNotImplemented,
+			Message: "realtime_state is not implemented yet",
+		}
+	}
+	return s.realtimeState(ctx, uuid)
+}
+
 func newTestRouter(checker stubChecker, protocol stubProtocol) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return newTestRouterWithLogger(checker, protocol, logger)
 }
 
 func newTestRouterWithLogger(checker stubChecker, protocol stubProtocol, logger *slog.Logger) http.Handler {
+	realtimeHub := realtime.NewHub(logger)
 	return NewRouter(Dependencies{
 		Logger:        logger,
 		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
 		Services: service.New(
 			checker,
 			webauthn.NoopVerifier{},
-			realtime.NopHub{},
+			realtimeHub,
 			protocol,
 			logger,
 		),

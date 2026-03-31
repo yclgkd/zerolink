@@ -12,6 +12,7 @@ docs/
 ├── QUICK_START.md     # Quick start guide (zero to running)
 ├── DEPLOYMENT.md      # Deployment guide (Cloudflare Workers manual deploy)
 ├── SELF_HOSTED_CONTRACT.md # Self-hosted backend contract freeze
+├── SELF_HOSTED_DEPLOYMENT.md # Self-hosted Docker Compose deployment
 ├── TECH_STACK.md      # Tech stack specification (toolchain, Monorepo, testing)
 ├── PRD.md             # Full product requirements document (main document)
 ├── ARCHITECTURE.md    # Architecture overview
@@ -29,6 +30,7 @@ docs/
 - **What is this project?** → [README.md](../README.md)
 - **How to get started quickly?** → [QUICK_START.md](./QUICK_START.md)
 - **How to deploy to Cloudflare?** → [DEPLOYMENT.md](./DEPLOYMENT.md)
+- **How to self-host locally?** → [SELF_HOSTED_DEPLOYMENT.md](./SELF_HOSTED_DEPLOYMENT.md)
 - **Core value proposition** → [PRD.md § 1. Product Overview](./PRD.md#1-product-overview)
 - **User flows** → [PRD.md § 5. User Flows](./PRD.md#5-user-flows-v25-ux-edition)
 
@@ -118,10 +120,11 @@ docs/
 
 ### DevOps / Deployment
 1. [DEPLOYMENT.md](./DEPLOYMENT.md) - **Full deployment guide (manual deploy)**
-2. [DEPLOYMENT.md](./DEPLOYMENT.md) - GitHub Actions and release process
-3. [TECH_STACK.md § Deployment & Release](./TECH_STACK.md#deployment--release) - Frontend and backend deployment
-4. [TECH_STACK.md § Release Pipeline](./TECH_STACK.md#version-management--release-pipeline) - PR validation and tag releases
-5. [VERIFY.md](./VERIFY.md) - Build integrity verification
+2. [SELF_HOSTED_DEPLOYMENT.md](./SELF_HOSTED_DEPLOYMENT.md) - Local Docker Compose self-hosting
+3. [DEPLOYMENT.md](./DEPLOYMENT.md) - GitHub Actions and release process
+4. [TECH_STACK.md § Deployment & Release](./TECH_STACK.md#deployment--release) - Frontend and backend deployment
+5. [TECH_STACK.md § Release Pipeline](./TECH_STACK.md#version-management--release-pipeline) - PR validation and tag releases
+6. [VERIFY.md](./VERIFY.md) - Build integrity verification
 
 ---
 

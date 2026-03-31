@@ -1,0 +1,75 @@
+name: zerolink-selfhost
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.example
+        required: true
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/api.Dockerfile
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.example
+        required: true
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - selfhost-migrate
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/api.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.example
+        required: true
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "8788"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O /dev/null http://127.0.0.1:8788/readyz || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:

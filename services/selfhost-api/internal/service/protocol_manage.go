@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
@@ -242,6 +243,7 @@ func (s *ProtocolService) LockCommit(ctx context.Context, input LockCommitInput)
 	}
 
 	now := s.now().UTC()
+	var publishedState RealtimeStateOutput
 	err := s.db.WithChannelTx(ctx, input.UUID, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.LoadActiveChannel(ctx, now)
 		if err != nil {
@@ -309,12 +311,14 @@ func (s *ProtocolService) LockCommit(ctx context.Context, input LockCommitInput)
 			return err
 		}
 
+		publishedState = buildRealtimeState(*channel)
 		return nil
 	})
 	if err != nil {
 		return LockCommitOutput{}, mapProtocolError(err)
 	}
 
+	s.publishRealtimeState(ctx, publishedState)
 	return LockCommitOutput{OK: true}, nil
 }
 
@@ -440,6 +444,8 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 		)
 	}
 
+	var publishedState RealtimeStateOutput
+	var closedReason *realtime.CloseReason
 	err = s.db.WithChannelTx(ctx, input.UUID, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.LoadActiveChannel(ctx, now)
 		if err != nil {
@@ -510,6 +516,10 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 
 			if input.Intent.Op == "delete" {
 				_, err := tx.FinalizeTerminalState(ctx, store.TerminalReasonDeleted, now)
+				if err == nil {
+					reason := realtime.CloseReasonDeleted
+					closedReason = &reason
+				}
 				return err
 			}
 
@@ -541,7 +551,11 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 				return err
 			}
 
-			return s.applyDelivery(ctx, tx, channel, input, now, expireAt)
+			if err := s.applyDelivery(ctx, tx, channel, input, now, expireAt); err != nil {
+				return err
+			}
+			publishedState = buildRealtimeState(*channel)
+			return nil
 		}
 
 		softkeyCredential, err := decodeStoredSoftkeyCredential(channel.AdminCredential)
@@ -557,6 +571,10 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 
 		if input.Intent.Op == "delete" {
 			_, err := tx.FinalizeTerminalState(ctx, store.TerminalReasonDeleted, now)
+			if err == nil {
+				reason := realtime.CloseReasonDeleted
+				closedReason = &reason
+			}
 			return err
 		}
 
@@ -582,10 +600,20 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 			return err
 		}
 
-		return s.applyDelivery(ctx, tx, channel, input, now, expireAt)
+		if err := s.applyDelivery(ctx, tx, channel, input, now, expireAt); err != nil {
+			return err
+		}
+		publishedState = buildRealtimeState(*channel)
+		return nil
 	})
 	if err != nil {
 		return CompoundCommitOutput{}, mapProtocolError(err)
+	}
+
+	if closedReason != nil {
+		s.publishRealtimeClosed(ctx, input.UUID, *closedReason)
+	} else {
+		s.publishRealtimeState(ctx, publishedState)
 	}
 
 	return CompoundCommitOutput{OK: true}, nil
@@ -688,6 +716,30 @@ func (s *ProtocolService) DecryptFetch(ctx context.Context, uuid string) (Decryp
 	}
 
 	return output, nil
+}
+
+func (s *ProtocolService) publishRealtimeState(ctx context.Context, state RealtimeStateOutput) {
+	if s.publisher == nil || state.ChannelID == "" {
+		return
+	}
+
+	_ = s.publisher.PublishState(ctx, realtime.StateSnapshot{
+		ChannelID:       state.ChannelID,
+		State:           state.State,
+		Version:         state.Version,
+		AdminMode:       state.AdminMode,
+		SecurityProfile: state.SecurityProfile,
+		ReceiverPubFpr:  state.ReceiverPubFpr,
+		ExpiresAt:       state.ExpiresAt,
+	})
+}
+
+func (s *ProtocolService) publishRealtimeClosed(ctx context.Context, channelID string, reason realtime.CloseReason) {
+	if s.publisher == nil || channelID == "" {
+		return
+	}
+
+	_ = s.publisher.PublishClosed(ctx, channelID, reason)
 }
 
 func (input LockCommitInput) Validate() error {
