@@ -14,6 +14,7 @@ type Config struct {
 	LogLevel slog.Level
 	HTTP     HTTPConfig
 	Database DatabaseConfig
+	RP       RPConfig
 }
 
 type HTTPConfig struct {
@@ -31,6 +32,11 @@ type DatabaseConfig struct {
 	MinConns       int32
 	ConnectTimeout time.Duration
 	HealthTimeout  time.Duration
+}
+
+type RPConfig struct {
+	ID     string
+	Origin string
 }
 
 func Load() (Config, error) {
@@ -63,11 +69,17 @@ func LoadFromEnv(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, err
 	}
 
+	rpCfg, err := loadRPConfig(lookup)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		AppEnv:   appEnv,
 		LogLevel: logLevel,
 		HTTP:     httpCfg,
 		Database: dbCfg,
+		RP:       rpCfg,
 	}, nil
 }
 
@@ -138,6 +150,28 @@ func loadDatabaseConfig(lookup func(string) (string, bool), url string) (Databas
 		MinConns:       minConns,
 		ConnectTimeout: connectTimeout,
 		HealthTimeout:  healthTimeout,
+	}, nil
+}
+
+func loadRPConfig(lookup func(string) (string, bool)) (RPConfig, error) {
+	rpID, ok := lookup("SELFHOST_API_RP_ID")
+	if !ok || strings.TrimSpace(rpID) == "" {
+		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ID is required")
+	}
+
+	rpOrigin, ok := lookup("SELFHOST_API_RP_ORIGIN")
+	if !ok || strings.TrimSpace(rpOrigin) == "" {
+		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ORIGIN is required")
+	}
+
+	trimmedOrigin := strings.TrimRight(strings.TrimSpace(rpOrigin), "/")
+	if !strings.HasPrefix(trimmedOrigin, "http://") && !strings.HasPrefix(trimmedOrigin, "https://") {
+		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ORIGIN must start with http:// or https://")
+	}
+
+	return RPConfig{
+		ID:     strings.TrimSpace(rpID),
+		Origin: trimmedOrigin,
 	}, nil
 }
 

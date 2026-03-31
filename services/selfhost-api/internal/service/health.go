@@ -16,6 +16,7 @@ type Container struct {
 	Health   *HealthService
 	Verifier webauthn.Verifier
 	Realtime realtime.Publisher
+	Protocol Protocol
 }
 
 type HealthService struct {
@@ -29,11 +30,17 @@ type Status struct {
 	Checks    map[string]string `json:"checks,omitempty"`
 }
 
-func New(checker ReadinessChecker, verifier webauthn.Verifier, publisher realtime.Publisher) *Container {
+func New(
+	checker ReadinessChecker,
+	verifier webauthn.Verifier,
+	publisher realtime.Publisher,
+	protocol Protocol,
+) *Container {
 	return &Container{
 		Health:   &HealthService{checker: checker},
 		Verifier: verifier,
 		Realtime: publisher,
+		Protocol: protocol,
 	}
 }
 

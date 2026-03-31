@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Keep self-hosted M3 create/public status contract-compatible while deferring WebAuthn verification
+
+**Decision**: Implement self-hosted `create_begin`, `create_finish`, and `public_status` in the Go service now, but keep WebAuthn attestation handling at the metadata/persistence boundary instead of attempting full verification before the dedicated verifier lands.
+**Context**: Issue #211 needs the first end-user-facing self-hosted routes to work against the existing frontend contract. M2 already added PostgreSQL persistence, but the Go service still returned `501 NOT_IMPLEMENTED` for every protocol route and did not yet have RP configuration for creation options or share/manage URLs.
+**Options Considered**: Keep returning placeholders until the full WebAuthn verifier is ready; add ad-hoc route logic directly inside `httpapi`; add a small protocol service that generates creation options, persists the same channel lifecycle fields the frontend expects, and stores opaque attestation metadata for later milestones.
+**Choice**: Add `internal/service/protocol.go` as the self-hosted M3 protocol layer, wire `create_begin`, `create_finish`, and `public_status` through `httpapi`, require `SELFHOST_API_RP_ID` and `SELFHOST_API_RP_ORIGIN`, persist `waiting` channels with the same provisional `adminMode=webauthn` / empty-lock-key shape the Worker currently exposes, and store either softkey JWK metadata or raw WebAuthn attestation metadata in `admin_credential` without verifying it yet.
+**Reasoning**: This is the smallest change that makes the self-hosted backend usable for frontend create flows and polling-based status sync while preserving current response shapes and terminal-state behavior. Deferring attestation verification keeps M3 scoped and avoids baking half-verified security logic into the request path before the real verifier contract is settled.
+**Trade-offs**: Secure create flows currently persist attestation metadata but do not cryptographically verify it yet, so later milestones must replace or enrich the stored credential shape before WebAuthn-backed manage/delete flows can be trusted. The Go service now depends on explicit RP config from the deployment environment because share/manage URLs and browser WebAuthn origin checks are frontend-origin-sensitive.
+
 ## [2026-03-31] Model self-hosted channel correctness around one row plus per-channel advisory-lock transactions
 
 **Decision**: Implement M2 for the Go self-hosted backend with four PostgreSQL tables (`channels`, `active_challenges`, `used_nonces`, `terminal_tombstones`), `sqlc`-generated queries, and a `WithChannelTx(...)` helper that acquires a transaction-scoped advisory lock derived from the channel UUID before any correctness-path read/write runs.

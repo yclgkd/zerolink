@@ -29,7 +29,18 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	}
 
 	realtimeHub := realtime.NopHub{}
-	services := service.New(db, webauthn.NoopVerifier{}, realtimeHub)
+	services := service.New(
+		db,
+		webauthn.NoopVerifier{},
+		realtimeHub,
+		service.NewProtocolService(
+			db,
+			service.ProtocolConfig{
+				RPID:     cfg.RP.ID,
+				RPOrigin: cfg.RP.Origin,
+			},
+		),
+	)
 
 	handler := httpapi.NewRouter(httpapi.Dependencies{
 		Logger:   logger,

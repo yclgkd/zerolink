@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -43,7 +44,7 @@ func NewRouter(deps Dependencies) http.Handler {
 			mux.HandleFunc(route.Pattern, methodOnly(route.Method, websocketPlaceholder))
 			continue
 		}
-		mux.HandleFunc(route.Pattern, methodOnly(route.Method, protocolPlaceholder(route.Name)))
+		mux.HandleFunc(route.Pattern, methodOnly(route.Method, protocolHandler(route.Name, deps.Services.Protocol)))
 	}
 
 	mux.HandleFunc("/", notFound)
@@ -90,6 +91,23 @@ func protocolPlaceholder(routeName string) http.HandlerFunc {
 	}
 }
 
+func protocolHandler(routeName string, protocolService service.Protocol) http.HandlerFunc {
+	if protocolService == nil {
+		return protocolPlaceholder(routeName)
+	}
+
+	switch routeName {
+	case "create_begin":
+		return createBeginHandler(protocolService)
+	case "create_finish":
+		return createFinishHandler(protocolService)
+	case "public_status":
+		return publicStatusHandler(protocolService)
+	default:
+		return protocolPlaceholder(routeName)
+	}
+}
+
 func websocketPlaceholder(w http.ResponseWriter, r *http.Request) {
 	if !isWebSocketUpgrade(r) {
 		w.Header().Set("Connection", "Upgrade")
@@ -126,10 +144,79 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		slog.Error("encode json response", "error", err)
 	}
+}
+
+func createBeginHandler(protocolService service.Protocol) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input service.CreateBeginInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid json body")
+			return
+		}
+
+		if input.UUID != r.PathValue("uuid") {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+
+		output, err := protocolService.CreateBegin(r.Context(), input)
+		if err != nil {
+			writeProtocolError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, output)
+	}
+}
+
+func createFinishHandler(protocolService service.Protocol) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input service.CreateFinishInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid json body")
+			return
+		}
+
+		if input.UUID != r.PathValue("uuid") {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+
+		output, err := protocolService.CreateFinish(r.Context(), input)
+		if err != nil {
+			writeProtocolError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, output)
+	}
+}
+
+func publicStatusHandler(protocolService service.Protocol) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		output, err := protocolService.PublicStatus(r.Context(), r.PathValue("uuid"))
+		if err != nil {
+			writeProtocolError(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, output)
+	}
+}
+
+func writeProtocolError(w http.ResponseWriter, err error) {
+	var protocolErr *service.ProtocolError
+	if errors.As(err, &protocolErr) {
+		writeError(w, protocolErr.Status, protocolErr.Code, protocolErr.Message)
+		return
+	}
+
+	writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "unexpected internal error")
 }
 
 func isWebSocketUpgrade(r *http.Request) bool {
