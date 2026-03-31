@@ -1,3 +1,5 @@
+<!-- synced-with: f21240e -->
+
 # 自部署后端契约冻结
 
 这份文档用于冻结自部署后端在开始 Go 实现前必须复现的协议外观契约。
@@ -50,6 +52,7 @@
 | `NOT_IMPLEMENTED` | `501` | Worker router | 命中占位路由但未实现 |
 | `INTERNAL_ERROR` | `500` | Worker 或 DO | 未预期异常或上游响应无效 |
 | `RATE_LIMITED` | `429` | DO | 应用层限流；可能带 `Retry-After` |
+| `CHANNEL_NOT_DELIVERED` | `409` | DO decrypt-fetch 读路径 | channel 存在，但当前还没有可供解密的密文 |
 | `CHALLENGE_INVALID` | `401` | DO | challenge 缺失、过期或无效 |
 | `CHALLENGE_CONSUMED` | `409` | DO | challenge 已被消费 |
 | `LOCK_FORBIDDEN` | `403` | DO | 非法状态迁移、终态、或 lock 不允许 |

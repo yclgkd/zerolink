@@ -22,6 +22,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: The Go port will otherwise re-implement protocol behavior across package boundaries with no single machine-checkable baseline. Freezing both the route/error contract and the exact-match byte surfaces creates a stable handoff for M1/M2 while keeping frontend behavior unchanged.
 **Trade-offs**: Fixture maintenance now becomes part of any protocol change, and the current contract intentionally leaves backend-internal policy details such as exact rate-limit windows and commit-cookie replacement strategy unresolved until later milestones.
 **Follow-up (2026-03-30, milestone handoff)**: M1 and M2 must treat `protocol-fixtures/selfhost-contract-v1.json` as the first cross-runtime compatibility asset. If a Go helper cannot reproduce a locked fixture exactly, the implementation is wrong unless the contract doc and fixtures are updated together in a separate contract-change PR.
+**Follow-up (2026-03-31, review fixes)**: The frozen error matrix now explicitly includes the shipped `decrypt_fetch` read-path error `CHANNEL_NOT_DELIVERED`. Chinese mirrors for contract-freeze docs must also carry accurate `synced-with` markers so bilingual maintenance stays diff-based instead of heuristic.
 
 ## [2026-03-30] Second-round frontend polish keeps safety flows intact while removing neon residue
 
