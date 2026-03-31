@@ -42,10 +42,11 @@ type Protocol interface {
 }
 
 type ProtocolError struct {
-	Code    string
-	Status  int
-	Message string
-	Cause   error
+	Code              string
+	Status            int
+	Message           string
+	Cause             error
+	RetryAfterSeconds int
 }
 
 func (e *ProtocolError) Error() string {
@@ -72,12 +73,13 @@ type ProtocolConfig struct {
 }
 
 type ProtocolService struct {
-	db         *store.Database
-	verifier   webauthn.Verifier
-	rpID       string
-	rpOrigin   string
-	now        func() time.Time
-	randomRead func([]byte) (int, error)
+	db          *store.Database
+	verifier    webauthn.Verifier
+	rpID        string
+	rpOrigin    string
+	now         func() time.Time
+	randomRead  func([]byte) (int, error)
+	rateLimiter *protocolRateLimiter
 }
 
 type CreateBeginInput struct {
@@ -157,12 +159,13 @@ func NewProtocolService(db *store.Database, cfg ProtocolConfig) Protocol {
 	}
 
 	return &ProtocolService{
-		db:         db,
-		verifier:   verifier,
-		rpID:       cfg.RPID,
-		rpOrigin:   strings.TrimRight(cfg.RPOrigin, "/"),
-		now:        func() time.Time { return time.Now().UTC() },
-		randomRead: rand.Read,
+		db:          db,
+		verifier:    verifier,
+		rpID:        cfg.RPID,
+		rpOrigin:    strings.TrimRight(cfg.RPOrigin, "/"),
+		now:         func() time.Time { return time.Now().UTC() },
+		randomRead:  rand.Read,
+		rateLimiter: newProtocolRateLimiter(),
 	}
 }
 
@@ -518,6 +521,18 @@ func cipherBundleInvalid(message string) error {
 
 func assertionInvalid(message string) error {
 	return &ProtocolError{Code: "ASSERTION_INVALID", Status: 403, Message: message}
+}
+
+func rateLimited(message string, retryAfterSeconds int) error {
+	if retryAfterSeconds < 1 {
+		retryAfterSeconds = 1
+	}
+	return &ProtocolError{
+		Code:              "RATE_LIMITED",
+		Status:            429,
+		Message:           message,
+		RetryAfterSeconds: retryAfterSeconds,
+	}
 }
 
 func attestationUnverifiable(message string) error {

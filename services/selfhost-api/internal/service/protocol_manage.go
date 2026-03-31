@@ -192,6 +192,10 @@ func (s *ProtocolService) LockBegin(ctx context.Context, input LockBeginInput) (
 			return nil
 		}
 
+		if err := s.enforceRateLimit(protocolRateLimitLockBegin, input.UUID, now); err != nil {
+			return err
+		}
+
 		challengeID, err := s.randomBase64URL(lockChallengeIDBytes)
 		if err != nil {
 			return err
@@ -269,6 +273,9 @@ func (s *ProtocolService) LockCommit(ctx context.Context, input LockCommitInput)
 		if *challenge.ChallengeID != input.LockChallengeID {
 			return challengeInvalid("lock challenge not found")
 		}
+		if err := s.enforceRateLimit(protocolRateLimitLockCommit, input.UUID, now); err != nil {
+			return err
+		}
 
 		expectedProof, err := computeLockProof(input.UUID, input.LockChallengeID, *challenge.ChallengeValue, *channel.LockKey)
 		if err != nil {
@@ -338,6 +345,9 @@ func (s *ProtocolService) CompoundBegin(ctx context.Context, input CompoundBegin
 			!activeChallenge.ExpiresAt.After(now) ||
 			activeChallenge.ChallengeID == nil ||
 			activeChallenge.ChallengeSeed == nil {
+			if err := s.enforceRateLimit(protocolRateLimitCompoundBegin, input.UUID, now); err != nil {
+				return err
+			}
 			challengeID, err := s.randomBase64URL(compoundChallengeIDBytes)
 			if err != nil {
 				return err
@@ -465,6 +475,9 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 		adminMode := resolveChannelAdminMode(channel)
 		expectedChallengeBytes, err := computeExpectedCompoundChallengeBytes(channel.UUID, input.IntentHash, challenge, input.Intent.Op)
 		if err != nil {
+			return err
+		}
+		if err := s.enforceRateLimit(protocolRateLimitCompoundCommit, input.UUID, now); err != nil {
 			return err
 		}
 
@@ -709,11 +722,28 @@ func (input CompoundCommitInput) Validate() error {
 	if err := input.Intent.Validate(); err != nil {
 		return err
 	}
-	if input.Assertion != nil && !input.Assertion.Valid() {
-		return badRequest("invalid assertion")
-	}
-	if input.SoftkeySignature != "" && !isLowerHex(input.SoftkeySignature, 0) {
-		return badRequest("invalid softkeySignature")
+	hasAssertion := input.Assertion != nil
+	hasSoftkey := input.SoftkeySignature != ""
+
+	switch {
+	case hasAssertion:
+		if input.AdminMode != "" || hasSoftkey {
+			return badRequest("invalid compound commit payload")
+		}
+		if !input.Assertion.Valid() {
+			return badRequest("invalid assertion")
+		}
+	case hasSoftkey:
+		if input.AdminMode != string(store.AdminModePassword) && input.AdminMode != string(store.AdminModeSoftkey) {
+			return badRequest("invalid compound commit payload")
+		}
+		if !isLowerHex(input.SoftkeySignature, 0) {
+			return badRequest("invalid softkeySignature")
+		}
+	case input.AdminMode != "":
+		return badRequest("invalid compound commit payload")
+	default:
+		return badRequest("invalid compound commit payload")
 	}
 	return nil
 }

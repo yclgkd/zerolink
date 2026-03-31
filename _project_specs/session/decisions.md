@@ -842,3 +842,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: URL fragment
 **Reasoning**: Browsers never send fragments to servers (HTTP spec); recipient copies entire URL; zero-knowledge guarantee
 **Trade-offs**: Entire link must be shared intact; no server-side logging of key material (intentional)
+## [2026-03-31] Mirror Worker hardening in self-hosted manage flows
+
+**Decision**: Enforce per-channel manage rate limits and strict compound_commit auth payload shapes in the Go self-hosted service
+**Context**: PR #219 added self-hosted lock/manage flows but initially missed the Worker abuse controls and request-union hardening
+**Options Considered**: Leave validation to callers, add HTTP-only middleware, enforce in the protocol service
+**Choice**: Enforce in the protocol service
+**Reasoning**: The service layer already owns protocol state transitions, so it is the narrowest place to preserve Worker parity across HTTP handlers and future callers
+**Trade-offs**: Rate limiting is process-local instead of Durable Object-local, so multi-instance deployments still need edge or infra throttling for global enforcement

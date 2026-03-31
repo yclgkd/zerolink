@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -368,6 +369,9 @@ func writeProtocolError(logger *slog.Logger, w http.ResponseWriter, err error) {
 				"status", protocolErr.Status,
 				"error", cause,
 			)
+		}
+		if protocolErr.RetryAfterSeconds > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(protocolErr.RetryAfterSeconds))
 		}
 		writeError(logger, w, protocolErr.Status, protocolErr.Code, protocolErr.Message)
 		return

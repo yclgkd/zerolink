@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -281,6 +282,71 @@ func TestProtocolServiceDeleteCommitFinalizesDeletedTombstone(t *testing.T) {
 	}
 }
 
+func TestProtocolServiceLockBeginRateLimitsNewChallengeIssuanceWhileAllowingActiveReuse(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+	}).(*ProtocolService)
+
+	currentNow := time.UnixMilli(1_730_000_100_000).UTC()
+	svc.now = func() time.Time { return currentNow }
+
+	uuid := "qqqqqqqqqqqqqqqqqqqqq"
+	createPasswordChannel(t, svc, uuid, currentNow.UnixMilli(), sampleSoftkeyJWK())
+
+	first, err := svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("first LockBegin() error = %v", err)
+	}
+
+	currentNow = currentNow.Add(time.Second)
+	if got, err := svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid}); err != nil {
+		t.Fatalf("reused LockBegin() error = %v", err)
+	} else if got.LockChallenge.ID != first.LockChallenge.ID {
+		t.Fatalf("reused challenge id = %q, want %q", got.LockChallenge.ID, first.LockChallenge.ID)
+	}
+
+	markChallengeConsumedForTest(t, db, uuid, store.ChallengeKindLock, currentNow.Add(3*time.Second))
+
+	currentNow = currentNow.Add(4 * time.Second)
+	second, err := svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("second LockBegin() error = %v", err)
+	}
+	markChallengeConsumedForTest(t, db, uuid, store.ChallengeKindLock, currentNow.Add(time.Second))
+
+	currentNow = currentNow.Add(2 * time.Second)
+	third, err := svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("third LockBegin() error = %v", err)
+	}
+	markChallengeConsumedForTest(t, db, uuid, store.ChallengeKindLock, currentNow.Add(time.Second))
+
+	currentNow = currentNow.Add(2 * time.Second)
+	_, err = svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid})
+	requireProtocolError(t, err, "RATE_LIMITED", 429)
+
+	if second.LockChallenge.ID == first.LockChallenge.ID {
+		t.Fatalf("second challenge id = %q, want a new challenge", second.LockChallenge.ID)
+	}
+	if third.LockChallenge.ID == second.LockChallenge.ID {
+		t.Fatalf("third challenge id = %q, want a new challenge", third.LockChallenge.ID)
+	}
+
+	currentNow = time.UnixMilli(1_730_000_160_001).UTC()
+	next, err := svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("LockBegin() after window reset error = %v", err)
+	}
+	if next.LockChallenge.ID == third.LockChallenge.ID {
+		t.Fatalf("reset challenge id = %q, want a fresh challenge", next.LockChallenge.ID)
+	}
+}
+
 func TestProtocolServiceCompoundCommitRejectsVersionMismatch(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
@@ -320,6 +386,63 @@ func TestProtocolServiceCompoundCommitRejectsVersionMismatch(t *testing.T) {
 		Intent:           intent,
 	})
 	requireProtocolError(t, err, "VERSION_MISMATCH", 409)
+}
+
+func TestProtocolServiceCompoundCommitRateLimitsRepeatedVerifiedAttempts(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+	}).(*ProtocolService)
+
+	currentNow := time.UnixMilli(1_730_000_200_000).UTC()
+	svc.now = func() time.Time { return currentNow }
+
+	uuid := "rrrrrrrrrrrrrrrrrrrrr"
+	softkeyPrivateKey, softkeyPubJWK := generateSoftkeyKeyPair(t)
+	_, receiverPubFpr := createAndLockPasswordChannel(t, svc, uuid, currentNow.UnixMilli(), softkeyPubJWK)
+
+	begin, err := svc.CompoundBegin(context.Background(), CompoundBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("CompoundBegin() error = %v", err)
+	}
+
+	intent := ManageIntent{
+		Op:             "update",
+		UUID:           uuid,
+		Version:        begin.CurrentVersion,
+		Timestamp:      currentNow.Add(2 * time.Second).UnixMilli(),
+		Nonce:          encodeBase64URL([]byte("nonce-rate-limit-000001")),
+		ReceiverPubFpr: receiverPubFpr,
+		CipherBundle:   buildCipherBundle(t, uuid, begin.CurrentVersion, receiverPubFpr, []byte("ciphertext-rate-limit")),
+		ExpireAt:       json.RawMessage("null"),
+	}
+	intentHash, err := intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("intent.ComputeHash() error = %v", err)
+	}
+
+	invalidSignature := signSoftkeyPayload(t, softkeyPrivateKey, []byte("wrong-compound-challenge"))
+	input := CompoundCommitInput{
+		AdminMode:        string(store.AdminModePassword),
+		UUID:             uuid,
+		SoftkeySignature: invalidSignature,
+		IntentHash:       intentHash,
+		Intent:           intent,
+	}
+
+	for attempt := 0; attempt < 10; attempt++ {
+		currentNow = time.UnixMilli(1_730_000_200_000 + int64(3_000+attempt)).UTC()
+		_, err := svc.CompoundCommit(context.Background(), input)
+		requireProtocolError(t, err, "ASSERTION_INVALID", 403)
+	}
+
+	currentNow = time.UnixMilli(1_730_000_204_000).UTC()
+	_, err = svc.CompoundCommit(context.Background(), input)
+	requireProtocolError(t, err, "RATE_LIMITED", 429)
 }
 
 func TestProtocolServiceCompoundCommitRejectsNonceReplay(t *testing.T) {
@@ -423,6 +546,25 @@ func TestProtocolServiceCompoundCommitRejectsNonceReplay(t *testing.T) {
 	requireProtocolError(t, err, "NONCE_REPLAY", 409)
 }
 
+func TestCompoundCommitInputValidateRejectsMixedAuthPayload(t *testing.T) {
+	input := validSoftkeyCompoundCommitInput("sssssssssssssssssssss")
+	input.Assertion = validAssertionJSON()
+
+	err := input.Validate()
+	requireProtocolError(t, err, "BAD_REQUEST", 400)
+	requireProtocolErrorMessage(t, err, "invalid compound commit payload")
+}
+
+func TestCompoundCommitInputValidateRejectsMissingAuthPayload(t *testing.T) {
+	input := validSoftkeyCompoundCommitInput("ttttttttttttttttttttt")
+	input.AdminMode = ""
+	input.SoftkeySignature = ""
+
+	err := input.Validate()
+	requireProtocolError(t, err, "BAD_REQUEST", 400)
+	requireProtocolErrorMessage(t, err, "invalid compound commit payload")
+}
+
 func createAndLockPasswordChannel(
 	t *testing.T,
 	svc Protocol,
@@ -432,23 +574,7 @@ func createAndLockPasswordChannel(
 ) (RSAPublicKeyJWK, string) {
 	t.Helper()
 
-	lockKeyB64u := encodeBase64URL([]byte("lock-key-password-channel-0000001"))
-	if _, err := svc.CreateBegin(context.Background(), CreateBeginInput{
-		UUID:            uuid,
-		Timestamp:       &timestamp,
-		SecurityProfile: string(store.SecurityProfileQuick),
-	}); err != nil {
-		t.Fatalf("CreateBegin() error = %v", err)
-	}
-	if _, err := svc.CreateFinish(context.Background(), CreateFinishInput{
-		AdminMode:     string(store.AdminModePassword),
-		UUID:          uuid,
-		SoftkeyPubJWK: softkeyPubJWK,
-		LockKeyB64u:   lockKeyB64u,
-		Timestamp:     &timestamp,
-	}); err != nil {
-		t.Fatalf("CreateFinish() error = %v", err)
-	}
+	lockKeyB64u := createPasswordChannel(t, svc, uuid, timestamp, softkeyPubJWK)
 
 	lockBegin, err := svc.LockBegin(context.Background(), LockBeginInput{UUID: uuid})
 	if err != nil {
@@ -472,6 +598,35 @@ func createAndLockPasswordChannel(
 	}
 
 	return receiverPubJWK, receiverPubFpr
+}
+
+func createPasswordChannel(
+	t *testing.T,
+	svc Protocol,
+	uuid string,
+	timestamp int64,
+	softkeyPubJWK *ECDSAPublicKeyJWK,
+) string {
+	t.Helper()
+
+	lockKeyB64u := encodeBase64URL([]byte("lock-key-password-channel-0000001"))
+	if _, err := svc.CreateBegin(context.Background(), CreateBeginInput{
+		UUID:            uuid,
+		Timestamp:       &timestamp,
+		SecurityProfile: string(store.SecurityProfileQuick),
+	}); err != nil {
+		t.Fatalf("CreateBegin() error = %v", err)
+	}
+	if _, err := svc.CreateFinish(context.Background(), CreateFinishInput{
+		AdminMode:     string(store.AdminModePassword),
+		UUID:          uuid,
+		SoftkeyPubJWK: softkeyPubJWK,
+		LockKeyB64u:   lockKeyB64u,
+		Timestamp:     &timestamp,
+	}); err != nil {
+		t.Fatalf("CreateFinish() error = %v", err)
+	}
+	return lockKeyB64u
 }
 
 func generateSoftkeyKeyPair(t *testing.T) (*ecdsa.PrivateKey, *ECDSAPublicKeyJWK) {
@@ -553,4 +708,60 @@ func buildCipherBundle(
 
 func int64String(value int64) string {
 	return fmt.Sprintf("%d", value)
+}
+
+func markChallengeConsumedForTest(
+	t *testing.T,
+	db *store.Database,
+	uuid string,
+	kind store.ChallengeKind,
+	consumedAt time.Time,
+) {
+	t.Helper()
+
+	if err := db.WithChannelTx(context.Background(), uuid, func(ctx context.Context, tx *store.ChannelTx) error {
+		_, err := tx.MarkChallengeConsumed(ctx, kind, consumedAt)
+		return err
+	}); err != nil {
+		t.Fatalf("mark challenge consumed: %v", err)
+	}
+}
+
+func validSoftkeyCompoundCommitInput(uuid string) CompoundCommitInput {
+	return CompoundCommitInput{
+		AdminMode:        string(store.AdminModePassword),
+		UUID:             uuid,
+		SoftkeySignature: strings.Repeat("a", 128),
+		IntentHash:       strings.Repeat("b", 64),
+		Intent: ManageIntent{
+			Op:             "update",
+			UUID:           uuid,
+			Version:        0,
+			Timestamp:      1_730_000_000_000,
+			Nonce:          encodeBase64URL([]byte("validate-nonce-000001")),
+			ReceiverPubFpr: strings.Repeat("c", 64),
+			CipherBundle: &CipherBundle{
+				Ciphertext:     encodeBase64URL([]byte("ciphertext")),
+				IV:             encodeBase64URL([]byte("iv")),
+				AAD:            encodeBase64URL([]byte("aad")),
+				EncContentKey:  encodeBase64URL([]byte("cek")),
+				CiphertextHash: strings.Repeat("d", 64),
+				PadBlock:       4096,
+			},
+			ExpireAt: json.RawMessage("null"),
+		},
+	}
+}
+
+func validAssertionJSON() *AssertionJSON {
+	return &AssertionJSON{
+		ID:    encodeBase64URL([]byte("credential-id")),
+		RawID: encodeBase64URL([]byte("credential-id")),
+		Type:  "public-key",
+		Response: AssertionResponseJSON{
+			ClientDataJSON:    encodeBase64URL([]byte("client-data")),
+			AuthenticatorData: encodeBase64URL([]byte("auth-data")),
+			Signature:         encodeBase64URL([]byte("signature")),
+		},
+	}
 }
