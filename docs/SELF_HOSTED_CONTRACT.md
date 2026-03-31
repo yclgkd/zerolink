@@ -32,11 +32,11 @@ The frozen JSON fixtures live at `protocol-fixtures/selfhost-contract-v1.json`.
 | --- | --- | --- | --- | --- | --- |
 | `/api/create_begin/:uuid` | `POST` | `CreateBeginRequestSchema` | `CreateBeginResponseSchema` | `apiClient.createBegin()` | Always returns `creationOptions`; password-mode compatibility stays frozen for now |
 | `/api/create_finish/:uuid` | `POST` | `CreateFinishRequestSchema` | `CreateFinishResponseSchema` | `apiClient.createFinish()` | Accepts `webauthn`, `password`, and legacy `softkey` admin modes |
-| `/api/lock_begin/:uuid` | `POST` | `LockBeginRequestSchema` | `LockBeginResponseSchema` | `apiClient.lockBegin()` | Begin step for receiver locking |
-| `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | Current backend may set a commit-cookie via response headers |
-| `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | Returns current admin mode, security profile, version, and optional receiver identity |
-| `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` or `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | Handles update delivery flow |
-| `/api/delete_commit/:uuid` | `POST` | Same commit unions with `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path |
+| `/api/lock_begin/:uuid` | `POST` | `LockBeginRequestSchema` | `LockBeginResponseSchema` | `apiClient.lockBegin()` | Begin step for receiver locking; may set caller-binding commit-cookie state via response headers |
+| `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | Consumes the active lock challenge; may clear or rotate commit-cookie state via response headers |
+| `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | Returns current admin mode, security profile, version, and optional receiver identity; may set caller-binding commit-cookie state via response headers |
+| `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` or `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | Handles update delivery flow; may clear or rotate commit-cookie state via response headers |
+| `/api/delete_commit/:uuid` | `POST` | Same commit unions with `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path; inherits the same commit-cookie caller-binding semantics |
 | `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Public state snapshot only |
 | `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |

@@ -32,11 +32,11 @@
 | --- | --- | --- | --- | --- | --- |
 | `/api/create_begin/:uuid` | `POST` | `CreateBeginRequestSchema` | `CreateBeginResponseSchema` | `apiClient.createBegin()` | 当前始终返回 `creationOptions`；password 模式兼容行为先冻结 |
 | `/api/create_finish/:uuid` | `POST` | `CreateFinishRequestSchema` | `CreateFinishResponseSchema` | `apiClient.createFinish()` | 接受 `webauthn`、`password`、legacy `softkey` |
-| `/api/lock_begin/:uuid` | `POST` | `LockBeginRequestSchema` | `LockBeginResponseSchema` | `apiClient.lockBegin()` | 接收方上锁 begin |
-| `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | 当前后端可能在响应头里设置 commit-cookie |
-| `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | 返回 admin mode、security profile、version，以及可选 receiver 身份 |
-| `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` 或 `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | update / deliver 主路径 |
-| `/api/delete_commit/:uuid` | `POST` | 同 commit union，但 `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | delete-only alias |
+| `/api/lock_begin/:uuid` | `POST` | `LockBeginRequestSchema` | `LockBeginResponseSchema` | `apiClient.lockBegin()` | 接收方上锁 begin；响应头可能设置用于 caller binding 的 commit-cookie 状态 |
+| `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | 消费当前 lock challenge；响应头可能清理或轮转 commit-cookie 状态 |
+| `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | 返回 admin mode、security profile、version，以及可选 receiver 身份；响应头可能设置用于 caller binding 的 commit-cookie 状态 |
+| `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` 或 `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | update / deliver 主路径；响应头可能清理或轮转 commit-cookie 状态 |
+| `/api/delete_commit/:uuid` | `POST` | 同 commit union，但 `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | compound commit 的 delete-only alias；继承相同的 commit-cookie caller-binding 语义 |
 | `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回公开状态快照 |
 | `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷 |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | 升级后走 `WsClientMessageSchema` | `WsServerMessageSchema` | `ChannelSync.connect()` | 当前未带 `Upgrade: websocket` 会返回 `426` + `{ ok: false, code: "BAD_REQUEST" }` |
