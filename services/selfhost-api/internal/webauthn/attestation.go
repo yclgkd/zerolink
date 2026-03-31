@@ -22,6 +22,7 @@ type attestationObject struct {
 type attestationStatement struct {
 	Signature []byte   `cbor:"sig"`
 	X5C       [][]byte `cbor:"x5c"`
+	Algorithm int64    `cbor:"alg"`
 }
 
 type authenticatorData struct {

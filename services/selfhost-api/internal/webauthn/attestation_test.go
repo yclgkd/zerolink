@@ -74,6 +74,54 @@ func TestVerifyAttestationVerifiesPackedSelfAttestation(t *testing.T) {
 	}
 }
 
+func TestVerifyAttestationRejectsPackedSelfAttestationWithWrongAlg(t *testing.T) {
+	t.Parallel()
+
+	verifier := NewVerifier()
+	fixture := buildAttestationFixture(t, "packed")
+	fixture = rewriteAttestation(t, fixture, func(attestation *attestationObject) {
+		attestation.Stmt.Algorithm = -8
+	})
+
+	_, err := verifier.VerifyAttestation(t.Context(), fixture.Input)
+	if err == nil || err.Error() != "packed self-attestation alg must be -7 (ES256), got -8" {
+		t.Fatalf("VerifyAttestation() error = %v, want alg mismatch", err)
+	}
+}
+
+func TestVerifyAttestationRejectsPackedSelfAttestationWithInvalidSignature(t *testing.T) {
+	t.Parallel()
+
+	verifier := NewVerifier()
+	fixture := buildAttestationFixture(t, "packed")
+	fixture = rewriteAttestation(t, fixture, func(attestation *attestationObject) {
+		signature := append([]byte(nil), attestation.Stmt.Signature...)
+		signature[0] ^= 0x01
+		attestation.Stmt.Signature = signature
+	})
+
+	_, err := verifier.VerifyAttestation(t.Context(), fixture.Input)
+	if err == nil || err.Error() != "packed self-attestation signature verification failed" {
+		t.Fatalf("VerifyAttestation() error = %v, want signature verification failure", err)
+	}
+}
+
+func TestVerifyAttestationRejectsUnsupportedFormatWithoutReflectingInput(t *testing.T) {
+	t.Parallel()
+
+	verifier := NewVerifier()
+	fixture := buildAttestationFixture(t, "none")
+	fixture = rewriteAttestation(t, fixture, func(attestation *attestationObject) {
+		attestation.Format = "tpm"
+		attestation.Stmt = attestationStatement{}
+	})
+
+	_, err := verifier.VerifyAttestation(t.Context(), fixture.Input)
+	if err == nil || err.Error() != "unsupported attestation format" {
+		t.Fatalf("VerifyAttestation() error = %v, want unsupported attestation format", err)
+	}
+}
+
 type attestationFixture struct {
 	Input        AttestationInput
 	CredentialID string
@@ -120,7 +168,10 @@ func buildAttestationFixture(t *testing.T, format string) attestationFixture {
 	}
 	if format == "packed" {
 		signature := signPackedSelf(t, privateKey, authData, clientDataJSON)
-		attestationObject["attStmt"] = map[string]any{"sig": signature}
+		attestationObject["attStmt"] = map[string]any{
+			"alg": int64(-7),
+			"sig": signature,
+		}
 	}
 
 	encodedAttestation, err := cbor.Marshal(attestationObject)
@@ -180,4 +231,32 @@ func signPackedSelf(t *testing.T, key *ecdsa.PrivateKey, authData []byte, client
 
 func packageBase64URL(value []byte) string {
 	return base64.RawURLEncoding.EncodeToString(value)
+}
+
+func rewriteAttestation(
+	t *testing.T,
+	fixture attestationFixture,
+	mutate func(*attestationObject),
+) attestationFixture {
+	t.Helper()
+
+	attestationBytes, err := base64.RawURLEncoding.DecodeString(fixture.Input.AttestationObjectB64u)
+	if err != nil {
+		t.Fatalf("DecodeString(attestationObject) error = %v", err)
+	}
+
+	var attestation attestationObject
+	if err := cbor.Unmarshal(attestationBytes, &attestation); err != nil {
+		t.Fatalf("Unmarshal(attestationObject) error = %v", err)
+	}
+
+	mutate(&attestation)
+
+	encodedAttestation, err := cbor.Marshal(attestation)
+	if err != nil {
+		t.Fatalf("Marshal(attestationObject) error = %v", err)
+	}
+
+	fixture.Input.AttestationObjectB64u = packageBase64URL(encodedAttestation)
+	return fixture
 }

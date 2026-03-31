@@ -40,6 +40,7 @@ type ProtocolError struct {
 	Code    string
 	Status  int
 	Message string
+	Cause   error
 }
 
 func (e *ProtocolError) Error() string {
@@ -50,6 +51,13 @@ func (e *ProtocolError) Error() string {
 		return e.Message
 	}
 	return e.Code
+}
+
+func (e *ProtocolError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }
 
 type ProtocolConfig struct {
@@ -484,8 +492,8 @@ func notFound(message string) error {
 	return &ProtocolError{Code: "NOT_FOUND", Status: 404, Message: message}
 }
 
-func internalError(_ error) error {
-	return &ProtocolError{Code: "INTERNAL_ERROR", Status: 500, Message: "unexpected internal error"}
+func internalError(err error) error {
+	return &ProtocolError{Code: "INTERNAL_ERROR", Status: 500, Message: "unexpected internal error", Cause: err}
 }
 
 func toStoreSecurityProfile(value string) store.SecurityProfile {

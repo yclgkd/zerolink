@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
@@ -21,6 +22,7 @@ type Container struct {
 
 type HealthService struct {
 	checker ReadinessChecker
+	logger  *slog.Logger
 }
 
 type Status struct {
@@ -35,9 +37,14 @@ func New(
 	verifier webauthn.Verifier,
 	publisher realtime.Publisher,
 	protocol Protocol,
+	logger *slog.Logger,
 ) *Container {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Container{
-		Health:   &HealthService{checker: checker},
+		Health:   &HealthService{checker: checker, logger: logger},
 		Verifier: verifier,
 		Realtime: publisher,
 		Protocol: protocol,
@@ -56,6 +63,11 @@ func (s *HealthService) Live() Status {
 }
 
 func (s *HealthService) Ready(ctx context.Context) Status {
+	logger := s.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	status := Status{
 		OK:        true,
 		Status:    "ok",
@@ -66,6 +78,7 @@ func (s *HealthService) Ready(ctx context.Context) Status {
 	}
 
 	if err := s.checker.Ping(ctx); err != nil {
+		logger.Error("readiness check failed", "check", "database", "error", err)
 		status.OK = false
 		status.Status = "degraded"
 		status.Checks["database"] = "down"

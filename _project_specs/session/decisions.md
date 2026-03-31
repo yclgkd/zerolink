@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Self-hosted protocol HTTP edges must log internals, bound bodies, and preserve terminal audit reasons
+
+**Decision**: The self-hosted Go API now treats protocol-edge hardening as part of the frozen contract boundary: unexpected internal failures still return the generic external `INTERNAL_ERROR`, but retain and log their original cause; protocol JSON bodies are capped at 64 KiB; API responses emit basic security headers plus exact-origin preflight support for the configured `RP_ORIGIN`; packed self-attestation explicitly validates `alg == -7`, invalid signatures, and P-256 curve membership; and terminal tombstones preserve an earlier `deleted` reason instead of being rewritten by later expiry paths.
+**Context**: Follow-up review on PR #218 correctly identified a cluster of boundary problems that were individually small but operationally important: masked 500s had become hard to debug, POST bodies were unbounded, self-hosted HTTP responses had weaker edge defaults than the Worker path, packed attestation skipped a spec-required algorithm check, and the tombstone UPSERT could erase delete-vs-expired audit history.
+**Options Considered**: Keep the route layer minimal and accept weaker diagnostics/edge hardening for now; fix only the externally visible bugs and defer the operational items; tighten the self-hosted HTTP/store/verifier boundary in one pass while keeping public response shapes stable.
+**Choice**: Fix the real issues now, but keep the public contract stable: no new protocol fields, no new auth model, and no optimistic-lock redesign. Cross-origin support remains narrow and opt-in to the configured RP origin rather than becoming a wildcard CORS policy.
+**Reasoning**: These changes improve survivability and debuggability without reopening the protocol design. The server still avoids exposing internal failures to clients, but operators now get logs they can act on. Likewise, the store keeps the original terminal reason, which is the only audit-preserving behavior consistent with the Worker semantics.
+**Trade-offs**: The HTTP layer now carries a bit more wiring because logger/origin concerns are explicit, and the Go verifier intentionally becomes slightly stricter than the initial Worker parity patch by rejecting malformed packed self-attestation earlier and more explicitly.
+
 ## [2026-03-31] Self-hosted protocol INTERNAL_ERROR responses must not expose backend failure details
 
 **Decision**: Self-hosted `create_begin`, `create_finish`, and `public_status` now collapse unexpected backend failures to the generic external message `unexpected internal error` while still returning `INTERNAL_ERROR` / `500`.

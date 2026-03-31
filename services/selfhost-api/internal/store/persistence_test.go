@@ -284,6 +284,22 @@ func TestFinalizeTerminalStatePreservesDeleteTombstone(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("read delete tombstone: %v", err)
 	}
+
+	if err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		tombstone, err := tx.FinalizeTerminalState(ctx, TerminalReasonExpired, now.Add(time.Minute))
+		if err != nil {
+			return err
+		}
+		if tombstone.Reason != TerminalReasonDeleted {
+			t.Fatalf("tombstone reason = %s, want %s after expired finalize", tombstone.Reason, TerminalReasonDeleted)
+		}
+		if !tombstone.FinalizedAt.Equal(now) {
+			t.Fatalf("tombstone finalizedAt = %s, want %s", tombstone.FinalizedAt, now)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("re-finalize deleted tombstone as expired: %v", err)
+	}
 }
 
 func TestSaveChannelRejectsTombstonedUUID(t *testing.T) {

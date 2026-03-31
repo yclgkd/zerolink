@@ -22,7 +22,7 @@ func verifyStatement(
 	case "none":
 		return false, "fmt:'none' attestation - no attestation statement provided; credential origin is unverifiable", nil
 	default:
-		return false, "", fmt.Errorf("Attestation format '%s' is not supported", attestation.Format)
+		return false, "", errors.New("unsupported attestation format")
 	}
 }
 
@@ -33,6 +33,9 @@ func verifyPacked(
 ) (bool, string, error) {
 	if len(attestation.Stmt.X5C) > 0 {
 		return false, "", errors.New("x5c attestation (certificate chain) is not yet supported; only packed self-attestation and fmt:'none' are accepted")
+	}
+	if attestation.Stmt.Algorithm != -7 {
+		return false, "", fmt.Errorf("packed self-attestation alg must be -7 (ES256), got %d", attestation.Stmt.Algorithm)
 	}
 	if len(attestation.Stmt.Signature) == 0 {
 		return false, "", errors.New("packed attestation missing sig field; cannot verify")
@@ -47,7 +50,7 @@ func verifyPacked(
 		return false, "", err
 	}
 	if !verified {
-		return false, "", nil
+		return false, "", errors.New("packed self-attestation signature verification failed")
 	}
 	return true, "packed self-attestation verified; no certificate chain - hardware origin is not cryptographically proven", nil
 }
@@ -76,11 +79,15 @@ func parseCOSEPublicKey(raw []byte) (*ecdsa.PublicKey, error) {
 	if !xOK || !yOK || len(x) != 32 || len(y) != 32 {
 		return nil, errors.New("Invalid COSE key coordinates")
 	}
-	return &ecdsa.PublicKey{
+	key := &ecdsa.PublicKey{
 		Curve: elliptic.P256(),
 		X:     new(big.Int).SetBytes(x),
 		Y:     new(big.Int).SetBytes(y),
-	}, nil
+	}
+	if !key.Curve.IsOnCurve(key.X, key.Y) {
+		return nil, errors.New("COSE key coordinates are not on the P-256 curve")
+	}
+	return key, nil
 }
 
 func matchesInt(value any, want int64) bool {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -65,13 +66,19 @@ func (s stubProtocol) PublicStatus(ctx context.Context, uuid string) (service.Pu
 
 func newTestRouter(checker stubChecker, protocol stubProtocol) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return newTestRouterWithLogger(checker, protocol, logger)
+}
+
+func newTestRouterWithLogger(checker stubChecker, protocol stubProtocol, logger *slog.Logger) http.Handler {
 	return NewRouter(Dependencies{
-		Logger: logger,
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
 		Services: service.New(
 			checker,
 			webauthn.NoopVerifier{},
 			realtime.NopHub{},
 			protocol,
+			logger,
 		),
 	})
 }
@@ -95,6 +102,12 @@ func TestHealthz(t *testing.T) {
 	if !payload.OK {
 		t.Fatal("payload.OK = false, want true")
 	}
+	if res.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", res.Header().Get("X-Content-Type-Options"))
+	}
+	if res.Header().Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("X-Frame-Options = %q, want DENY", res.Header().Get("X-Frame-Options"))
+	}
 }
 
 func TestReadyzReturnsServiceUnavailableWhenDatabaseIsDown(t *testing.T) {
@@ -107,6 +120,21 @@ func TestReadyzReturnsServiceUnavailableWhenDatabaseIsDown(t *testing.T) {
 
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", res.Code)
+	}
+}
+
+func TestReadyzLogsDatabaseFailure(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	res := httptest.NewRecorder()
+
+	newTestRouterWithLogger(stubChecker{err: errors.New("db down")}, stubProtocol{}, logger).ServeHTTP(res, req)
+
+	if !strings.Contains(logs.String(), "db down") {
+		t.Fatalf("logs = %q, want db down detail", logs.String())
 	}
 }
 
@@ -190,6 +218,27 @@ func TestCreateBeginRouteRejectsPathBodyMismatch(t *testing.T) {
 	}
 }
 
+func TestCreateBeginRouteRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/create_begin/abcdefghijklmnopqrstu",
+		strings.NewReader(
+			`{"uuid":"abcdefghijklmnopqrstu","timestamp":1730000000000,"securityProfile":"secure","padding":"`+
+				strings.Repeat("a", maxProtocolBodyBytes)+
+				`"}`,
+		),
+	)
+	res := httptest.NewRecorder()
+
+	newTestRouter(stubChecker{}, stubProtocol{}).ServeHTTP(res, req)
+
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", res.Code)
+	}
+}
+
 func TestCreateFinishRouteRejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
@@ -204,6 +253,37 @@ func TestCreateFinishRouteRejectsInvalidJSON(t *testing.T) {
 
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", res.Code)
+	}
+}
+
+func TestCreateBeginRouteLogsInternalProtocolErrors(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/create_begin/abcdefghijklmnopqrstu",
+		strings.NewReader(`{"uuid":"abcdefghijklmnopqrstu","timestamp":1730000000000,"securityProfile":"secure","ttl":3600000}`),
+	)
+	res := httptest.NewRecorder()
+
+	newTestRouterWithLogger(stubChecker{}, stubProtocol{
+		createBegin: func(context.Context, service.CreateBeginInput) (service.CreateBeginOutput, error) {
+			return service.CreateBeginOutput{}, &service.ProtocolError{
+				Code:    "INTERNAL_ERROR",
+				Status:  http.StatusInternalServerError,
+				Message: "unexpected internal error",
+				Cause:   errors.New("db down"),
+			}
+		},
+	}, logger).ServeHTTP(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", res.Code)
+	}
+	if !strings.Contains(logs.String(), "db down") {
+		t.Fatalf("logs = %q, want db down detail", logs.String())
 	}
 }
 
@@ -229,5 +309,26 @@ func TestPublicStatusRouteReturnsProtocolPayload(t *testing.T) {
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.Code)
+	}
+}
+
+func TestAPIOptionsPreflightReturnsConfiguredCORSHeaders(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/create_begin/abcdefghijklmnopqrstu", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	res := httptest.NewRecorder()
+
+	newTestRouter(stubChecker{}, stubProtocol{}).ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", res.Code)
+	}
+	if res.Header().Get("Access-Control-Allow-Origin") != "http://localhost:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", res.Header().Get("Access-Control-Allow-Origin"))
+	}
+	if res.Header().Get("Access-Control-Allow-Methods") != accessControlAllowMethods {
+		t.Fatalf("Access-Control-Allow-Methods = %q", res.Header().Get("Access-Control-Allow-Methods"))
 	}
 }

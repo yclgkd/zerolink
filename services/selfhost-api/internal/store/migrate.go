@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -172,20 +173,30 @@ ORDER BY version ASC`, migrationTableName))
 	return result, nil
 }
 
-func applyMigration(ctx context.Context, pool *pgxpool.Pool, migration migrationFile, checksum string) (MigrationRecord, error) {
+func applyMigration(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	migration migrationFile,
+	checksum string,
+) (record MigrationRecord, err error) {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return MigrationRecord{}, fmt.Errorf("begin migration %s: %w", migration.Version, err)
 	}
 	defer func() {
-		_ = tx.Rollback(ctx)
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr == nil || errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			return
+		}
+		if err == nil {
+			err = fmt.Errorf("rollback migration %s: %w", migration.Version, rollbackErr)
+		}
 	}()
 
 	if _, err := tx.Exec(ctx, migration.SQL); err != nil {
 		return MigrationRecord{}, fmt.Errorf("execute migration %s (%s): %w", migration.Version, migration.Path, err)
 	}
 
-	var record MigrationRecord
 	record.Version = migration.Version
 	record.Name = migration.Name
 	record.Checksum = checksum

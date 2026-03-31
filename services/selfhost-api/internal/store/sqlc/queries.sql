@@ -258,8 +258,7 @@ INSERT INTO terminal_tombstones (
   $3
 )
 ON CONFLICT (channel_id) DO UPDATE SET
-  reason = EXCLUDED.reason,
-  finalized_at = EXCLUDED.finalized_at
+  finalized_at = terminal_tombstones.finalized_at
 RETURNING
   channel_id,
   reason,
