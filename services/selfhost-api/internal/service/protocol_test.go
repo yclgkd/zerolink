@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -444,6 +445,7 @@ func TestProtocolServiceRetainsChallengeWhenPersistAfterVerificationFails(t *tes
 		Timestamp:   &timestamp,
 	})
 	requireProtocolError(t, err, "INTERNAL_ERROR", 500)
+	requireProtocolErrorMessage(t, err, "unexpected internal error")
 
 	if err := db.WithChannelTx(inspectCtx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.GetChannel(ctx)
@@ -467,6 +469,9 @@ func TestProtocolServiceRetainsChallengeWhenPersistAfterVerificationFails(t *tes
 	}); err != nil {
 		t.Fatalf("inspect post-rollback channel: %v", err)
 	}
+	if strings.Contains(err.Error(), "context canceled") {
+		t.Fatalf("error message leaked internal cause: %q", err.Error())
+	}
 }
 
 func requireProtocolError(t *testing.T, err error, code string, status int) {
@@ -485,6 +490,18 @@ func requireProtocolError(t *testing.T, err error, code string, status int) {
 	}
 	if protocolErr.Status != status {
 		t.Fatalf("protocolErr.Status = %d, want %d", protocolErr.Status, status)
+	}
+}
+
+func requireProtocolErrorMessage(t *testing.T, err error, message string) {
+	t.Helper()
+
+	var protocolErr *ProtocolError
+	if !errors.As(err, &protocolErr) {
+		t.Fatalf("error = %T, want *ProtocolError", err)
+	}
+	if protocolErr.Message != message {
+		t.Fatalf("protocolErr.Message = %q, want %q", protocolErr.Message, message)
 	}
 }
 

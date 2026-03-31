@@ -484,8 +484,8 @@ func notFound(message string) error {
 	return &ProtocolError{Code: "NOT_FOUND", Status: 404, Message: message}
 }
 
-func internalError(err error) error {
-	return &ProtocolError{Code: "INTERNAL_ERROR", Status: 500, Message: err.Error()}
+func internalError(_ error) error {
+	return &ProtocolError{Code: "INTERNAL_ERROR", Status: 500, Message: "unexpected internal error"}
 }
 
 func toStoreSecurityProfile(value string) store.SecurityProfile {

@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Self-hosted protocol INTERNAL_ERROR responses must not expose backend failure details
+
+**Decision**: Self-hosted `create_begin`, `create_finish`, and `public_status` now collapse unexpected backend failures to the generic external message `unexpected internal error` while still returning `INTERNAL_ERROR` / `500`.
+**Context**: PR #218 added the first self-hosted protocol routes, but review found that `internalError(err)` preserved `err.Error()` verbatim. Because the HTTP router serializes `ProtocolError.Message`, transaction, database, and verifier failures could leak backend details to clients.
+**Options Considered**: Keep the raw error text for easier debugging; make masking conditional on environment; always return the same public-facing `INTERNAL_ERROR` message and rely on server-side logging/status codes for observability.
+**Choice**: Always mask unexpected protocol failures behind the same generic message that the Worker returns externally.
+**Reasoning**: The self-hosted API should match the frozen contract and production Worker behavior on error exposure. Internal failure text is operational detail, not protocol surface, and leaking it creates unnecessary security and implementation coupling.
+**Trade-offs**: Debugging from client-visible responses is less convenient in local development, so operators must rely on server logs and targeted tests rather than raw HTTP error strings.
+
 ## [2026-03-31] Self-hosted WebAuthn create_finish must consume the stored challenge and persist a real StoredCredential
 
 **Decision**: Self-hosted `create_finish` now treats WebAuthn finalization as a verifier-backed boundary: it loads the stored `create` challenge inside the same channel transaction as attestation verification and channel persistence, maps missing/invalid challenges to `CHALLENGE_INVALID`, maps verifier failures to `ATTESTATION_UNVERIFIABLE`, and persists only the verifier-derived `StoredCredential` fields (`credentialId`, `publicKey`, `signCount`, `aaguid`, `transports`) instead of raw attestation blobs.
