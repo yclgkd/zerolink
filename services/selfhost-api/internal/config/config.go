@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -164,15 +166,57 @@ func loadRPConfig(lookup func(string) (string, bool)) (RPConfig, error) {
 		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ORIGIN is required")
 	}
 
-	trimmedOrigin := strings.TrimRight(strings.TrimSpace(rpOrigin), "/")
-	if !strings.HasPrefix(trimmedOrigin, "http://") && !strings.HasPrefix(trimmedOrigin, "https://") {
-		return RPConfig{}, fmt.Errorf("SELFHOST_API_RP_ORIGIN must start with http:// or https://")
+	normalizedOrigin, err := normalizeRPOrigin(rpOrigin)
+	if err != nil {
+		return RPConfig{}, err
 	}
 
 	return RPConfig{
 		ID:     strings.TrimSpace(rpID),
-		Origin: trimmedOrigin,
+		Origin: normalizedOrigin,
 	}, nil
+}
+
+func normalizeRPOrigin(value string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must be a valid URL: %w", err)
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must start with http:// or https://")
+	}
+	if parsed.Host == "" || parsed.Hostname() == "" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must include a host")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include user info")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include a path")
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include a query string")
+	}
+	if parsed.Fragment != "" {
+		return "", fmt.Errorf("SELFHOST_API_RP_ORIGIN must not include a fragment")
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	port := parsed.Port()
+	if port == "" || isDefaultOriginPort(scheme, port) {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		return scheme + "://" + host, nil
+	}
+
+	return scheme + "://" + net.JoinHostPort(host, port), nil
+}
+
+func isDefaultOriginPort(scheme, port string) bool {
+	return (scheme == "http" && port == "80") || (scheme == "https" && port == "443")
 }
 
 func validateAppEnv(value string) error {

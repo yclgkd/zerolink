@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Self-hosted RP_ORIGIN must be stored as a canonical origin, not an arbitrary URL
+
+**Decision**: Self-hosted config loading now parses `SELFHOST_API_RP_ORIGIN` as an origin-only URL, rejects path/query/fragment/userinfo, lowercases scheme and host, and strips default ports before storing it.
+**Context**: PR #218 already reused `RP_ORIGIN` for three exact-match boundaries: WebAuthn `clientData.origin`, HTTP `Access-Control-Allow-Origin`, and returned `shareUrl` / `manageUrl`. Review found that the earlier config check only enforced an `http(s)` prefix, so pathful or non-canonical values could pass startup and then fail at runtime in hard-to-debug ways.
+**Options Considered**: Keep the loose prefix validation and document the constraint; canonicalize only when generating URLs but leave CORS/WebAuthn to compare raw strings; validate and canonicalize the value once during config load so every downstream consumer sees the same origin.
+**Choice**: Normalize once in `internal/config` and fail fast on non-origin URLs.
+**Reasoning**: `RP_ORIGIN` is part of the security boundary, not just display configuration. Treating it as an origin instead of a generic URL avoids mismatches between browser-serialized origins and operator-provided environment strings.
+**Trade-offs**: Configuration becomes slightly stricter, so previously tolerated but incorrect values such as `https://example.com/app` now fail startup instead of degrading only the create flow later.
+
 ## [2026-03-31] Self-hosted protocol HTTP edges must log internals, bound bodies, and preserve terminal audit reasons
 
 **Decision**: The self-hosted Go API now treats protocol-edge hardening as part of the frozen contract boundary: unexpected internal failures still return the generic external `INTERNAL_ERROR`, but retain and log their original cause; protocol JSON bodies are capped at 64 KiB; API responses emit basic security headers plus exact-origin preflight support for the configured `RP_ORIGIN`; packed self-attestation explicitly validates `alg == -7`, invalid signatures, and P-256 curve membership; and terminal tombstones preserve an earlier `deleted` reason instead of being rewritten by later expiry paths.

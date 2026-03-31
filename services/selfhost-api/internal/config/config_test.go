@@ -59,6 +59,27 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvCanonicalizesRPOrigin(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := LoadFromEnv(func(key string) (string, bool) {
+		values := map[string]string{
+			"SELFHOST_API_DATABASE_URL": "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":        "localhost",
+			"SELFHOST_API_RP_ORIGIN":    "HTTPS://Example.COM:443/",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err != nil {
+		t.Fatalf("LoadFromEnv() error = %v", err)
+	}
+
+	if cfg.RP.Origin != "https://example.com" {
+		t.Fatalf("RP.Origin = %q, want https://example.com", cfg.RP.Origin)
+	}
+}
+
 func TestLoadFromEnvRequiresDatabaseURL(t *testing.T) {
 	t.Parallel()
 
@@ -107,5 +128,56 @@ func TestLoadFromEnvRequiresRPConfig(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SELFHOST_API_RP_ID") {
 		t.Fatalf("LoadFromEnv() error = %v, want SELFHOST_API_RP_ID mention", err)
+	}
+}
+
+func TestLoadFromEnvRejectsNonCanonicalRPOrigin(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		origin  string
+		message string
+	}{
+		{
+			name:    "path",
+			origin:  "https://example.com/app",
+			message: "must not include a path",
+		},
+		{
+			name:    "query",
+			origin:  "https://example.com?foo=bar",
+			message: "must not include a query string",
+		},
+		{
+			name:    "fragment",
+			origin:  "https://example.com#section",
+			message: "must not include a fragment",
+		},
+		{
+			name:    "userinfo",
+			origin:  "https://user@example.com",
+			message: "must not include user info",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadFromEnv(func(key string) (string, bool) {
+				values := map[string]string{
+					"SELFHOST_API_DATABASE_URL": "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+					"SELFHOST_API_RP_ID":        "localhost",
+					"SELFHOST_API_RP_ORIGIN":    tt.origin,
+				}
+				value, ok := values[key]
+				return value, ok
+			})
+			if err == nil {
+				t.Fatalf("LoadFromEnv() error = nil, want %q", tt.message)
+			}
+			if !strings.Contains(err.Error(), tt.message) {
+				t.Fatalf("LoadFromEnv() error = %v, want %q", err, tt.message)
+			}
+		})
 	}
 }

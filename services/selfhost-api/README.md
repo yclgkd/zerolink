@@ -54,7 +54,7 @@ The service does not auto-load `.env`, so local `go run` commands must source it
 | `SELFHOST_API_BIND_ADDR` | no | `:8788` | HTTP bind address |
 | `SELFHOST_API_LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` |
 | `SELFHOST_API_RP_ID` | yes | none | WebAuthn RP ID, usually the frontend host name |
-| `SELFHOST_API_RP_ORIGIN` | yes | none | Frontend origin used for WebAuthn and returned share/manage URLs |
+| `SELFHOST_API_RP_ORIGIN` | yes | none | Frontend origin only, used for WebAuthn, exact CORS matching, and returned share/manage URLs; must not include path/query/fragment |
 | `SELFHOST_API_DATABASE_URL` | yes | none | PostgreSQL DSN |
 | `SELFHOST_API_DB_MAX_CONNS` | no | `8` | Pool upper bound |
 | `SELFHOST_API_DB_MIN_CONNS` | no | `0` | Pool lower bound |
