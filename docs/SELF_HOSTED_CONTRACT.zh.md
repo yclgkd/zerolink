@@ -1,4 +1,4 @@
-<!-- synced-with: 39e3727 -->
+<!-- synced-with: PENDING -->
 
 # 自部署后端契约冻结
 
@@ -9,7 +9,7 @@
 - 枚举前端当前依赖的 HTTP / WebSocket 契约
 - 冻结必须逐字节一致的输出面
 - 记录对前端可见的错误语义
-- 明确列出当前不能靠“实现时猜测”解决的开放问题
+- 明确列出当前不能靠”实现时猜测”解决的开放问题
 
 ## 必须精确复现的输出面
 
@@ -18,13 +18,44 @@
 | Canonical JSON 排序 | `packages/shared/src/canonical.ts` | `intentHash` 跨运行时必须一致 | `canonicalJson` |
 | `intentHash = SHA-256(canonicalJson)` | `packages/shared/src/canonical.ts` | WebAuthn / softkey proof 都绑定它 | `canonicalJson` |
 | Cipher bundle AAD 字符串与 UTF-8 bytes | `packages/shared/src/protocol.ts` | 接收方解密完整性依赖相同 AAD | `aad` |
-| `lock_key = SHA-256("GL-lockkey" || uuid || lock_secret)` | `packages/frontend/src/crypto/protocol-utils.ts` | lock proof 校验依赖它 | `challengeDerivation.lock` |
-| `lock_proof = SHA-256("GL-lock" || uuid || challenge_id || challenge || lock_key)` | `packages/frontend/src/crypto/protocol-utils.ts` | TOFU 防抢锁核心 | `challengeDerivation.lock` |
-| `expectedCompoundChallenge = SHA-256("GLv2.5" || uuid || challenge_id || intent_hash || seed)` | `packages/frontend/src/crypto/protocol-utils.ts` | WebAuthn challenge 绑定操作意图 | `challengeDerivation.compound` |
-| `deliveryProofChallenge = SHA-256("GL-delivery-proof" || uuid || intent_hash)` | `packages/shared/src/senderAuth.ts` | detached delivery proof 校验依赖它 | `challengeDerivation.deliveryProof` |
+| `lock_key = SHA-256(“GL-lockkey” || uuid || lock_secret)` | `packages/frontend/src/crypto/protocol-utils.ts` | lock proof 校验依赖它 | `challengeDerivation.lock` |
+| `lock_proof = SHA-256(“GL-lock” || uuid || challenge_id || challenge || lock_key)` | `packages/frontend/src/crypto/protocol-utils.ts` | TOFU 防抢锁核心 | `challengeDerivation.lock` |
+| `expectedCompoundChallenge = SHA-256(“GLv2.5” || uuid || challenge_id || intent_hash || seed)` | `packages/frontend/src/crypto/protocol-utils.ts` | WebAuthn challenge 绑定操作意图 | `challengeDerivation.compound` |
+| `deliveryProofChallenge = SHA-256(“GL-delivery-proof” || uuid || intent_hash)` | `packages/shared/src/senderAuth.ts` | detached delivery proof 校验依赖它 | `challengeDerivation.deliveryProof` |
 | WebSocket 消息 schema | `packages/shared/src/ws.ts` | 实时同步兼容性 | `ws` |
 
 冻结用的 JSON fixture 位于 `protocol-fixtures/selfhost-contract-v1.json`。
+
+### 输入编码规则
+
+所有 hash 推导遵循同一模式：每个输入独立编码为字节切片，按顺序拼接后送入 SHA-256。
+
+| 参数类型 | 编码方式 | 示例 |
+| --- | --- | --- |
+| 域前缀字符串 | UTF-8 → bytes | `”GL-lockkey”`, `”GL-lock”`, `”GLv2.5”`, `”GL-delivery-proof”` |
+| UUID | UTF-8 → bytes（字符串原样，不做解码） | 所有推导中的 `uuid` |
+| Base64url 编码的输入 | **base64url decode → 原始字节** | `lock_secret`, `challenge_id`, `challenge`, `lock_key`, `seed` |
+| Intent hash（hex 字符串） | **UTF-8 → bytes（64 字符 hex 字符串原样保留，不做 hex decode）** | compound challenge 和 delivery proof 中的 `intentHash` |
+
+各函数的输出编码：
+
+| 函数 | 输出编码 |
+| --- | --- |
+| `lock_key` | base64url |
+| `lock_proof` | 小写 hex（64 字符） |
+| `expectedCompoundChallenge` | base64url |
+| `deliveryProofChallenge` | base64url |
+| `intentHash` | 小写 hex（64 字符） |
+
+### Canonical JSON 规则
+
+`canonicalJsonStringify` 执行**递归**字母序 key 排序：
+
+- 所有嵌套层级的 object key 均按字典序排列（JavaScript `Array.sort()` 默认行为）
+- 数组元素顺序不变；只对数组内的 object key 排序
+- `undefined` 值从输出中省略（整个 key 被丢弃）
+- `null` 在 JSON 输出中保留为 `null`
+- 排序后通过 `JSON.stringify` 序列化（标准 JSON 编码）
 
 ## HTTP 契约矩阵
 
@@ -64,12 +95,38 @@
 | `ASSERTION_INVALID` | `403` | DO | WebAuthn 或 softkey 签名校验失败 |
 | `ATTESTATION_UNVERIFIABLE` | `403` | DO | create 阶段 attestation 校验失败 |
 
+## Channel 状态机
+
+后端必须精确执行以下状态迁移。未列出的迁移必须以 `LOCK_FORBIDDEN` 拒绝。
+
+| 起始 | 目标 | 触发 | 说明 |
+| --- | --- | --- | --- |
+| `waiting` | `locked` | `lock_commit` | 需要有效的 `lock_proof` |
+| `locked` | `delivered` | `compound_commit` | 首次交付；需 cipher bundle |
+| `delivered` | `delivered` | `compound_commit` | 更新交付；version 必须递增 |
+| `waiting`, `locked`, `delivered` | `deleted` | `delete_commit` | 需有效 sender auth（WebAuthn 或 softkey） |
+| 任何非终态 | `expired` | TTL 到期 | 自动触发，无 API 入口 |
+
+终态（`deleted`、`expired`）不允许任何后续迁移。对终态 channel 的变更请求必须返回 `LOCK_FORBIDDEN` 或 `NOT_FOUND`。
+
+合法状态：`waiting`、`locked`、`delivered`、`deleted`、`expired`。
+
+合法 admin mode：`webauthn`、`password`、`softkey`（`password` 的 legacy 别名；凡接受 `password` 的地方必须同时接受 `softkey`）。
+
+合法 security profile：`quick`、`secure`。
+
 ## WebSocket 兼容要求
 
 - 客户端消息必须通过 `WsClientMessageSchema`
 - 服务端消息必须通过 `WsServerMessageSchema`
-- 前端策略是“优先 WS，失败后 polling”
+- 前端策略是”优先 WS，失败后 polling”
 - 顺序要求是语义级别的：前端只接受 `version >= lastVersion`
+- 服务端消息类型：`state_changed`、`channel_closed`（reason：`deleted` | `expired`）、`pong`
+- 客户端消息类型：`subscribe`、`ping`
+
+### Polling Fallback
+
+当 WebSocket 断连时，前端回退到每 18 秒轮询 `/api/public/:uuid`（`POLL_INTERVAL_MS`）。Go 后端必须保证该端点返回与 WebSocket `state_changed` 消息等效的 `PublicStatusResponseSchema` 结构。
 
 ## 当前明确保留的开放问题
 

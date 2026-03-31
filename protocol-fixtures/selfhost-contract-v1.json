@@ -94,10 +94,27 @@
         }
       },
       {
+        "name": "state-changed-softkey-legacy",
+        "payload": {
+          "type": "state_changed",
+          "state": "delivered",
+          "version": 1,
+          "adminMode": "softkey",
+          "securityProfile": "quick"
+        }
+      },
+      {
         "name": "channel-closed-deleted",
         "payload": {
           "type": "channel_closed",
           "reason": "deleted"
+        }
+      },
+      {
+        "name": "channel-closed-expired",
+        "payload": {
+          "type": "channel_closed",
+          "reason": "expired"
         }
       },
       {

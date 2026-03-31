@@ -26,6 +26,37 @@ These helpers are implementation details today, but their outputs are protocol c
 
 The frozen JSON fixtures live at `protocol-fixtures/selfhost-contract-v1.json`.
 
+### Input Encoding Rules
+
+All hash derivations follow the same pattern: each input is encoded independently, then the resulting byte slices are concatenated in order before hashing with SHA-256.
+
+| Parameter kind | Encoding | Examples |
+| --- | --- | --- |
+| Domain prefix string | UTF-8 → bytes | `"GL-lockkey"`, `"GL-lock"`, `"GLv2.5"`, `"GL-delivery-proof"` |
+| UUID | UTF-8 → bytes (the string itself, not decoded) | `uuid` in all derivations |
+| Base64url-encoded input | **base64url decode → raw bytes** | `lock_secret`, `challenge_id`, `challenge`, `lock_key`, `seed` |
+| Intent hash (hex string) | **UTF-8 → bytes (the 64-char hex string as-is, NOT hex-decoded)** | `intentHash` in compound challenge and delivery proof |
+
+Output encoding varies per function:
+
+| Function | Output encoding |
+| --- | --- |
+| `lock_key` | base64url |
+| `lock_proof` | lowercase hex (64 chars) |
+| `expectedCompoundChallenge` | base64url |
+| `deliveryProofChallenge` | base64url |
+| `intentHash` | lowercase hex (64 chars) |
+
+### Canonical JSON Rules
+
+`canonicalJsonStringify` applies **recursive** alphabetical key sorting:
+
+- Object keys at every nesting level are sorted lexicographically (JavaScript `Array.sort()` default)
+- Array element order is preserved; only object keys within arrays are sorted
+- `undefined` values are omitted from output (key is dropped)
+- `null` is preserved as `null` in the JSON output
+- The sorted object is serialized via `JSON.stringify` (standard JSON encoding)
+
 ## HTTP Contract Matrix
 
 | Route | Method | Request schema | Success schema | Current frontend caller | Notes |
@@ -64,12 +95,38 @@ The frozen JSON fixtures live at `protocol-fixtures/selfhost-contract-v1.json`.
 | `ASSERTION_INVALID` | `403` | DO | WebAuthn or softkey signature verification failed |
 | `ATTESTATION_UNVERIFIABLE` | `403` | DO | Creation attestation validation failed |
 
+## Channel State Machine
+
+The backend must enforce these state transitions exactly. Any transition not listed below must be rejected with `LOCK_FORBIDDEN`.
+
+| From | To | Trigger | Notes |
+| --- | --- | --- | --- |
+| `waiting` | `locked` | `lock_commit` | Valid `lock_proof` required |
+| `locked` | `delivered` | `compound_commit` | First delivery; cipher bundle required |
+| `delivered` | `delivered` | `compound_commit` | Update delivery; version must increment |
+| `waiting`, `locked`, `delivered` | `deleted` | `delete_commit` | Valid sender auth (WebAuthn or softkey) |
+| any non-terminal | `expired` | TTL expiration | Automatic; no API trigger |
+
+Terminal states (`deleted`, `expired`) allow no outbound transitions. Any request that would mutate a terminal-state channel must return `LOCK_FORBIDDEN` or `NOT_FOUND`.
+
+Valid states: `waiting`, `locked`, `delivered`, `deleted`, `expired`.
+
+Valid admin modes: `webauthn`, `password`, `softkey` (legacy alias for `password`; must be accepted everywhere `password` is).
+
+Valid security profiles: `quick`, `secure`.
+
 ## WebSocket Compatibility
 
 - Client messages are validated against `WsClientMessageSchema`
 - Server messages are validated against `WsServerMessageSchema`
 - Frontend behavior is WS-first and HTTP-polling fallback second
 - Message ordering requirement is semantic, not just transport-level: frontend only accepts `version >= lastVersion`
+- Server message types: `state_changed`, `channel_closed` (reasons: `deleted` | `expired`), `pong`
+- Client message types: `subscribe`, `ping`
+
+### Polling Fallback
+
+When WebSocket disconnects, the frontend falls back to polling `/api/public/:uuid` every 18 seconds (`POLL_INTERVAL_MS`). The Go backend must ensure `/api/public/:uuid` returns the same `PublicStatusResponseSchema` shape so polling produces identical state updates as WebSocket `state_changed` messages.
 
 ## Open Ambiguities
 
