@@ -105,6 +105,14 @@ func (tx *ChannelTx) SaveChannel(ctx context.Context, channel Channel) (*Channel
 		return nil, err
 	}
 
+	tombstone, err := tx.GetTerminalTombstone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if tombstone != nil {
+		return nil, fmt.Errorf("%w: %s", ErrChannelTombstoned, tombstone.Reason)
+	}
+
 	row, err := tx.queries.UpsertChannel(ctx, sqlcgen.UpsertChannelParams{
 		Uuid:                normalized.UUID,
 		State:               string(normalized.State),

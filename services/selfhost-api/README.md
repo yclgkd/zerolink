@@ -153,3 +153,6 @@ If `sqlc` is not installed locally, generate code with Docker:
 cd services/selfhost-api
 docker run --rm -v "$PWD:/src" -w /src sqlc/sqlc:1.27.0 generate
 ```
+
+PostgreSQL-backed store tests run automatically in CI. To run them locally, point
+`SELFHOST_API_TEST_DATABASE_URL` at a disposable PostgreSQL instance before `go test ./...`.

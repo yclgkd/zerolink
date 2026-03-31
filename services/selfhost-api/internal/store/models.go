@@ -49,8 +49,9 @@ const (
 )
 
 var (
-	ErrChannelNotFound = errors.New("channel not found")
-	ErrNonceReplay     = errors.New("nonce already consumed")
+	ErrChannelNotFound   = errors.New("channel not found")
+	ErrChannelTombstoned = errors.New("channel is terminally tombstoned")
+	ErrNonceReplay       = errors.New("nonce already consumed")
 )
 
 type Channel struct {

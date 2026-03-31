@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/config"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/sqlcgen"
 )
 
 func TestWithChannelTxSerializesSameChannel(t *testing.T) {
@@ -216,6 +218,76 @@ func TestFinalizeTerminalStatePreservesDeleteTombstone(t *testing.T) {
 	}
 }
 
+func TestSaveChannelRejectsTombstonedUUID(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	channel := Channel{
+		UUID:            "channel-tombstone-guard",
+		State:           ChannelStateWaiting,
+		CreatedAt:       now.Add(-time.Minute),
+		ExpiresAt:       now.Add(time.Hour),
+		TTLMS:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: SecurityProfileSecure,
+		Version:         0,
+	}
+
+	if err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		if _, err := tx.SaveChannel(ctx, channel); err != nil {
+			return err
+		}
+		_, err := tx.FinalizeTerminalState(ctx, TerminalReasonDeleted, now)
+		return err
+	}); err != nil {
+		t.Fatalf("finalize tombstone: %v", err)
+	}
+
+	err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		_, err := tx.SaveChannel(ctx, channel)
+		return err
+	})
+	if !errors.Is(err, ErrChannelTombstoned) {
+		t.Fatalf("SaveChannel() error = %v, want ErrChannelTombstoned", err)
+	}
+}
+
+func TestDirectUpsertRejectsTombstonedUUID(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	channelID := "channel-tombstone-trigger"
+
+	if _, err := db.pool.Exec(
+		ctx,
+		"INSERT INTO terminal_tombstones (channel_id, reason, finalized_at) VALUES ($1, $2, $3)",
+		channelID,
+		string(TerminalReasonDeleted),
+		now,
+	); err != nil {
+		t.Fatalf("seed tombstone: %v", err)
+	}
+
+	_, err := sqlcgen.New(db.pool).UpsertChannel(ctx, sqlcgen.UpsertChannelParams{
+		Uuid:            channelID,
+		State:           string(ChannelStateWaiting),
+		CreatedAt:       requiredTimestamp(now.Add(-time.Minute)),
+		ExpiresAt:       requiredTimestamp(now.Add(time.Hour)),
+		TtlMs:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: string(SecurityProfileQuick),
+		Version:         0,
+	})
+	if err == nil {
+		t.Fatal("expected direct channel upsert to be rejected by tombstone trigger")
+	}
+	if !strings.Contains(err.Error(), "terminally tombstoned") {
+		t.Fatalf("direct upsert error = %v, want tombstone trigger failure", err)
+	}
+}
+
 func openTestDatabase(t *testing.T) *Database {
 	t.Helper()
 
@@ -224,6 +296,9 @@ func openTestDatabase(t *testing.T) *Database {
 		databaseURL = os.Getenv("SELFHOST_API_DATABASE_URL")
 	}
 	if databaseURL == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("SELFHOST_API_TEST_DATABASE_URL is not set in CI")
+		}
 		t.Skip("SELFHOST_API_TEST_DATABASE_URL is not set")
 	}
 

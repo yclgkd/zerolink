@@ -67,3 +67,38 @@ jobs:
         env:
           VITE_RELEASE_VERIFICATION_REQUIRED: "true"
         run: pnpm --filter @zerolink/frontend build
+
+  selfhost-store:
+    name: Self-Hosted Store
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zerolink_selfhost
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zerolink_selfhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: services/selfhost-api/go.mod
+          cache-dependency-path: services/selfhost-api/go.sum
+
+      - name: Run self-hosted store tests
+        working-directory: services/selfhost-api
+        env:
+          SELFHOST_API_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/zerolink_selfhost?sslmode=disable
+        run: go test ./...
