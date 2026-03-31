@@ -6,8 +6,6 @@ services:
     restart: unless-stopped
     env_file:
       - path: .env
-        required: false
-      - path: .env.example
         required: true
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -25,8 +23,6 @@ services:
       dockerfile: deploy/selfhost/api.Dockerfile
     env_file:
       - path: .env
-        required: false
-      - path: .env.example
         required: true
     depends_on:
       db:
@@ -42,8 +38,6 @@ services:
     restart: unless-stopped
     env_file:
       - path: .env
-        required: false
-      - path: .env.example
         required: true
     depends_on:
       db:

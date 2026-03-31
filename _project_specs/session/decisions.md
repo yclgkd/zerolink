@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Split self-hosted manage protocol flow from payload and crypto helpers to enforce the 800-line limit
+
+**Decision**: Keep `services/selfhost-api/internal/service/protocol_manage.go` focused on transactional manage-flow entrypoints and state transitions, and move payload validation / canonicalization / proof-building / crypto-adjacent helpers into `services/selfhost-api/internal/service/protocol_manage_helpers.go`.
+**Context**: PR #220 follow-up fixes included a review finding that `protocol_manage.go` had grown past the repo's hard 800-line limit while also carrying duplicated delivery validation across the WebAuthn and password/softkey branches.
+**Options Considered**: Leave the file oversized until a later cleanup; split by auth mode and duplicate shared helpers; keep one flow file and extract the shared manage payload and delivery helpers into a companion file.
+**Choice**: Add `validateAndApplyDelivery(...)` for the shared delivery transition path and extract the validation / proof / crypto helpers into `protocol_manage_helpers.go` while preserving package-local access.
+**Reasoning**: This keeps the behavior-critical transaction flow readable in one place, removes duplicate delivery validation logic, and satisfies the repo file-size rule without widening the public surface or changing protocol semantics.
+**Trade-offs**: The `service` package now spreads manage logic across two files, so future edits need to check both the flow file and the helper file together.
+
 ## [2026-03-31] Self-hosted local packaging ships as single-node realtime plus Caddy compose bundle
 
 **Decision**: The self-hosted path now ships a first-party local deployment bundle under `deploy/selfhost/` and exposes `/api/ws/:uuid` from the Go API using an in-memory single-node realtime hub, while keeping the frontend's existing HTTP polling fallback unchanged.

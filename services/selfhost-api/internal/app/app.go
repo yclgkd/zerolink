@@ -55,12 +55,14 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		Realtime:      realtimeHub,
 	})
 
+	// WriteTimeout is intentionally 0: hijacked WebSocket connections
+	// inherit the server-level deadline, which would kill long-lived
+	// sessions. Per-write deadlines are enforced inside the realtime hub.
 	server := &http.Server{
 		Addr:              cfg.HTTP.BindAddr,
 		Handler:           handler,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
-		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 

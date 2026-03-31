@@ -4,7 +4,7 @@
   route {
     @api path /api/* /healthz /readyz
     @frontend {
-      not path /assets/*
+      not path /api/* /healthz /readyz /assets/*
     }
 
     reverse_proxy @api api:8788
