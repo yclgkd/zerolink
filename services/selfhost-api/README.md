@@ -1,8 +1,8 @@
-# Self-Hosted API (M1 Scaffold)
+# Self-Hosted API (M1-M2)
 
 This module bootstraps the Go-based self-hosted backend for ZeroLink.
 
-Current M1 scope:
+Current scope:
 
 - Go module and service layout under `services/selfhost-api/`
 - Environment-based config loading with validation
@@ -10,9 +10,11 @@ Current M1 scope:
 - `GET /healthz` and `GET /readyz`
 - PostgreSQL connection bootstrap
 - Embedded SQL migration runner
+- PostgreSQL persistence schema for channels, active challenges, used nonces, and terminal tombstones
+- `sqlc` query definitions plus a channel-scoped transaction layer built around PostgreSQL advisory locks
 - Reserved package boundaries for `httpapi`, `service`, `store`, `protocol`, `webauthn`, and `realtime`
 
-Out of scope for M1:
+Out of scope:
 
 - Protocol route implementations
 - WebAuthn verification
@@ -33,9 +35,10 @@ services/selfhost-api/
 │   ├── protocol/            # Frozen route surface for later milestones
 │   ├── realtime/            # Realtime boundary placeholder
 │   ├── service/             # Health/readiness service layer
-│   ├── store/               # PostgreSQL + migration runner
+│   ├── store/               # PostgreSQL, sqlc, migrations, transaction helpers
 │   └── webauthn/            # WebAuthn verification boundary placeholder
 ├── migrations/              # Embedded SQL migrations
+├── sqlc.yaml                # sqlc generation config
 └── README.md
 ```
 
@@ -139,6 +142,18 @@ All frozen protocol routes already exist as placeholders and currently return `5
 
 ```bash
 cd services/selfhost-api
+sqlc generate
 go test ./...
 go test -race ./...
 ```
+
+If `sqlc` is not installed locally, generate code with Docker:
+
+```bash
+cd services/selfhost-api
+docker run --rm -v "$PWD:/src" -w /src sqlc/sqlc:1.27.0 generate
+```
+
+PostgreSQL-backed store tests run automatically in CI. To run them locally, point
+`SELFHOST_API_TEST_DATABASE_URL` at a disposable PostgreSQL instance before `go test ./...`.
+The store suite intentionally refuses to fall back to `SELFHOST_API_DATABASE_URL`, because the tests truncate persistence tables.

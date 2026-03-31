@@ -33,4 +33,16 @@ func TestLoadMigrationFilesReturnsEmbeddedSQL(t *testing.T) {
 	if files[0].SQL == "" {
 		t.Fatal("first migration SQL is empty")
 	}
+	if len(files) < 2 {
+		t.Fatalf("loadMigrationFiles() len = %d, want at least 2 migrations", len(files))
+	}
+	if files[1].Version != "000002" {
+		t.Fatalf("second migration version = %q, want 000002", files[1].Version)
+	}
+	if len(files) < 3 {
+		t.Fatalf("loadMigrationFiles() len = %d, want at least 3 migrations", len(files))
+	}
+	if files[2].Version != "000003" {
+		t.Fatalf("third migration version = %q, want 000003", files[2].Version)
+	}
 }
