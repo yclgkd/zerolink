@@ -1,4 +1,4 @@
-<!-- synced-with: 48c5b8a -->
+<!-- synced-with: 0957905 -->
 
 # 自部署后端契约冻结
 
@@ -62,14 +62,14 @@
 | 路由 | 方法 | 请求 schema | 成功 schema | 当前前端调用点 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `/api/create_begin/:uuid` | `POST` | `CreateBeginRequestSchema` | `CreateBeginResponseSchema` | `apiClient.createBegin()` | 当前始终返回 `creationOptions`；password 模式兼容行为先冻结 |
-| `/api/create_finish/:uuid` | `POST` | `CreateFinishRequestSchema` | `CreateFinishResponseSchema` | `apiClient.createFinish()` | 接受 `webauthn`、`password`、legacy `softkey` |
+| `/api/create_finish/:uuid` | `POST` | `CreateFinishRequestSchema` | `CreateFinishResponseSchema` | `apiClient.createFinish()` | 接受 `webauthn`、`password`、legacy `softkey` 这三种 schema 变体；但 `secure` channel 必须以 `webauthn` 完成，`quick` 才允许三者任选 |
 | `/api/lock_begin/:uuid` | `POST` | `LockBeginRequestSchema` | `LockBeginResponseSchema` | `apiClient.lockBegin()` | 接收方上锁 begin；响应头可能设置用于 caller binding 的 commit-cookie 状态 |
 | `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | 消费当前 lock challenge；响应头可能清理或轮转 commit-cookie 状态 |
 | `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | 返回 admin mode、security profile、version，以及可选 receiver 身份；响应头可能设置用于 caller binding 的 commit-cookie 状态 |
 | `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` 或 `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | update / deliver 主路径；响应头可能清理或轮转 commit-cookie 状态 |
 | `/api/delete_commit/:uuid` | `POST` | 同 commit union，但 `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | compound commit 的 delete-only alias；继承相同的 commit-cookie caller-binding 语义 |
-| `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回公开状态快照 |
-| `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷 |
+| `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回活跃 channel 的公开状态；一旦 channel 已 tombstone 化或被 lazy purge，规范外部行为是 `404 NOT_FOUND`，而不是 `200` 终态快照 |
+| `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷；其中 `cipherVersion` 表示本次已交付密文的版本（当前 DO 实现里等于 `record.version - 1`），不是原始 channel record 的 `version` |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | 升级后走 `WsClientMessageSchema` | `WsServerMessageSchema` | `ChannelSync.connect()` | 当前未带 `Upgrade: websocket` 会返回 `426` + `{ ok: false, code: "BAD_REQUEST" }` |
 
 ## 错误语义矩阵
@@ -107,13 +107,15 @@
 | `waiting`, `locked`, `delivered` | `deleted` | `delete_commit` | 需有效 sender auth（WebAuthn 或 softkey） |
 | 任何非终态 | `expired` | TTL 到期 | 自动触发，无 API 入口 |
 
-终态（`deleted`、`expired`）不允许任何后续迁移。对终态 channel 的变更请求必须返回 `LOCK_FORBIDDEN` 或 `NOT_FOUND`。
+终态（`deleted`、`expired`）不允许任何后续迁移。一旦终态被 finalize 成 tombstone，或过期记录被 lazy purge，后续外部请求的规范行为就是返回 `NOT_FOUND`。`LOCK_FORBIDDEN` 仍用于活跃非终态记录上的非法迁移。
 
 合法状态：`waiting`、`locked`、`delivered`、`deleted`、`expired`。
 
 合法 admin mode：`webauthn`、`password`、`softkey`（`password` 的 legacy 别名；凡接受 `password` 的地方必须同时接受 `softkey`）。
 
 合法 security profile：`quick`、`secure`。
+
+Admin-mode 绑定不变量：`secure` channel 在 `create_finish` 必须使用 `webauthn`；`quick` channel 可以使用 `webauthn`、`password` 或 `softkey`。
 
 ## WebSocket 兼容要求
 
@@ -126,7 +128,7 @@
 
 ### Polling Fallback
 
-当 WebSocket 断连时，前端回退到每 18 秒轮询 `/api/public/:uuid`（`POLL_INTERVAL_MS`）。Go 后端必须保证该端点返回与 WebSocket `state_changed` 消息等效的 `PublicStatusResponseSchema` 结构。
+当 WebSocket 断连时，前端回退到每 18 秒轮询 `/api/public/:uuid`（`POLL_INTERVAL_MS`）。这条路径与 WebSocket `state_changed` 是“兼容等价”，但不是逐字节一致：响应仍然使用 `PublicStatusResponseSchema`，而它本身不带 `version`，前端会在把 polling 结果转换成 `ChannelStateUpdate` 时复用本地 `lastVersion`。对于不存在、已删除、已过期的 channel，规范外部行为是 `404 NOT_FOUND`；前端仍兼容历史上的 `200` 终态快照，但 Go 后端应以 tombstone 驱动的 `404` 语义为目标。
 
 ## 当前明确保留的开放问题
 

@@ -62,14 +62,14 @@ Output encoding varies per function:
 | Route | Method | Request schema | Success schema | Current frontend caller | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `/api/create_begin/:uuid` | `POST` | `CreateBeginRequestSchema` | `CreateBeginResponseSchema` | `apiClient.createBegin()` | Always returns `creationOptions`; password-mode compatibility stays frozen for now |
-| `/api/create_finish/:uuid` | `POST` | `CreateFinishRequestSchema` | `CreateFinishResponseSchema` | `apiClient.createFinish()` | Accepts `webauthn`, `password`, and legacy `softkey` admin modes |
+| `/api/create_finish/:uuid` | `POST` | `CreateFinishRequestSchema` | `CreateFinishResponseSchema` | `apiClient.createFinish()` | Accepts `webauthn`, `password`, and legacy `softkey` schema variants; `secure` channels must finalize with `webauthn`, while `quick` channels may use any of the three |
 | `/api/lock_begin/:uuid` | `POST` | `LockBeginRequestSchema` | `LockBeginResponseSchema` | `apiClient.lockBegin()` | Begin step for receiver locking; may set caller-binding commit-cookie state via response headers |
 | `/api/lock_commit/:uuid` | `POST` | `LockCommitRequestSchema` | `LockCommitResponseSchema` | `apiClient.lockCommit()` | Consumes the active lock challenge; may clear or rotate commit-cookie state via response headers |
 | `/api/manage/compound_begin/:uuid` | `POST` | `CompoundBeginRequestSchema` | `CompoundBeginResponseSchema` | `apiClient.compoundBegin()` | Returns current admin mode, security profile, version, and optional receiver identity; may set caller-binding commit-cookie state via response headers |
 | `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` or `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | Handles update delivery flow; may clear or rotate commit-cookie state via response headers |
 | `/api/delete_commit/:uuid` | `POST` | Same commit unions with `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path; inherits the same commit-cookie caller-binding semantics |
-| `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Public state snapshot only |
-| `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery |
+| `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Active-channel public snapshot only; once a channel is tombstoned or lazily purged, canonical external behavior is `404 NOT_FOUND` rather than a `200` terminal snapshot |
+| `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery; `cipherVersion` is the delivered payload version (`record.version - 1` in the current DO implementation), not the raw channel record version |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |
 
 ## Error Semantics Matrix
@@ -107,13 +107,15 @@ The backend must enforce these state transitions exactly. Any transition not lis
 | `waiting`, `locked`, `delivered` | `deleted` | `delete_commit` | Valid sender auth (WebAuthn or softkey) |
 | any non-terminal | `expired` | TTL expiration | Automatic; no API trigger |
 
-Terminal states (`deleted`, `expired`) allow no outbound transitions. Any request that would mutate a terminal-state channel must return `LOCK_FORBIDDEN` or `NOT_FOUND`.
+Terminal states (`deleted`, `expired`) allow no outbound transitions. Once a terminal state has been finalized into a tombstone, or an expired record has been lazily purged, subsequent external requests canonically return `NOT_FOUND`. `LOCK_FORBIDDEN` remains the invalid-transition code for active non-terminal records.
 
 Valid states: `waiting`, `locked`, `delivered`, `deleted`, `expired`.
 
 Valid admin modes: `webauthn`, `password`, `softkey` (legacy alias for `password`; must be accepted everywhere `password` is).
 
 Valid security profiles: `quick`, `secure`.
+
+Admin-mode binding invariant: `secure` channels must use `webauthn` at `create_finish`; `quick` channels may use `webauthn`, `password`, or `softkey`.
 
 ## WebSocket Compatibility
 
@@ -126,7 +128,7 @@ Valid security profiles: `quick`, `secure`.
 
 ### Polling Fallback
 
-When WebSocket disconnects, the frontend falls back to polling `/api/public/:uuid` every 18 seconds (`POLL_INTERVAL_MS`). The Go backend must ensure `/api/public/:uuid` returns the same `PublicStatusResponseSchema` shape so polling produces identical state updates as WebSocket `state_changed` messages.
+When WebSocket disconnects, the frontend falls back to polling `/api/public/:uuid` every 18 seconds (`POLL_INTERVAL_MS`). This path is compatibility-equivalent, not byte-for-byte identical, to WebSocket `state_changed`: the response still uses `PublicStatusResponseSchema`, which has no `version`, and the frontend reuses its local `lastVersion` when turning poll responses into `ChannelStateUpdate`s. Canonical external behavior for missing, deleted, or expired channels is `404 NOT_FOUND`; the frontend still tolerates legacy `200` terminal snapshots, but the Go backend should target the tombstone-driven `404` semantics.
 
 ## Open Ambiguities
 
