@@ -61,7 +61,16 @@ func websocketHandler(
 			return
 		}
 
-		client := hub.Register(uuid, conn)
+		client, err := hub.Register(uuid, conn)
+		if err != nil {
+			_ = conn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "connection limit reached"),
+				time.Now().Add(time.Second),
+			)
+			_ = conn.Close()
+			return
+		}
 		defer func() {
 			hub.Unregister(client)
 			_ = conn.Close()
@@ -151,7 +160,7 @@ func websocketOriginAllowed(r *http.Request, allowedOrigin string) bool {
 	}
 
 	requestOrigin := normalizeOrigin(r.Header.Get("Origin"))
-	return requestOrigin == "" || requestOrigin == allowedOrigin
+	return requestOrigin == allowedOrigin
 }
 
 func toRealtimeSnapshot(state service.RealtimeStateOutput) realtime.StateSnapshot {

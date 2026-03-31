@@ -3,12 +3,17 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+const maxConnectionsPerChannel = 10
+
+var ErrConnectionLimitReached = errors.New("connection limit reached")
 
 const (
 	CloseNormal           = 1000
@@ -75,12 +80,7 @@ func NewHub(logger *slog.Logger) *Hub {
 	}
 }
 
-func (h *Hub) Register(channelID string, conn *websocket.Conn) *Client {
-	client := &Client{
-		channelID: channelID,
-		conn:      conn,
-	}
-
+func (h *Hub) Register(channelID string, conn *websocket.Conn) (*Client, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -91,9 +91,17 @@ func (h *Hub) Register(channelID string, conn *websocket.Conn) *Client {
 		}
 		h.channels[channelID] = group
 	}
+	if len(group.clients) >= maxConnectionsPerChannel {
+		return nil, ErrConnectionLimitReached
+	}
+
+	client := &Client{
+		channelID: channelID,
+		conn:      conn,
+	}
 	group.clients[client] = struct{}{}
 
-	return client
+	return client, nil
 }
 
 func (h *Hub) Unregister(client *Client) {
@@ -319,16 +327,36 @@ func (h *Hub) setChannelExpiry(channelID string, expiresAt time.Time) {
 }
 
 func (h *Hub) handleChannelExpiry(channelID string, expected time.Time) {
-	h.mu.RLock()
+	h.mu.Lock()
 	group := h.channels[channelID]
 	if group == nil || !group.expiresAt.Equal(expected) {
-		h.mu.RUnlock()
+		h.mu.Unlock()
 		return
 	}
-	h.mu.RUnlock()
 
-	_ = h.PublishClosed(context.Background(), channelID, CloseReasonExpired)
+	if group.timer != nil {
+		group.timer.Stop()
+	}
+	clients := make([]*Client, 0, len(group.clients))
+	for client := range group.clients {
+		clients = append(clients, client)
+	}
+	delete(h.channels, channelID)
+	h.mu.Unlock()
+
+	message := channelClosedMessage{
+		Type:   "channel_closed",
+		Reason: string(CloseReasonExpired),
+	}
+	for _, client := range clients {
+		if err := h.writeJSON(client, message); err != nil {
+			h.logger.Debug("write websocket close payload", "channel_id", channelID, "error", err)
+		}
+		h.closeClient(client, CloseChannelGone, string(CloseReasonExpired))
+	}
 }
+
+const writeDeadline = 10 * time.Second
 
 func (h *Hub) writeJSON(client *Client, payload any) error {
 	data, err := json.Marshal(payload)
@@ -338,6 +366,7 @@ func (h *Hub) writeJSON(client *Client, payload any) error {
 
 	client.writeMu.Lock()
 	defer client.writeMu.Unlock()
+	_ = client.conn.SetWriteDeadline(time.Now().Add(writeDeadline))
 	return client.conn.WriteMessage(websocket.TextMessage, data)
 }
 
@@ -352,6 +381,7 @@ func (h *Hub) closeClient(client *Client, code int, reason string) {
 	defer client.writeMu.Unlock()
 
 	deadline := time.Now().Add(time.Second)
+	_ = client.conn.SetWriteDeadline(deadline)
 	_ = client.conn.WriteControl(
 		websocket.CloseMessage,
 		websocket.FormatCloseMessage(code, reason),

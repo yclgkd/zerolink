@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -206,7 +207,9 @@ func mustDialWebSocket(t *testing.T, serverURL string, path string) *websocket.C
 	t.Helper()
 
 	wsURL := "ws" + strings.TrimPrefix(serverURL, "http") + path
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	header := http.Header{}
+	header.Set("Origin", "http://localhost:5173")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
 	}

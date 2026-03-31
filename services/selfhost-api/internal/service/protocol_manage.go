@@ -514,7 +514,16 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 				return assertionInvalid(err.Error())
 			}
 
+			credential.SignCount = assertionResult.NewSignCount
+			channel.AdminCredential, err = json.Marshal(credential)
+			if err != nil {
+				return err
+			}
+
 			if input.Intent.Op == "delete" {
+				if _, err := tx.SaveChannel(ctx, *channel); err != nil {
+					return err
+				}
 				_, err := tx.FinalizeTerminalState(ctx, store.TerminalReasonDeleted, now)
 				if err == nil {
 					reason := realtime.CloseReasonDeleted
@@ -529,7 +538,7 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 			if channel.ReceiverPubFpr == nil {
 				return lockForbidden("delivery requires a locked receiver identity")
 			}
-			if input.Intent.ReceiverPubFpr != *channel.ReceiverPubFpr {
+			if !constantTimeEqualString(input.Intent.ReceiverPubFpr, *channel.ReceiverPubFpr) {
 				return lockForbidden("intent receiverPubFpr does not match locked receiver fingerprint")
 			}
 
@@ -542,12 +551,6 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 			}
 
 			if err := validateCipherBundle(*input.Intent.CipherBundle, input.Intent, *channel.ReceiverPubFpr); err != nil {
-				return err
-			}
-
-			credential.SignCount = assertionResult.NewSignCount
-			channel.AdminCredential, err = json.Marshal(credential)
-			if err != nil {
 				return err
 			}
 
@@ -584,7 +587,7 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 		if channel.ReceiverPubFpr == nil {
 			return lockForbidden("delivery requires a locked receiver identity")
 		}
-		if input.Intent.ReceiverPubFpr != *channel.ReceiverPubFpr {
+		if !constantTimeEqualString(input.Intent.ReceiverPubFpr, *channel.ReceiverPubFpr) {
 			return lockForbidden("intent receiverPubFpr does not match locked receiver fingerprint")
 		}
 
@@ -1140,11 +1143,17 @@ func verifySoftkeySignature(jwk ECDSAPublicKeyJWK, payload []byte, signatureHex 
 	if err != nil {
 		return err
 	}
+	if len(xBytes) != 32 || len(yBytes) != 32 {
+		return errors.New("invalid P-256 key coordinates")
+	}
 
 	publicKey := &ecdsa.PublicKey{
 		Curve: elliptic.P256(),
 		X:     new(big.Int).SetBytes(xBytes),
 		Y:     new(big.Int).SetBytes(yBytes),
+	}
+	if !elliptic.P256().IsOnCurve(publicKey.X, publicKey.Y) {
+		return errors.New("public key point not on curve")
 	}
 	digest := sha256.Sum256(payload)
 	if !ecdsa.Verify(publicKey, digest[:], new(big.Int).SetBytes(signatureBytes[:32]), new(big.Int).SetBytes(signatureBytes[32:])) {
