@@ -12,6 +12,7 @@ export function clearBootstrapBodyStyles(): void {
   const props = [
     'margin',
     'padding',
+    'backgroundColor',
     'backgroundImage',
     'backgroundSize',
     'backgroundAttachment',
