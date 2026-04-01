@@ -364,7 +364,7 @@ func TestCreateBeginRouteRejectsOversizedBody(t *testing.T) {
 		"/api/create_begin/abcdefghijklmnopqrstu",
 		strings.NewReader(
 			`{"uuid":"abcdefghijklmnopqrstu","timestamp":1730000000000,"securityProfile":"secure","padding":"`+
-				strings.Repeat("a", maxProtocolBodyBytes)+
+				strings.Repeat("a", defaultMaxProtocolBodyBytes)+
 				`"}`,
 		),
 	)

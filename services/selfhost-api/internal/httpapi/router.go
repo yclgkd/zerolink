@@ -17,11 +17,11 @@ import (
 )
 
 type Dependencies struct {
-	Logger        *slog.Logger
-	Services      *service.Container
-	AllowedOrigin string
-	Realtime      *realtime.Hub
-	FilePolicy    FilePolicy
+	Logger               *slog.Logger
+	Services             *service.Container
+	AllowedOrigin        string
+	Realtime             *realtime.Hub
+	FilePolicy           FilePolicy
 	MaxProtocolBodyBytes int64
 }
 
@@ -49,9 +49,10 @@ type statusResponse struct {
 }
 
 const (
-	accessControlAllowHeaders = "Content-Type"
-	accessControlAllowMethods = "GET,POST,OPTIONS"
-	defaultMaxProtocolBodyBytes = 64 * 1024
+	accessControlAllowHeaders      = "Content-Type"
+	accessControlAllowMethods      = "GET,POST,OPTIONS"
+	defaultMaxProtocolBodyBytes    = 64 * 1024
+	maxWebSocketClientMessageBytes = defaultMaxProtocolBodyBytes
 )
 
 func NewRouter(deps Dependencies) http.Handler {

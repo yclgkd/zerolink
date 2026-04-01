@@ -3,9 +3,8 @@ import {
   AES_GCM,
   buildCipherBundleAadBytes,
   computeIntentHash,
-  encodeFileSharePayload,
-  encodeTextSharePayload,
   deriveUpdateProofChallengeB64u,
+  encodeFileSharePayload,
   NONCE_BYTES,
   type UpdateIntent,
 } from '@zerolink/shared';
@@ -80,10 +79,15 @@ async function buildDeliverUpdateIntent(
         mediaType: input.file.mediaType,
         bytes: input.file.bytes,
       });
+      if (plaintextBytes.byteLength > inlineMaxBytes) {
+        return toError(
+          'MULTIPART_REQUIRED',
+          'deliver.file-policy',
+          'Selected file exceeds the inline delivery limit for this deployment.'
+        );
+      }
       maxPlaintextBytes = inlineMaxBytes;
       payloadKind = 'file';
-    } else if (typeof input.plaintext === 'string') {
-      plaintextBytes = encodeTextSharePayload(input.plaintext);
     } else {
       plaintextBytes = toPlaintextBytes(input.plaintext);
     }

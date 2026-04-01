@@ -877,3 +877,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Enforce in the protocol service
 **Reasoning**: The service layer already owns protocol state transitions, so it is the narrowest place to preserve Worker parity across HTTP handlers and future callers
 **Trade-offs**: Rate limiting is process-local instead of Durable Object-local, so multi-instance deployments still need edge or infra throttling for global enforcement
+## [2026-04-01] Keep inline text compatibility while file payloads stay envelope-backed
+
+**Decision**: Preserve raw text delivery bytes for inline text shares, and validate file payloads after envelope metadata is added
+**Context**: Phase-1 file delivery introduced a shared payload envelope and a self-hosted protocol body cap, which regressed the published 2 MB text ceiling and let file metadata overflow the inline limit late in the encryption pipeline
+**Options Considered**: Keep wrapping text and add a new text oversize error, shrink the advertised file limit globally, or preserve legacy raw text bytes while checking actual file envelope size
+**Choice**: Preserve legacy raw text bytes and validate file envelopes before encryption
+**Reasoning**: This keeps existing text-share limits stable, fixes the late `CRYPTO_ERROR` failure mode for files, and avoids broadening the protocol surface with new client-visible error codes mid-phase
+**Trade-offs**: Text and file payloads now intentionally use different wire encodings until multipart delivery lands

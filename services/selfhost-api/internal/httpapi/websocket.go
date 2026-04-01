@@ -79,7 +79,7 @@ func websocketHandler(
 			_ = conn.Close()
 		}()
 
-		conn.SetReadLimit(maxProtocolBodyBytes)
+		conn.SetReadLimit(maxWebSocketClientMessageBytes)
 		_ = conn.SetReadDeadline(time.Now().Add(wsSubscribeTimeout))
 
 		for {

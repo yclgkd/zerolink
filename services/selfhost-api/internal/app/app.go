@@ -15,12 +15,21 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
+const minInlineProtocolBodyBytes = int64(2_097_152 * 4)
+
 type Runtime struct {
 	server          *http.Server
 	shutdownTimeout time.Duration
 	db              *store.Database
 	realtime        realtime.Publisher
 	logger          *slog.Logger
+}
+
+func resolveMaxProtocolBodyBytes(fileMaxBytes int64) int64 {
+	if fileMaxBytes <= 0 {
+		return minInlineProtocolBodyBytes
+	}
+	return max(fileMaxBytes*4, minInlineProtocolBodyBytes)
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
@@ -60,7 +69,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			MaxChunks:               cfg.File.MaxChunks,
 			MultipartSupported:      cfg.File.MultipartSupported,
 		},
-		MaxProtocolBodyBytes: cfg.File.MaxBytes * 4,
+		MaxProtocolBodyBytes: resolveMaxProtocolBodyBytes(cfg.File.MaxBytes),
 	})
 
 	// WriteTimeout is intentionally 0: hijacked WebSocket connections
