@@ -112,7 +112,7 @@ Selectable `securityProfile` at creation (v3.0 two tiers):
 ### 5.2 Receiver Locking (Receiver: Foolproof)
 
 - After opening the share link, the page shows a minimal animation (3 frames):
-    1. "Your password stays only with you"
+    1. "Your passphrase stays only with you"
     2. "Your passphrase creates your personal decryption key — the sender never learns it"
     3. "After locking, only you can open the content"
 - Enter password -> generate RSA keypair -> Argon2id-wrap private key and store locally
