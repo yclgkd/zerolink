@@ -4,9 +4,10 @@ import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } 
 import { useTranslation } from 'react-i18next';
 
 import { StateNotice } from '../../components/layout';
+import { Button } from '../../components/ui/button';
 import { type CreatedLinks, getChannelTtlLabel } from './helpers';
 
-function useCopyLink(url: string) {
+function useCopyLink(url: string, onCopied?: () => void) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -21,11 +22,12 @@ function useCopyLink(url: string) {
       await navigator.clipboard.writeText(url);
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       setCopied(true);
+      onCopied?.();
       timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
     }
-  }, [url]);
+  }, [onCopied, url]);
 
   return { copied, copy };
 }
@@ -36,15 +38,17 @@ function CopyableLinkRow({
   testId,
   copyTestId,
   isManageLink = false,
+  onCopied,
 }: {
   label: string;
   url: string;
   testId: string;
   copyTestId: string;
   isManageLink?: boolean;
+  onCopied?: () => void;
 }) {
   const { t } = useTranslation();
-  const { copied, copy } = useCopyLink(url);
+  const { copied, copy } = useCopyLink(url, onCopied);
 
   return (
     <div className="space-y-2">
@@ -91,6 +95,49 @@ function CopyableLinkRow({
   );
 }
 
+function CreateAnotherConfirmPanel({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <StateNotice
+      autoFocusOnMount
+      className="space-y-3 ring-1 ring-amber-300/12"
+      data-testid="create-another-confirm"
+      tone="warning"
+    >
+      <p className="text-sm leading-6 text-foreground/90">{t('create.createAnotherConfirmBody')}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          data-testid="create-another-confirm-cancel"
+          onClick={onCancel}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          {t('create.createAnotherConfirmCancel')}
+        </Button>
+        <Button
+          className="border-amber-300/28 bg-amber-400/10 text-amber-100 hover:bg-amber-400/16 hover:text-amber-50"
+          data-testid="create-another-confirm-continue"
+          onClick={onConfirm}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <PlusCircle aria-hidden="true" className="size-3.5" />
+          {t('create.createAnotherConfirmContinue')}
+        </Button>
+      </div>
+    </StateNotice>
+  );
+}
+
 export function SuccessSummary({
   createdProfile,
   links,
@@ -101,6 +148,9 @@ export function SuccessSummary({
   onCreateAnother: () => void;
 }): ReactElement | null {
   const { t } = useTranslation();
+  const [shareLinkEverCopied, setShareLinkEverCopied] = useState(false);
+  const [manageLinkEverCopied, setManageLinkEverCopied] = useState(false);
+  const [showCreateAnotherConfirm, setShowCreateAnotherConfirm] = useState(false);
 
   const profileLabelMap: Record<SecurityProfile, string> = useMemo(
     () => ({
@@ -111,6 +161,22 @@ export function SuccessSummary({
   );
 
   if (!createdProfile || !links) return null;
+
+  const canCreateAnotherDirectly = shareLinkEverCopied && manageLinkEverCopied;
+
+  const handleCreateAnotherClick = () => {
+    if (canCreateAnotherDirectly) {
+      onCreateAnother();
+      return;
+    }
+
+    setShowCreateAnotherConfirm(true);
+  };
+
+  const handleConfirmCreateAnother = () => {
+    setShowCreateAnotherConfirm(false);
+    onCreateAnother();
+  };
 
   return (
     <div
@@ -136,7 +202,7 @@ export function SuccessSummary({
         <button
           className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           data-testid="create-another-button"
-          onClick={onCreateAnother}
+          onClick={handleCreateAnotherClick}
           type="button"
         >
           <PlusCircle aria-hidden="true" className="size-3.5" />
@@ -148,6 +214,7 @@ export function SuccessSummary({
         <CopyableLinkRow
           copyTestId="create-success-share-link-copy"
           label={t('create.shareLinkLabel')}
+          onCopied={() => setShareLinkEverCopied(true)}
           testId="create-success-share-link"
           url={links.shareUrlWithFragment}
         />
@@ -165,6 +232,7 @@ export function SuccessSummary({
           copyTestId="create-success-manage-link-copy"
           isManageLink
           label={t('create.manageLinkLabel')}
+          onCopied={() => setManageLinkEverCopied(true)}
           testId="create-success-manage-link"
           url={links.manageUrl}
         />
@@ -175,6 +243,12 @@ export function SuccessSummary({
           {t('create.expiryHint', { duration: getChannelTtlLabel(t, links.ttl) })}
         </p>
       </div>
+      {showCreateAnotherConfirm ? (
+        <CreateAnotherConfirmPanel
+          onCancel={() => setShowCreateAnotherConfirm(false)}
+          onConfirm={handleConfirmCreateAnother}
+        />
+      ) : null}
     </div>
   );
 }

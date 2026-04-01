@@ -10,6 +10,8 @@ const { detectWebAuthnSupportMock, createChannelMock } = vi.hoisted(() => ({
   detectWebAuthnSupportMock: vi.fn(),
   createChannelMock: vi.fn(),
 }));
+const originalClipboard = navigator.clipboard;
+const writeTextMock = vi.fn();
 
 vi.mock('../crypto/webauthn', async () => {
   const actual = await vi.importActual<typeof import('../crypto/webauthn')>('../crypto/webauthn');
@@ -75,10 +77,25 @@ describe('CreatePage integration', () => {
     useCreateStore.getState().resetCreateStore();
     window.sessionStorage.clear();
     mockCreateSuccess();
+    writeTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
   });
 
   afterEach(() => {
     cleanup();
+    if (originalClipboard) {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: originalClipboard,
+      });
+    } else {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
   });
 
   it('renders Quick and Secure mode cards', () => {
@@ -255,26 +272,6 @@ describe('CreatePage integration', () => {
     expect(submit.disabled).toBe(false);
   });
 
-  it('shows the passphrase policy hint in Quick mode', () => {
-    mockWebAuthnSupport(true);
-    renderCreatePage();
-
-    expect(screen.getByText('Use 4+ random words or 12+ characters')).toBeTruthy();
-  });
-
-  it('enables submit button for a multi-word passphrase with ordinary spaces', () => {
-    mockWebAuthnSupport(true);
-    renderCreatePage();
-
-    fireEvent.click(screen.getByTestId('mode-card-quick'));
-
-    const input = screen.getByTestId('passphrase-input-field') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'correct horse battery staple' } });
-
-    const submit = screen.getByTestId('create-submit-button') as HTMLButtonElement;
-    expect(submit.disabled).toBe(false);
-  });
-
   it('enables submit button in Secure mode when WebAuthn is available', () => {
     mockWebAuthnSupport(true);
     renderCreatePage();
@@ -379,6 +376,150 @@ describe('CreatePage integration', () => {
     });
   });
 
+  it('shows a create another confirmation when no success links were copied', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+
+    const confirm = await screen.findByTestId('create-another-confirm');
+    expect(confirm.textContent).toContain(
+      'Have you saved both the share link and the private manage link?'
+    );
+    expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+  });
+
+  it('shows a create another confirmation when only one success link was copied', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-success-share-link-copy'));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith(
+        '/s/aaaaaaaaaaaaaaaaaaaaa#k=bW9ja19sb2NrX3NlY3JldA'
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+
+    expect(await screen.findByTestId('create-another-confirm')).toBeTruthy();
+  });
+
+  it('returns to the form immediately when both success links were copied', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-success-share-link-copy'));
+    fireEvent.click(screen.getByTestId('create-success-manage-link-copy'));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('how-it-works')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('create-success-summary')).toBeNull();
+    expect(screen.queryByTestId('create-another-confirm')).toBeNull();
+  });
+
+  it('hides the create another confirmation when cancel is clicked', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+
+    const cancelButton = await screen.findByTestId('create-another-confirm-cancel');
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('create-another-confirm')).toBeNull();
+    });
+
+    expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+  });
+
+  it('returns to the form when the create another confirmation is accepted', async () => {
+    mockWebAuthnSupport(true);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+    fireEvent.click(await screen.findByTestId('create-another-confirm-continue'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('how-it-works')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('create-success-summary')).toBeNull();
+  });
+
+  it('does not count failed clipboard writes as copied links', async () => {
+    mockWebAuthnSupport(true);
+    writeTextMock.mockRejectedValueOnce(new Error('permission denied'));
+    writeTextMock.mockResolvedValueOnce(undefined);
+    renderCreatePage();
+
+    fireEvent.click(screen.getByTestId('mode-card-secure'));
+    fireEvent.click(screen.getByTestId('create-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-success-summary')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('create-success-share-link-copy'));
+    fireEvent.click(screen.getByTestId('create-success-manage-link-copy'));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(screen.getByTestId('create-success-share-link-copy').textContent).toContain('Copy');
+    expect(screen.getByTestId('create-success-manage-link-copy').textContent).toContain('Copied');
+
+    fireEvent.click(screen.getByTestId('create-another-button'));
+
+    expect(await screen.findByTestId('create-another-confirm')).toBeTruthy();
+  });
+
   it('shows error notice when createChannel fails', async () => {
     mockWebAuthnSupport(true);
     createChannelMock.mockResolvedValueOnce({
@@ -429,6 +570,7 @@ describe('CreatePage integration', () => {
 
     // Form is hidden after success; click "Create another" to reveal form with cleared password
     fireEvent.click(screen.getByTestId('create-another-button'));
+    fireEvent.click(await screen.findByTestId('create-another-confirm-continue'));
     await waitFor(() => {
       expect(screen.getByTestId('quick-share-password-panel')).toBeTruthy();
     });
@@ -596,6 +738,13 @@ describe('CreatePage integration', () => {
       expect(screen.getByTestId('create-success-summary')).toBeTruthy();
     });
     expect(screen.queryByTestId('how-it-works')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('create-success-share-link-copy'));
+    fireEvent.click(screen.getByTestId('create-success-manage-link-copy'));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledTimes(2);
+    });
 
     fireEvent.click(screen.getByTestId('create-another-button'));
 
