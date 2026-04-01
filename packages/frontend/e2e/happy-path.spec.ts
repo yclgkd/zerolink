@@ -91,7 +91,7 @@ test.describe('ZL-032 e2e happy path', () => {
 
       await page.getByTestId('share-decrypt-burn').click();
       await expect(page.getByTestId('share-decrypt-burned')).toBeVisible();
-      await expect(page.getByText('Local plaintext removed from this device.')).toBeVisible();
+      await expect(page.getByText('Local decrypted copy removed from this device.')).toBeVisible();
       await expect(
         page.getByText(
           'This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt again.'

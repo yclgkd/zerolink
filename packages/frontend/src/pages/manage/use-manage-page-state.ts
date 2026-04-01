@@ -1,6 +1,7 @@
 import { CHANNEL_STATE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { apiClient } from '../../api/client';
 import { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
 import { deserializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { useDeliverStore } from '../../stores/deliver-store';
@@ -17,6 +18,9 @@ export function useManagePageState(uuid?: string) {
   const actionScopeRef = useRef(0);
   const latestManageHashRef = useRef(location.hash);
 
+  const [deliveryMode, setDeliveryMode] = useState<'text' | 'file'>('text');
+  const [filePolicyMaxBytes, setFilePolicyMaxBytes] = useState<number | null>(null);
+  const filePolicyFetchedRef = useRef(false);
   const [secretInput, setSecretInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [softkeyPassphrase, setSoftkeyPassphrase] = useState('');
@@ -111,6 +115,7 @@ export function useManagePageState(uuid?: string) {
   useEffect(() => {
     actionScopeRef.current += 1;
     setIsActionPending(false);
+    setDeliveryMode('text');
     setSecretInput('');
     setSelectedFile(null);
     setSoftkeyPassphrase('');
@@ -152,7 +157,9 @@ export function useManagePageState(uuid?: string) {
     store.channelState !== CHANNEL_STATE.EXPIRED &&
     profile !== null &&
     Boolean(store.uuid);
-  const canDeliver = canManageActions && (secretInput.trim().length > 0 || selectedFile !== null);
+  const canDeliver =
+    canManageActions &&
+    (deliveryMode === 'text' ? secretInput.trim().length > 0 : selectedFile !== null);
 
   const { handleDeliver, isActiveActionContext } = useManageDeliveryLogic(
     mountedRef,
@@ -190,6 +197,8 @@ export function useManagePageState(uuid?: string) {
     status: store.channelState,
     adminMode: store.adminMode,
     showDestroyConfirm: store.showDestroyConfirm,
+    deliveryMode,
+    filePolicyMaxBytes,
     secretInput,
     selectedFile,
     softkeyPassphrase,
@@ -202,11 +211,27 @@ export function useManagePageState(uuid?: string) {
     isActionPending,
     canManageActions,
     canDeliver,
+    handleModeChange: (mode: 'text' | 'file') => {
+      setDeliveryMode(mode);
+      setActionError(null);
+      setIsSecretInputInvalid(false);
+      if (mode === 'text') {
+        setSelectedFile(null);
+      } else {
+        setSecretInput('');
+        if (!filePolicyFetchedRef.current) {
+          filePolicyFetchedRef.current = true;
+          void apiClient.filePolicy().then((result) => {
+            if (!mountedRef.current) return;
+            if (result.ok) {
+              setFilePolicyMaxBytes(result.data.policy.maxFileBytes);
+            }
+          });
+        }
+      }
+    },
     handleSecretChange: (value: string) => {
       setSecretInput(value);
-      if (value.trim().length > 0 && selectedFile) {
-        setSelectedFile(null);
-      }
       if (actionError || isSecretInputInvalid) {
         setActionError(null);
         setIsSecretInputInvalid(false);
@@ -214,9 +239,6 @@ export function useManagePageState(uuid?: string) {
     },
     handleFileSelect: (file: File | null) => {
       setSelectedFile(file);
-      if (file) {
-        setSecretInput('');
-      }
       if (actionError || isSecretInputInvalid) {
         setActionError(null);
         setIsSecretInputInvalid(false);

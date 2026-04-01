@@ -8,7 +8,7 @@ import {
   HexStringSchema,
   SECURITY_PROFILE,
 } from '@zerolink/shared';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../crypto/webauthn', async () => {
   const actual = await vi.importActual<typeof import('../crypto/webauthn')>('../crypto/webauthn');
@@ -44,7 +44,7 @@ afterEach(() => {
 describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   let anchoredBase: Awaited<ReturnType<typeof buildAnchoredSoftkeyDeliveryBase>>;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     anchoredBase = await buildAnchoredSoftkeyDeliveryBase();
   });
 

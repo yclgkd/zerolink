@@ -15,7 +15,15 @@ import { SafetyCode } from '../../components/safety/safety-code';
 import { Button } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
 import type { deriveSafetyCodeDisplay } from '../../crypto/safety-code-derive';
+import { cn } from '../../lib/utils';
 import { isTerminalManageState } from './manage-utils';
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+}
 
 export function ManagePageHeader({
   status,
@@ -205,6 +213,46 @@ export function StatusContent({
   );
 }
 
+export function DeliveryModeSelector({
+  mode,
+  onModeChange,
+  disabled,
+}: {
+  mode: 'text' | 'file';
+  onModeChange: (mode: 'text' | 'file') => void;
+  disabled: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      aria-label="Delivery mode"
+      className="flex gap-1 rounded-xl border border-border/60 bg-background/20 p-1"
+      data-testid="manage-delivery-mode-selector"
+      role="tablist"
+    >
+      {(['text', 'file'] as const).map((m) => (
+        <button
+          aria-selected={mode === m}
+          className={cn(
+            'flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+            mode === m
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+          data-testid={`manage-mode-${m}`}
+          disabled={disabled}
+          key={m}
+          onClick={() => onModeChange(m)}
+          role="tab"
+          type="button"
+        >
+          {t(m === 'text' ? 'manage.deliveryModeText' : 'manage.deliveryModeFile')}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function SecretInput({
   value,
   onChange,
@@ -243,10 +291,12 @@ export function FileInput({
   selectedFile,
   disabled,
   onSelect,
+  maxFileBytes,
 }: {
   selectedFile: File | null;
   disabled: boolean;
   onSelect: (file: File | null) => void;
+  maxFileBytes: number | null;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -257,6 +307,11 @@ export function FileInput({
     }
     onSelect(null);
   }
+
+  const sizeHint =
+    maxFileBytes !== null
+      ? t('manage.fileSizeLimit', { size: formatFileSize(maxFileBytes) })
+      : t('manage.fileSizeLimitLoading');
 
   return (
     <section className="flex flex-col gap-3">
@@ -272,7 +327,9 @@ export function FileInput({
         ref={inputRef}
         type="file"
       />
-      <p className="text-xs text-muted-foreground">{t('manage.fileSizeHint')}</p>
+      <p className="text-xs text-muted-foreground" data-testid="manage-file-size-hint">
+        {sizeHint}
+      </p>
       {selectedFile ? (
         <div
           className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/60 bg-background/35 px-4 py-3 text-sm text-muted-foreground"

@@ -109,6 +109,7 @@ export function useManageDeliveryLogic(
     setIsActionPending(false);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
+      setSelectedFile(null);
       return setActionError(mapActionError(result.error.code, result.error.message));
     }
 

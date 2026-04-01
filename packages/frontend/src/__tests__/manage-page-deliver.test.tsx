@@ -766,9 +766,12 @@ describe('ManagePage – deliver actions', () => {
       value: async () => new TextEncoder().encode('file-body').buffer,
     });
 
-    fireEvent.change(screen.getByTestId('manage-secret-input'), {
-      target: { value: 'stale text' },
-    });
+    // Mock filePolicy fetch triggered by switching to file mode
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, policy: { maxFileBytes: 10_485_760 } })
+    );
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+
     fireEvent.change(screen.getByTestId('manage-file-input'), {
       target: { files: [file] },
     });
@@ -797,6 +800,12 @@ describe('ManagePage – deliver actions', () => {
 
     await screen.findByTestId('manage-state-locked');
     await waitForManageActionsEnabled();
+
+    // Mock filePolicy fetch triggered by switching to file mode
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ ok: true, policy: { maxFileBytes: 10_485_760 } })
+    );
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
 
     const file = new File(['file-body'], 'secret.bin', {
       type: 'application/octet-stream',

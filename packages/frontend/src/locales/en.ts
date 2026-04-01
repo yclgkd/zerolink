@@ -101,11 +101,14 @@ const en = {
     safetyUnavailableTitle: 'Safety Code unavailable right now.',
     safetyUnavailableBody:
       'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.',
+    deliveryModeText: 'Text',
+    deliveryModeFile: 'File',
     secretLabel: 'Secret to Deliver',
     secretPlaceholder: 'Type or paste your secret here',
     fileLabel: 'File to Deliver',
     fileClearButton: 'Remove File',
-    fileSizeHint: 'Maximum file size is determined by your deployment configuration.',
+    fileSizeLimit: 'Max file size: {{size}}',
+    fileSizeLimitLoading: 'Checking file size limit\u2026',
     softkeyPassphraseHint:
       'This channel uses a password-protected management key. Enter the password you set when creating this channel.',
     softkeyLabel: 'Channel password',
