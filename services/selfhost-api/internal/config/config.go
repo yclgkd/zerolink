@@ -16,6 +16,7 @@ type Config struct {
 	LogLevel slog.Level
 	HTTP     HTTPConfig
 	Database DatabaseConfig
+	File     FileConfig
 	RP       RPConfig
 }
 
@@ -36,10 +37,26 @@ type DatabaseConfig struct {
 	HealthTimeout  time.Duration
 }
 
+type FileConfig struct {
+	MaxBytes                int64
+	MultipartThresholdBytes int64
+	ChunkSizeBytes          int64
+	MaxChunks               int64
+	MultipartSupported      bool
+}
+
 type RPConfig struct {
 	ID     string
 	Origin string
 }
+
+const (
+	defaultFileMaxBytes                = int64(2_097_152)
+	defaultFileMultipartThresholdBytes = defaultFileMaxBytes
+	defaultFileChunkSizeBytes          = int64(262_144)
+	defaultFileMaxChunks               = int64(8)
+	maxInlineFileBytes                 = defaultFileMaxBytes
+)
 
 func Load() (Config, error) {
 	return LoadFromEnv(os.LookupEnv)
@@ -71,6 +88,11 @@ func LoadFromEnv(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, err
 	}
 
+	fileCfg, err := loadFileConfig(lookup)
+	if err != nil {
+		return Config{}, err
+	}
+
 	rpCfg, err := loadRPConfig(lookup)
 	if err != nil {
 		return Config{}, err
@@ -81,6 +103,7 @@ func LoadFromEnv(lookup func(string) (string, bool)) (Config, error) {
 		LogLevel: logLevel,
 		HTTP:     httpCfg,
 		Database: dbCfg,
+		File:     fileCfg,
 		RP:       rpCfg,
 	}, nil
 }
@@ -152,6 +175,67 @@ func loadDatabaseConfig(lookup func(string) (string, bool), url string) (Databas
 		MinConns:       minConns,
 		ConnectTimeout: connectTimeout,
 		HealthTimeout:  healthTimeout,
+	}, nil
+}
+
+func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
+	maxBytes, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_BYTES", defaultFileMaxBytes)
+	if err != nil {
+		return FileConfig{}, err
+	}
+
+	multipartThresholdBytes, err := parseInt64Env(
+		lookup,
+		"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES",
+		defaultFileMultipartThresholdBytes,
+	)
+	if err != nil {
+		return FileConfig{}, err
+	}
+
+	chunkSizeBytes, err := parseInt64Env(
+		lookup,
+		"SELFHOST_API_FILE_CHUNK_SIZE_BYTES",
+		defaultFileChunkSizeBytes,
+	)
+	if err != nil {
+		return FileConfig{}, err
+	}
+
+	maxChunks, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_CHUNKS", defaultFileMaxChunks)
+	if err != nil {
+		return FileConfig{}, err
+	}
+
+	if maxBytes <= 0 || maxBytes > maxInlineFileBytes {
+		return FileConfig{}, fmt.Errorf(
+			"SELFHOST_API_FILE_MAX_BYTES must be between 1 and %d",
+			maxInlineFileBytes,
+		)
+	}
+	if multipartThresholdBytes <= 0 || multipartThresholdBytes > maxBytes {
+		return FileConfig{}, fmt.Errorf(
+			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES must be between 1 and SELFHOST_API_FILE_MAX_BYTES",
+		)
+	}
+	if chunkSizeBytes <= 0 {
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_CHUNK_SIZE_BYTES must be positive")
+	}
+	if maxChunks <= 0 {
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_MAX_CHUNKS must be positive")
+	}
+	if chunkSizeBytes*maxChunks < maxBytes {
+		return FileConfig{}, fmt.Errorf(
+			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES * SELFHOST_API_FILE_MAX_CHUNKS must cover SELFHOST_API_FILE_MAX_BYTES",
+		)
+	}
+
+	return FileConfig{
+		MaxBytes:                maxBytes,
+		MultipartThresholdBytes: multipartThresholdBytes,
+		ChunkSizeBytes:          chunkSizeBytes,
+		MaxChunks:               maxChunks,
+		MultipartSupported:      false,
 	}, nil
 }
 
@@ -259,6 +343,15 @@ func parseInt32Env(lookup func(string) (string, bool), key string, fallback int3
 		return 0, fmt.Errorf("%s must be a valid int32: %w", key, err)
 	}
 	return int32(parsed), nil
+}
+
+func parseInt64Env(lookup func(string) (string, bool), key string, fallback int64) (int64, error) {
+	value := envOrDefault(lookup, key, strconv.FormatInt(fallback, 10))
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid int64: %w", key, err)
+	}
+	return parsed, nil
 }
 
 func envOrDefault(lookup func(string) (string, bool), key, fallback string) string {

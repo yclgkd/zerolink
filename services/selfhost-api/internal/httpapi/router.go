@@ -21,6 +21,16 @@ type Dependencies struct {
 	Services      *service.Container
 	AllowedOrigin string
 	Realtime      *realtime.Hub
+	FilePolicy    FilePolicy
+	MaxProtocolBodyBytes int64
+}
+
+type FilePolicy struct {
+	MaxFileBytes            int64
+	MultipartThresholdBytes int64
+	ChunkSizeBytes          int64
+	MaxChunks               int64
+	MultipartSupported      bool
 }
 
 type errorResponse struct {
@@ -41,7 +51,7 @@ type statusResponse struct {
 const (
 	accessControlAllowHeaders = "Content-Type"
 	accessControlAllowMethods = "GET,POST,OPTIONS"
-	maxProtocolBodyBytes      = 64 * 1024
+	defaultMaxProtocolBodyBytes = 64 * 1024
 )
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -51,9 +61,14 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	maxProtocolBodyBytes := deps.MaxProtocolBodyBytes
+	if maxProtocolBodyBytes <= 0 {
+		maxProtocolBodyBytes = defaultMaxProtocolBodyBytes
+	}
 
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
+	mux.HandleFunc("/api/file_policy", methodOnly(http.MethodGet, logger, filePolicyHandler(deps.FilePolicy, logger)))
 
 	for _, route := range protocol.RouteSpecs() {
 		if route.Name == "ws" {
@@ -63,7 +78,7 @@ func NewRouter(deps Dependencies) http.Handler {
 			)
 			continue
 		}
-		mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, protocolHandler(route.Name, deps.Services.Protocol, logger)))
+		mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, protocolHandler(route.Name, deps.Services.Protocol, logger, maxProtocolBodyBytes)))
 	}
 
 	mux.HandleFunc("/", notFound(logger))
@@ -113,32 +128,47 @@ func protocolPlaceholder(routeName string, logger *slog.Logger) http.HandlerFunc
 	}
 }
 
-func protocolHandler(routeName string, protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+func protocolHandler(routeName string, protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
 	if protocolService == nil {
 		return protocolPlaceholder(routeName, logger)
 	}
 
 	switch routeName {
 	case "create_begin":
-		return createBeginHandler(protocolService, logger)
+		return createBeginHandler(protocolService, logger, maxProtocolBodyBytes)
 	case "create_finish":
-		return createFinishHandler(protocolService, logger)
+		return createFinishHandler(protocolService, logger, maxProtocolBodyBytes)
 	case "lock_begin":
-		return lockBeginHandler(protocolService, logger)
+		return lockBeginHandler(protocolService, logger, maxProtocolBodyBytes)
 	case "lock_commit":
-		return lockCommitHandler(protocolService, logger)
+		return lockCommitHandler(protocolService, logger, maxProtocolBodyBytes)
 	case "compound_begin":
-		return compoundBeginHandler(protocolService, logger)
+		return compoundBeginHandler(protocolService, logger, maxProtocolBodyBytes)
 	case "compound_commit":
-		return compoundCommitHandler(protocolService, logger, false)
+		return compoundCommitHandler(protocolService, logger, false, maxProtocolBodyBytes)
 	case "delete_commit":
-		return compoundCommitHandler(protocolService, logger, true)
+		return compoundCommitHandler(protocolService, logger, true, maxProtocolBodyBytes)
 	case "public_status":
 		return publicStatusHandler(protocolService, logger)
 	case "decrypt_fetch":
 		return decryptFetchHandler(protocolService, logger)
 	default:
 		return protocolPlaceholder(routeName, logger)
+	}
+}
+
+func filePolicyHandler(filePolicy FilePolicy, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(logger, w, http.StatusOK, map[string]any{
+			"ok": true,
+			"policy": map[string]any{
+				"maxFileBytes":            filePolicy.MaxFileBytes,
+				"multipartThresholdBytes": filePolicy.MultipartThresholdBytes,
+				"chunkSizeBytes":          filePolicy.ChunkSizeBytes,
+				"maxChunks":               filePolicy.MaxChunks,
+				"multipartSupported":      filePolicy.MultipartSupported,
+			},
+		})
 	}
 }
 
@@ -192,10 +222,10 @@ func writeJSON(logger *slog.Logger, w http.ResponseWriter, status int, payload a
 	}
 }
 
-func createBeginHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+func createBeginHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.CreateBeginInput
-		if !decodeJSONBody(w, r, &input, logger) {
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
 			return
 		}
 
@@ -214,10 +244,10 @@ func createBeginHandler(protocolService service.Protocol, logger *slog.Logger) h
 	}
 }
 
-func createFinishHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+func createFinishHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.CreateFinishInput
-		if !decodeJSONBody(w, r, &input, logger) {
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
 			return
 		}
 
@@ -248,10 +278,10 @@ func publicStatusHandler(protocolService service.Protocol, logger *slog.Logger) 
 	}
 }
 
-func lockBeginHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+func lockBeginHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.LockBeginInput
-		if !decodeJSONBody(w, r, &input, logger) {
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
 			return
 		}
 
@@ -270,10 +300,10 @@ func lockBeginHandler(protocolService service.Protocol, logger *slog.Logger) htt
 	}
 }
 
-func lockCommitHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+func lockCommitHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.LockCommitInput
-		if !decodeJSONBody(w, r, &input, logger) {
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
 			return
 		}
 
@@ -292,10 +322,10 @@ func lockCommitHandler(protocolService service.Protocol, logger *slog.Logger) ht
 	}
 }
 
-func compoundBeginHandler(protocolService service.Protocol, logger *slog.Logger) http.HandlerFunc {
+func compoundBeginHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.CompoundBeginInput
-		if !decodeJSONBody(w, r, &input, logger) {
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
 			return
 		}
 
@@ -318,10 +348,11 @@ func compoundCommitHandler(
 	protocolService service.Protocol,
 	logger *slog.Logger,
 	deleteOnly bool,
+	maxProtocolBodyBytes int64,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.CompoundCommitInput
-		if !decodeJSONBody(w, r, &input, logger) {
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
 			return
 		}
 
@@ -386,8 +417,8 @@ func writeProtocolError(logger *slog.Logger, w http.ResponseWriter, err error) {
 	writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "unexpected internal error")
 }
 
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *slog.Logger) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxProtocolBodyBytes)
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *slog.Logger, maxBytes int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	defer r.Body.Close()
 
 	decoder := json.NewDecoder(r.Body)

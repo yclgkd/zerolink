@@ -749,6 +749,46 @@ describe('ManagePage – deliver actions', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('passes selected file bytes to deliverSecret and clears text mode', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const file = new File(['file-body'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(file, 'arrayBuffer', {
+      configurable: true,
+      value: async () => new TextEncoder().encode('file-body').buffer,
+    });
+
+    fireEvent.change(screen.getByTestId('manage-secret-input'), {
+      target: { value: 'stale text' },
+    });
+    fireEvent.change(screen.getByTestId('manage-file-input'), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = deliverSecretMock.mock.calls[0]?.[0];
+    expect(callArg?.plaintext).toBe('');
+    expect(callArg?.file).toMatchObject({
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+    });
+    expect(Array.from(callArg.file.bytes)).toEqual(
+      Array.from(new Uint8Array(await file.arrayBuffer()))
+    );
+  });
+
   it('calls toast.success after successful deliver', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');

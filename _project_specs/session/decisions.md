@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-01] Phase-1 file sharing stays inline-only, policy-driven, and download-only
+
+**Decision**: Implement the first file-sharing slice on the existing encrypted `cipherBundle` path instead of introducing blob/object storage now. Files are wrapped in an encrypted payload envelope, deployment limits come from a dedicated `/api/file_policy` contract backed by env vars, receiver UI decrypts to local file state, and the browser only downloads after an explicit user click. No inline preview is allowed in this phase.
+**Context**: Product direction expanded ZeroLink from text-only secret delivery to arbitrary file delivery, but the immediate requirement was to preserve the zero-knowledge boundary and make file-size limits configurable while leaving room for a later multipart/blob-storage rollout.
+**Options Considered**: Keep text-only delivery; add preview-capable file support immediately; build the full multipart/object-storage pipeline now; ship a smaller inline-only file mode first and reject files that exceed the future multipart threshold.
+**Choice**: Add a shared text/file payload envelope, expose a per-deployment file policy to the frontend, allow sender-side file selection on Manage, decode to either plaintext or file metadata on Share, and trigger download only through an explicit button. Files above the inline threshold return `MULTIPART_REQUIRED`; files above the deployment max return `FILE_TOO_LARGE`.
+**Reasoning**: This preserves the existing trust model because the server still stores only opaque ciphertext, avoids the attack surface of browser-side previews, and creates a clean contract boundary (`filePolicy`, `payload.kind`) that a later multipart implementation can reuse instead of replacing.
+**Trade-offs**: Phase 1 still inherits the inline ciphertext ceiling, so deployment max file size is hard-capped to the current plaintext envelope limit until multipart/object storage lands. Self-hosted config and Worker envs now need to stay aligned on file-policy defaults and validation rules.
+
 ## [2026-03-31] Split self-hosted manage protocol flow from payload and crypto helpers to enforce the 800-line limit
 
 **Decision**: Keep `services/selfhost-api/internal/service/protocol_manage.go` focused on transactional manage-flow entrypoints and state transitions, and move payload validation / canonicalization / proof-building / crypto-adjacent helpers into `services/selfhost-api/internal/service/protocol_manage_helpers.go`.

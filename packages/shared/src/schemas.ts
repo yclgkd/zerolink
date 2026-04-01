@@ -4,6 +4,7 @@ import {
   AES_GCM,
   CHANNEL_STATE,
   CHANNEL_TTL_MS,
+  FILE_SHARE,
   PBKDF2_ITERATIONS,
   SAFETY_CODE,
   SECURITY_PROFILE,
@@ -244,6 +245,23 @@ export const CompoundChallengeSchema = z.object({
   expiresAt: UnixMsSchema,
 });
 
+export const FileSharePolicySchema = z
+  .object({
+    maxFileBytes: z.number().int().positive(),
+    multipartThresholdBytes: z.number().int().positive(),
+    chunkSizeBytes: z.number().int().positive(),
+    maxChunks: z.number().int().positive(),
+    multipartSupported: z.boolean(),
+  })
+  .refine((value) => value.multipartThresholdBytes <= value.maxFileBytes, {
+    path: ['multipartThresholdBytes'],
+    message: 'multipartThresholdBytes must be <= maxFileBytes',
+  })
+  .refine((value) => value.chunkSizeBytes * value.maxChunks >= value.maxFileBytes, {
+    path: ['maxChunks'],
+    message: 'chunkSizeBytes * maxChunks must cover maxFileBytes',
+  });
+
 // ─── Serialised WebAuthn Schemas ──────────────────────────────────────────────
 
 export const AttestationJSONSchema = z.object({
@@ -420,6 +438,7 @@ export const CompoundBeginResponseSchema = z.object({
   currentVersion: z.number().int().nonnegative(),
   securityProfile: SecurityProfileSchema,
   adminMode: AdminModeSchema,
+  filePolicy: FileSharePolicySchema.optional(),
 });
 
 // ─── Intent Schemas ───────────────────────────────────────────────────────────
@@ -493,6 +512,17 @@ export const DecryptFetchResponseSchema = z.object({
   cipherVersion: z.number().int().nonnegative(),
   deliveryAuth: DecryptFetchDeliveryAuthSchema.optional(),
   deliveredAt: UnixMsSchema,
+});
+
+export const FilePolicyResponseSchema = z.object({
+  ok: z.literal(true),
+  policy: FileSharePolicySchema.default({
+    maxFileBytes: FILE_SHARE.MAX_BYTES_DEFAULT,
+    multipartThresholdBytes: FILE_SHARE.MULTIPART_THRESHOLD_DEFAULT,
+    chunkSizeBytes: FILE_SHARE.CHUNK_SIZE_DEFAULT,
+    maxChunks: FILE_SHARE.MAX_CHUNKS_DEFAULT,
+    multipartSupported: FILE_SHARE.MULTIPART_SUPPORTED,
+  }),
 });
 
 export const ErrorResponseSchema = z.object({

@@ -18,6 +18,7 @@ export function useManagePageState(uuid?: string) {
   const latestManageHashRef = useRef(location.hash);
 
   const [secretInput, setSecretInput] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [softkeyPassphrase, setSoftkeyPassphrase] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
@@ -111,6 +112,7 @@ export function useManagePageState(uuid?: string) {
     actionScopeRef.current += 1;
     setIsActionPending(false);
     setSecretInput('');
+    setSelectedFile(null);
     setSoftkeyPassphrase('');
     setActionError(null);
     setIsSecretInputInvalid(false);
@@ -150,7 +152,7 @@ export function useManagePageState(uuid?: string) {
     store.channelState !== CHANNEL_STATE.EXPIRED &&
     profile !== null &&
     Boolean(store.uuid);
-  const canDeliver = canManageActions && secretInput.trim().length > 0;
+  const canDeliver = canManageActions && (secretInput.trim().length > 0 || selectedFile !== null);
 
   const { handleDeliver, isActiveActionContext } = useManageDeliveryLogic(
     mountedRef,
@@ -160,10 +162,12 @@ export function useManagePageState(uuid?: string) {
     setActionError,
     setIsSecretInputInvalid,
     secretInput,
+    selectedFile,
     softkeyPassphrase,
     profile,
     getWrappedPrivateKey,
     setSecretInput,
+    setSelectedFile,
     setSoftkeyPassphrase
   );
 
@@ -187,6 +191,7 @@ export function useManagePageState(uuid?: string) {
     adminMode: store.adminMode,
     showDestroyConfirm: store.showDestroyConfirm,
     secretInput,
+    selectedFile,
     softkeyPassphrase,
     safetyCode,
     actionError,
@@ -199,6 +204,19 @@ export function useManagePageState(uuid?: string) {
     canDeliver,
     handleSecretChange: (value: string) => {
       setSecretInput(value);
+      if (value.trim().length > 0 && selectedFile) {
+        setSelectedFile(null);
+      }
+      if (actionError || isSecretInputInvalid) {
+        setActionError(null);
+        setIsSecretInputInvalid(false);
+      }
+    },
+    handleFileSelect: (file: File | null) => {
+      setSelectedFile(file);
+      if (file) {
+        setSecretInput('');
+      }
       if (actionError || isSecretInputInvalid) {
         setActionError(null);
         setIsSecretInputInvalid(false);

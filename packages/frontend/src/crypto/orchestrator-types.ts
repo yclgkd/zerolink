@@ -3,7 +3,10 @@ import type {
   ChannelTtlMs,
   CipherBundle,
   CompoundBeginResponse,
+  DecryptedFilePayload,
+  DecryptedSharePayload,
   DeleteIntent,
+  FileSharePolicy,
   HexString,
   RSAPublicKeyJWK,
   SecurityProfile,
@@ -37,6 +40,8 @@ export type CryptoOrchestratorErrorCode =
   | 'PASSPHRASE_REQUIRED'
   | 'CHANNEL_NOT_DELIVERED'
   | 'INTEGRITY_MISMATCH'
+  | 'FILE_TOO_LARGE'
+  | 'MULTIPART_REQUIRED'
   | 'CRYPTO_ERROR'
   | 'INTERNAL_ERROR';
 
@@ -129,6 +134,11 @@ export interface DeliverSecretInput {
   uuid: string;
   profile: SecurityProfile;
   plaintext: string | Uint8Array;
+  file?: {
+    fileName: string;
+    mediaType: string;
+    bytes: Uint8Array;
+  };
   expireAt?: number | null;
   /** Required when the channel uses softkey/password mode. Must match the passphrase used at create time. */
   softkeyPassphrase?: string;
@@ -144,6 +154,7 @@ export interface DeliverSecretOutput {
   intent: UpdateIntent;
   expectedChallenge: string;
   cipherBundle: CipherBundle;
+  payloadKind: DecryptedSharePayload['kind'];
 }
 
 /**
@@ -179,10 +190,10 @@ export interface DecryptDeliveredInput {
  * Output of a successful decryptDelivered flow.
  */
 export interface DecryptDeliveredOutput {
-  plaintext: string;
   deliveredAt: number;
   receiverPubFpr: string;
   cipherVersion: number;
+  payload: DecryptedSharePayload;
 }
 
 /**
@@ -224,6 +235,13 @@ export type ResolvedDeliverBeginData = CompoundBeginResponse & {
   receiverPubJwk: NonNullable<CompoundBeginResponse['receiverPubJwk']>;
   receiverPubFpr: NonNullable<CompoundBeginResponse['receiverPubFpr']>;
 };
+
+export interface FileDeliveryPolicyResolution {
+  policy: FileSharePolicy;
+  inlineMaxBytes: number;
+}
+
+export type { DecryptedFilePayload };
 
 export type DeliverStoreStateSnapshot = ReturnType<DeliverStore['getState']>;
 export type DecryptStoreStateSnapshot = ReturnType<DecryptStore['getState']>;

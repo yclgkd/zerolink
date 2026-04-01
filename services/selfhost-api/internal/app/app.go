@@ -53,6 +53,14 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		Services:      services,
 		AllowedOrigin: cfg.RP.Origin,
 		Realtime:      realtimeHub,
+		FilePolicy: httpapi.FilePolicy{
+			MaxFileBytes:            cfg.File.MaxBytes,
+			MultipartThresholdBytes: cfg.File.MultipartThresholdBytes,
+			ChunkSizeBytes:          cfg.File.ChunkSizeBytes,
+			MaxChunks:               cfg.File.MaxChunks,
+			MultipartSupported:      cfg.File.MultipartSupported,
+		},
+		MaxProtocolBodyBytes: cfg.File.MaxBytes * 4,
 	})
 
 	// WriteTimeout is intentionally 0: hijacked WebSocket connections

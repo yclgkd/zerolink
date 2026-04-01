@@ -558,6 +558,8 @@ export interface CompoundBeginResponse {
   securityProfile: SecurityProfile;
   /** Admin mode of the channel; controls how compound_commit is authenticated. */
   adminMode: AdminMode;
+  /** Optional deployment file policy used by file delivery UIs. */
+  filePolicy?: FileSharePolicy | undefined;
 }
 
 /** Canonical update payload; SHA-256 of its JSON form becomes intent_hash. */
@@ -621,6 +623,14 @@ export interface CompoundCommitResponse {
   ok: true;
 }
 
+export interface FileSharePolicy {
+  maxFileBytes: number;
+  multipartThresholdBytes: number;
+  chunkSizeBytes: number;
+  maxChunks: number;
+  multipartSupported: boolean;
+}
+
 export interface PublicStatusResponse {
   ok: true;
   state: ChannelState;
@@ -636,6 +646,11 @@ export interface DecryptFetchResponse {
   cipherVersion: number;
   deliveryAuth?: DecryptFetchDeliveryAuth | undefined;
   deliveredAt: UnixMs;
+}
+
+export interface FilePolicyResponse {
+  ok: true;
+  policy: FileSharePolicy;
 }
 
 /** Standard error envelope for all 4xx / 5xx API responses. */

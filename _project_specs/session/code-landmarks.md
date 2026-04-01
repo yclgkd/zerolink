@@ -40,7 +40,11 @@ UPDATE WHEN:
 | `packages/backend/src/do/SecretVault.ts` | Durable Object — atomic channel lifecycle state machine |
 | `packages/backend/src/do/SecretVaultWebSocket.ts` | Durable Object WebSocket accept/broadcast helpers for channel state sync |
 | `packages/frontend/src/crypto/orchestrator.ts` | Frontend crypto orchestration (create / lock / deliver / decrypt) |
+| `packages/shared/src/payload.ts` | Shared encrypted payload envelope for delivered content — wraps text/file payloads, decodes decrypted bytes back into `payload.kind`, and sanitizes download filenames for receiver-side save actions |
+| `packages/backend/src/file-policy.ts` | Worker-side file policy resolver — parses env-configured file limits, validates the inline-only phase-1 ceiling, and serves `/api/file_policy` responses |
 | `packages/frontend/src/pages/create/share-link-session-cache.ts` | Best-effort session-scoped cache for same-session sender recovery of one-time share links while a channel is still waiting; each entry expires against the selected channel TTL |
+| `packages/frontend/src/pages/manage/use-manage-actions.ts` | Sender delivery action bridge — turns selected `File` objects into bytes for `cryptoOrchestrator.deliverSecret(...)` and enforces text/file mutual exclusivity through Manage page state |
+| `packages/frontend/src/features/share/share-logic.ts` | Receiver-side delivered-state controller — owns decrypt submit/burn behavior and the explicit click-to-download path for decrypted files |
 | `packages/frontend/src/components/safety/safety-code.tsx` | Shared sender/receiver fingerprint verification card; supports a compact density so terminal-state mobile layouts can stay verification-first without pushing the primary action too far below the fold |
 | `packages/frontend/src/sync/` | Channel sync client: WebSocket-first subscription with `/api/public/:uuid` polling fallback |
 | `packages/frontend/src/stores/` | Zustand stores: `create-store`, `decrypt-store`, `deliver-store`, `lock-store` |
@@ -70,6 +74,8 @@ UPDATE WHEN:
 | `.github/workflows/pr-validate.yml` | PR CI gates: root/workspace typecheck, root/workspace unit tests, frontend build on `pull_request` / `merge_group` (E2E suites run in `e2e-full.yml` nightly/manual only — PR #184 free-tier budget) |
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
+| `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — now also owns file policy env vars (`SELFHOST_API_FILE_*`) and enforces phase-1 inline file ceilings at startup |
+| `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — now serves `/api/file_policy` and applies a config-driven JSON body limit for file-capable protocol requests |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
 | `deploy/selfhost/docker-compose.yml` | Self-hosted local stack bundle — starts PostgreSQL, migration job, Go API, and Caddy-served frontend with `.env` fallback to `.env.example` |
 | `deploy/selfhost/Caddyfile` | Self-hosted reverse-proxy and SPA fallback config — `/api/*`, `/healthz`, and `/readyz` must route before static fallback |
@@ -105,6 +111,10 @@ UPDATE WHEN:
 | `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | Shared frontend crypto test helpers — defaults orchestrator tests to fast Argon2id params and provides seeded immutable decrypt fixtures for heavy flows |
 | `packages/backend/src/**/__tests__/` | Worker + Durable Object unit tests |
 | `packages/shared/src/__tests__/selfhost-contract-fixtures.test.ts` | Shared cross-runtime fixture verification for canonical JSON, intent hashes, AAD, delivery-proof challenge, and WS message schemas |
+| `packages/shared/src/__tests__/payload.test.ts` | Shared payload-envelope tests for text/file round-trips, legacy text fallback, and tamper detection on encrypted file metadata |
+| `packages/frontend/src/__tests__/crypto-orchestrator-deliver.test.ts` | Frontend deliver-flow coverage, including file-policy-driven file delivery and `MULTIPART_REQUIRED` rejection |
+| `packages/frontend/src/__tests__/share-page-decrypt.test.tsx` | Receiver delivered-page UI coverage, including plaintext burn and download-only decrypted file UX |
+| `packages/frontend/src/__tests__/manage-page-deliver.test.tsx` | Sender Manage page integration coverage for text/file delivery inputs and action error handling |
 | `services/selfhost-api/internal/httpapi/router_test.go` | Self-hosted Go HTTP smoke tests for health, readiness, M3 create/public routes, remaining placeholders, and websocket upgrade gating |
 | `services/selfhost-api/internal/httpapi/websocket_test.go` | Self-hosted websocket route tests for subscribe bootstrap, ping/pong, state fan-out, and channel close notifications |
 | `services/selfhost-api/internal/service/protocol_test.go` | Self-hosted Go M3 service tests covering quick/secure create flows, downgrade rejection, transactional WebAuthn finalize rollback, attestation failure mapping, and expired public-status tombstoning |
@@ -128,6 +138,7 @@ UPDATE WHEN:
 | `packages/frontend/src/crypto/webauthn.ts` | `useLiteralKeys` Biome errors | Cannot auto-fix; TypeScript `noPropertyAccessFromIndexSignature` requires bracket notation in this file — do not touch |
 | `packages/frontend/src/release/verification.ts` | Verified Release covers only `dist/assets/*` | Root documents (`index.html`, `robots.txt`) are excluded from the signed manifest because Cloudflare can mutate edge responses; the executing bootstrap entry must still match `manifest.entryAssetPath` |
 | `packages/frontend/src/release/tiered-verification.ts` | Cached release trust still revalidates `manifest.json` + `manifest.sig` | `manifest-hash.txt` is an unsigned helper and may only be used as a freshness hint before deciding whether to run full verification |
+| `packages/shared/src/payload.ts` + `packages/frontend/src/features/share/share-logic.ts` | File delivery is intentionally download-only in phase 1 | Do not add preview rendering on the receiver page without a new security review; decrypted files must stay out of the DOM and only download on explicit click |
 | `packages/backend/src/do/SecretVault.ts` | `/ws` upgrades require an active channel record and top-level redaction | Missing or terminal channels must fail the WebSocket upgrade so dead links do not keep idle Durable Object sockets alive, and unexpected `fetch()`-level `/ws` failures must still flow through `mapError()` with handler `ws_subscribe` |
 | `packages/backend/src/do/SecretVaultHttp.ts` | Production observability intentionally omits raw exception text | `mapError()` keeps staging stacks/messages for debugging, but production emits only a structured error name + handler + fingerprint payload; `stack_fingerprint` is based on a normalized handler + error-name + frame signature, not raw stack text or bundle offsets; use `APP_ENV` from `packages/backend/wrangler.toml`, not hostnames, to reason about log detail |
 | `packages/backend/src/security-headers.ts` | `Cache-Control: no-store` on SPA entry paths is intentional | Changing to `no-cache` causes stale HTML replay across signed deployments and breaks the Verified Release gate — see decisions.md [2026-03-10] |

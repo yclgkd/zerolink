@@ -239,6 +239,53 @@ export function SecretInput({
   );
 }
 
+export function FileInput({
+  selectedFile,
+  disabled,
+  onSelect,
+}: {
+  selectedFile: File | null;
+  disabled: boolean;
+  onSelect: (file: File | null) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className="flex flex-col gap-3">
+      <label className="text-sm font-medium text-foreground" htmlFor="manage-file-input">
+        {t('manage.fileLabel')}
+      </label>
+      <input
+        className="block w-full rounded-2xl border border-border/70 bg-card/60 px-4 py-3 text-sm text-foreground file:mr-3 file:rounded-xl file:border-0 file:bg-primary/12 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+        data-testid="manage-file-input"
+        disabled={disabled}
+        id="manage-file-input"
+        onChange={(event) => onSelect(event.target.files?.[0] ?? null)}
+        type="file"
+      />
+      {selectedFile ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/60 bg-background/35 px-4 py-3 text-sm text-muted-foreground"
+          data-testid="manage-file-selected"
+        >
+          <span className="break-all text-foreground">
+            {selectedFile.name} ({selectedFile.size} bytes)
+          </span>
+          <Button
+            data-testid="manage-file-clear"
+            disabled={disabled}
+            onClick={() => onSelect(null)}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            {t('manage.fileClearButton')}
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function DestroyConfirmPanel({
   pending,
   onCancelDestroy,

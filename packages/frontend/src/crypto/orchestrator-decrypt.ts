@@ -5,6 +5,7 @@ import {
   computeCredentialPublicKeyFingerprint,
   computeIntentHash,
   computeSoftkeyPublicKeyFingerprint,
+  decodeSharePayload,
   decodeBase64Url,
   deriveUpdateProofChallengeB64u,
   type UpdateIntent,
@@ -202,7 +203,7 @@ async function performDecryptionPipeline(
     });
 
     return {
-      plaintext: new TextDecoder().decode(plaintextBytes),
+      plaintextBytes: plaintextBytes.slice(),
     };
   } finally {
     wipeBytes(ciphertextBytes);
@@ -267,7 +268,7 @@ export async function executeDecryptDelivered(
     const cipherVersion = await resolveCipherVersionForDecrypt(payload, envelope, input.uuid);
     assertMonotonicDeliveryState(envelope, cipherVersion, payload.cipherBundle.ciphertextHash);
 
-    const { plaintext } = await performDecryptionPipeline(
+    const { plaintextBytes } = await performDecryptionPipeline(
       payload,
       normalizedPassphrase,
       envelope,
@@ -275,6 +276,8 @@ export async function executeDecryptDelivered(
       cipherVersion,
       deps.kdfParams
     );
+    const decryptedPayload = decodeSharePayload(plaintextBytes);
+    wipeBytes(plaintextBytes);
     try {
       await deps.receiverKeyStorage.save({
         ...envelope,
@@ -289,16 +292,20 @@ export async function executeDecryptDelivered(
       return toError(toStorageErrorCode(error), 'decrypt.persist-state');
     }
     applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
-      state.setPlaintext(plaintext);
+      if (decryptedPayload.kind === 'file') {
+        state.setFile(decryptedPayload);
+        return;
+      }
+      state.setPlaintext(decryptedPayload.text);
     });
 
     return {
       ok: true,
       data: {
-        plaintext,
         deliveredAt: payload.deliveredAt,
         receiverPubFpr: payload.receiverPubFpr,
         cipherVersion,
+        payload: decryptedPayload,
       },
     };
   } catch (error) {

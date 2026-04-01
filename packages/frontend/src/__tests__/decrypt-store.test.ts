@@ -53,6 +53,7 @@ describe('useDecryptStore', () => {
     expect(state.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(state.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(state.plaintext).toBeNull();
+    expect(state.file).toBeNull();
     expect(state.localPlaintextBurned).toBe(false);
   });
 
@@ -120,6 +121,31 @@ describe('useDecryptStore', () => {
     state.markLocalPlaintextBurned();
     expect(useDecryptStore.getState().localPlaintextBurned).toBe(true);
     expect(useDecryptStore.getState().plaintext).toBeNull();
+    expect(useDecryptStore.getState().file).toBeNull();
+  });
+
+  it('stores file payloads and clears them when locally burned', () => {
+    const state = useDecryptStore.getState();
+    state.setFile({
+      kind: 'file',
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    expect(useDecryptStore.getState().file).toEqual({
+      kind: 'file',
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    expect(useDecryptStore.getState().plaintext).toBeNull();
+
+    state.markLocalPlaintextBurned();
+    expect(useDecryptStore.getState().localPlaintextBurned).toBe(true);
+    expect(useDecryptStore.getState().plaintext).toBeNull();
+    expect(useDecryptStore.getState().file).toBeNull();
   });
 
   it('resets channel-scoped state when uuid changes', () => {
@@ -139,6 +165,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.plaintext).toBeNull();
+    expect(nextState.file).toBeNull();
     expect(nextState.localPlaintextBurned).toBe(false);
   });
 
@@ -158,6 +185,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus.status).toBe('success');
     expect(nextState.decryptFetch.status).toBe('success');
     expect(nextState.plaintext).toBe('secret payload');
+    expect(nextState.file).toBeNull();
     expect(nextState.localPlaintextBurned).toBe(false);
   });
 
@@ -177,6 +205,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.plaintext).toBeNull();
+    expect(nextState.file).toBeNull();
     expect(nextState.localPlaintextBurned).toBe(false);
   });
 });

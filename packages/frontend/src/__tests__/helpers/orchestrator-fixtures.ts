@@ -4,6 +4,7 @@ import {
   type Base64Url,
   Base64UrlSchema,
   buildCipherBundleAadBytes,
+  type DecryptedSharePayload,
   type DecryptFetchResponse,
   type DecryptFetchSoftkeyDeliveryAuth,
   type ECDSAPublicKeyJWK,
@@ -207,6 +208,7 @@ export function createApiClientMock(): ApiClient {
     deleteCommit: vi.fn(),
     publicStatus: vi.fn(),
     decryptFetch: vi.fn(),
+    filePolicy: vi.fn(),
   };
 }
 
@@ -272,12 +274,18 @@ export interface DeliveredDecryptFixtureBase {
   cipherBundle: DecryptFetchResponse['cipherBundle'];
   receiverPubFpr: HexString;
   receiverKeyEnvelope: ReceiverKeyEnvelope;
-  plaintext: string;
+  plaintext: string | null;
+  expectedPayload: DecryptedSharePayload;
 }
 
 export async function buildDeliveredDecryptFixtureBase(
   params: {
     plaintext?: string;
+    file?: {
+      fileName: string;
+      mediaType: string;
+      bytes: Uint8Array;
+    };
     receiverKeyStorage?: ReceiverKeyStorage | undefined;
     useFastKdf?: boolean | undefined;
   } = {}
@@ -297,6 +305,18 @@ export async function buildDeliveredDecryptFixtureBase(
     }
   );
   const plaintext = params.plaintext ?? 'receiver can decrypt this';
+  const expectedPayload: DecryptedSharePayload = params.file
+    ? {
+        kind: 'file',
+        fileName: params.file.fileName,
+        mediaType: params.file.mediaType,
+        size: params.file.bytes.byteLength,
+        bytes: Uint8Array.from(params.file.bytes),
+      }
+    : {
+        kind: 'text',
+        text: plaintext,
+      };
 
   vi.mocked(apiClient.lockBegin).mockResolvedValue({
     ok: true,
@@ -346,6 +366,20 @@ export async function buildDeliveredDecryptFixtureBase(
     ok: true,
     data: VALID_ASSERTION,
   } satisfies WebAuthnAdapterResult<AssertionJSON>);
+  vi.mocked(apiClient.filePolicy).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      ok: true,
+      policy: {
+        maxFileBytes: 2_097_152,
+        multipartThresholdBytes: 2_097_152,
+        chunkSizeBytes: 262_144,
+        maxChunks: 8,
+        multipartSupported: false,
+      },
+    },
+  });
 
   let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
   vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
@@ -358,7 +392,8 @@ export async function buildDeliveredDecryptFixtureBase(
   const deliverResult = await orchestrator.deliverSecret({
     uuid: VALID_UUID,
     profile: SECURITY_PROFILE.SECURE,
-    plaintext,
+    plaintext: params.file ? '' : plaintext,
+    ...(params.file ? { file: params.file } : {}),
   });
   expect(deliverResult.ok).toBe(true);
   expect(committedCipherBundle).not.toBeNull();
@@ -376,7 +411,8 @@ export async function buildDeliveredDecryptFixtureBase(
     cipherBundle: cloneCipherBundle(committedCipherBundle),
     receiverPubFpr: lockResult.data.receiverPubFpr,
     receiverKeyEnvelope: cloneReceiverKeyEnvelope(receiverKeyEnvelope),
-    plaintext,
+    plaintext: params.file ? null : plaintext,
+    expectedPayload,
   };
 }
 
@@ -392,7 +428,8 @@ export async function seedDeliveredDecryptFixture(
   receiverKeyStorage: ReceiverKeyStorage;
   cipherBundle: DecryptFetchResponse['cipherBundle'];
   receiverPubFpr: HexString;
-  plaintext: string;
+  plaintext: string | null;
+  expectedPayload: DecryptedSharePayload;
 }> {
   const receiverKeyStorage =
     params.receiverKeyStorage ??
@@ -417,6 +454,12 @@ export async function seedDeliveredDecryptFixture(
     cipherBundle: cloneCipherBundle(base.cipherBundle),
     receiverPubFpr: base.receiverPubFpr,
     plaintext: base.plaintext,
+    expectedPayload: base.expectedPayload.kind === 'file'
+      ? {
+          ...base.expectedPayload,
+          bytes: Uint8Array.from(base.expectedPayload.bytes),
+        }
+      : base.expectedPayload,
   };
 }
 

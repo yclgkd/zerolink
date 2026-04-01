@@ -8,6 +8,7 @@ export interface EncryptAesGcmParams {
   aad?: Uint8Array;
   iv?: Uint8Array;
   padBlock?: number;
+  maxPlaintextBytes?: number;
 }
 
 export interface EncryptAesGcmResult {
@@ -45,9 +46,12 @@ function assertPadBlock(padBlock: number): void {
   }
 }
 
-function assertPlaintextSize(plaintext: Uint8Array): void {
-  if (plaintext.byteLength > MAX_PLAINTEXT_BYTES) {
-    throw new Error(`plaintext exceeds MAX_PLAINTEXT_BYTES (${MAX_PLAINTEXT_BYTES})`);
+function assertPlaintextSize(plaintext: Uint8Array, maxPlaintextBytes: number): void {
+  if (!Number.isInteger(maxPlaintextBytes) || maxPlaintextBytes <= 0) {
+    throw new Error('maxPlaintextBytes must be a positive integer');
+  }
+  if (plaintext.byteLength > maxPlaintextBytes) {
+    throw new Error(`plaintext exceeds maxPlaintextBytes (${maxPlaintextBytes})`);
   }
 }
 
@@ -89,10 +93,11 @@ function buildAesGcmParams(iv: Uint8Array, aad?: Uint8Array): AesGcmParams {
 
 export function padPlaintext(
   plaintext: Uint8Array,
-  padBlock: number = AES_GCM.PAD_BLOCK_DEFAULT
+  padBlock: number = AES_GCM.PAD_BLOCK_DEFAULT,
+  maxPlaintextBytes: number = MAX_PLAINTEXT_BYTES
 ): Uint8Array {
   assertPadBlock(padBlock);
-  assertPlaintextSize(plaintext);
+  assertPlaintextSize(plaintext, maxPlaintextBytes);
 
   const minLength = LENGTH_PREFIX_BYTES + plaintext.byteLength;
   const paddedLength = Math.ceil(minLength / padBlock) * padBlock;
@@ -161,6 +166,7 @@ export async function encryptAesGcm({
   aad,
   iv,
   padBlock = AES_GCM.PAD_BLOCK_DEFAULT,
+  maxPlaintextBytes = MAX_PLAINTEXT_BYTES,
 }: EncryptAesGcmParams): Promise<EncryptAesGcmResult> {
   assertPadBlock(padBlock);
   const cryptoApi = getCryptoApi();
@@ -168,7 +174,7 @@ export async function encryptAesGcm({
 
   assertIvLength(resolvedIv);
 
-  const paddedPlaintext = padPlaintext(plaintext, padBlock);
+  const paddedPlaintext = padPlaintext(plaintext, padBlock, maxPlaintextBytes);
   const ciphertextBuffer = await cryptoApi.subtle.encrypt(
     buildAesGcmParams(resolvedIv, aad),
     key,

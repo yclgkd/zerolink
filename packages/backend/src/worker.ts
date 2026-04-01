@@ -17,6 +17,7 @@ import {
   INTERNAL_COMMIT_TOKEN_HEADER,
   readInternalCommitCookieSignal,
 } from './commitTokens.ts';
+import { toFilePolicyResponse } from './file-policy.ts';
 import { applySecurityHeaders } from './security-headers.ts';
 
 export interface Env {
@@ -26,6 +27,11 @@ export interface Env {
   COMMIT_TOKEN_SECRET: string;
   RP_ID: string;
   RP_ORIGIN: string;
+  FILE_MAX_BYTES?: string | number;
+  FILE_MULTIPART_THRESHOLD_BYTES?: string | number;
+  FILE_CHUNK_SIZE_BYTES?: string | number;
+  FILE_MAX_CHUNKS?: string | number;
+  FILE_MULTIPART_SUPPORTED?: string | boolean;
 }
 
 const UUID_REGEX = /^[A-Za-z0-9_-]{21}$/u;
@@ -53,6 +59,7 @@ const DELETE_COMMIT_PATH = /^\/api\/delete_commit\/([^/]+)$/u;
 const PUBLIC_STATUS_PATH = /^\/api\/public\/([^/]+)$/u;
 const DECRYPT_FETCH_PATH = /^\/api\/decrypt_fetch\/([^/]+)$/u;
 const WS_SUBSCRIBE_PATH = /^\/api\/ws\/([^/]+)$/u;
+const FILE_POLICY_PATH = '/api/file_policy';
 
 const API_ROUTES: readonly ApiRoute[] = [
   { method: 'POST', pattern: /^\/api\/create_begin\/[^/]+$/u },
@@ -411,6 +418,11 @@ async function forwardWebSocketUpgrade(
 async function handleApiRequest(request: Request, pathname: string, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return preflight();
+  }
+
+  if (pathname === FILE_POLICY_PATH) {
+    if (request.method !== 'GET') return methodNotAllowed('GET');
+    return jsonApiResponse(toFilePolicyResponse(env) as unknown as Record<string, unknown>, 200);
   }
 
   const wsMatch = pathname.match(WS_SUBSCRIBE_PATH);

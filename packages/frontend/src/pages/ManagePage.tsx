@@ -8,6 +8,7 @@ import { PassphraseInput } from '../components/lock/passphrase-input';
 import { clearCreatedShareLink, readCreatedShareLink } from './create/share-link-session-cache';
 import {
   ActionPanel,
+  FileInput,
   ManagePageHeader,
   SecretInput,
   StatusContent,
@@ -120,6 +121,14 @@ export function ManagePage(): ReactElement {
                 disabled={state.isActionPending}
                 onChange={state.handleSecretChange}
                 value={state.secretInput}
+              />
+            ) : null}
+
+            {showDeliveryComposer ? (
+              <FileInput
+                disabled={state.isActionPending}
+                onSelect={state.handleFileSelect}
+                selectedFile={state.selectedFile}
               />
             ) : null}
 

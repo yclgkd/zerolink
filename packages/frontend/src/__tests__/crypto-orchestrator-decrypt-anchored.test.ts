@@ -81,7 +81,10 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
 
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
-    expect(decryptResult.data.plaintext).toBe('anchored softkey plaintext');
+    expect(decryptResult.data.payload).toEqual({
+      kind: 'text',
+      text: 'anchored softkey plaintext',
+    });
     await expect(prepared.receiverKeyStorage.load(VALID_UUID)).resolves.toMatchObject({
       senderAuthFpr: prepared.senderAuthFpr,
       lastAcceptedDelivery: {

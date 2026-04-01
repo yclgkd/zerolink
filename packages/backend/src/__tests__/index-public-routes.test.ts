@@ -8,6 +8,43 @@ import {
 } from './helpers/worker-fixtures.ts';
 
 describe('backend worker routing — public/read routes', () => {
+  it('serves deployment file policy without hitting the Durable Object', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
+    });
+    env.FILE_MAX_BYTES = 1_048_576;
+    env.FILE_MULTIPART_THRESHOLD_BYTES = 1_048_576;
+    env.FILE_CHUNK_SIZE_BYTES = 262_144;
+    env.FILE_MAX_CHUNKS = 4;
+
+    const response = await dispatch(env, '/api/file_policy', 'GET');
+    const payload = (await response.json()) as {
+      ok: true;
+      policy: {
+        maxFileBytes: number;
+        multipartThresholdBytes: number;
+        chunkSizeBytes: number;
+        maxChunks: number;
+        multipartSupported: boolean;
+      };
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      ok: true,
+      policy: {
+        maxFileBytes: 1_048_576,
+        multipartThresholdBytes: 1_048_576,
+        chunkSizeBytes: 262_144,
+        maxChunks: 4,
+        multipartSupported: false,
+      },
+    });
+    expect(calls).toHaveLength(0);
+  });
+
   it('forwards GET /api/public/:uuid to SecretVault DO get_public_state', async () => {
     const publicStateResponse = {
       ok: true,

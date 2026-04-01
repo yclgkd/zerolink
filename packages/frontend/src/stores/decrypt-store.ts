@@ -1,6 +1,7 @@
 import {
   CHANNEL_STATE,
   type ChannelState,
+  type DecryptedFilePayload,
   type DecryptFetchResponse,
   type PublicStatusResponse,
   type UUID,
@@ -24,6 +25,7 @@ export interface DecryptStoreState {
   publicStatus: AsyncRequestState<PublicStatusResponse>;
   decryptFetch: AsyncRequestState<DecryptFetchResponse>;
   plaintext: string | null;
+  file: DecryptedFilePayload | null;
   localPlaintextBurned: boolean;
 }
 
@@ -39,6 +41,7 @@ export interface DecryptStoreActions {
   completeDecryptFetch: (payload: DecryptFetchResponse) => void;
   failDecryptFetch: (errorCode: string) => void;
   setPlaintext: (plaintext: string | null) => void;
+  setFile: (file: DecryptedFilePayload | null) => void;
   markLocalPlaintextBurned: () => void;
   resetDecryptStore: () => void;
 }
@@ -55,6 +58,7 @@ function createInitialState(): DecryptStoreState {
     publicStatus: createIdleRequestState<PublicStatusResponse>(),
     decryptFetch: createIdleRequestState<DecryptFetchResponse>(),
     plaintext: null,
+    file: null,
     localPlaintextBurned: false,
   };
 }
@@ -100,6 +104,14 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
   setPlaintext: (plaintext) =>
     set(() => ({
       plaintext,
+      file: null,
+      localPlaintextBurned: false,
+    })),
+
+  setFile: (file) =>
+    set(() => ({
+      file,
+      plaintext: null,
       localPlaintextBurned: false,
     })),
 
@@ -107,6 +119,7 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
     set(() => ({
       localPlaintextBurned: true,
       plaintext: null,
+      file: null,
     })),
 
   resetDecryptStore: () => set(createInitialState()),

@@ -2,6 +2,7 @@ import type {
   Base64Url,
   ChannelState,
   CipherBundle,
+  FileSharePolicy,
   HexString,
   RSAPublicKeyJWK,
   SecurityProfile,
@@ -9,7 +10,7 @@ import type {
   UUID,
   WrappedPrivateKey,
 } from '@zerolink/shared';
-import { AES_GCM, SECURITY_PROFILE } from '@zerolink/shared';
+import { AES_GCM, FILE_SHARE, SECURITY_PROFILE } from '@zerolink/shared';
 import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 import type { ApiClient } from '../api/client';
 import type {
@@ -19,6 +20,7 @@ import type {
   DecryptStoreStateSnapshot,
   DeliverStore,
   DeliverStoreStateSnapshot,
+  FileDeliveryPolicyResolution,
 } from './orchestrator-types';
 import {
   getPassphraseValidationMessage,
@@ -162,6 +164,29 @@ export function toPlaintextBytes(value: string | Uint8Array): Uint8Array {
     return toUtf8Bytes(value);
   }
   return Uint8Array.from(value);
+}
+
+export function resolveFileSharePolicy(policy?: FileSharePolicy): FileSharePolicy {
+  return (
+    policy ?? {
+      maxFileBytes: FILE_SHARE.MAX_BYTES_DEFAULT,
+      multipartThresholdBytes: FILE_SHARE.MULTIPART_THRESHOLD_DEFAULT,
+      chunkSizeBytes: FILE_SHARE.CHUNK_SIZE_DEFAULT,
+      maxChunks: FILE_SHARE.MAX_CHUNKS_DEFAULT,
+      multipartSupported: FILE_SHARE.MULTIPART_SUPPORTED,
+    }
+  );
+}
+
+export function resolveInlineFilePolicy(policy?: FileSharePolicy): FileDeliveryPolicyResolution {
+  const resolvedPolicy = resolveFileSharePolicy(policy);
+  return {
+    policy: resolvedPolicy,
+    inlineMaxBytes: Math.min(
+      resolvedPolicy.maxFileBytes,
+      resolvedPolicy.multipartThresholdBytes
+    ),
+  };
 }
 
 export function isDeliveredState(state: ChannelState): boolean {

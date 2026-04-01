@@ -2,6 +2,7 @@ import {
   type Base64Url,
   CHANNEL_STATE,
   type ChannelState,
+  sanitizeDownloadFilename,
   ErrorResponseSchema,
   type HexString,
   PublicStatusResponseSchema,
@@ -690,7 +691,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     hasValidPassphrase(passphrase) &&
     !isDecryptSubmitting;
 
-  const canBurn = Boolean(enabled) && Boolean(store.plaintext) && !isDecryptSubmitting;
+  const canBurn = Boolean(enabled) && Boolean(store.plaintext || store.file) && !isDecryptSubmitting;
 
   function isActiveDecryptContext(scope: number, actionUuid: string): boolean {
     if (!mountedRef.current) return false;
@@ -762,12 +763,31 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
   }
 
   function handleBurn(): void {
-    if (!enabled || isDecryptSubmitting || !store.plaintext) return;
+    if (!enabled || isDecryptSubmitting || (!store.plaintext && !store.file)) return;
 
     store.markLocalPlaintextBurned();
     setPassphrase('');
     clearDecryptError();
     toast.success(t('share.burnedToast'));
+  }
+
+  function handleDownloadFile(): void {
+    if (!enabled || !store.file) return;
+
+    const blobBytes = store.file.bytes.slice();
+    const objectUrl = URL.createObjectURL(
+      new Blob([blobBytes.buffer as ArrayBuffer], {
+        type: store.file.mediaType || 'application/octet-stream',
+      })
+    );
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = sanitizeDownloadFilename(store.file.fileName);
+    anchor.rel = 'noopener';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   }
 
   return {
@@ -787,6 +807,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
       }
     },
     handleDecrypt,
+    handleDownloadFile,
     handleBurn,
   };
 }

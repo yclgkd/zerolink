@@ -303,6 +303,135 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
     expect(useDeliverStore.getState().compoundCommit.errorCode).toBe('CRYPTO_ERROR');
   });
 
+  it('delivers file payloads using the deployment file policy', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        allowCredentials: VALID_ALLOW_CREDENTIALS,
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.SECURE,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(apiClient.filePolicy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        policy: {
+          maxFileBytes: MAX_PLAINTEXT_BYTES,
+          multipartThresholdBytes: MAX_PLAINTEXT_BYTES,
+          chunkSizeBytes: 262_144,
+          maxChunks: 8,
+          multipartSupported: false,
+        },
+      },
+    });
+    vi.mocked(assertWithWebAuthn).mockResolvedValue({
+      ok: true,
+      data: VALID_ASSERTION,
+    } satisfies WebAuthnAdapterResult<AssertionJSON>);
+    vi.mocked(apiClient.compoundCommit).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true },
+    });
+
+    const result = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.SECURE,
+      plaintext: '',
+      file: {
+        fileName: 'secret.bin',
+        mediaType: 'application/octet-stream',
+        bytes: new Uint8Array([1, 2, 3, 4]),
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.payloadKind).toBe('file');
+    expect(vi.mocked(apiClient.filePolicy)).toHaveBeenCalledTimes(1);
+    expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELIVERED);
+  });
+
+  it('returns MULTIPART_REQUIRED when file exceeds the inline threshold', async () => {
+    const { orchestrator, apiClient } = createOrchestrator();
+    const receiverKeyPair = await generateReceiverKeyPair();
+    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
+    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+
+    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        challenge: {
+          id: VALID_B64U,
+          seed: VALID_B64U,
+          expiresAt: CHALLENGE_EXPIRES_AT,
+        },
+        allowCredentials: VALID_ALLOW_CREDENTIALS,
+        receiverPubFpr,
+        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
+        currentVersion: 0,
+        securityProfile: SECURITY_PROFILE.SECURE,
+        adminMode: 'webauthn',
+      },
+    });
+    vi.mocked(apiClient.filePolicy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        policy: {
+          maxFileBytes: MAX_PLAINTEXT_BYTES,
+          multipartThresholdBytes: 4,
+          chunkSizeBytes: 262_144,
+          maxChunks: 8,
+          multipartSupported: false,
+        },
+      },
+    });
+
+    const result = await orchestrator.deliverSecret({
+      uuid: VALID_UUID,
+      profile: SECURITY_PROFILE.SECURE,
+      plaintext: '',
+      file: {
+        fileName: 'secret.bin',
+        mediaType: 'application/octet-stream',
+        bytes: new Uint8Array([1, 2, 3, 4, 5]),
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'MULTIPART_REQUIRED',
+        stage: 'deliver.file-policy',
+        message: 'Selected file exceeds the inline delivery limit for this deployment.',
+      },
+    });
+    expect(vi.mocked(assertWithWebAuthn)).not.toHaveBeenCalled();
+    expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
+  });
+
   it('uses 4 KB padding for quick profile delivery', async () => {
     const cipherBundle = await deliverAndCaptureCipherBundle(SECURITY_PROFILE.QUICK);
 
