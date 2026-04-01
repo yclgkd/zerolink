@@ -393,7 +393,7 @@ export function LockedStep({
             </li>
           ))}
         </ol>
-        <p className="text-sm leading-6 text-muted-foreground">{t('share.nextStep3')}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{t('share.nextStepNote')}</p>
       </div>
     </section>
   );

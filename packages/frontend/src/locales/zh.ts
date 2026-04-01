@@ -161,7 +161,7 @@ const zh: Translation = {
     nextStepsLabel: '后续步骤',
     nextStep1: '只有本设备显示安全码时才能验证安全码',
     nextStep2: '通过其他渠道与发送方确认并验证安全码',
-    nextStep3: '发送方传递密文后，此页面将自动刷新',
+    nextStepNote: '发送方传递密文后，此页面将自动刷新',
     deliveredTitle: '频道已传递',
     deliveredBody: '加密密钥已传递，解密仍需创建接收方锁定的设备。',
     deliveredAtLabel: '传递时间：',

@@ -171,7 +171,7 @@ const en = {
     nextStepsLabel: 'Next Steps',
     nextStep1: 'The Safety Code can only be verified on the device that locked this channel.',
     nextStep2: 'Confirm and verify the Safety Code with the sender over another channel.',
-    nextStep3: 'This page will refresh automatically when the sender delivers the ciphertext.',
+    nextStepNote: 'This page will refresh automatically when the sender delivers the ciphertext.',
     deliveredTitle: 'Channel Delivered',
     deliveredBody:
       'The encrypted secret has been delivered. Decryption still requires the device that created the receiver lock.',

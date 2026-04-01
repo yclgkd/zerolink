@@ -167,7 +167,7 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.DELIVERED) {
     return (
-      <section className="max-w-[48rem] space-y-3" data-testid="manage-state-delivered">
+      <section className="max-w-[52rem] space-y-3" data-testid="manage-state-delivered">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.deliveredTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.deliveredBody')}</p>
