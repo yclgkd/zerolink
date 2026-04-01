@@ -30,6 +30,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Add optional `payloadKind` to update intent / delivery-proof metadata, have frontend always send it for new deliveries, persist it in Worker/self-hosted proofs, and enforce inline file ciphertext ceilings only for declared file deliveries. On decrypt, `declaredKind: "file"` is strict, `declaredKind: "text"` stays raw text, and `declaredKind: undefined` may still decode a valid file envelope but otherwise falls back to raw text.
 **Reasoning**: This keeps new file flows verifiable end-to-end and gives the backend a concrete contract to enforce, without stranding historical records or regressing legacy text compatibility. It also avoids leaking filename/size metadata to the server because the type bit is the only new server-visible signal.
 **Trade-offs**: Undeclared deliveries remain partially heuristic at decrypt time, so compatibility mode still carries a small ambiguity surface until multipart/object-storage support can rely on stronger typed metadata everywhere.
+**Follow-up (2026-04-01)**: Review follow-up later tightened receiver behavior for proof-backed deliveries. When `deliveryAuth` is present, undeclared payloads no longer opportunistically decode as files and instead stay on the raw-text path; see the newer entry above, "Receiver-side file decoding requires declared `payloadKind: \"file\"`."
 
 ## [2026-04-01] Phase-1 file sharing stays inline-only, policy-driven, and download-only
 
