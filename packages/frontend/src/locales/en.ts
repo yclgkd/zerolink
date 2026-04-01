@@ -101,8 +101,8 @@ const en = {
     safetyUnavailableTitle: 'Safety Code unavailable right now.',
     safetyUnavailableBody:
       'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.',
-    secretLabel: 'Secret Payload',
-    secretPlaceholder: 'Enter plaintext to encrypt and deliver',
+    secretLabel: 'Secret to Deliver',
+    secretPlaceholder: 'Type or paste your secret here',
     softkeyPassphraseHint:
       'This channel uses a password-protected management key. Enter the password you set when creating this channel.',
     softkeyLabel: 'Channel password',

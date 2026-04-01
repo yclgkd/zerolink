@@ -113,7 +113,7 @@ Selectable `securityProfile` at creation (v3.0 two tiers):
 
 - After opening the share link, the page shows a minimal animation (3 frames):
     1. "Your password stays only with you"
-    2. "It generates your decryption key (the sender doesn't know it either)"
+    2. "Your passphrase creates your personal decryption key — the sender never learns it"
     3. "After locking, only you can open the content"
 - Enter password -> generate RSA keypair -> Argon2id-wrap private key and store locally
 - Lock request must carry a lock challenge response (see protocol)
@@ -450,7 +450,7 @@ Copy principles:
 ### 13.2 Receiver Foolproof Animation and Copy
 
 - Animation within 3 frames + 1 strong prompt:
-    - "This is your decryption key - the sender doesn't know it either"
+    - "Your passphrase creates your decryption key — the sender never learns it"
 - Password strength prompt (but not forcing overly strong passwords to avoid discouraging users; Secure Share is available separately as a higher security option)
 
 ### 13.3 Guidance When WebAuthn Is Unavailable
