@@ -336,12 +336,10 @@ func computeExpectedCompoundChallengeBytes(
 	}
 
 	if op == "update" {
-		chunks := make([]byte, 0, len("GL-delivery-proof")+len(uuid)+len(challengeIDBytes)+len(intentHash)+len(challengeSeedBytes))
+		chunks := make([]byte, 0, len("GL-delivery-proof")+len(uuid)+len(intentHash))
 		chunks = append(chunks, []byte("GL-delivery-proof")...)
 		chunks = append(chunks, []byte(uuid)...)
-		chunks = append(chunks, challengeIDBytes...)
 		chunks = append(chunks, []byte(intentHash)...)
-		chunks = append(chunks, challengeSeedBytes...)
 		sum := sha256.Sum256(chunks)
 		return sum[:], nil
 	}
