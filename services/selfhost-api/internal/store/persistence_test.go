@@ -293,8 +293,8 @@ func TestFinalizeTerminalStatePreservesDeleteTombstone(t *testing.T) {
 		if tombstone.Reason != TerminalReasonDeleted {
 			t.Fatalf("tombstone reason = %s, want %s after expired finalize", tombstone.Reason, TerminalReasonDeleted)
 		}
-		if !tombstone.FinalizedAt.Equal(now) {
-			t.Fatalf("tombstone finalizedAt = %s, want %s", tombstone.FinalizedAt, now)
+		if !tombstone.FinalizedAt.Equal(now.Truncate(time.Microsecond)) {
+			t.Fatalf("tombstone finalizedAt = %s, want %s", tombstone.FinalizedAt, now.Truncate(time.Microsecond))
 		}
 		return nil
 	}); err != nil {
