@@ -1,4 +1,4 @@
-import type { DecryptFetchResponse } from '@zerolink/shared';
+import type { DecryptedSharePayload, DecryptFetchResponse } from '@zerolink/shared';
 import {
   AES_GCM,
   buildCipherBundleAadBytes,
@@ -37,6 +37,8 @@ import {
 import { computeSha256Hex, decodeBase64UrlBytes, encodeBase64UrlBytes } from './protocol-utils';
 import type { ReceiverKeyEnvelope } from './storage';
 
+const textDecoder = new TextDecoder();
+
 async function resolveAnchoredCipherVersion(
   payload: DecryptFetchResponse,
   envelope: ReceiverKeyEnvelope,
@@ -67,6 +69,9 @@ async function resolveAnchoredCipherVersion(
       timestamp: payload.deliveryAuth.meta.timestamp,
       nonce: payload.deliveryAuth.meta.nonce,
       receiverPubFpr: payload.receiverPubFpr,
+      ...(payload.deliveryAuth.meta.payloadKind
+        ? { payloadKind: payload.deliveryAuth.meta.payloadKind }
+        : {}),
       cipherBundle: payload.cipherBundle,
       expireAt: payload.deliveryAuth.meta.expireAt,
     };
@@ -121,6 +126,32 @@ async function resolveCipherVersionForDecrypt(
   }
 
   return payload.cipherVersion;
+}
+
+function decodeDeliveredPayload(
+  plaintextBytes: Uint8Array,
+  declaredKind: 'text' | 'file' | undefined
+): DecryptedSharePayload {
+  if (declaredKind === 'text') {
+    return {
+      kind: 'text',
+      text: textDecoder.decode(plaintextBytes),
+    };
+  }
+
+  const decryptedPayload = decodeSharePayload(plaintextBytes);
+  if (declaredKind === 'file' && decryptedPayload.kind !== 'file') {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+
+  if (declaredKind === undefined && decryptedPayload.kind !== 'file') {
+    return {
+      kind: 'text',
+      text: textDecoder.decode(plaintextBytes),
+    };
+  }
+
+  return decryptedPayload;
 }
 
 function assertMonotonicDeliveryState(
@@ -276,7 +307,10 @@ export async function executeDecryptDelivered(
       cipherVersion,
       deps.kdfParams
     );
-    const decryptedPayload = decodeSharePayload(plaintextBytes);
+    const decryptedPayload = decodeDeliveredPayload(
+      plaintextBytes,
+      payload.deliveryAuth?.meta.payloadKind
+    );
     wipeBytes(plaintextBytes);
     try {
       await deps.receiverKeyStorage.save({

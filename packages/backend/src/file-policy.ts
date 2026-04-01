@@ -1,4 +1,5 @@
 import {
+  AES_GCM,
   FILE_SHARE,
   type FilePolicyResponse,
   type FileSharePolicy,
@@ -13,6 +14,9 @@ export interface FilePolicyEnv {
   FILE_MAX_CHUNKS?: string | number;
   FILE_MULTIPART_SUPPORTED?: string | boolean;
 }
+
+const MAX_INLINE_FILE_BYTES =
+  MAX_PLAINTEXT_BYTES - FILE_SHARE.ENVELOPE_FIXED_BYTES - FILE_SHARE.HEADER_MAX_BYTES;
 
 function parsePositiveInt(
   value: string | number | undefined,
@@ -77,11 +81,23 @@ export function resolveFilePolicy(env: FilePolicyEnv): FileSharePolicy {
     ),
   });
 
-  if (policy.maxFileBytes > MAX_PLAINTEXT_BYTES) {
-    throw new Error(`FILE_MAX_BYTES must be <= ${MAX_PLAINTEXT_BYTES} for inline delivery`);
+  if (policy.maxFileBytes > MAX_INLINE_FILE_BYTES) {
+    throw new Error(`FILE_MAX_BYTES must be <= ${MAX_INLINE_FILE_BYTES} for inline delivery`);
   }
 
   return policy;
+}
+
+export function resolveInlineFilePlaintextBytes(maxFileBytes: number): number {
+  return maxFileBytes + FILE_SHARE.ENVELOPE_FIXED_BYTES + FILE_SHARE.HEADER_MAX_BYTES;
+}
+
+export function resolveMaxFileCiphertextBytes(maxFileBytes: number, padBlock: number): number {
+  const paddedPlaintextBytes =
+    Math.ceil(
+      (AES_GCM.PAD_LENGTH_PREFIX_BYTES + resolveInlineFilePlaintextBytes(maxFileBytes)) / padBlock
+    ) * padBlock;
+  return paddedPlaintextBytes + AES_GCM.TAG_LENGTH_BITS / 8;
 }
 
 export function toFilePolicyResponse(env: FilePolicyEnv): FilePolicyResponse {

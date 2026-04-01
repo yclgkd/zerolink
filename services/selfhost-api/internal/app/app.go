@@ -52,6 +52,13 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			RPOrigin:  cfg.RP.Origin,
 			Verifier:  verifier,
 			Publisher: realtimeHub,
+			File: service.FilePolicy{
+				MaxFileBytes:            cfg.File.MaxBytes,
+				MultipartThresholdBytes: cfg.File.MultipartThresholdBytes,
+				ChunkSizeBytes:          cfg.File.ChunkSizeBytes,
+				MaxChunks:               cfg.File.MaxChunks,
+				MultipartSupported:      cfg.File.MultipartSupported,
+			},
 		},
 	)
 	services := service.New(

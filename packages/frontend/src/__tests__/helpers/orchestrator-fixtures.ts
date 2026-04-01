@@ -634,6 +634,9 @@ export async function buildAnchoredSoftkeyDeliveryBase(
         version: capturedCommit.intent.version,
         timestamp: capturedCommit.intent.timestamp,
         nonce: capturedCommit.intent.nonce,
+        ...(capturedCommit.intent.payloadKind
+          ? { payloadKind: capturedCommit.intent.payloadKind }
+          : {}),
         expireAt: capturedCommit.intent.expireAt,
       },
       signer: {

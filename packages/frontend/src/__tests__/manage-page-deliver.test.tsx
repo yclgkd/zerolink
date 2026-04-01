@@ -789,6 +789,36 @@ describe('ManagePage – deliver actions', () => {
     );
   });
 
+  it('clears the underlying file input value when selection is removed', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const file = new File(['file-body'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    const input = screen.getByTestId('manage-file-input') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: { files: [file] },
+    });
+    expect(screen.getByTestId('manage-file-selected')).toBeTruthy();
+
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      writable: true,
+      value: 'C:\\fakepath\\secret.bin',
+    });
+
+    fireEvent.click(screen.getByTestId('manage-file-clear'));
+
+    expect(input.value).toBe('');
+  });
+
   it('calls toast.success after successful deliver', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');

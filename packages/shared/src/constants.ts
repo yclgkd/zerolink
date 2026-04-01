@@ -62,11 +62,14 @@ export const MAX_PLAINTEXT_BYTES = 2_097_152 as const; // 2 × 1024 × 1024
  * Download-only file sharing policy defaults.
  *
  * Phase 1 keeps file delivery on the existing inline encrypted payload path,
- * so the default ceiling aligns with MAX_PLAINTEXT_BYTES.
+ * so the default raw-file ceiling reserves space for the encrypted envelope
+ * header inside MAX_PLAINTEXT_BYTES.
  */
 export const FILE_SHARE = {
-  MAX_BYTES_DEFAULT: MAX_PLAINTEXT_BYTES,
-  MULTIPART_THRESHOLD_DEFAULT: MAX_PLAINTEXT_BYTES,
+  ENVELOPE_FIXED_BYTES: 8,
+  HEADER_MAX_BYTES: 16 * 1024,
+  MAX_BYTES_DEFAULT: MAX_PLAINTEXT_BYTES - 8 - 16 * 1024,
+  MULTIPART_THRESHOLD_DEFAULT: MAX_PLAINTEXT_BYTES - 8 - 16 * 1024,
   CHUNK_SIZE_DEFAULT: 262_144, // 256 KiB
   MAX_CHUNKS_DEFAULT: 8,
   MULTIPART_SUPPORTED: false,

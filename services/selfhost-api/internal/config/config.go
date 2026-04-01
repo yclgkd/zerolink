@@ -51,7 +51,9 @@ type RPConfig struct {
 }
 
 const (
-	defaultFileMaxBytes                = int64(2_097_152)
+	fileEnvelopeFixedBytes             = int64(8)
+	fileHeaderMaxBytes                 = int64(16 * 1024)
+	defaultFileMaxBytes                = int64(2_097_152) - fileEnvelopeFixedBytes - fileHeaderMaxBytes
 	defaultFileMultipartThresholdBytes = defaultFileMaxBytes
 	defaultFileChunkSizeBytes          = int64(262_144)
 	defaultFileMaxChunks               = int64(8)

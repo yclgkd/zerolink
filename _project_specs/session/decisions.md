@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-01] File-share integrity binds `payloadKind`, but undeclared decrypts must stay backward-compatible
+
+**Decision**: Keep `payloadKind` as an optional signed delivery metadata field for file-aware update intents and proofs, enforce file limits server-side only when `payloadKind === "file"`, and make decrypt fallback opportunistically decode undeclared file envelopes while still treating undeclared text as raw plaintext.
+**Context**: Phase-1 file sharing introduced inline file payloads and deployment file-policy contracts, but review uncovered two conflicting requirements: new file deliveries need a backend-enforced type signal so `/api/file_policy` is not advisory only, while historical delivered payloads and tests still exist without `payloadKind`, including legacy text that may begin with `ZLP1`.
+**Options Considered**: Require `payloadKind` everywhere immediately and break older payload verification/decrypt flows; ignore `payloadKind` during verification and keep file policy frontend-only; sign `payloadKind` when present, enforce file policy from that signal, and preserve backward compatibility for undeclared deliveries at decrypt time.
+**Choice**: Add optional `payloadKind` to update intent / delivery-proof metadata, have frontend always send it for new deliveries, persist it in Worker/self-hosted proofs, and enforce inline file ciphertext ceilings only for declared file deliveries. On decrypt, `declaredKind: "file"` is strict, `declaredKind: "text"` stays raw text, and `declaredKind: undefined` may still decode a valid file envelope but otherwise falls back to raw text.
+**Reasoning**: This keeps new file flows verifiable end-to-end and gives the backend a concrete contract to enforce, without stranding historical records or regressing legacy text compatibility. It also avoids leaking filename/size metadata to the server because the type bit is the only new server-visible signal.
+**Trade-offs**: Undeclared deliveries remain partially heuristic at decrypt time, so compatibility mode still carries a small ambiguity surface until multipart/object-storage support can rely on stronger typed metadata everywhere.
+
 ## [2026-04-01] Phase-1 file sharing stays inline-only, policy-driven, and download-only
 
 **Decision**: Implement the first file-sharing slice on the existing encrypted `cipherBundle` path instead of introducing blob/object storage now. Files are wrapped in an encrypted payload envelope, deployment limits come from a dedicated `/api/file_policy` contract backed by env vars, receiver UI decrypts to local file state, and the browser only downloads after an explicit user click. No inline preview is allowed in this phase.

@@ -1,7 +1,9 @@
+import { FILE_SHARE } from './constants.ts';
+
 const MAGIC = 'ZLP1';
 const MAGIC_BYTES = new TextEncoder().encode(MAGIC);
 const HEADER_LENGTH_BYTES = 4;
-const MAX_HEADER_BYTES = 16 * 1024;
+const MAX_HEADER_BYTES = FILE_SHARE.HEADER_MAX_BYTES;
 const FALLBACK_DOWNLOAD_FILE_NAME = 'download.bin';
 const INVALID_FILENAME_CHARS = new Set(['\\', '/', ':', '*', '?', '"', '<', '>', '|']);
 
@@ -55,10 +57,30 @@ export type DecryptedSharePayload = DecryptedTextPayload | DecryptedFilePayload;
 
 function sanitizeFilenameChar(char: string): string {
   const codePoint = char.codePointAt(0);
-  if (codePoint == null || codePoint < 0x20 || INVALID_FILENAME_CHARS.has(char)) {
+  if (
+    codePoint == null ||
+    codePoint < 0x20 ||
+    isUnsafeFilenameCodePoint(codePoint) ||
+    INVALID_FILENAME_CHARS.has(char)
+  ) {
     return '_';
   }
   return char;
+}
+
+function isUnsafeFilenameCodePoint(codePoint: number): boolean {
+  return (
+    codePoint === 0x061c ||
+    codePoint === 0x200b ||
+    codePoint === 0x200c ||
+    codePoint === 0x200d ||
+    codePoint === 0x200e ||
+    codePoint === 0x200f ||
+    codePoint === 0x2060 ||
+    codePoint === 0xfeff ||
+    (codePoint >= 0x202a && codePoint <= 0x202e) ||
+    (codePoint >= 0x2066 && codePoint <= 0x2069)
+  );
 }
 
 export function sanitizeDownloadFilename(fileName: string | null | undefined): string {
@@ -116,31 +138,31 @@ function hasEnvelopeMagic(bytes: Uint8Array): boolean {
   return true;
 }
 
-function parseHeader(bytes: Uint8Array): {
+function tryParseHeader(bytes: Uint8Array): {
   header: PayloadHeader;
   bodyOffset: number;
-} {
+} | null {
   if (!hasEnvelopeMagic(bytes)) {
-    throw new Error('payload envelope magic mismatch');
+    return null;
   }
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const headerLength = view.getUint32(MAGIC_BYTES.byteLength, false);
   if (headerLength <= 0 || headerLength > MAX_HEADER_BYTES) {
-    throw new Error('payload header length is invalid');
+    return null;
   }
 
   const headerOffset = MAGIC_BYTES.byteLength + HEADER_LENGTH_BYTES;
   const bodyOffset = headerOffset + headerLength;
   if (bodyOffset > bytes.byteLength) {
-    throw new Error('payload header length exceeds envelope size');
+    return null;
   }
 
   let parsedHeader: unknown;
   try {
     parsedHeader = JSON.parse(textDecoder.decode(bytes.subarray(headerOffset, bodyOffset)));
   } catch {
-    throw new Error('payload header is not valid JSON');
+    return null;
   }
 
   if (
@@ -149,7 +171,7 @@ function parseHeader(bytes: Uint8Array): {
     !('kind' in parsedHeader) ||
     typeof parsedHeader.kind !== 'string'
   ) {
-    throw new Error('payload header shape is invalid');
+    return null;
   }
 
   if (parsedHeader.kind === 'text') {
@@ -171,7 +193,7 @@ function parseHeader(bytes: Uint8Array): {
     };
   }
 
-  throw new Error('payload kind is invalid');
+  return null;
 }
 
 export function encodeTextSharePayload(text: string): Uint8Array {
@@ -195,14 +217,15 @@ export function encodeFileSharePayload(input: {
 }
 
 export function decodeSharePayload(bytes: Uint8Array): DecryptedSharePayload {
-  if (!hasEnvelopeMagic(bytes)) {
+  const parsed = tryParseHeader(bytes);
+  if (!parsed) {
     return {
       kind: 'text',
       text: textDecoder.decode(bytes),
     };
   }
 
-  const { header, bodyOffset } = parseHeader(bytes);
+  const { header, bodyOffset } = parsed;
   const bodyBytes = bytes.slice(bodyOffset);
 
   if (header.kind === 'text') {

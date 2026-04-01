@@ -35,6 +35,7 @@ import {
 } from '../crypto/bytes.ts';
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { verifyAssertion } from '../crypto/webauthn.ts';
+import { resolveFilePolicy, resolveMaxFileCiphertextBytes } from '../file-policy.ts';
 import {
   buildCommitCookieSignal,
   shouldClearCommitCookie,
@@ -76,6 +77,7 @@ interface CommitRequestContext extends BeginRequestContext {
 // ---------------------------------------------------------------------------
 
 async function validateCipherBundle(
+  vc: VaultContext,
   intent: UpdateIntent,
   lockedReceiverPubFpr: HexString
 ): Promise<void> {
@@ -110,6 +112,19 @@ async function validateCipherBundle(
       'cipherBundle.aad does not match the expected binding'
     );
   }
+
+  if (intent.payloadKind === 'file') {
+    const maxCiphertextBytes = resolveMaxFileCiphertextBytes(
+      resolveFilePolicy(vc.env).maxFileBytes,
+      intent.cipherBundle.padBlock
+    );
+    if (ciphertextBytes.byteLength > maxCiphertextBytes) {
+      throw new StateTransitionError(
+        'CIPHER_BUNDLE_INVALID',
+        'cipherBundle.ciphertext exceeds the configured inline file limit'
+      );
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +140,7 @@ function buildUpdateDeliveryProof(
     timestamp: intent.timestamp,
     nonce: intent.nonce,
     expireAt: intent.expireAt,
+    ...(intent.payloadKind ? { payloadKind: intent.payloadKind } : {}),
   };
 
   if ('softkeySignature' in params) {
@@ -367,7 +383,7 @@ export async function commitCompoundInternal(
         );
       }
 
-      await validateCipherBundle(intent, record.receiver.pubFpr);
+      await validateCipherBundle(vc, intent, record.receiver.pubFpr);
     }
 
     enforceRateLimit(vc, 'compound_commit', now, tokenHash);

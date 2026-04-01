@@ -41,6 +41,14 @@ describe('share payload envelope', () => {
     });
   });
 
+  it('treats malformed ZLP1-prefixed plaintext as legacy text', () => {
+    const legacy = new TextEncoder().encode('ZLP1hello world');
+    expect(decodeSharePayload(legacy)).toEqual({
+      kind: 'text',
+      text: 'ZLP1hello world',
+    });
+  });
+
   it('rejects file envelopes with mismatched declared size', () => {
     const payload = encodeFileSharePayload({
       fileName: 'secret.bin',
@@ -86,6 +94,10 @@ describe('sanitizeDownloadFilename', () => {
 
   it('replaces control characters', () => {
     expect(sanitizeDownloadFilename('file\x00name')).toBe('file_name');
+  });
+
+  it('replaces bidi override characters', () => {
+    expect(sanitizeDownloadFilename('invoice\u202Egpj.exe')).toBe('invoice_gpj.exe');
   });
 
   it('falls back to download.bin for empty string', () => {

@@ -83,6 +83,7 @@ export const ChannelTtlMsSchema = z.union([
 
 /** 'password' is the canonical new name; 'softkey' is the legacy alias. */
 export const AdminModeSchema = z.enum(['webauthn', 'password', 'softkey']);
+export const SharePayloadKindSchema = z.enum(['text', 'file']);
 
 /** WebAuthn Level 3 authenticator transport values. */
 export const AuthenticatorTransportSchema = z.enum([
@@ -293,6 +294,7 @@ export const UpdateDeliveryMetaSchema = z.object({
   timestamp: UnixMsSchema,
   nonce: Base64UrlSchema,
   expireAt: z.union([UnixMsSchema, z.null()]),
+  payloadKind: SharePayloadKindSchema.optional(),
 });
 
 export const DetachedWebAuthnDeliveryProofSchema = z.object({
@@ -449,6 +451,7 @@ export const UpdateIntentSchema = z.object({
   timestamp: UnixMsSchema,
   nonce: Base64UrlSchema,
   receiverPubFpr: HexStringSchema,
+  payloadKind: SharePayloadKindSchema.optional(),
   cipherBundle: CipherBundleSchema,
   // null means "retain the channel's original TTL".
   expireAt: z.union([UnixMsSchema, z.null()]),

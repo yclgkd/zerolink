@@ -249,6 +249,15 @@ export function FileInput({
   onSelect: (file: File | null) => void;
 }) {
   const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function clearSelection(): void {
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
+    onSelect(null);
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <label className="text-sm font-medium text-foreground" htmlFor="manage-file-input">
@@ -260,6 +269,7 @@ export function FileInput({
         disabled={disabled}
         id="manage-file-input"
         onChange={(event) => onSelect(event.target.files?.[0] ?? null)}
+        ref={inputRef}
         type="file"
       />
       <p className="text-xs text-muted-foreground">{t('manage.fileSizeHint')}</p>
@@ -274,7 +284,7 @@ export function FileInput({
           <Button
             data-testid="manage-file-clear"
             disabled={disabled}
-            onClick={() => onSelect(null)}
+            onClick={clearSelection}
             size="sm"
             type="button"
             variant="secondary"

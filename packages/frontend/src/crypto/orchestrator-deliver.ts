@@ -130,6 +130,7 @@ async function buildDeliverUpdateIntent(
       timestamp: asUnixMs(deps.now()),
       nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
       receiverPubFpr: beginData.receiverPubFpr,
+      payloadKind,
       cipherBundle,
       expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
     };

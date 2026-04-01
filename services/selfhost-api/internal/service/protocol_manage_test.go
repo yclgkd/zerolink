@@ -282,6 +282,110 @@ func TestProtocolServiceDeleteCommitFinalizesDeletedTombstone(t *testing.T) {
 	}
 }
 
+func TestProtocolServiceRejectsOversizedFileCiphertext(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+		File: FilePolicy{
+			MaxFileBytes:            1,
+			MultipartThresholdBytes: 1,
+			ChunkSizeBytes:          1,
+			MaxChunks:               1,
+			MultipartSupported:      false,
+		},
+	})
+
+	ctx := context.Background()
+	timestamp := time.Now().UTC().UnixMilli()
+	uuid := "qqqqqqqqqqqqqqqqqqqqq"
+	lockKeyB64u := encodeBase64URL([]byte("lock-key-manage-flow-000000000009"))
+	softkeyPrivateKey, softkeyPubJWK := generateSoftkeyKeyPair(t)
+
+	if _, err := svc.CreateBegin(ctx, CreateBeginInput{
+		UUID:            uuid,
+		Timestamp:       &timestamp,
+		SecurityProfile: string(store.SecurityProfileQuick),
+	}); err != nil {
+		t.Fatalf("CreateBegin() error = %v", err)
+	}
+	if _, err := svc.CreateFinish(ctx, CreateFinishInput{
+		AdminMode:     string(store.AdminModePassword),
+		UUID:          uuid,
+		SoftkeyPubJWK: softkeyPubJWK,
+		LockKeyB64u:   lockKeyB64u,
+		Timestamp:     &timestamp,
+	}); err != nil {
+		t.Fatalf("CreateFinish() error = %v", err)
+	}
+
+	lockBegin, err := svc.LockBegin(ctx, LockBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("LockBegin() error = %v", err)
+	}
+	receiverPubJWK, receiverPubFpr := generateReceiverPublicKey(t)
+	lockProof, err := computeLockProof(uuid, lockBegin.LockChallenge.ID, lockBegin.LockChallenge.Challenge, lockKeyB64u)
+	if err != nil {
+		t.Fatalf("computeLockProof() error = %v", err)
+	}
+	if _, err := svc.LockCommit(ctx, LockCommitInput{
+		UUID:            uuid,
+		LockChallengeID: lockBegin.LockChallenge.ID,
+		LockProof:       lockProof,
+		ReceiverPubJWK:  receiverPubJWK,
+		ReceiverPubFpr:  receiverPubFpr,
+		LockedAt:        timestamp + 1_000,
+	}); err != nil {
+		t.Fatalf("LockCommit() error = %v", err)
+	}
+
+	compoundBegin, err := svc.CompoundBegin(ctx, CompoundBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("CompoundBegin() error = %v", err)
+	}
+
+	intent := ManageIntent{
+		Op:             "update",
+		UUID:           uuid,
+		Version:        0,
+		Timestamp:      timestamp + 2_000,
+		Nonce:          encodeBase64URL([]byte("nonce-manage-flow-000009")),
+		ReceiverPubFpr: receiverPubFpr,
+		PayloadKind:    "file",
+		CipherBundle:   buildCipherBundle(t, uuid, 0, receiverPubFpr, make([]byte, 8_192)),
+		ExpireAt:       json.RawMessage("null"),
+	}
+	intentHash, err := intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("intent.ComputeHash() error = %v", err)
+	}
+	expectedChallenge, err := computeExpectedCompoundChallengeBytes(
+		uuid,
+		intentHash,
+		&store.ActiveChallenge{
+			ChallengeID:   stringPtr(compoundBegin.Challenge.ID),
+			ChallengeSeed: stringPtr(compoundBegin.Challenge.Seed),
+		},
+		intent.Op,
+	)
+	if err != nil {
+		t.Fatalf("computeExpectedCompoundChallengeBytes() error = %v", err)
+	}
+	signature := signSoftkeyPayload(t, softkeyPrivateKey, expectedChallenge)
+
+	_, err = svc.CompoundCommit(ctx, CompoundCommitInput{
+		AdminMode:        string(store.AdminModePassword),
+		UUID:             uuid,
+		SoftkeySignature: signature,
+		IntentHash:       intentHash,
+		Intent:           intent,
+	})
+	requireProtocolError(t, err, "CIPHER_BUNDLE_INVALID", 400)
+}
+
 func TestProtocolServiceLockBeginRateLimitsNewChallengeIssuanceWhileAllowingActiveReuse(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
