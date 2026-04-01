@@ -362,14 +362,16 @@ func (s *ProtocolService) PublicStatus(ctx context.Context, uuid string) (Public
 
 	now := s.now().UTC()
 	var output PublicStatusOutput
+	var channelNotFound bool
 
 	err := s.db.WithChannelTx(ctx, uuid, func(ctx context.Context, tx *store.ChannelTx) error {
 		channel, err := tx.LoadActiveChannel(ctx, now)
+		if errors.Is(err, store.ErrChannelNotFound) {
+			channelNotFound = true
+			return nil // commit so any tombstone written by lazy expiry finalization is persisted
+		}
 		if err != nil {
 			return err
-		}
-		if channel == nil {
-			return notFound("channel not found")
 		}
 
 		adminMode := string(store.AdminModeWebAuthn)
@@ -390,6 +392,9 @@ func (s *ProtocolService) PublicStatus(ctx context.Context, uuid string) (Public
 	})
 	if err != nil {
 		return PublicStatusOutput{}, mapProtocolError(err)
+	}
+	if channelNotFound {
+		return PublicStatusOutput{}, notFound("channel not found")
 	}
 
 	return output, nil
