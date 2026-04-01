@@ -102,7 +102,7 @@ const en = {
     safetyUnavailableBody:
       'Receiver fingerprint is missing from the current channel state, so the Safety Code cannot be shown.',
     secretLabel: 'Secret Payload',
-    secretPlaceholder: 'Enter plaintext secret to encrypt and deliver',
+    secretPlaceholder: 'Enter plaintext to encrypt and deliver',
     softkeyPassphraseHint:
       'This channel uses a password-protected management key. Enter the password you set when creating this channel.',
     softkeyLabel: 'Channel password',
@@ -169,9 +169,9 @@ const en = {
     lockedTitle: 'Receiver channel is locked',
     lockedBody: 'Verify the Safety Code with the sender only if this device shows it below.',
     nextStepsLabel: 'Next Steps',
-    nextStep1: 'Coordinate with the sender over another channel.',
-    nextStep2: 'Only confirm the Safety Code if this device shows it below.',
-    nextStep3: 'This page updates automatically when the sender delivers the encrypted secret.',
+    nextStep1: 'The Safety Code can only be verified on the device that locked this channel.',
+    nextStep2: 'Confirm and verify the Safety Code with the sender over another channel.',
+    nextStep3: 'This page will refresh automatically when the sender delivers the ciphertext.',
     deliveredTitle: 'Channel Delivered',
     deliveredBody:
       'The encrypted secret has been delivered. Decryption still requires the device that created the receiver lock.',

@@ -362,10 +362,7 @@ export function LockedStep({
 }) {
   const { t } = useTranslation();
 
-  const nextSteps = useMemo(
-    () => [t('share.nextStep1'), t('share.nextStep2'), t('share.nextStep3')],
-    [t]
-  );
+  const nextSteps = useMemo(() => [t('share.nextStep1'), t('share.nextStep2')], [t]);
 
   return (
     <section className="max-w-[52rem] space-y-4" data-testid="share-step-locked">
@@ -396,6 +393,7 @@ export function LockedStep({
             </li>
           ))}
         </ol>
+        <p className="text-sm leading-6 text-muted-foreground">{t('share.nextStep3')}</p>
       </div>
     </section>
   );

@@ -144,7 +144,7 @@ export function StatusContent({
 
   if (status === CHANNEL_STATE.LOCKED) {
     return (
-      <section className="max-w-[48rem] space-y-3" data-testid="manage-state-locked">
+      <section className="max-w-[52rem] space-y-3" data-testid="manage-state-locked">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{t('manage.lockedTitle')}</h3>
           <p className="text-sm leading-6 text-muted-foreground">{t('manage.lockedBody')}</p>
@@ -220,7 +220,7 @@ export function SecretInput({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="space-y-2">
+    <section className="space-y-3">
       <label className="text-sm font-medium text-foreground" htmlFor="manage-secret-input">
         {t('manage.secretLabel')}
       </label>
