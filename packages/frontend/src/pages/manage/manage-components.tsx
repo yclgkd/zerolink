@@ -220,7 +220,7 @@ export function SecretInput({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="space-y-3">
+    <section className="flex flex-col gap-3">
       <label className="text-sm font-medium text-foreground" htmlFor="manage-secret-input">
         {t('manage.secretLabel')}
       </label>
