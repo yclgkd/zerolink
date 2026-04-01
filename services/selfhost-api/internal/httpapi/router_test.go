@@ -377,6 +377,50 @@ func TestCreateBeginRouteRejectsOversizedBody(t *testing.T) {
 	}
 }
 
+func TestCreateBeginRouteKeepsDefaultBodyLimitWhenCompoundCommitCapIsExpanded(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:               logger,
+		AllowedOrigin:        "http://localhost:5173",
+		Realtime:             realtimeHub,
+		MaxProtocolBodyBytes: 8 * 1024 * 1024,
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            2_097_152,
+			MultipartThresholdBytes: 2_097_152,
+			ChunkSizeBytes:          262_144,
+			MaxChunks:               8,
+			MultipartSupported:      false,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{},
+			logger,
+		),
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/create_begin/abcdefghijklmnopqrstu",
+		strings.NewReader(
+			`{"uuid":"abcdefghijklmnopqrstu","timestamp":1730000000000,"securityProfile":"secure","padding":"`+
+				strings.Repeat("a", defaultMaxProtocolBodyBytes)+
+				`"}`,
+		),
+	)
+	res := httptest.NewRecorder()
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", res.Code)
+	}
+}
+
 func TestCreateFinishRouteRejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 

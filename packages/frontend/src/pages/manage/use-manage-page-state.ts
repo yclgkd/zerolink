@@ -224,8 +224,15 @@ export function useManagePageState(uuid?: string) {
           void apiClient.filePolicy().then((result) => {
             if (!mountedRef.current) return;
             if (result.ok) {
-              setFilePolicyMaxBytes(result.data.policy.maxFileBytes);
+              setFilePolicyMaxBytes(
+                Math.min(
+                  result.data.policy.maxFileBytes,
+                  result.data.policy.multipartThresholdBytes
+                )
+              );
+              return;
             }
+            filePolicyFetchedRef.current = false;
           });
         }
       }

@@ -51,6 +51,12 @@ export interface DecryptStoreActions {
  */
 export type DecryptStore = DecryptStoreState & DecryptStoreActions;
 
+function wipeFileBytes(file: DecryptedFilePayload | null): void {
+  if (file) {
+    file.bytes.fill(0);
+  }
+}
+
 function createInitialState(): DecryptStoreState {
   return {
     uuid: null,
@@ -71,6 +77,7 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
 
   setDecryptUuid: (uuid) => {
     if (get().uuid === uuid) return;
+    wipeFileBytes(get().file);
     set(() => ({
       ...createInitialState(),
       uuid,
@@ -102,24 +109,29 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
     set(() => ({ decryptFetch: createErrorState<DecryptFetchResponse>(errorCode) })),
 
   setPlaintext: (plaintext) =>
-    set(() => ({
-      plaintext,
-      file: null,
-      localPlaintextBurned: false,
-    })),
+    set((state) => {
+      wipeFileBytes(state.file);
+      return {
+        plaintext,
+        file: null,
+        localPlaintextBurned: false,
+      };
+    }),
 
   setFile: (file) =>
-    set(() => ({
-      file,
-      plaintext: null,
-      localPlaintextBurned: false,
-    })),
+    set((state) => {
+      if (state.file !== file) {
+        wipeFileBytes(state.file);
+      }
+      return {
+        file,
+        plaintext: null,
+        localPlaintextBurned: false,
+      };
+    }),
 
   markLocalPlaintextBurned: () => {
-    const { file } = get();
-    if (file) {
-      file.bytes.fill(0);
-    }
+    wipeFileBytes(get().file);
     set(() => ({
       localPlaintextBurned: true,
       plaintext: null,
@@ -127,5 +139,8 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
     }));
   },
 
-  resetDecryptStore: () => set(createInitialState()),
+  resetDecryptStore: () => {
+    wipeFileBytes(get().file);
+    set(createInitialState());
+  },
 }));

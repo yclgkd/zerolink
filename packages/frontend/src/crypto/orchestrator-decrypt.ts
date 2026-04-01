@@ -130,9 +130,17 @@ async function resolveCipherVersionForDecrypt(
 
 function decodeDeliveredPayload(
   plaintextBytes: Uint8Array,
-  declaredKind: 'text' | 'file' | undefined
+  declaredKind: 'text' | 'file' | undefined,
+  hasDeliveryAuth: boolean
 ): DecryptedSharePayload {
   if (declaredKind === 'text') {
+    return {
+      kind: 'text',
+      text: textDecoder.decode(plaintextBytes),
+    };
+  }
+
+  if (declaredKind === undefined && hasDeliveryAuth) {
     return {
       kind: 'text',
       text: textDecoder.decode(plaintextBytes),
@@ -309,7 +317,8 @@ export async function executeDecryptDelivered(
     );
     const decryptedPayload = decodeDeliveredPayload(
       plaintextBytes,
-      payload.deliveryAuth?.meta.payloadKind
+      payload.deliveryAuth?.meta.payloadKind,
+      payload.deliveryAuth !== undefined
     );
     wipeBytes(plaintextBytes);
     try {

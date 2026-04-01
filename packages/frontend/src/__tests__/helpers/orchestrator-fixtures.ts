@@ -476,7 +476,14 @@ export async function buildAnchoredSoftkeyDeliveryBase(
   params: {
     receiverKeyStorage?: ReceiverKeyStorage | undefined;
     uuid?: string;
-    plaintext?: string;
+    plaintext?: string | Uint8Array;
+    file?:
+      | {
+          fileName: string;
+          mediaType: string;
+          bytes: Uint8Array;
+        }
+      | undefined;
     passphrase?: string;
     useFastKdf?: boolean | undefined;
   } = {}
@@ -599,12 +606,29 @@ export async function buildAnchoredSoftkeyDeliveryBase(
   if (!createResult.data.wrappedPrivateKey) {
     throw new Error('expected wrappedPrivateKey in createResult');
   }
+  if (params.file) {
+    vi.mocked(apiClient.filePolicy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        policy: {
+          maxFileBytes: 2_097_152,
+          multipartThresholdBytes: 2_097_152,
+          chunkSizeBytes: 262_144,
+          maxChunks: 8,
+          multipartSupported: false,
+        },
+      },
+    });
+  }
   const deliverResult = await orchestrator.deliverSecret({
     uuid,
     profile: SECURITY_PROFILE.QUICK,
-    plaintext: params.plaintext ?? 'anchored softkey plaintext',
+    plaintext: params.file ? '' : (params.plaintext ?? 'anchored softkey plaintext'),
     softkeyPassphrase: passphrase,
     wrappedPrivateKey: createResult.data.wrappedPrivateKey,
+    ...(params.file ? { file: params.file } : {}),
   });
   expect(deliverResult.ok).toBe(true);
   expect(committed).not.toBeNull();

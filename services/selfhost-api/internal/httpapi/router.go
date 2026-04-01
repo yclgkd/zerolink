@@ -62,9 +62,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 
 	mux := http.NewServeMux()
-	maxProtocolBodyBytes := deps.MaxProtocolBodyBytes
-	if maxProtocolBodyBytes <= 0 {
-		maxProtocolBodyBytes = defaultMaxProtocolBodyBytes
+	maxCompoundCommitBodyBytes := deps.MaxProtocolBodyBytes
+	if maxCompoundCommitBodyBytes <= 0 {
+		maxCompoundCommitBodyBytes = defaultMaxProtocolBodyBytes
 	}
 
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
@@ -79,7 +79,7 @@ func NewRouter(deps Dependencies) http.Handler {
 			)
 			continue
 		}
-		mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, protocolHandler(route.Name, deps.Services.Protocol, logger, maxProtocolBodyBytes)))
+		mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, protocolHandler(route.Name, deps.Services.Protocol, logger, maxCompoundCommitBodyBytes)))
 	}
 
 	mux.HandleFunc("/", notFound(logger))
@@ -129,26 +129,26 @@ func protocolPlaceholder(routeName string, logger *slog.Logger) http.HandlerFunc
 	}
 }
 
-func protocolHandler(routeName string, protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func protocolHandler(routeName string, protocolService service.Protocol, logger *slog.Logger, maxCompoundCommitBodyBytes int64) http.HandlerFunc {
 	if protocolService == nil {
 		return protocolPlaceholder(routeName, logger)
 	}
 
 	switch routeName {
 	case "create_begin":
-		return createBeginHandler(protocolService, logger, maxProtocolBodyBytes)
+		return createBeginHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "create_finish":
-		return createFinishHandler(protocolService, logger, maxProtocolBodyBytes)
+		return createFinishHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "lock_begin":
-		return lockBeginHandler(protocolService, logger, maxProtocolBodyBytes)
+		return lockBeginHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "lock_commit":
-		return lockCommitHandler(protocolService, logger, maxProtocolBodyBytes)
+		return lockCommitHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "compound_begin":
-		return compoundBeginHandler(protocolService, logger, maxProtocolBodyBytes)
+		return compoundBeginHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "compound_commit":
-		return compoundCommitHandler(protocolService, logger, false, maxProtocolBodyBytes)
+		return compoundCommitHandler(protocolService, logger, false, maxCompoundCommitBodyBytes)
 	case "delete_commit":
-		return compoundCommitHandler(protocolService, logger, true, maxProtocolBodyBytes)
+		return compoundCommitHandler(protocolService, logger, true, defaultMaxProtocolBodyBytes)
 	case "public_status":
 		return publicStatusHandler(protocolService, logger)
 	case "decrypt_fetch":
