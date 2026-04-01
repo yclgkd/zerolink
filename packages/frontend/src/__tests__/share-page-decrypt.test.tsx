@@ -233,10 +233,35 @@ function mockDecryptSuccessWithStoreSideEffects(cipherVersion = 0): void {
     return {
       ok: true,
       data: {
-        plaintext,
+        payload: {
+          kind: 'text',
+          text: plaintext,
+        },
         deliveredAt: MOCK_TIMESTAMP,
         receiverPubFpr: VALID_HEX,
         cipherVersion,
+      },
+    };
+  });
+}
+
+function mockDecryptFileSuccessWithStoreSideEffects(): void {
+  decryptDeliveredMock.mockImplementation(async () => {
+    const file = {
+      kind: 'file' as const,
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      size: 4,
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    };
+    useDecryptStore.getState().setFile(file);
+    return {
+      ok: true,
+      data: {
+        payload: file,
+        deliveredAt: MOCK_TIMESTAMP,
+        receiverPubFpr: VALID_HEX,
+        cipherVersion: 0,
       },
     };
   });
@@ -605,7 +630,7 @@ describe('SharePage – decryptDelivered action', () => {
     expect(burned).toBeTruthy();
     expect(burned.getAttribute('role')).toBe('status');
     expect(burned.getAttribute('aria-live')).toBe('polite');
-    expect(screen.getByText('Local plaintext removed from this device.')).toBeTruthy();
+    expect(screen.getByText('Local decrypted copy removed from this device.')).toBeTruthy();
     expect(
       screen.getByText(
         'This does not delete the channel or mark it expired. Re-enter your passphrase to decrypt again.'
@@ -642,6 +667,37 @@ describe('SharePage – decryptDelivered action', () => {
     });
     expect(screen.queryByTestId('share-decrypt-burned')).toBeNull();
     expect(await screen.findByTestId('share-decrypt-plaintext')).toBeTruthy();
+  });
+
+  it('shows decrypted file metadata and downloads only after explicit click', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+    mockDecryptFileSuccessWithStoreSideEffects();
+
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-file');
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+    fireEvent.click(screen.getByTestId('share-decrypt-button'));
+
+    expect(await screen.findByTestId('share-decrypt-file')).toBeTruthy();
+    expect(screen.queryByTestId('share-decrypt-plaintext')).toBeNull();
+    expect(createObjectURLSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('share-download-file-button'));
+
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:mock-file');
+    });
   });
 
   it('shows delivery timestamp after successful decrypt', async () => {
@@ -771,6 +827,6 @@ describe('SharePage – decryptDelivered action', () => {
     await waitFor(() => {
       expect(toastSuccessMock).toHaveBeenCalledOnce();
     });
-    expect(toastSuccessMock).toHaveBeenCalledWith('Local plaintext removed.');
+    expect(toastSuccessMock).toHaveBeenCalledWith('Local decrypted copy removed.');
   });
 });

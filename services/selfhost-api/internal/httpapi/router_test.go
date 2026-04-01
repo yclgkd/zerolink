@@ -147,6 +147,13 @@ func newTestRouterWithLogger(checker stubChecker, protocol stubProtocol, logger 
 		Logger:        logger,
 		AllowedOrigin: "http://localhost:5173",
 		Realtime:      realtimeHub,
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            2_097_152,
+			MultipartThresholdBytes: 2_097_152,
+			ChunkSizeBytes:          262_144,
+			MaxChunks:               8,
+			MultipartSupported:      false,
+		},
 		Services: service.New(
 			checker,
 			webauthn.NoopVerifier{},
@@ -155,6 +162,63 @@ func newTestRouterWithLogger(checker stubChecker, protocol stubProtocol, logger 
 			logger,
 		),
 	})
+}
+
+func TestFilePolicyRouteReturnsConfiguredPolicy(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/file_policy", nil)
+	res := httptest.NewRecorder()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            1_048_576,
+			MultipartThresholdBytes: 1_048_576,
+			ChunkSizeBytes:          262_144,
+			MaxChunks:               4,
+			MultipartSupported:      false,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.Code)
+	}
+
+	var payload struct {
+		OK     bool `json:"ok"`
+		Policy struct {
+			MaxFileBytes            int64 `json:"maxFileBytes"`
+			MultipartThresholdBytes int64 `json:"multipartThresholdBytes"`
+			ChunkSizeBytes          int64 `json:"chunkSizeBytes"`
+			MaxChunks               int64 `json:"maxChunks"`
+			MultipartSupported      bool  `json:"multipartSupported"`
+		} `json:"policy"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !payload.OK {
+		t.Fatal("payload.OK = false, want true")
+	}
+	if payload.Policy.MaxFileBytes != 1_048_576 {
+		t.Fatalf("MaxFileBytes = %d, want 1048576", payload.Policy.MaxFileBytes)
+	}
+	if payload.Policy.MaxChunks != 4 {
+		t.Fatalf("MaxChunks = %d, want 4", payload.Policy.MaxChunks)
+	}
 }
 
 func TestHealthz(t *testing.T) {
@@ -300,13 +364,57 @@ func TestCreateBeginRouteRejectsOversizedBody(t *testing.T) {
 		"/api/create_begin/abcdefghijklmnopqrstu",
 		strings.NewReader(
 			`{"uuid":"abcdefghijklmnopqrstu","timestamp":1730000000000,"securityProfile":"secure","padding":"`+
-				strings.Repeat("a", maxProtocolBodyBytes)+
+				strings.Repeat("a", defaultMaxProtocolBodyBytes)+
 				`"}`,
 		),
 	)
 	res := httptest.NewRecorder()
 
 	newTestRouter(stubChecker{}, stubProtocol{}).ServeHTTP(res, req)
+
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", res.Code)
+	}
+}
+
+func TestCreateBeginRouteKeepsDefaultBodyLimitWhenCompoundCommitCapIsExpanded(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:               logger,
+		AllowedOrigin:        "http://localhost:5173",
+		Realtime:             realtimeHub,
+		MaxProtocolBodyBytes: 8 * 1024 * 1024,
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            2_097_152,
+			MultipartThresholdBytes: 2_097_152,
+			ChunkSizeBytes:          262_144,
+			MaxChunks:               8,
+			MultipartSupported:      false,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{},
+			logger,
+		),
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/create_begin/abcdefghijklmnopqrstu",
+		strings.NewReader(
+			`{"uuid":"abcdefghijklmnopqrstu","timestamp":1730000000000,"securityProfile":"secure","padding":"`+
+				strings.Repeat("a", defaultMaxProtocolBodyBytes)+
+				`"}`,
+		),
+	)
+	res := httptest.NewRecorder()
+
+	router.ServeHTTP(res, req)
 
 	if res.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413", res.Code)

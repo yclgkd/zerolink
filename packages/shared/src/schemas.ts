@@ -4,6 +4,7 @@ import {
   AES_GCM,
   CHANNEL_STATE,
   CHANNEL_TTL_MS,
+  FILE_SHARE,
   PBKDF2_ITERATIONS,
   SAFETY_CODE,
   SECURITY_PROFILE,
@@ -82,6 +83,7 @@ export const ChannelTtlMsSchema = z.union([
 
 /** 'password' is the canonical new name; 'softkey' is the legacy alias. */
 export const AdminModeSchema = z.enum(['webauthn', 'password', 'softkey']);
+export const SharePayloadKindSchema = z.enum(['text', 'file']);
 
 /** WebAuthn Level 3 authenticator transport values. */
 export const AuthenticatorTransportSchema = z.enum([
@@ -244,6 +246,23 @@ export const CompoundChallengeSchema = z.object({
   expiresAt: UnixMsSchema,
 });
 
+export const FileSharePolicySchema = z
+  .object({
+    maxFileBytes: z.number().int().positive(),
+    multipartThresholdBytes: z.number().int().positive(),
+    chunkSizeBytes: z.number().int().positive(),
+    maxChunks: z.number().int().positive(),
+    multipartSupported: z.boolean(),
+  })
+  .refine((value) => value.multipartThresholdBytes <= value.maxFileBytes, {
+    path: ['multipartThresholdBytes'],
+    message: 'multipartThresholdBytes must be <= maxFileBytes',
+  })
+  .refine((value) => value.chunkSizeBytes * value.maxChunks >= value.maxFileBytes, {
+    path: ['maxChunks'],
+    message: 'chunkSizeBytes * maxChunks must cover maxFileBytes',
+  });
+
 // ─── Serialised WebAuthn Schemas ──────────────────────────────────────────────
 
 export const AttestationJSONSchema = z.object({
@@ -275,6 +294,7 @@ export const UpdateDeliveryMetaSchema = z.object({
   timestamp: UnixMsSchema,
   nonce: Base64UrlSchema,
   expireAt: z.union([UnixMsSchema, z.null()]),
+  payloadKind: SharePayloadKindSchema.optional(),
 });
 
 export const DetachedWebAuthnDeliveryProofSchema = z.object({
@@ -431,6 +451,7 @@ export const UpdateIntentSchema = z.object({
   timestamp: UnixMsSchema,
   nonce: Base64UrlSchema,
   receiverPubFpr: HexStringSchema,
+  payloadKind: SharePayloadKindSchema.optional(),
   cipherBundle: CipherBundleSchema,
   // null means "retain the channel's original TTL".
   expireAt: z.union([UnixMsSchema, z.null()]),
@@ -493,6 +514,17 @@ export const DecryptFetchResponseSchema = z.object({
   cipherVersion: z.number().int().nonnegative(),
   deliveryAuth: DecryptFetchDeliveryAuthSchema.optional(),
   deliveredAt: UnixMsSchema,
+});
+
+export const FilePolicyResponseSchema = z.object({
+  ok: z.literal(true),
+  policy: FileSharePolicySchema.default({
+    maxFileBytes: FILE_SHARE.MAX_BYTES_DEFAULT,
+    multipartThresholdBytes: FILE_SHARE.MULTIPART_THRESHOLD_DEFAULT,
+    chunkSizeBytes: FILE_SHARE.CHUNK_SIZE_DEFAULT,
+    maxChunks: FILE_SHARE.MAX_CHUNKS_DEFAULT,
+    multipartSupported: FILE_SHARE.MULTIPART_SUPPORTED,
+  }),
 });
 
 export const ErrorResponseSchema = z.object({

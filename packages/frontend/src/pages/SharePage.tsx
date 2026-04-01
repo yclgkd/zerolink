@@ -172,10 +172,12 @@ export function SharePage(): ReactElement {
             decryptError={decryptLogic.decryptError}
             decryptPending={decryptLogic.decryptPending}
             deliveredAt={decryptLogic.deliveredAt}
+            file={decryptLogic.store.file}
             isDecryptPassphraseInvalid={decryptLogic.isDecryptPassphraseInvalid}
             localPlaintextBurned={decryptLogic.store.localPlaintextBurned}
             onBurn={decryptLogic.handleBurn}
             onDecrypt={() => void decryptLogic.handleDecrypt()}
+            onDownloadFile={decryptLogic.handleDownloadFile}
             onPassphraseChange={decryptLogic.handlePassphraseChange}
             passphrase={decryptLogic.passphrase}
             plaintext={decryptLogic.store.plaintext}

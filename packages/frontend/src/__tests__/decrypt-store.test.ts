@@ -53,6 +53,7 @@ describe('useDecryptStore', () => {
     expect(state.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(state.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(state.plaintext).toBeNull();
+    expect(state.file).toBeNull();
     expect(state.localPlaintextBurned).toBe(false);
   });
 
@@ -120,6 +121,79 @@ describe('useDecryptStore', () => {
     state.markLocalPlaintextBurned();
     expect(useDecryptStore.getState().localPlaintextBurned).toBe(true);
     expect(useDecryptStore.getState().plaintext).toBeNull();
+    expect(useDecryptStore.getState().file).toBeNull();
+  });
+
+  it('stores file payloads and clears them when locally burned', () => {
+    const state = useDecryptStore.getState();
+    const fileBytes = new Uint8Array([1, 2, 3]);
+    state.setFile({
+      kind: 'file',
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: fileBytes,
+    });
+    expect(useDecryptStore.getState().file).toEqual({
+      kind: 'file',
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: fileBytes,
+    });
+    expect(useDecryptStore.getState().plaintext).toBeNull();
+
+    state.markLocalPlaintextBurned();
+    expect(useDecryptStore.getState().localPlaintextBurned).toBe(true);
+    expect(useDecryptStore.getState().plaintext).toBeNull();
+    expect(useDecryptStore.getState().file).toBeNull();
+    expect(Array.from(fileBytes)).toEqual([0, 0, 0]);
+  });
+
+  it('wipes decrypted file bytes when plaintext overwrites file state', () => {
+    const state = useDecryptStore.getState();
+    const fileBytes = new Uint8Array([4, 5, 6]);
+    state.setFile({
+      kind: 'file',
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: fileBytes,
+    });
+
+    state.setPlaintext('replacement text');
+
+    expect(useDecryptStore.getState().plaintext).toBe('replacement text');
+    expect(useDecryptStore.getState().file).toBeNull();
+    expect(Array.from(fileBytes)).toEqual([0, 0, 0]);
+  });
+
+  it('wipes decrypted file bytes when uuid changes or store resets', () => {
+    const state = useDecryptStore.getState();
+    const firstBytes = new Uint8Array([7, 8, 9]);
+    state.setDecryptUuid(VALID_UUID);
+    state.setFile({
+      kind: 'file',
+      fileName: 'first.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: firstBytes,
+    });
+
+    state.setDecryptUuid(NEXT_UUID);
+    expect(Array.from(firstBytes)).toEqual([0, 0, 0]);
+
+    const secondBytes = new Uint8Array([10, 11, 12]);
+    state.setFile({
+      kind: 'file',
+      fileName: 'second.bin',
+      mediaType: 'application/octet-stream',
+      size: 3,
+      bytes: secondBytes,
+    });
+
+    state.resetDecryptStore();
+    expect(Array.from(secondBytes)).toEqual([0, 0, 0]);
   });
 
   it('resets channel-scoped state when uuid changes', () => {
@@ -139,6 +213,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.plaintext).toBeNull();
+    expect(nextState.file).toBeNull();
     expect(nextState.localPlaintextBurned).toBe(false);
   });
 
@@ -158,6 +233,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus.status).toBe('success');
     expect(nextState.decryptFetch.status).toBe('success');
     expect(nextState.plaintext).toBe('secret payload');
+    expect(nextState.file).toBeNull();
     expect(nextState.localPlaintextBurned).toBe(false);
   });
 
@@ -177,6 +253,7 @@ describe('useDecryptStore', () => {
     expect(nextState.publicStatus).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.decryptFetch).toEqual({ status: 'idle', data: null, errorCode: null });
     expect(nextState.plaintext).toBeNull();
+    expect(nextState.file).toBeNull();
     expect(nextState.localPlaintextBurned).toBe(false);
   });
 });

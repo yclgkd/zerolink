@@ -8,6 +8,8 @@ import { PassphraseInput } from '../components/lock/passphrase-input';
 import { clearCreatedShareLink, readCreatedShareLink } from './create/share-link-session-cache';
 import {
   ActionPanel,
+  DeliveryModeSelector,
+  FileInput,
   ManagePageHeader,
   SecretInput,
   StatusContent,
@@ -110,6 +112,14 @@ export function ManagePage(): ReactElement {
         {showDeliveryComposer || showPasswordSection ? (
           <section className="max-w-[52rem] space-y-4 rounded-2xl border border-border/60 bg-muted/18 p-4 sm:p-5">
             {showDeliveryComposer ? (
+              <DeliveryModeSelector
+                disabled={state.isActionPending}
+                mode={state.deliveryMode}
+                onModeChange={state.handleModeChange}
+              />
+            ) : null}
+
+            {showDeliveryComposer && state.deliveryMode === 'text' ? (
               <SecretInput
                 ariaDescribedBy={
                   state.actionError && state.isSecretInputInvalid
@@ -120,6 +130,15 @@ export function ManagePage(): ReactElement {
                 disabled={state.isActionPending}
                 onChange={state.handleSecretChange}
                 value={state.secretInput}
+              />
+            ) : null}
+
+            {showDeliveryComposer && state.deliveryMode === 'file' ? (
+              <FileInput
+                disabled={state.isActionPending}
+                maxFileBytes={state.filePolicyMaxBytes}
+                onSelect={state.handleFileSelect}
+                selectedFile={state.selectedFile}
               />
             ) : null}
 

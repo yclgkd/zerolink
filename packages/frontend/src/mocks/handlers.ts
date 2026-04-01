@@ -9,6 +9,7 @@ import {
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
   DecryptFetchResponseSchema,
+  FilePolicyResponseSchema,
   HexStringSchema,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
@@ -126,6 +127,25 @@ function getCompoundCommitBody(body: RequestBody | null) {
 }
 
 export const handlers = [
+  http.get(`${API_PREFIX}/file_policy`, () => {
+    const payload = {
+      ok: true,
+      policy: {
+        maxFileBytes: 2_097_152,
+        multipartThresholdBytes: 2_097_152,
+        chunkSizeBytes: 262_144,
+        maxChunks: 8,
+        multipartSupported: false,
+      },
+    };
+    const parsedPayload = FilePolicyResponseSchema.safeParse(payload);
+    if (!parsedPayload.success) {
+      return badRequest();
+    }
+
+    return HttpResponse.json(parsedPayload.data);
+  }),
+
   http.get(`${API_PREFIX}/public/:uuid`, ({ params }) => {
     const pathUuid = getPathUuid(params);
     if (!pathUuid) {

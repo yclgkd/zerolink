@@ -2,7 +2,9 @@ import { CHANNEL_STATE, type SecurityProfile, type WrappedPrivateKey } from '@ze
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { apiClient } from '../../api/client';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
+import { resolveInlineFilePolicy } from '../../crypto/orchestrator-utils';
 import { useDeliverStore } from '../../stores/deliver-store';
 import {
   getChannelPasswordValidationErrorI18n,
@@ -18,10 +20,12 @@ export function useManageDeliveryLogic(
   setActionError: (error: string | null) => void,
   setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
+  selectedFile: File | null,
   softkeyPassphrase: string,
   profile: SecurityProfile | null,
   getWrappedPrivateKey: () => WrappedPrivateKey | undefined,
   setSecretInput: (value: string) => void,
+  setSelectedFile: (value: File | null) => void,
   setSoftkeyPassphrase: (value: string) => void
 ) {
   const { t } = useTranslation();
@@ -43,9 +47,9 @@ export function useManageDeliveryLogic(
       setIsSecretInputInvalid(false);
       return setActionError('Channel authentication mode is still loading. Please retry.');
     }
-    if (secretInput.trim().length === 0) {
+    if (secretInput.trim().length === 0 && !selectedFile) {
       setIsSecretInputInvalid(true);
-      return setActionError('Secret payload is required before delivery.');
+      return setActionError('Secret text or a file is required before delivery.');
     }
     const needsChannelPassword = requiresChannelPassword(store.adminMode);
     if (needsChannelPassword) {
@@ -68,10 +72,47 @@ export function useManageDeliveryLogic(
     let result: Awaited<ReturnType<typeof cryptoOrchestrator.deliverSecret>>;
     try {
       const wrappedPrivateKey = getWrappedPrivateKey();
+      let fileInput:
+        | {
+            fileName: string;
+            mediaType: string;
+            bytes: Uint8Array;
+          }
+        | undefined;
+      if (selectedFile) {
+        const filePolicyResult = await apiClient.filePolicy();
+        if (!isActiveActionContext(actionScope, actionUuid)) {
+          return;
+        }
+        if (!filePolicyResult.ok) {
+          setIsActionPending(false);
+          setIsSecretInputInvalid(false);
+          return setActionError(mapActionError(filePolicyResult.error.code));
+        }
+
+        const { policy, inlineMaxBytes } = resolveInlineFilePolicy(filePolicyResult.data.policy);
+        if (selectedFile.size > policy.maxFileBytes) {
+          setIsActionPending(false);
+          setIsSecretInputInvalid(false);
+          return setActionError(mapActionError('FILE_TOO_LARGE'));
+        }
+        if (selectedFile.size > inlineMaxBytes) {
+          setIsActionPending(false);
+          setIsSecretInputInvalid(false);
+          return setActionError(mapActionError('MULTIPART_REQUIRED'));
+        }
+
+        fileInput = {
+          fileName: selectedFile.name,
+          mediaType: selectedFile.type || 'application/octet-stream',
+          bytes: new Uint8Array(await selectedFile.arrayBuffer()),
+        };
+      }
       result = await cryptoOrchestrator.deliverSecret({
         uuid: actionUuid,
         profile,
-        plaintext: secretInput,
+        plaintext: selectedFile ? '' : secretInput,
+        ...(fileInput ? { file: fileInput } : {}),
         ...(needsChannelPassword ? { softkeyPassphrase } : {}),
         ...(wrappedPrivateKey !== undefined ? { wrappedPrivateKey } : {}),
       });
@@ -90,6 +131,7 @@ export function useManageDeliveryLogic(
     if (!isActiveActionContext(actionScope, actionUuid)) {
       if (result.ok) {
         setSecretInput('');
+        setSelectedFile(null);
         setSoftkeyPassphrase('');
       }
       return;
@@ -97,6 +139,7 @@ export function useManageDeliveryLogic(
     setIsActionPending(false);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
+      setSelectedFile(null);
       return setActionError(mapActionError(result.error.code, result.error.message));
     }
 
@@ -104,6 +147,7 @@ export function useManageDeliveryLogic(
     setIsSecretInputInvalid(false);
     setActionError(null);
     setSecretInput('');
+    setSelectedFile(null);
     setSoftkeyPassphrase('');
     toast.success(t('manage.deliveredToast'));
   };

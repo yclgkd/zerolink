@@ -393,6 +393,7 @@ export interface UpdateDeliveryMeta {
   timestamp: UnixMs;
   nonce: Base64Url;
   expireAt: UnixMs | null;
+  payloadKind?: SharePayloadKind | undefined;
 }
 
 export interface DetachedWebAuthnDeliveryProof {
@@ -568,6 +569,7 @@ export interface UpdateIntent {
   timestamp: UnixMs;
   nonce: Base64Url;
   receiverPubFpr: HexString;
+  payloadKind?: SharePayloadKind | undefined;
   cipherBundle: CipherBundle;
   /** null means "use channel's default TTL". */
   expireAt: UnixMs | null;
@@ -581,6 +583,8 @@ export interface DeleteIntent {
   timestamp: UnixMs;
   nonce: Base64Url;
 }
+
+export type SharePayloadKind = 'text' | 'file';
 
 export type ManageIntent = UpdateIntent | DeleteIntent;
 
@@ -621,6 +625,14 @@ export interface CompoundCommitResponse {
   ok: true;
 }
 
+export interface FileSharePolicy {
+  maxFileBytes: number;
+  multipartThresholdBytes: number;
+  chunkSizeBytes: number;
+  maxChunks: number;
+  multipartSupported: boolean;
+}
+
 export interface PublicStatusResponse {
   ok: true;
   state: ChannelState;
@@ -636,6 +648,11 @@ export interface DecryptFetchResponse {
   cipherVersion: number;
   deliveryAuth?: DecryptFetchDeliveryAuth | undefined;
   deliveredAt: UnixMs;
+}
+
+export interface FilePolicyResponse {
+  ok: true;
+  policy: FileSharePolicy;
 }
 
 /** Standard error envelope for all 4xx / 5xx API responses. */

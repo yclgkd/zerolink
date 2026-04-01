@@ -1,4 +1,4 @@
-import type { SafetyCodeDisplay } from '@zerolink/shared';
+import type { DecryptedFilePayload, SafetyCodeDisplay } from '@zerolink/shared';
 import { KeyRound, Unlock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -416,6 +416,19 @@ function formatDeliveredAt(ts: number): string {
   return new Date(ts).toLocaleString();
 }
 
+function formatFileSize(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KiB`;
+  }
+  if (size < 1024 * 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
+  }
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+}
+
 export function DeliveredStep({
   safetyCodeAvailable,
   safetyCodeStatus,
@@ -425,6 +438,7 @@ export function DeliveredStep({
   decryptError,
   isDecryptPassphraseInvalid,
   plaintext,
+  file,
   localPlaintextBurned,
   canDecrypt,
   canBurn,
@@ -432,6 +446,7 @@ export function DeliveredStep({
   cipherVersion,
   onPassphraseChange,
   onDecrypt,
+  onDownloadFile,
   onBurn,
 }: {
   safetyCodeAvailable: SafetyCodeDisplay | null;
@@ -442,6 +457,7 @@ export function DeliveredStep({
   decryptError: string | null;
   isDecryptPassphraseInvalid: boolean;
   plaintext: string | null;
+  file: DecryptedFilePayload | null;
   localPlaintextBurned: boolean;
   canDecrypt: boolean;
   canBurn: boolean;
@@ -449,9 +465,11 @@ export function DeliveredStep({
   cipherVersion: number | null;
   onPassphraseChange: (value: string) => void;
   onDecrypt: () => void;
+  onDownloadFile: () => void;
   onBurn: () => void;
 }) {
   const { t } = useTranslation();
+  const hasDecryptedPayload = Boolean(plaintext) || Boolean(file);
   return (
     <section className="max-w-[52rem] space-y-4" data-testid="share-step-delivered">
       <div className="space-y-1">
@@ -477,7 +495,7 @@ export function DeliveredStep({
 
       {canDecryptLocally ? (
         <>
-          {cipherVersion !== null && cipherVersion >= 1 && !plaintext ? (
+          {cipherVersion !== null && cipherVersion >= 1 && !hasDecryptedPayload ? (
             <StateNotice data-testid="share-cipher-version-notice" tone="info">
               <p className="text-sm">{t('share.cipherVersionNotice')}</p>
             </StateNotice>
@@ -518,15 +536,17 @@ export function DeliveredStep({
                   </>
                 )}
               </Button>
-              <Button
-                data-testid="share-decrypt-burn"
-                disabled={!canBurn}
-                onClick={onBurn}
-                type="button"
-                variant="danger"
-              >
-                {t('share.burnButton')}
-              </Button>
+              {file ? null : (
+                <Button
+                  data-testid="share-decrypt-burn"
+                  disabled={!canBurn}
+                  onClick={onBurn}
+                  type="button"
+                  variant="danger"
+                >
+                  {t('share.burnButton')}
+                </Button>
+              )}
             </div>
           </div>
 
@@ -543,6 +563,44 @@ export function DeliveredStep({
               <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
                 {plaintext}
               </pre>
+            </div>
+          ) : null}
+
+          {file ? (
+            <div
+              className="space-y-3 rounded-2xl border border-sky-300/20 bg-sky-400/8 p-4"
+              data-testid="share-decrypt-file"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-200">
+                {t('share.fileLabel')}
+              </p>
+              <dl className="grid gap-2 text-sm leading-6 text-foreground sm:grid-cols-[7rem_1fr]">
+                <dt className="text-muted-foreground">{t('share.fileNameLabel')}</dt>
+                <dd className="break-all">{file.fileName}</dd>
+                <dt className="text-muted-foreground">{t('share.fileSizeLabel')}</dt>
+                <dd>{formatFileSize(file.size)}</dd>
+                <dt className="text-muted-foreground">{t('share.fileTypeLabel')}</dt>
+                <dd className="break-all">{file.mediaType || 'application/octet-stream'}</dd>
+              </dl>
+              <p className="text-sm text-muted-foreground">{t('share.fileDownloadHint')}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  data-testid="share-download-file-button"
+                  onClick={onDownloadFile}
+                  type="button"
+                >
+                  {t('share.fileDownloadButton')}
+                </Button>
+                <Button
+                  data-testid="share-download-burn"
+                  disabled={!canBurn}
+                  onClick={onBurn}
+                  type="button"
+                  variant="danger"
+                >
+                  {t('share.burnButton')}
+                </Button>
+              </div>
             </div>
           ) : null}
 

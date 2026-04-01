@@ -113,6 +113,7 @@ type ManageIntent struct {
 	Timestamp      int64           `json:"timestamp"`
 	Nonce          string          `json:"nonce"`
 	ReceiverPubFpr string          `json:"receiverPubFpr,omitempty"`
+	PayloadKind    string          `json:"payloadKind,omitempty"`
 	CipherBundle   *CipherBundle   `json:"cipherBundle,omitempty"`
 	ExpireAt       json.RawMessage `json:"expireAt,omitempty"`
 }
@@ -633,7 +634,12 @@ func (s *ProtocolService) validateAndApplyDelivery(
 	if err != nil {
 		return RealtimeStateOutput{}, err
 	}
-	if err := validateCipherBundle(*input.Intent.CipherBundle, input.Intent, *channel.ReceiverPubFpr); err != nil {
+	if err := validateCipherBundle(
+		*input.Intent.CipherBundle,
+		input.Intent,
+		*channel.ReceiverPubFpr,
+		s.filePolicy.MaxFileBytes,
+	); err != nil {
 		return RealtimeStateOutput{}, err
 	}
 	if err := s.applyDelivery(ctx, tx, channel, input, now, expireAt); err != nil {

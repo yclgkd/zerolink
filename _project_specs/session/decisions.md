@@ -13,6 +13,43 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-01] Receiver-side file decoding requires declared `payloadKind: "file"`
+
+**Decision**: Keep `payloadKind` optional at the transport/schema level for rolling compatibility, but anchored decrypt only treats a payload as a downloadable file when signed delivery metadata explicitly declares `payloadKind: "file"`. Undeclared payloads stay on the raw-text decode path.
+**Context**: Review follow-up on phase-1 file sharing found that opportunistically decoding undeclared file envelopes let a custom sender omit `payloadKind` while still getting receiver-side file handling, which undermined deployment file-policy intent even though the backend can only enforce file ceilings for declared file deliveries.
+**Options Considered**: Continue heuristic undeclared file decoding; require `payloadKind` immediately for every update intent and risk skew with older text clients; keep the field optional for transport compatibility but require the signed type bit before enabling receiver-side file download behavior.
+**Choice**: Preserve optional `payloadKind` in shared contracts and stored proofs, but make decrypt treat undeclared payloads as raw text whenever delivery auth is present. Legacy raw-text flows remain compatible, while current proof-backed file deliveries must declare `payloadKind: "file"` end-to-end.
+**Reasoning**: The server cannot inspect ciphertext to infer whether an undeclared payload is really a file, so the safest enforceable boundary is to require the signed type bit before the receiver upgrades decrypted bytes into file metadata and download UX. This closes the practical bypass without breaking historical text deliveries.
+**Trade-offs**: Undeclared file-envelope payloads produced by pre-fix builds now surface as raw text instead of downloadable files; that is an intentional compatibility trade to preserve policy semantics.
+
+## [2026-04-01] File-share integrity binds `payloadKind`, but undeclared decrypts must stay backward-compatible
+
+**Decision**: Keep `payloadKind` as an optional signed delivery metadata field for file-aware update intents and proofs, enforce file limits server-side only when `payloadKind === "file"`, and make decrypt fallback opportunistically decode undeclared file envelopes while still treating undeclared text as raw plaintext.
+**Context**: Phase-1 file sharing introduced inline file payloads and deployment file-policy contracts, but review uncovered two conflicting requirements: new file deliveries need a backend-enforced type signal so `/api/file_policy` is not advisory only, while historical delivered payloads and tests still exist without `payloadKind`, including legacy text that may begin with `ZLP1`.
+**Options Considered**: Require `payloadKind` everywhere immediately and break older payload verification/decrypt flows; ignore `payloadKind` during verification and keep file policy frontend-only; sign `payloadKind` when present, enforce file policy from that signal, and preserve backward compatibility for undeclared deliveries at decrypt time.
+**Choice**: Add optional `payloadKind` to update intent / delivery-proof metadata, have frontend always send it for new deliveries, persist it in Worker/self-hosted proofs, and enforce inline file ciphertext ceilings only for declared file deliveries. On decrypt, `declaredKind: "file"` is strict, `declaredKind: "text"` stays raw text, and `declaredKind: undefined` may still decode a valid file envelope but otherwise falls back to raw text.
+**Reasoning**: This keeps new file flows verifiable end-to-end and gives the backend a concrete contract to enforce, without stranding historical records or regressing legacy text compatibility. It also avoids leaking filename/size metadata to the server because the type bit is the only new server-visible signal.
+**Trade-offs**: Undeclared deliveries remain partially heuristic at decrypt time, so compatibility mode still carries a small ambiguity surface until multipart/object-storage support can rely on stronger typed metadata everywhere.
+**Follow-up (2026-04-01)**: Review follow-up later tightened receiver behavior for proof-backed deliveries. When `deliveryAuth` is present, undeclared payloads no longer opportunistically decode as files and instead stay on the raw-text path; see the newer entry above, "Receiver-side file decoding requires declared `payloadKind: \"file\"`."
+
+## [2026-04-01] Phase-1 file sharing stays inline-only, policy-driven, and download-only
+
+**Decision**: Implement the first file-sharing slice on the existing encrypted `cipherBundle` path instead of introducing blob/object storage now. Files are wrapped in an encrypted payload envelope, deployment limits come from a dedicated `/api/file_policy` contract backed by env vars, receiver UI decrypts to local file state, and the browser only downloads after an explicit user click. No inline preview is allowed in this phase.
+**Context**: Product direction expanded ZeroLink from text-only secret delivery to arbitrary file delivery, but the immediate requirement was to preserve the zero-knowledge boundary and make file-size limits configurable while leaving room for a later multipart/blob-storage rollout.
+**Options Considered**: Keep text-only delivery; add preview-capable file support immediately; build the full multipart/object-storage pipeline now; ship a smaller inline-only file mode first and reject files that exceed the future multipart threshold.
+**Choice**: Add a shared text/file payload envelope, expose a per-deployment file policy to the frontend, allow sender-side file selection on Manage, decode to either plaintext or file metadata on Share, and trigger download only through an explicit button. Files above the inline threshold return `MULTIPART_REQUIRED`; files above the deployment max return `FILE_TOO_LARGE`.
+**Reasoning**: This preserves the existing trust model because the server still stores only opaque ciphertext, avoids the attack surface of browser-side previews, and creates a clean contract boundary (`filePolicy`, `payload.kind`) that a later multipart implementation can reuse instead of replacing.
+**Trade-offs**: Phase 1 still inherits the inline ciphertext ceiling, so deployment max file size is hard-capped to the current plaintext envelope limit until multipart/object storage lands. Self-hosted config and Worker envs now need to stay aligned on file-policy defaults and validation rules.
+
+## [2026-04-01] Keep inline text compatibility while file payloads stay envelope-backed
+
+**Decision**: Preserve raw text delivery bytes for inline text shares, and validate file payloads after envelope metadata is added
+**Context**: Phase-1 file delivery introduced a shared payload envelope and a self-hosted protocol body cap, which regressed the published 2 MB text ceiling and let file metadata overflow the inline limit late in the encryption pipeline
+**Options Considered**: Keep wrapping text and add a new text oversize error, shrink the advertised file limit globally, or preserve legacy raw text bytes while checking actual file envelope size
+**Choice**: Preserve legacy raw text bytes and validate file envelopes before encryption
+**Reasoning**: This keeps existing text-share limits stable, fixes the late `CRYPTO_ERROR` failure mode for files, and avoids broadening the protocol surface with new client-visible error codes mid-phase
+**Trade-offs**: Text and file payloads now intentionally use different wire encodings until multipart delivery lands
+
 ## [2026-04-01] Protect create-success links before resetting the sender flow
 
 **Decision**: The create success summary now gates `Create another` behind link-saved confirmation unless the sender has successfully copied both the one-time share link and the private manage link during the current success view.

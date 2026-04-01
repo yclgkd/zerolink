@@ -11,6 +11,7 @@ import {
   DecryptFetchResponseSchema,
   DeleteIntentSchema,
   ErrorResponseSchema,
+  FilePolicyResponseSchema,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
   LockCommitRequestSchema,
@@ -130,6 +131,7 @@ export interface ApiClient {
   decryptFetch: (
     uuid: z.input<typeof UUIDSchema>
   ) => Promise<ApiResult<z.output<typeof DecryptFetchResponseSchema>>>;
+  filePolicy: () => Promise<ApiResult<z.output<typeof FilePolicyResponseSchema>>>;
 }
 
 interface RequestJsonOptions<TInput, TRequest, TResponse> {
@@ -358,6 +360,18 @@ function buildPublicApi(basePath: string, fetchImpl: typeof fetch) {
           requestSchema: UUIDSchema,
           buildPath: (request) => `decrypt_fetch/${request}`,
           responseSchema: DecryptFetchResponseSchema,
+        },
+        basePath,
+        fetchImpl
+      ),
+    filePolicy: () =>
+      executeRequest(
+        {
+          method: 'GET',
+          input: 'file-policy',
+          requestSchema: z.string(),
+          buildPath: () => 'file_policy',
+          responseSchema: FilePolicyResponseSchema,
         },
         basePath,
         fetchImpl

@@ -1,4 +1,4 @@
-import type { DecryptFetchResponse } from '@zerolink/shared';
+import type { DecryptedSharePayload, DecryptFetchResponse } from '@zerolink/shared';
 import {
   AES_GCM,
   buildCipherBundleAadBytes,
@@ -6,6 +6,7 @@ import {
   computeIntentHash,
   computeSoftkeyPublicKeyFingerprint,
   decodeBase64Url,
+  decodeSharePayload,
   deriveUpdateProofChallengeB64u,
   type UpdateIntent,
   verifySoftkeyDeliveryProof,
@@ -35,6 +36,8 @@ import {
 } from './orchestrator-utils';
 import { computeSha256Hex, decodeBase64UrlBytes, encodeBase64UrlBytes } from './protocol-utils';
 import type { ReceiverKeyEnvelope } from './storage';
+
+const textDecoder = new TextDecoder();
 
 async function resolveAnchoredCipherVersion(
   payload: DecryptFetchResponse,
@@ -66,6 +69,9 @@ async function resolveAnchoredCipherVersion(
       timestamp: payload.deliveryAuth.meta.timestamp,
       nonce: payload.deliveryAuth.meta.nonce,
       receiverPubFpr: payload.receiverPubFpr,
+      ...(payload.deliveryAuth.meta.payloadKind
+        ? { payloadKind: payload.deliveryAuth.meta.payloadKind }
+        : {}),
       cipherBundle: payload.cipherBundle,
       expireAt: payload.deliveryAuth.meta.expireAt,
     };
@@ -120,6 +126,40 @@ async function resolveCipherVersionForDecrypt(
   }
 
   return payload.cipherVersion;
+}
+
+function decodeDeliveredPayload(
+  plaintextBytes: Uint8Array,
+  declaredKind: 'text' | 'file' | undefined,
+  hasDeliveryAuth: boolean
+): DecryptedSharePayload {
+  if (declaredKind === 'text') {
+    return {
+      kind: 'text',
+      text: textDecoder.decode(plaintextBytes),
+    };
+  }
+
+  if (declaredKind === undefined && hasDeliveryAuth) {
+    return {
+      kind: 'text',
+      text: textDecoder.decode(plaintextBytes),
+    };
+  }
+
+  const decryptedPayload = decodeSharePayload(plaintextBytes);
+  if (declaredKind === 'file' && decryptedPayload.kind !== 'file') {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+
+  if (declaredKind === undefined && decryptedPayload.kind !== 'file') {
+    return {
+      kind: 'text',
+      text: textDecoder.decode(plaintextBytes),
+    };
+  }
+
+  return decryptedPayload;
 }
 
 function assertMonotonicDeliveryState(
@@ -202,7 +242,7 @@ async function performDecryptionPipeline(
     });
 
     return {
-      plaintext: new TextDecoder().decode(plaintextBytes),
+      plaintextBytes: plaintextBytes.slice(),
     };
   } finally {
     wipeBytes(ciphertextBytes);
@@ -267,7 +307,7 @@ export async function executeDecryptDelivered(
     const cipherVersion = await resolveCipherVersionForDecrypt(payload, envelope, input.uuid);
     assertMonotonicDeliveryState(envelope, cipherVersion, payload.cipherBundle.ciphertextHash);
 
-    const { plaintext } = await performDecryptionPipeline(
+    const { plaintextBytes } = await performDecryptionPipeline(
       payload,
       normalizedPassphrase,
       envelope,
@@ -275,6 +315,12 @@ export async function executeDecryptDelivered(
       cipherVersion,
       deps.kdfParams
     );
+    const decryptedPayload = decodeDeliveredPayload(
+      plaintextBytes,
+      payload.deliveryAuth?.meta.payloadKind,
+      payload.deliveryAuth !== undefined
+    );
+    wipeBytes(plaintextBytes);
     try {
       await deps.receiverKeyStorage.save({
         ...envelope,
@@ -289,16 +335,20 @@ export async function executeDecryptDelivered(
       return toError(toStorageErrorCode(error), 'decrypt.persist-state');
     }
     applyDecryptStoreUpdate(deps.decryptStore, input.uuid, (state) => {
-      state.setPlaintext(plaintext);
+      if (decryptedPayload.kind === 'file') {
+        state.setFile(decryptedPayload);
+        return;
+      }
+      state.setPlaintext(decryptedPayload.text);
     });
 
     return {
       ok: true,
       data: {
-        plaintext,
         deliveredAt: payload.deliveredAt,
         receiverPubFpr: payload.receiverPubFpr,
         cipherVersion,
+        payload: decryptedPayload,
       },
     };
   } catch (error) {

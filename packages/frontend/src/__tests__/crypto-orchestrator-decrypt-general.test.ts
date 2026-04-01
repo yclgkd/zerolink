@@ -58,7 +58,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
     deliveredDecryptBase = await buildDeliveredDecryptFixtureBase();
   });
 
-  it('decrypts delivered payload and sets plaintext in decrypt store', async () => {
+  it('decrypts delivered text payload and sets plaintext in decrypt store', async () => {
     const storage = createIndexedDbReceiverKeyStorage({
       dbName: 'test-orchestrator-decrypt',
       storeName: 'receiver-keys',
@@ -98,10 +98,63 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
 
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
-    expect(decryptResult.data.plaintext).toBe(prepared.plaintext);
+    expect(decryptResult.data.payload).toEqual(prepared.expectedPayload);
     expect(decryptResult.data.cipherVersion).toBe(0);
-    expect('plaintextBytes' in decryptResult.data).toBe(false);
     expect(useDecryptStore.getState().plaintext).toBe(prepared.plaintext);
+    expect(useDecryptStore.getState().file).toBeNull();
+  });
+
+  it('decrypts delivered file payload and stores download metadata', async () => {
+    const storage = createIndexedDbReceiverKeyStorage({
+      dbName: 'test-orchestrator-decrypt-file',
+      storeName: 'receiver-keys',
+    });
+    const prepared = await seedDeliveredDecryptFixture(
+      await buildDeliveredDecryptFixtureBase({
+        receiverKeyStorage: storage,
+        file: {
+          fileName: 'secret.bin',
+          mediaType: 'application/octet-stream',
+          bytes: new Uint8Array([1, 2, 3, 4]),
+        },
+      }),
+      {
+        receiverKeyStorage: storage,
+      }
+    );
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'webauthn' as const,
+        securityProfile: SECURITY_PROFILE.SECURE,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: 0,
+        deliveredAt: NOW,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const decryptResult = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(decryptResult.ok).toBe(true);
+    if (!decryptResult.ok) return;
+    expect(decryptResult.data.payload).toEqual(prepared.expectedPayload);
+    expect(useDecryptStore.getState().plaintext).toBeNull();
+    expect(useDecryptStore.getState().file).toEqual(prepared.expectedPayload);
   });
 
   it('does not apply decrypt store updates when uuid changes mid-flow', async () => {

@@ -5,6 +5,7 @@ import {
   CreateBeginResponseSchema,
   CreateFinishResponseSchema,
   DecryptFetchResponseSchema,
+  FilePolicyResponseSchema,
   LockBeginResponseSchema,
   LockCommitResponseSchema,
   PublicStatusResponseSchema,
@@ -245,6 +246,17 @@ describe('api client', () => {
     if (!result.ok) return;
 
     expect(DecryptFetchResponseSchema.safeParse(result.data).success).toBe(true);
+  });
+
+  it('returns success for filePolicy', async () => {
+    const client = createClient();
+    const result = await client.filePolicy();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(FilePolicyResponseSchema.safeParse(result.data).success).toBe(true);
+    expect(result.data.policy.multipartSupported).toBe(false);
   });
 
   it('returns INVALID_REQUEST without calling fetch when request input is invalid', async () => {

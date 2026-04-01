@@ -5,10 +5,11 @@ import 'fake-indexeddb/auto';
 import {
   CHANNEL_STATE,
   type DecryptFetchResponse,
+  encodeFileSharePayload,
   HexStringSchema,
   SECURITY_PROFILE,
 } from '@zerolink/shared';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../crypto/webauthn', async () => {
   const actual = await vi.importActual<typeof import('../crypto/webauthn')>('../crypto/webauthn');
@@ -44,7 +45,7 @@ afterEach(() => {
 describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
   let anchoredBase: Awaited<ReturnType<typeof buildAnchoredSoftkeyDeliveryBase>>;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     anchoredBase = await buildAnchoredSoftkeyDeliveryBase();
   });
 
@@ -81,7 +82,10 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
 
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
-    expect(decryptResult.data.plaintext).toBe('anchored softkey plaintext');
+    expect(decryptResult.data.payload).toEqual({
+      kind: 'text',
+      text: 'anchored softkey plaintext',
+    });
     await expect(prepared.receiverKeyStorage.load(VALID_UUID)).resolves.toMatchObject({
       senderAuthFpr: prepared.senderAuthFpr,
       lastAcceptedDelivery: {
@@ -89,6 +93,51 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
         ciphertextHash: prepared.cipherBundle.ciphertextHash,
       },
     });
+  });
+
+  it('treats anchored undeclared payloads as raw text instead of downloadable files', async () => {
+    const disguisedFileEnvelope = encodeFileSharePayload({
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    });
+    const anchoredFileBase = await buildAnchoredSoftkeyDeliveryBase({
+      plaintext: disguisedFileEnvelope,
+    });
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredFileBase });
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.QUICK,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: prepared.deliveryAuth,
+      } satisfies DecryptFetchResponse,
+    });
+
+    const decryptResult = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(decryptResult.ok).toBe(true);
+    if (!decryptResult.ok) return;
+    expect(decryptResult.data.payload.kind).toBe('text');
+    expect(useDecryptStore.getState().file).toBeNull();
   });
 
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload is missing deliveryAuth', async () => {

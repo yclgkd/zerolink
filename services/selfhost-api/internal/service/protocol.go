@@ -73,6 +73,15 @@ type ProtocolConfig struct {
 	RPOrigin  string
 	Verifier  webauthn.Verifier
 	Publisher realtime.Publisher
+	File      FilePolicy
+}
+
+type FilePolicy struct {
+	MaxFileBytes            int64
+	MultipartThresholdBytes int64
+	ChunkSizeBytes          int64
+	MaxChunks               int64
+	MultipartSupported      bool
 }
 
 type ProtocolService struct {
@@ -81,6 +90,7 @@ type ProtocolService struct {
 	rpID        string
 	rpOrigin    string
 	publisher   realtime.Publisher
+	filePolicy  FilePolicy
 	now         func() time.Time
 	randomRead  func([]byte) (int, error)
 	rateLimiter *protocolRateLimiter
@@ -178,6 +188,7 @@ func NewProtocolService(db *store.Database, cfg ProtocolConfig) Protocol {
 		rpID:        cfg.RPID,
 		rpOrigin:    strings.TrimRight(cfg.RPOrigin, "/"),
 		publisher:   cfg.Publisher,
+		filePolicy:  cfg.File,
 		now:         func() time.Time { return time.Now().UTC() },
 		randomRead:  rand.Read,
 		rateLimiter: newProtocolRateLimiter(),

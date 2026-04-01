@@ -57,7 +57,17 @@ describe('padPlaintext', () => {
 
   it('rejects plaintext above MAX_PLAINTEXT_BYTES', () => {
     const oversized = new Uint8Array(MAX_PLAINTEXT_BYTES + 1);
-    expect(() => padPlaintext(oversized)).toThrow('plaintext exceeds MAX_PLAINTEXT_BYTES');
+    expect(() => padPlaintext(oversized)).toThrow(
+      `plaintext exceeds maxPlaintextBytes (${MAX_PLAINTEXT_BYTES})`
+    );
+  });
+
+  it('supports overriding the plaintext ceiling', () => {
+    const padded = padPlaintext(new Uint8Array(3), AES_GCM.PAD_BLOCK_DEFAULT, 3);
+    expect(padded.byteLength).toBe(AES_GCM.PAD_BLOCK_DEFAULT);
+    expect(() => padPlaintext(new Uint8Array(4), AES_GCM.PAD_BLOCK_DEFAULT, 3)).toThrow(
+      'plaintext exceeds maxPlaintextBytes (3)'
+    );
   });
 });
 

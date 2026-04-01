@@ -24,6 +24,10 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 			"SELFHOST_API_DB_HEALTH_TIMEOUT":        "3s",
 			"SELFHOST_API_HTTP_READ_TIMEOUT":        "11s",
 			"SELFHOST_API_HTTP_READ_HEADER_TIMEOUT": "6s",
+			"SELFHOST_API_FILE_MAX_BYTES":           "1048576",
+			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES": "1048576",
+			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":    "262144",
+			"SELFHOST_API_FILE_MAX_CHUNKS":          "4",
 		}
 
 		value, ok := values[key]
@@ -56,6 +60,12 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 	}
 	if cfg.RP.Origin != "http://localhost:5173" {
 		t.Fatalf("RP.Origin = %q, want http://localhost:5173", cfg.RP.Origin)
+	}
+	if cfg.File.MaxBytes != 1_048_576 {
+		t.Fatalf("File.MaxBytes = %d, want 1048576", cfg.File.MaxBytes)
+	}
+	if cfg.File.MaxChunks != 4 {
+		t.Fatalf("File.MaxChunks = %d, want 4", cfg.File.MaxChunks)
 	}
 }
 
@@ -128,6 +138,30 @@ func TestLoadFromEnvRequiresRPConfig(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SELFHOST_API_RP_ID") {
 		t.Fatalf("LoadFromEnv() error = %v, want SELFHOST_API_RP_ID mention", err)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidFilePolicy(t *testing.T) {
+	t.Parallel()
+
+	_, err := LoadFromEnv(func(key string) (string, bool) {
+		values := map[string]string{
+			"SELFHOST_API_DATABASE_URL":                     "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":                            "localhost",
+			"SELFHOST_API_RP_ORIGIN":                        "http://localhost:5173",
+			"SELFHOST_API_FILE_MAX_BYTES":                   "2048",
+			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES":   "4096",
+			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":            "512",
+			"SELFHOST_API_FILE_MAX_CHUNKS":                  "4",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil {
+		t.Fatal("LoadFromEnv() error = nil, want invalid file policy error")
+	}
+	if !strings.Contains(err.Error(), "SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES") {
+		t.Fatalf("LoadFromEnv() error = %v, want SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES mention", err)
 	}
 }
 

@@ -1,9 +1,16 @@
-import type { AssertionJSON, Base64Url, CompoundBeginResponse, HexString } from '@zerolink/shared';
+import type {
+  AssertionJSON,
+  Base64Url,
+  CompoundBeginResponse,
+  FileSharePolicy,
+  HexString,
+} from '@zerolink/shared';
 import {
   AES_GCM,
   buildCipherBundleAadBytes,
   computeIntentHash,
   deriveUpdateProofChallengeB64u,
+  encodeFileSharePayload,
   NONCE_BYTES,
   type UpdateIntent,
 } from '@zerolink/shared';
@@ -24,6 +31,7 @@ import {
   mapWebAuthnError,
   normalizePassphrase,
   randomBase64Url,
+  resolveInlineFilePolicy,
   resolvePadBlockForProfile,
   signChallengeWithWrappedKey,
   toCipherBundleTransport,
@@ -36,16 +44,55 @@ import { assertWithWebAuthn } from './webauthn';
 async function buildDeliverUpdateIntent(
   deps: ResolvedDeps,
   input: DeliverSecretInput,
-  beginData: ResolvedDeliverBeginData
-) {
+  beginData: ResolvedDeliverBeginData,
+  filePolicy?: FileSharePolicy
+): Promise<
+  CryptoOrchestratorResult<{
+    intent: UpdateIntent;
+    intentHash: HexString;
+    expectedChallenge: Base64Url;
+    cipherBundle: DeliverSecretOutput['cipherBundle'];
+    payloadKind: DeliverSecretOutput['payloadKind'];
+  }>
+> {
   let plaintextBytes: Uint8Array | null = null;
   let aad: Uint8Array | null = null;
   let rawContentKey: Uint8Array | null = null;
   let encrypted: Awaited<ReturnType<typeof encryptAesGcm>> | null = null;
   let encContentKey: Uint8Array | null = null;
+  let payloadKind: DeliverSecretOutput['payloadKind'] = 'text';
+  let maxPlaintextBytes: number | undefined;
 
   try {
-    plaintextBytes = toPlaintextBytes(input.plaintext);
+    if (input.file) {
+      const { policy, inlineMaxBytes } = resolveInlineFilePolicy(filePolicy);
+      if (input.file.bytes.byteLength > policy.maxFileBytes) {
+        return toError(
+          'FILE_TOO_LARGE',
+          'deliver.file-policy',
+          `Selected file exceeds the deployment limit (${policy.maxFileBytes} bytes).`
+        );
+      }
+      plaintextBytes = encodeFileSharePayload({
+        fileName: input.file.fileName,
+        mediaType: input.file.mediaType,
+        bytes: input.file.bytes,
+      });
+      // Compare the full envelope (magic + header + body) against the inline
+      // limit. The envelope is always larger than the raw file bytes due to
+      // framing overhead, so this is the authoritative check.
+      if (plaintextBytes.byteLength > inlineMaxBytes) {
+        return toError(
+          'MULTIPART_REQUIRED',
+          'deliver.file-policy',
+          'Selected file exceeds the inline delivery limit for this deployment.'
+        );
+      }
+      maxPlaintextBytes = inlineMaxBytes;
+      payloadKind = 'file';
+    } else {
+      plaintextBytes = toPlaintextBytes(input.plaintext);
+    }
     aad = buildCipherBundleAadBytes({
       uuid: asUuid(input.uuid),
       version: beginData.currentVersion,
@@ -58,6 +105,7 @@ async function buildDeliverUpdateIntent(
       plaintext: plaintextBytes,
       aad,
       padBlock: resolvePadBlockForProfile(input.profile),
+      ...(maxPlaintextBytes ? { maxPlaintextBytes } : {}),
     });
     const receiverPublicKey = await importReceiverPublicKeyFromJwk(beginData.receiverPubJwk);
     encContentKey = await wrapContentKey({
@@ -82,6 +130,7 @@ async function buildDeliverUpdateIntent(
       timestamp: asUnixMs(deps.now()),
       nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
       receiverPubFpr: beginData.receiverPubFpr,
+      payloadKind,
       cipherBundle,
       expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
     };
@@ -92,7 +141,10 @@ async function buildDeliverUpdateIntent(
       intentHash,
     });
 
-    return { intent, intentHash, expectedChallenge, cipherBundle };
+    return {
+      ok: true,
+      data: { intent, intentHash, expectedChallenge, cipherBundle, payloadKind },
+    };
   } finally {
     wipeBytes(plaintextBytes);
     wipeBytes(aad);
@@ -134,15 +186,34 @@ export async function executeDeliverSecret(
     receiverPubFpr: beginData.receiverPubFpr,
   } as ResolvedDeliverBeginData;
 
+  let filePolicy: FileSharePolicy | undefined;
+  if (input.file) {
+    const filePolicyRes = await deps.client.filePolicy();
+    if (!filePolicyRes.ok) {
+      applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+        state.failCompoundCommit(filePolicyRes.error.code);
+      });
+      return toError(filePolicyRes.error.code, 'deliver.file-policy.fetch');
+    }
+    filePolicy = filePolicyRes.data.policy;
+  }
+
   let intentData: Awaited<ReturnType<typeof buildDeliverUpdateIntent>>;
   try {
-    intentData = await buildDeliverUpdateIntent(deps, input, resolvedBeginData);
+    intentData = await buildDeliverUpdateIntent(deps, input, resolvedBeginData, filePolicy);
   } catch {
     applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
       state.failCompoundCommit('CRYPTO_ERROR');
     });
     return toError('CRYPTO_ERROR', 'deliver.crypto');
   }
+  if (!intentData.ok) {
+    applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
+      state.failCompoundCommit(intentData.error.code);
+    });
+    return intentData;
+  }
+  const resolvedIntentData = intentData.data;
 
   applyDeliverStoreUpdate(deps.deliverStore, input.uuid, (state) => {
     state.startCompoundCommit();
@@ -178,7 +249,7 @@ export async function executeDeliverSecret(
       softkeySignature = await signChallengeWithWrappedKey(
         input.wrappedPrivateKey,
         normalizedSoftkeyPassphrase,
-        intentData.expectedChallenge as Base64Url,
+        resolvedIntentData.expectedChallenge as Base64Url,
         deps.kdfParams
       );
     } catch {
@@ -192,7 +263,7 @@ export async function executeDeliverSecret(
       profile: input.profile,
       requestOptions: {
         publicKey: {
-          challenge: intentData.expectedChallenge,
+          challenge: resolvedIntentData.expectedChallenge,
           ...(resolvedBeginData.allowCredentials
             ? { allowCredentials: resolvedBeginData.allowCredentials }
             : {}),
@@ -213,14 +284,14 @@ export async function executeDeliverSecret(
         adminMode: resolvedBeginData.adminMode as 'password' | 'softkey',
         uuid: input.uuid,
         softkeySignature,
-        intentHash: intentData.intentHash,
-        intent: intentData.intent,
+        intentHash: resolvedIntentData.intentHash,
+        intent: resolvedIntentData.intent,
       }
     : {
         uuid: input.uuid,
         assertion: assertion as AssertionJSON,
-        intentHash: intentData.intentHash,
-        intent: intentData.intent,
+        intentHash: resolvedIntentData.intentHash,
+        intent: resolvedIntentData.intent,
       };
 
   const commitRes = await deps.client.compoundCommit(commitPayload);
@@ -236,5 +307,5 @@ export async function executeDeliverSecret(
     state.markDelivered();
   });
 
-  return { ok: true, data: intentData };
+  return { ok: true, data: resolvedIntentData };
 }

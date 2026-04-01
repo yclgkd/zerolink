@@ -64,6 +64,7 @@ vi.mock('../sync/use-channel-sync.ts', async () => {
   };
 });
 
+import { apiClient } from '../api/client';
 import { serializeWrappedKeyCompact } from '../crypto/wrapped-key-codec';
 import { ManagePage } from '../pages/ManagePage';
 import { useCreateStore } from '../stores/create-store';
@@ -164,6 +165,28 @@ function mockPublicState(
       ...(receiverPubFpr ? { receiverPubFpr } : {}),
     })
   );
+}
+
+function filePolicyResponse(
+  overrides: Partial<{
+    maxFileBytes: number;
+    multipartThresholdBytes: number;
+    chunkSizeBytes: number;
+    maxChunks: number;
+    multipartSupported: boolean;
+  }> = {}
+): Response {
+  return jsonResponse({
+    ok: true,
+    policy: {
+      maxFileBytes: 10_485_760,
+      multipartThresholdBytes: 10_485_760,
+      chunkSizeBytes: 262_144,
+      maxChunks: 40,
+      multipartSupported: false,
+      ...overrides,
+    },
+  });
 }
 
 function mockDeliverSuccessWithStoreSideEffects(): void {
@@ -747,6 +770,140 @@ describe('ManagePage – deliver actions', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('passes selected file bytes to deliverSecret and clears text mode', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const file = new File(['file-body'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(file, 'arrayBuffer', {
+      configurable: true,
+      value: async () => new TextEncoder().encode('file-body').buffer,
+    });
+
+    const filePolicySpy = vi.spyOn(apiClient, 'filePolicy').mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: await filePolicyResponse().json(),
+    });
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+    await screen.findByTestId('manage-file-size-hint');
+
+    fireEvent.change(screen.getByTestId('manage-file-input'), {
+      target: { files: [file] },
+    });
+    await screen.findByTestId('manage-file-selected');
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+
+    const callArg = deliverSecretMock.mock.calls[0]?.[0];
+    expect(callArg?.plaintext).toBe('');
+    expect(callArg?.file).toMatchObject({
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+    });
+    expect(Array.from(callArg.file.bytes)).toEqual(
+      Array.from(new Uint8Array(await file.arrayBuffer()))
+    );
+    filePolicySpy.mockRestore();
+  });
+
+  it('clears the underlying file input value when selection is removed', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const filePolicySpy = vi.spyOn(apiClient, 'filePolicy').mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: await filePolicyResponse().json(),
+    });
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+
+    const file = new File(['file-body'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    const input = screen.getByTestId('manage-file-input') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: { files: [file] },
+    });
+    expect(screen.getByTestId('manage-file-selected')).toBeTruthy();
+
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      writable: true,
+      value: 'C:\\fakepath\\secret.bin',
+    });
+
+    fireEvent.click(screen.getByTestId('manage-file-clear'));
+
+    expect(input.value).toBe('');
+    filePolicySpy.mockRestore();
+  });
+
+  it('shows the effective inline file limit and blocks oversized files before reading bytes', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const filePolicySpy = vi.spyOn(apiClient, 'filePolicy').mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: await filePolicyResponse({
+        maxFileBytes: 10_485_760,
+        multipartThresholdBytes: 1_048_576,
+      }).json(),
+    });
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-file-size-hint').textContent).toContain('1.0 MiB');
+    });
+
+    const file = new File(['oversized'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(file, 'size', {
+      configurable: true,
+      value: 2_000_000,
+    });
+    const arrayBufferSpy = vi.fn(async () => new TextEncoder().encode('oversized').buffer);
+    Object.defineProperty(file, 'arrayBuffer', {
+      configurable: true,
+      value: arrayBufferSpy,
+    });
+
+    fireEvent.change(screen.getByTestId('manage-file-input'), {
+      target: { files: [file] },
+    });
+    await screen.findByTestId('manage-file-selected');
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    const error = await screen.findByTestId('manage-action-error');
+    expect(error.textContent).toContain('inline delivery limit');
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+    expect(deliverSecretMock).not.toHaveBeenCalled();
+    filePolicySpy.mockRestore();
   });
 
   it('calls toast.success after successful deliver', async () => {

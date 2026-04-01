@@ -8,6 +8,8 @@ import {
   DecryptFetchResponseSchema,
   DeleteIntentSchema,
   ErrorResponseSchema,
+  FilePolicyResponseSchema,
+  FileSharePolicySchema,
   ManageIntentSchema,
   PublicStatusResponseSchema,
   SoftkeyCompoundCommitRequestSchema,
@@ -117,6 +119,50 @@ describe('schemas - protocol', () => {
   });
 
   // ─── Intent Schemas ─────────────────────────────────────────────────────────
+
+  describe('FileSharePolicySchema', () => {
+    it('accepts a valid inline policy', () => {
+      const result = FileSharePolicySchema.parse({
+        maxFileBytes: 2_097_152,
+        multipartThresholdBytes: 2_097_152,
+        chunkSizeBytes: 262_144,
+        maxChunks: 8,
+        multipartSupported: false,
+      });
+
+      expect(result.maxFileBytes).toBe(2_097_152);
+      expect(result.multipartSupported).toBe(false);
+    });
+
+    it('rejects policies whose threshold exceeds max bytes', () => {
+      expect(() =>
+        FileSharePolicySchema.parse({
+          maxFileBytes: 1024,
+          multipartThresholdBytes: 2048,
+          chunkSizeBytes: 512,
+          maxChunks: 4,
+          multipartSupported: false,
+        })
+      ).toThrow();
+    });
+  });
+
+  describe('FilePolicyResponseSchema', () => {
+    it('accepts a valid policy response', () => {
+      const result = FilePolicyResponseSchema.parse({
+        ok: true,
+        policy: {
+          maxFileBytes: 2_097_152,
+          multipartThresholdBytes: 2_097_152,
+          chunkSizeBytes: 262_144,
+          maxChunks: 8,
+          multipartSupported: false,
+        },
+      });
+
+      expect(result.policy.chunkSizeBytes).toBe(262_144);
+    });
+  });
 
   describe('UpdateIntentSchema', () => {
     const valid = {

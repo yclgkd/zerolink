@@ -18,6 +18,13 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
 )
 
+const (
+	fileEnvelopeFixedBytes = int64(8)
+	fileHeaderMaxBytes     = int64(16 * 1024)
+	aesGCMTagBytes         = int64(16)
+	aesPadLengthBytes      = int64(4)
+)
+
 func (input LockCommitInput) Validate() error {
 	if !isValidUUID(input.UUID) {
 		return badRequest("invalid uuid")
@@ -95,6 +102,9 @@ func (intent ManageIntent) Validate() error {
 		if len(intent.ExpireAt) == 0 {
 			return badRequest("invalid intent")
 		}
+		if intent.PayloadKind != "" && intent.PayloadKind != "text" && intent.PayloadKind != "file" {
+			return badRequest("invalid intent")
+		}
 		if !isLowerHex(intent.ReceiverPubFpr, 64) || intent.CipherBundle == nil || !intent.CipherBundle.Valid() {
 			return badRequest("invalid intent")
 		}
@@ -125,7 +135,7 @@ func (intent ManageIntent) CanonicalValue() map[string]any {
 	switch intent.Op {
 	case "update":
 		expireAt, _ := intent.ParseExpireAt()
-		return map[string]any{
+		payload := map[string]any{
 			"op":             intent.Op,
 			"uuid":           intent.UUID,
 			"version":        intent.Version,
@@ -142,6 +152,10 @@ func (intent ManageIntent) CanonicalValue() map[string]any {
 			},
 			"expireAt": nullableInt64ToAny(expireAt),
 		}
+		if intent.PayloadKind != "" {
+			payload["payloadKind"] = intent.PayloadKind
+		}
+		return payload
 	default:
 		return map[string]any{
 			"op":        intent.Op,
@@ -226,7 +240,12 @@ func parseFutureExpireAt(intent ManageIntent, now time.Time) (*int64, error) {
 	return expireAt, nil
 }
 
-func validateCipherBundle(bundle CipherBundle, intent ManageIntent, receiverPubFpr string) error {
+func validateCipherBundle(
+	bundle CipherBundle,
+	intent ManageIntent,
+	receiverPubFpr string,
+	maxFileBytes int64,
+) error {
 	ciphertextBytes, err := base64.RawURLEncoding.DecodeString(bundle.Ciphertext)
 	if err != nil {
 		return cipherBundleInvalid("cipherBundle.ciphertext is not valid base64url")
@@ -242,7 +261,20 @@ func validateCipherBundle(bundle CipherBundle, intent ManageIntent, receiverPubF
 		return cipherBundleInvalid("cipherBundle.aad does not match the expected binding")
 	}
 
+	if intent.PayloadKind == "file" {
+		maxCiphertextBytes := resolveMaxFileCiphertextBytes(maxFileBytes, bundle.PadBlock)
+		if int64(len(ciphertextBytes)) > maxCiphertextBytes {
+			return cipherBundleInvalid("cipherBundle.ciphertext exceeds the configured inline file limit")
+		}
+	}
+
 	return nil
+}
+
+func resolveMaxFileCiphertextBytes(maxFileBytes int64, padBlock int64) int64 {
+	maxPlaintextBytes := maxFileBytes + fileEnvelopeFixedBytes + fileHeaderMaxBytes
+	paddedPlaintextBytes := ((aesPadLengthBytes + maxPlaintextBytes + padBlock - 1) / padBlock) * padBlock
+	return paddedPlaintextBytes + aesGCMTagBytes
 }
 
 func buildStoredUpdateDeliveryProofJSON(adminMode store.AdminMode, input CompoundCommitInput) (json.RawMessage, error) {
@@ -251,6 +283,9 @@ func buildStoredUpdateDeliveryProofJSON(adminMode store.AdminMode, input Compoun
 		"timestamp": input.Intent.Timestamp,
 		"nonce":     input.Intent.Nonce,
 		"expireAt":  nullableInt64ToAny(mustParseExpireAt(input.Intent)),
+	}
+	if input.Intent.PayloadKind != "" {
+		meta["payloadKind"] = input.Intent.PayloadKind
 	}
 
 	var payload map[string]any

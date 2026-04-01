@@ -20,6 +20,11 @@ export interface SecretVaultEnv {
   COMMIT_TOKEN_SECRET: string;
   RP_ID: string;
   RP_ORIGIN: string;
+  FILE_MAX_BYTES?: string;
+  FILE_MULTIPART_THRESHOLD_BYTES?: string;
+  FILE_CHUNK_SIZE_BYTES?: string;
+  FILE_MAX_CHUNKS?: string;
+  FILE_MULTIPART_SUPPORTED?: string;
 }
 
 export interface CommitLockParams {

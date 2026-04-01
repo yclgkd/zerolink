@@ -24,6 +24,8 @@ export function mapActionError(code: string, message?: string): string {
     NETWORK_ERROR: 'manageError.networkError',
     BAD_REQUEST: 'manageError.badRequest',
     INVALID_REQUEST: 'manageError.badRequest',
+    FILE_TOO_LARGE: 'manageError.fileTooLarge',
+    MULTIPART_REQUIRED: 'manageError.multipartRequired',
     WEBAUTHN_ERROR: 'manageError.webauthnError',
     NOT_ALLOWED: 'manageError.webauthnError',
     ABORTED: 'manageError.webauthnError',

@@ -373,6 +373,9 @@ export async function installStatefulApiMock(
         timestamp: parsedBody.data.intent.timestamp,
         nonce: parsedBody.data.intent.nonce,
         expireAt: parsedBody.data.intent.expireAt,
+        ...(parsedBody.data.intent.payloadKind
+          ? { payloadKind: parsedBody.data.intent.payloadKind }
+          : {}),
       };
       const deliveryAuth =
         'softkeySignature' in parsedBody.data
