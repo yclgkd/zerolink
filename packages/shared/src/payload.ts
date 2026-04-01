@@ -3,6 +3,7 @@ const MAGIC_BYTES = new TextEncoder().encode(MAGIC);
 const HEADER_LENGTH_BYTES = 4;
 const MAX_HEADER_BYTES = 16 * 1024;
 const FALLBACK_DOWNLOAD_FILE_NAME = 'download.bin';
+const INVALID_FILENAME_CHARS = new Set(['\\', '/', ':', '*', '?', '"', '<', '>', '|']);
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -52,8 +53,16 @@ export interface DecryptedFilePayload {
 
 export type DecryptedSharePayload = DecryptedTextPayload | DecryptedFilePayload;
 
+function sanitizeFilenameChar(char: string): string {
+  const codePoint = char.codePointAt(0);
+  if (codePoint == null || codePoint < 0x20 || INVALID_FILENAME_CHARS.has(char)) {
+    return '_';
+  }
+  return char;
+}
+
 export function sanitizeDownloadFilename(fileName: string | null | undefined): string {
-  const normalized = (fileName ?? '').trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/gu, '_');
+  const normalized = Array.from((fileName ?? '').trim(), sanitizeFilenameChar).join('');
   return normalized.length > 0 ? normalized : FALLBACK_DOWNLOAD_FILE_NAME;
 }
 

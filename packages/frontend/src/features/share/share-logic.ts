@@ -2,11 +2,11 @@ import {
   type Base64Url,
   CHANNEL_STATE,
   type ChannelState,
-  sanitizeDownloadFilename,
   ErrorResponseSchema,
   type HexString,
   PublicStatusResponseSchema,
   type SafetyCodeDisplay,
+  sanitizeDownloadFilename,
   UUIDSchema,
 } from '@zerolink/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -691,7 +691,8 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     hasValidPassphrase(passphrase) &&
     !isDecryptSubmitting;
 
-  const canBurn = Boolean(enabled) && Boolean(store.plaintext || store.file) && !isDecryptSubmitting;
+  const canBurn =
+    Boolean(enabled) && Boolean(store.plaintext || store.file) && !isDecryptSubmitting;
 
   function isActiveDecryptContext(scope: number, actionUuid: string): boolean {
     if (!mountedRef.current) return false;

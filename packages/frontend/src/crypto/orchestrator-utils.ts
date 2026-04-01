@@ -182,10 +182,7 @@ export function resolveInlineFilePolicy(policy?: FileSharePolicy): FileDeliveryP
   const resolvedPolicy = resolveFileSharePolicy(policy);
   return {
     policy: resolvedPolicy,
-    inlineMaxBytes: Math.min(
-      resolvedPolicy.maxFileBytes,
-      resolvedPolicy.multipartThresholdBytes
-    ),
+    inlineMaxBytes: Math.min(resolvedPolicy.maxFileBytes, resolvedPolicy.multipartThresholdBytes),
   };
 }
 

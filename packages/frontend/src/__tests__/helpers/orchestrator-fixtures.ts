@@ -454,12 +454,13 @@ export async function seedDeliveredDecryptFixture(
     cipherBundle: cloneCipherBundle(base.cipherBundle),
     receiverPubFpr: base.receiverPubFpr,
     plaintext: base.plaintext,
-    expectedPayload: base.expectedPayload.kind === 'file'
-      ? {
-          ...base.expectedPayload,
-          bytes: Uint8Array.from(base.expectedPayload.bytes),
-        }
-      : base.expectedPayload,
+    expectedPayload:
+      base.expectedPayload.kind === 'file'
+        ? {
+            ...base.expectedPayload,
+            bytes: Uint8Array.from(base.expectedPayload.bytes),
+          }
+        : base.expectedPayload,
   };
 }
 
