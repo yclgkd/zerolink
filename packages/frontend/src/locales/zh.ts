@@ -56,6 +56,10 @@ const zh: Translation = {
     successModeLabel: '模式：',
     passwordProtectedBadge: '密码保护',
     createAnother: '再创建一个',
+    createAnotherConfirmBody:
+      '你已经保存分享链接和私密管理链接了吗？如果现在离开这个界面，之后这里可能无法再次查看它们。',
+    createAnotherConfirmCancel: '取消',
+    createAnotherConfirmContinue: '已保存，继续',
     shareLinkLabel: '分享链接 — 发送给接收方',
     shareLinkWarningTitle: '此分享链接仅显示一次。',
     shareLinkWarningBody:

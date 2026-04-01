@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-01] Protect create-success links before resetting the sender flow
+
+**Decision**: The create success summary now gates `Create another` behind link-saved confirmation unless the sender has successfully copied both the one-time share link and the private manage link during the current success view.
+**Context**: The success screen exposes two critical links, and the share link is explicitly one-time. Navigating away immediately on `Create another` made it too easy to lose both links before the sender had saved them.
+**Options Considered**: Open `Create another` in a new tab; always show a confirmation prompt; force both copy buttons before continuing; only warn when the user has not yet copied both links.
+**Choice**: Track successful clipboard writes for each link, allow direct reset only after both copies succeed, and otherwise show a warning-tone confirmation panel that lets the sender cancel or continue intentionally.
+**Reasoning**: This keeps the fast path for careful users who already saved both links, while protecting the common accidental-reset case without introducing popup blocking risk or forcing a rigid copy-only workflow.
+**Trade-offs**: Users who save links by screenshot or another manual method will see one extra confirmation step before starting a new channel.
+
 ## [2026-03-31] Split self-hosted manage protocol flow from payload and crypto helpers to enforce the 800-line limit
 
 **Decision**: Keep `services/selfhost-api/internal/service/protocol_manage.go` focused on transactional manage-flow entrypoints and state transitions, and move payload validation / canonicalization / proof-building / crypto-adjacent helpers into `services/selfhost-api/internal/service/protocol_manage_helpers.go`.
