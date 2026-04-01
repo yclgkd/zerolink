@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/yclgkd/ZeroLink/compare/v0.3.0...v0.4.0) (2026-04-01)
+
+
+### Features
+
+* add download-only file delivery ([#227](https://github.com/yclgkd/ZeroLink/issues/227)) ([2d210f0](https://github.com/yclgkd/ZeroLink/commit/2d210f051fe705d6f4489892a25358a5990b0091))
+
+
+### Bug Fixes
+
+* align sender locked UI layout and update receiver next-steps copy ([#222](https://github.com/yclgkd/ZeroLink/issues/222)) ([8e23777](https://github.com/yclgkd/ZeroLink/commit/8e237772f04cd1241c52486e4e24b021d14fa996))
+* correct copy that mislabels content payload as cryptographic key ([f3be74f](https://github.com/yclgkd/ZeroLink/commit/f3be74f1eff4d2299801d975ba1b18b4c1e8771c))
+* correct selfhost file limit test ([7ddd664](https://github.com/yclgkd/ZeroLink/commit/7ddd664440ac86b8262d418d993d27e83a05c01c))
+* protect create success links ([#226](https://github.com/yclgkd/ZeroLink/issues/226)) ([4c21be3](https://github.com/yclgkd/ZeroLink/commit/4c21be330a6a3a5f9b2af8cd6bf7804118318ccd))
+* selfhost delivery-proof challenge omits challenge ID and seed ([#224](https://github.com/yclgkd/ZeroLink/issues/224)) ([357f444](https://github.com/yclgkd/ZeroLink/commit/357f444a2b03f2e71c89de2c755304b35ac5cd0d))
+
 ## [0.3.0](https://github.com/yclgkd/ZeroLink/compare/v0.2.0...v0.3.0) (2026-04-01)
 
 
