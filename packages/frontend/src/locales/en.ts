@@ -59,6 +59,10 @@ const en = {
     successModeLabel: 'Mode:',
     passwordProtectedBadge: 'Password-protected',
     createAnother: 'Create another',
+    createAnotherConfirmBody:
+      'Have you saved both the share link and the private manage link? If you leave this screen now, you may not be able to view them again here.',
+    createAnotherConfirmCancel: 'Cancel',
+    createAnotherConfirmContinue: 'I saved them, continue',
     shareLinkLabel: 'Share link — send to receiver',
     shareLinkWarningTitle: 'This share link is shown only once.',
     shareLinkWarningBody:
