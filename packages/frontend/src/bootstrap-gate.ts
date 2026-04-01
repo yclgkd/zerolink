@@ -12,6 +12,7 @@ export function clearBootstrapBodyStyles(): void {
   const props = [
     'margin',
     'padding',
+    'backgroundColor',
     'backgroundImage',
     'backgroundSize',
     'backgroundAttachment',
@@ -43,19 +44,18 @@ export function defaultRenderVerificationGate(state: ReleaseVerificationGateStat
     state.status === 'verifying'
       ? 'Please wait before entering any sensitive content.'
       : 'Do not enter passwords, API keys, or private messages on this page.';
-  const accentColor = state.status === 'failed' ? '#f97316' : '#06b6d4';
+  const accentColor = state.status === 'failed' ? '#f97316' : '#7dd3fc';
   const badgeText = state.status === 'verifying' ? 'Verified Release' : 'Release Guard';
 
   document.body.style.margin = '0';
   document.body.style.padding = '0';
-  document.body.style.backgroundColor = '#06060b';
+  document.body.style.backgroundColor = '#08111f';
   document.body.style.backgroundImage = [
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E\")",
-    'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(139,92,246,0.22) 0%, transparent 60%)',
-    'linear-gradient(rgba(139,92,246,0.055) 1px, transparent 1px)',
-    'linear-gradient(90deg, rgba(139,92,246,0.055) 1px, transparent 1px)',
+    'radial-gradient(circle at top, rgba(125,211,252,0.13) 0%, transparent 40%)',
+    'radial-gradient(circle at 78% 18%, rgba(148,163,184,0.08) 0%, transparent 28%)',
+    'linear-gradient(180deg, rgba(8,17,31,0.96) 0%, rgba(7,13,24,1) 100%)',
   ].join(',');
-  document.body.style.backgroundSize = '200px 200px, auto, 40px 40px, 40px 40px';
+  document.body.style.backgroundSize = 'auto';
   document.body.style.backgroundAttachment = 'fixed';
   document.body.style.fontFamily = 'system-ui, -apple-system, sans-serif';
 
@@ -63,13 +63,13 @@ export function defaultRenderVerificationGate(state: ReleaseVerificationGateStat
   section.setAttribute('data-testid', 'release-verification-gate');
   section.setAttribute(
     'style',
-    'position:fixed;inset:0;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:32px;color:#f8fafc;'
+    'position:fixed;inset:0;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:32px;color:#e8eef8;'
   );
 
   const card = document.createElement('div');
   card.setAttribute(
     'style',
-    'max-width:640px;width:100%;border:1px solid rgba(6,182,212,0.25);background:rgba(20,20,30,0.72);backdrop-filter:blur(18px);border-radius:1rem;padding:32px;box-shadow:0 24px 80px rgba(0,0,0,0.45);'
+    'max-width:640px;width:100%;border:1px solid rgba(125,211,252,0.16);background:rgba(8,18,32,0.72);backdrop-filter:blur(18px);border-radius:1rem;padding:32px;box-shadow:0 24px 80px rgba(0,0,0,0.45);'
   );
 
   const badge = document.createElement('p');
@@ -87,13 +87,13 @@ export function defaultRenderVerificationGate(state: ReleaseVerificationGateStat
   heading.textContent = title;
 
   const bodyEl = document.createElement('p');
-  bodyEl.setAttribute('style', 'margin:0 0 14px 0;color:#94a3b8;font-size:14px;line-height:1.6;');
+  bodyEl.setAttribute('style', 'margin:0 0 14px 0;color:#99a9bf;font-size:14px;line-height:1.6;');
   bodyEl.textContent = body;
 
   const noteEl = document.createElement('p');
   noteEl.setAttribute(
     'style',
-    'margin:0;padding:12px 14px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:0.75rem;color:#94a3b8;font-size:13px;line-height:1.6;'
+    'margin:0;padding:12px 14px;background:rgba(56,189,248,0.08);border:1px solid rgba(125,211,252,0.16);border-radius:0.75rem;color:#99a9bf;font-size:13px;line-height:1.6;'
   );
   noteEl.textContent = dangerNote;
 
