@@ -798,3 +798,35 @@ func TestDeliveryProofChallengeMatchesProtocolFixture(t *testing.T) {
 		t.Errorf("delivery proof challenge = %q, want %q", gotB64u, wantB64u)
 	}
 }
+
+// TestDeleteChallengeMatchesProtocolFixture validates that the selfhost-api
+// computes the delete/compound challenge identically to the Cloudflare DO
+// backend (GLv2.5 domain: SHA256("GLv2.5" || uuid || challengeID || intentHash || seed)).
+//
+// Expected value is from protocol-fixtures/selfhost-contract-v1.json
+// › challengeDerivation.compound.expectedChallengeB64u
+func TestDeleteChallengeMatchesProtocolFixture(t *testing.T) {
+	uuid := "aaaaaaaaaaaaaaaaaaaaa"
+	challengeID := "bW9ja19jaGFsbGVuZ2VfaWQ"
+	challengeSeed := "c2VlZF9mb3JfY29tcG91bmRfY2hhbGxlbmdl"
+	intentHash := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	wantB64u := "ElSvIYDCPR7bM0n5N1jqf-4nSHwlKljClgwBNHletWA"
+
+	got, err := computeExpectedCompoundChallengeBytes(
+		uuid,
+		intentHash,
+		&store.ActiveChallenge{
+			ChallengeID:   stringPtr(challengeID),
+			ChallengeSeed: stringPtr(challengeSeed),
+		},
+		"delete",
+	)
+	if err != nil {
+		t.Fatalf("computeExpectedCompoundChallengeBytes() error = %v", err)
+	}
+
+	gotB64u := encodeBase64URL(got)
+	if gotB64u != wantB64u {
+		t.Errorf("delete challenge = %q, want %q", gotB64u, wantB64u)
+	}
+}
