@@ -230,12 +230,17 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 		)
 	}
 
+	multipartSupported, err := parseBoolEnv(lookup, "SELFHOST_API_FILE_MULTIPART_SUPPORTED", false)
+	if err != nil {
+		return FileConfig{}, err
+	}
+
 	return FileConfig{
 		MaxBytes:                maxBytes,
 		MultipartThresholdBytes: multipartThresholdBytes,
 		ChunkSizeBytes:          chunkSizeBytes,
 		MaxChunks:               maxChunks,
-		MultipartSupported:      false,
+		MultipartSupported:      multipartSupported,
 	}, nil
 }
 
@@ -350,6 +355,19 @@ func parseInt64Env(lookup func(string) (string, bool), key string, fallback int6
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s must be a valid int64: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func parseBoolEnv(lookup func(string) (string, bool), key string, fallback bool) (bool, error) {
+	fallbackStr := "false"
+	if fallback {
+		fallbackStr = "true"
+	}
+	value := envOrDefault(lookup, key, fallbackStr)
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be \"true\" or \"false\": %w", key, err)
 	}
 	return parsed, nil
 }

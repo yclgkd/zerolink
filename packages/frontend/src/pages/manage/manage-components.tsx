@@ -262,6 +262,7 @@ export function FileInput({
         onChange={(event) => onSelect(event.target.files?.[0] ?? null)}
         type="file"
       />
+      <p className="text-xs text-muted-foreground">{t('manage.fileSizeHint')}</p>
       {selectedFile ? (
         <div
           className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/60 bg-background/35 px-4 py-3 text-sm text-muted-foreground"

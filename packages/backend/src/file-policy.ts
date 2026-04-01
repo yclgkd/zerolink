@@ -1,10 +1,9 @@
 import {
   FILE_SHARE,
-  FilePolicyResponseSchema,
-  FileSharePolicySchema,
-  MAX_PLAINTEXT_BYTES,
   type FilePolicyResponse,
   type FileSharePolicy,
+  FileSharePolicySchema,
+  MAX_PLAINTEXT_BYTES,
 } from '@zerolink/shared';
 
 export interface FilePolicyEnv {
@@ -86,8 +85,5 @@ export function resolveFilePolicy(env: FilePolicyEnv): FileSharePolicy {
 }
 
 export function toFilePolicyResponse(env: FilePolicyEnv): FilePolicyResponse {
-  return FilePolicyResponseSchema.parse({
-    ok: true,
-    policy: resolveFilePolicy(env),
-  });
+  return { ok: true, policy: resolveFilePolicy(env) };
 }

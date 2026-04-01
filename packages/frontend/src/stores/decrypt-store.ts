@@ -115,12 +115,17 @@ export const useDecryptStore = create<DecryptStore>((set, get) => ({
       localPlaintextBurned: false,
     })),
 
-  markLocalPlaintextBurned: () =>
+  markLocalPlaintextBurned: () => {
+    const { file } = get();
+    if (file) {
+      file.bytes.fill(0);
+    }
     set(() => ({
       localPlaintextBurned: true,
       plaintext: null,
       file: null,
-    })),
+    }));
+  },
 
   resetDecryptStore: () => set(createInitialState()),
 }));

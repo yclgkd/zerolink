@@ -105,6 +105,7 @@ const en = {
     secretPlaceholder: 'Type or paste your secret here',
     fileLabel: 'File to Deliver',
     fileClearButton: 'Remove File',
+    fileSizeHint: 'Maximum file size is determined by your deployment configuration.',
     softkeyPassphraseHint:
       'This channel uses a password-protected management key. Enter the password you set when creating this channel.',
     softkeyLabel: 'Channel password',

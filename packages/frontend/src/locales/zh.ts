@@ -98,6 +98,7 @@ const zh: Translation = {
     secretPlaceholder: '在此输入或粘贴要发送的内容',
     fileLabel: '要发送的文件',
     fileClearButton: '移除文件',
+    fileSizeHint: '文件大小上限由当前部署配置决定。',
     softkeyPassphraseHint: '此频道使用密码保护的管理密钥，请输入创建频道时设置的密码。',
     softkeyLabel: '频道密码',
     softkeyPlaceholder: '输入频道密码',

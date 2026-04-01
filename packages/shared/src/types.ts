@@ -558,8 +558,6 @@ export interface CompoundBeginResponse {
   securityProfile: SecurityProfile;
   /** Admin mode of the channel; controls how compound_commit is authenticated. */
   adminMode: AdminMode;
-  /** Optional deployment file policy used by file delivery UIs. */
-  filePolicy?: FileSharePolicy | undefined;
 }
 
 /** Canonical update payload; SHA-256 of its JSON form becomes intent_hash. */

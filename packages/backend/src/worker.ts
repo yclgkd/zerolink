@@ -82,11 +82,7 @@ function buildApiHeaders(): Headers {
   });
 }
 
-function jsonApiResponse(
-  payload: Record<string, unknown>,
-  status: number,
-  headers?: Headers
-): Response {
+function jsonApiResponse(payload: unknown, status: number, headers?: Headers): Response {
   const resolvedHeaders = headers ?? buildApiHeaders();
   resolvedHeaders.set('Content-Type', 'application/json; charset=utf-8');
 
@@ -422,7 +418,7 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
 
   if (pathname === FILE_POLICY_PATH) {
     if (request.method !== 'GET') return methodNotAllowed('GET');
-    return jsonApiResponse(toFilePolicyResponse(env) as unknown as Record<string, unknown>, 200);
+    return jsonApiResponse(toFilePolicyResponse(env), 200);
   }
 
   const wsMatch = pathname.match(WS_SUBSCRIBE_PATH);

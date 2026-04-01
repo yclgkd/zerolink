@@ -1,4 +1,10 @@
-import type { AssertionJSON, Base64Url, CompoundBeginResponse, HexString } from '@zerolink/shared';
+import type {
+  AssertionJSON,
+  Base64Url,
+  CompoundBeginResponse,
+  FileSharePolicy,
+  HexString,
+} from '@zerolink/shared';
 import {
   AES_GCM,
   buildCipherBundleAadBytes,
@@ -39,7 +45,7 @@ async function buildDeliverUpdateIntent(
   deps: ResolvedDeps,
   input: DeliverSecretInput,
   beginData: ResolvedDeliverBeginData,
-  filePolicy?: CompoundBeginResponse['filePolicy']
+  filePolicy?: FileSharePolicy
 ): Promise<
   CryptoOrchestratorResult<{
     intent: UpdateIntent;
@@ -67,18 +73,14 @@ async function buildDeliverUpdateIntent(
           `Selected file exceeds the deployment limit (${policy.maxFileBytes} bytes).`
         );
       }
-      if (input.file.bytes.byteLength > inlineMaxBytes) {
-        return toError(
-          'MULTIPART_REQUIRED',
-          'deliver.file-policy',
-          'Selected file exceeds the inline delivery limit for this deployment.'
-        );
-      }
       plaintextBytes = encodeFileSharePayload({
         fileName: input.file.fileName,
         mediaType: input.file.mediaType,
         bytes: input.file.bytes,
       });
+      // Compare the full envelope (magic + header + body) against the inline
+      // limit. The envelope is always larger than the raw file bytes due to
+      // framing overhead, so this is the authoritative check.
       if (plaintextBytes.byteLength > inlineMaxBytes) {
         return toError(
           'MULTIPART_REQUIRED',
@@ -183,7 +185,7 @@ export async function executeDeliverSecret(
     receiverPubFpr: beginData.receiverPubFpr,
   } as ResolvedDeliverBeginData;
 
-  let filePolicy: CompoundBeginResponse['filePolicy'];
+  let filePolicy: FileSharePolicy | undefined;
   if (input.file) {
     const filePolicyRes = await deps.client.filePolicy();
     if (!filePolicyRes.ok) {

@@ -4,6 +4,7 @@ import {
   decodeSharePayload,
   encodeFileSharePayload,
   encodeTextSharePayload,
+  sanitizeDownloadFilename,
 } from '../payload.ts';
 
 describe('share payload envelope', () => {
@@ -51,7 +52,9 @@ describe('share payload envelope', () => {
     const headerLength = new DataView(tampered.buffer).getUint32(headerLengthOffset, false);
     const headerStart = 8;
     const headerEnd = headerStart + headerLength;
-    const parsedHeader = JSON.parse(new TextDecoder().decode(tampered.subarray(headerStart, headerEnd))) as {
+    const parsedHeader = JSON.parse(
+      new TextDecoder().decode(tampered.subarray(headerStart, headerEnd))
+    ) as {
       kind: 'file';
       fileName: string;
       mediaType: string;
@@ -62,6 +65,46 @@ describe('share payload envelope', () => {
     expect(updatedHeader.byteLength).toBe(headerLength);
     tampered.set(updatedHeader, headerStart);
 
-    expect(() => decodeSharePayload(tampered)).toThrow('payload file size does not match body length');
+    expect(() => decodeSharePayload(tampered)).toThrow(
+      'payload file size does not match body length'
+    );
+  });
+});
+
+describe('sanitizeDownloadFilename', () => {
+  it('preserves a normal filename', () => {
+    expect(sanitizeDownloadFilename('report.pdf')).toBe('report.pdf');
+  });
+
+  it('replaces path separators', () => {
+    expect(sanitizeDownloadFilename('../../etc/passwd')).toBe('.._.._etc_passwd');
+  });
+
+  it('replaces Windows forbidden characters', () => {
+    expect(sanitizeDownloadFilename('file:name?.txt')).toBe('file_name_.txt');
+  });
+
+  it('replaces control characters', () => {
+    expect(sanitizeDownloadFilename('file\x00name')).toBe('file_name');
+  });
+
+  it('falls back to download.bin for empty string', () => {
+    expect(sanitizeDownloadFilename('')).toBe('download.bin');
+  });
+
+  it('falls back to download.bin for null', () => {
+    expect(sanitizeDownloadFilename(null)).toBe('download.bin');
+  });
+
+  it('falls back to download.bin for undefined', () => {
+    expect(sanitizeDownloadFilename(undefined)).toBe('download.bin');
+  });
+
+  it('collapses a run of invalid characters to a single underscore', () => {
+    expect(sanitizeDownloadFilename('///\x00\x01')).toBe('_');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(sanitizeDownloadFilename('  file.txt  ')).toBe('file.txt');
   });
 });

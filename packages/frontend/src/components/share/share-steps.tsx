@@ -421,12 +421,12 @@ function formatFileSize(size: number): string {
     return `${size} B`;
   }
   if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / 1024).toFixed(1)} KiB`;
   }
   if (size < 1024 * 1024 * 1024) {
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
   }
-  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
 }
 
 export function DeliveredStep({

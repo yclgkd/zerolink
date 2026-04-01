@@ -438,7 +438,6 @@ export const CompoundBeginResponseSchema = z.object({
   currentVersion: z.number().int().nonnegative(),
   securityProfile: SecurityProfileSchema,
   adminMode: AdminModeSchema,
-  filePolicy: FileSharePolicySchema.optional(),
 });
 
 // ─── Intent Schemas ───────────────────────────────────────────────────────────

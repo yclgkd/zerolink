@@ -15,7 +15,12 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
-const minInlineProtocolBodyBytes = int64(2_097_152 * 4)
+// inlineBase64Overhead is the multiplier applied to convert raw file bytes to a
+// worst-case JSON body size. AES-GCM ciphertext is base64url-encoded in the
+// protocol JSON (3 raw bytes → 4 base64 chars), and the remaining JSON framing
+// adds a small additional overhead, so 4× is a safe upper bound.
+const inlineBase64Overhead = int64(4)
+const minInlineProtocolBodyBytes = int64(2_097_152) * inlineBase64Overhead
 
 type Runtime struct {
 	server          *http.Server
@@ -29,7 +34,7 @@ func resolveMaxProtocolBodyBytes(fileMaxBytes int64) int64 {
 	if fileMaxBytes <= 0 {
 		return minInlineProtocolBodyBytes
 	}
-	return max(fileMaxBytes*4, minInlineProtocolBodyBytes)
+	return max(fileMaxBytes*inlineBase64Overhead, minInlineProtocolBodyBytes)
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
