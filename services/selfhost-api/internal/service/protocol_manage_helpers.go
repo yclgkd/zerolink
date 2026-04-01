@@ -25,7 +25,7 @@ func (input LockCommitInput) Validate() error {
 	if !isBase64URL(input.LockChallengeID) {
 		return badRequest("invalid lockChallengeId")
 	}
-	if !isLowerHex(input.LockProof, 0) {
+	if !isLowerHex(input.LockProof, 64) {
 		return badRequest("invalid lockProof")
 	}
 	if !input.ReceiverPubJWK.Valid() {
@@ -255,6 +255,9 @@ func buildStoredUpdateDeliveryProofJSON(adminMode store.AdminMode, input Compoun
 
 	var payload map[string]any
 	if adminMode == store.AdminModeWebAuthn {
+		if input.Assertion == nil {
+			return nil, errors.New("assertion required for webauthn delivery proof")
+		}
 		payload = map[string]any{
 			"adminMode": "webauthn",
 			"meta":      meta,
@@ -323,10 +326,6 @@ func computeExpectedCompoundChallengeBytes(
 	challenge *store.ActiveChallenge,
 	op string,
 ) ([]byte, error) {
-	if op == "update" {
-		sum := sha256.Sum256([]byte("GL-delivery-proof" + uuid + intentHash))
-		return sum[:], nil
-	}
 	challengeIDBytes, err := base64.RawURLEncoding.DecodeString(*challenge.ChallengeID)
 	if err != nil {
 		return nil, err
@@ -334,6 +333,17 @@ func computeExpectedCompoundChallengeBytes(
 	challengeSeedBytes, err := base64.RawURLEncoding.DecodeString(*challenge.ChallengeSeed)
 	if err != nil {
 		return nil, err
+	}
+
+	if op == "update" {
+		chunks := make([]byte, 0, len("GL-delivery-proof")+len(uuid)+len(challengeIDBytes)+len(intentHash)+len(challengeSeedBytes))
+		chunks = append(chunks, []byte("GL-delivery-proof")...)
+		chunks = append(chunks, []byte(uuid)...)
+		chunks = append(chunks, challengeIDBytes...)
+		chunks = append(chunks, []byte(intentHash)...)
+		chunks = append(chunks, challengeSeedBytes...)
+		sum := sha256.Sum256(chunks)
+		return sum[:], nil
 	}
 
 	chunks := make([]byte, 0, len("GLv2.5")+len(uuid)+len(challengeIDBytes)+len(intentHash)+len(challengeSeedBytes))

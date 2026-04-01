@@ -32,6 +32,9 @@ func websocketHandler(
 	}
 
 	normalizedAllowedOrigin := normalizeOrigin(allowedOrigin)
+	if normalizedAllowedOrigin == "" && logger != nil {
+		logger.Warn("websocket origin check disabled: SELFHOST_API_RP_ORIGIN is not set")
+	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !isWebSocketUpgrade(r) {

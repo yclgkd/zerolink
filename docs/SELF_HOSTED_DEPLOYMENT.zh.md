@@ -54,6 +54,7 @@ docker compose -f deploy/selfhost/docker-compose.yml up --build
 - 这个打包使用默认前端 build，不启用签名后的 `Verified Release` 启动校验。
 - realtime hub 是进程内实现；如果要跑多个 API 副本，需要共享 pub/sub。
 - PostgreSQL 数据存放在 `postgres-data` volume 中。
+- API 服务没有设置全局 HTTP write timeout，以避免 WebSocket 长连接被断开；per-write 超时由 realtime hub 内部保证。如果你在 Caddy 配置中添加 `timeouts` 块，**不要**设置 `write_timeout`，否则反向代理会中断 WebSocket 会话。
 
 ## 停止
 

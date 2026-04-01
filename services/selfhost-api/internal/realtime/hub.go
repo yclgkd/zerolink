@@ -50,6 +50,7 @@ type Hub struct {
 	logger   *slog.Logger
 	mu       sync.RWMutex
 	channels map[string]*channelGroup
+	closed   bool
 }
 
 type Client struct {
@@ -83,6 +84,10 @@ func NewHub(logger *slog.Logger) *Hub {
 func (h *Hub) Register(channelID string, conn *websocket.Conn) (*Client, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.closed {
+		return nil, ErrConnectionLimitReached
+	}
 
 	group := h.channels[channelID]
 	if group == nil {
@@ -227,6 +232,7 @@ func (h *Hub) Close() error {
 	h.mu.Lock()
 	channels := h.channels
 	h.channels = make(map[string]*channelGroup)
+	h.closed = true
 	h.mu.Unlock()
 
 	for _, group := range channels {

@@ -54,6 +54,7 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 - This package serves the default frontend build. It does not enable the signed `Verified Release` bootstrap gate.
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.
+- The API server does not set a global HTTP write timeout so that WebSocket connections are not killed mid-session. Per-write deadlines are enforced inside the realtime hub. If you add a Caddy `timeouts` block, do not set `write_timeout` — it will terminate long-lived WebSocket sessions through the reverse proxy.
 
 ## Stop The Stack
 
