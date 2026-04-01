@@ -861,6 +861,14 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 1. Every `feat` or `fix` commit must bundle updates to the durable session files when needed. The original rule referenced `active.md/completed.md`; after the 2026-03-11 simplifications, the practical paths are `decisions.md` and `code-landmarks.md` when rationale or navigation context changes.
 2. PR templates and AI instructions (`CLAUDE.md`) will enforce this.
 **Status**: Implemented in `CLAUDE.md`. Enforced from PR #83 onwards.
+## [2026-04-01] Make self-hosted file-size regression test derive the real ciphertext limit
+
+**Decision**: Build the oversized file-ciphertext regression case from `resolveMaxFileCiphertextBytes(...) + 1` instead of using a hard-coded ciphertext length.
+**Context**: PR #227 added inline file delivery limits to the self-hosted Go service, but the regression test used an `8192`-byte sample that was still below the actual ciphertext ceiling once file envelope/header overhead and padding were accounted for. That made CI fail with `error = nil, want CIPHER_BUNDLE_INVALID`.
+**Options Considered**: Increase the hard-coded sample again, weaken the production limit math, or derive the test input from the same helper the validator uses.
+**Choice**: Derive the test input from the helper and exceed it by one byte.
+**Reasoning**: This keeps production behavior unchanged and makes the regression robust against future envelope or padding changes.
+**Trade-offs**: The test now depends on the helper formula, so it verifies the rejection boundary rather than independently re-deriving the math.
 ## [2026-03-02] Cloudflare Durable Objects Pricing Update
 
 **Decision**: Support Cloudflare Durable Objects Free Tier with SQLite backend.
