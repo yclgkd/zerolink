@@ -62,7 +62,23 @@ function sanitizeFilenameChar(char: string): string {
 }
 
 export function sanitizeDownloadFilename(fileName: string | null | undefined): string {
-  const normalized = Array.from((fileName ?? '').trim(), sanitizeFilenameChar).join('');
+  let normalized = '';
+  let previousWasReplacement = false;
+
+  for (const char of (fileName ?? '').trim()) {
+    const sanitized = sanitizeFilenameChar(char);
+    if (sanitized === '_') {
+      if (!previousWasReplacement) {
+        normalized += '_';
+      }
+      previousWasReplacement = true;
+      continue;
+    }
+
+    normalized += sanitized;
+    previousWasReplacement = false;
+  }
+
   return normalized.length > 0 ? normalized : FALLBACK_DOWNLOAD_FILE_NAME;
 }
 
