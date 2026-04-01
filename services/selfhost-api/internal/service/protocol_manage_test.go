@@ -355,8 +355,14 @@ func TestProtocolServiceRejectsOversizedFileCiphertext(t *testing.T) {
 		Nonce:          encodeBase64URL([]byte("nonce-manage-flow-000009")),
 		ReceiverPubFpr: receiverPubFpr,
 		PayloadKind:    "file",
-		CipherBundle:   buildCipherBundle(t, uuid, 0, receiverPubFpr, make([]byte, 8_192)),
-		ExpireAt:       json.RawMessage("null"),
+		CipherBundle: buildCipherBundle(
+			t,
+			uuid,
+			0,
+			receiverPubFpr,
+			make([]byte, int(resolveMaxFileCiphertextBytes(1, 4096)+1)),
+		),
+		ExpireAt: json.RawMessage("null"),
 	}
 	intentHash, err := intent.ComputeHash()
 	if err != nil {
