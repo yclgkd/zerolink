@@ -309,13 +309,17 @@ describe('SharePage – delivered state + safety code', () => {
         'This receiver channel is locked. This page updates automatically, but only the device that created the lock can verify the Safety Code shown below.'
       )
     ).toBeTruthy();
-    expect(screen.getByText('Coordinate with the sender over another channel.')).toBeTruthy();
     expect(
-      screen.getByText('Only confirm the Safety Code if this device shows it below.')
+      screen.getByText(
+        'The Safety Code can only be verified on the device that locked this channel.'
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Confirm and verify the Safety Code with the sender over another channel.')
     ).toBeTruthy();
     expect(
       screen.getByText(
-        'This page updates automatically when the sender delivers the encrypted secret.'
+        'This page will refresh automatically when the sender delivers the ciphertext.'
       )
     ).toBeTruthy();
     expect(await screen.findByTestId('safety-code-root')).toBeTruthy();
