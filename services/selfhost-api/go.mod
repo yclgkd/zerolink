@@ -2,7 +2,10 @@ module github.com/yclgkd/ZeroLink/services/selfhost-api
 
 go 1.24.0
 
-require github.com/jackc/pgx/v5 v5.7.4
+require (
+	github.com/gorilla/websocket v1.5.3
+	github.com/jackc/pgx/v5 v5.7.4
+)
 
 require (
 	github.com/fxamacker/cbor/v2 v2.7.0

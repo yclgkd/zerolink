@@ -14,6 +14,7 @@ docs/
 ├── QUICK_START.md    # 快速启动指南（从零到运行）
 ├── DEPLOYMENT.md     # 部署指南（Cloudflare Workers 手动部署）
 ├── SELF_HOSTED_CONTRACT.md # 自部署后端契约冻结
+├── SELF_HOSTED_DEPLOYMENT.md # 自部署 Docker Compose 部署
 ├── TECH_STACK.md     # 技术栈规范（工具链、Monorepo、测试）
 ├── PRD.md       # 完整产品需求文档（主文档）
 ├── ARCHITECTURE.md   # 架构概览
@@ -31,6 +32,7 @@ docs/
 - **项目是什么？** → [README.md](../README.zh.md)
 - **如何快速开始？** → [QUICK_START.md](./QUICK_START.zh.md)
 - **如何部署到 Cloudflare？** → [DEPLOYMENT.md](./DEPLOYMENT.zh.md)
+- **如何本地自部署？** → [SELF_HOSTED_DEPLOYMENT.md](./SELF_HOSTED_DEPLOYMENT.zh.md)
 - **核心价值主张** → [PRD.md § 1. 产品概述](./PRD.zh.md#1-产品概述)
 - **用户流程** → [PRD.md § 5. 用户流程](./PRD.zh.md#5-用户流程v25-ux-版)
 
@@ -120,10 +122,11 @@ docs/
 
 ### DevOps / 部署
 1. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - **完整部署指南（手动部署）**
-2. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - GitHub Actions 与发布流程
-3. [TECH_STACK.md § 部署与发布](./TECH_STACK.zh.md#部署与发布) - 前后端部署
-4. [TECH_STACK.md § 发布流程](./TECH_STACK.zh.md#版本管理与发布流水线) - PR 验证与 tag 发布
-5. [VERIFY.md](./VERIFY.zh.md) - 构建完整性验证
+2. [SELF_HOSTED_DEPLOYMENT.md](./SELF_HOSTED_DEPLOYMENT.zh.md) - 本地 Docker Compose 自部署
+3. [DEPLOYMENT.md](./DEPLOYMENT.zh.md) - GitHub Actions 与发布流程
+4. [TECH_STACK.md § 部署与发布](./TECH_STACK.zh.md#部署与发布) - 前后端部署
+5. [TECH_STACK.md § 发布流程](./TECH_STACK.zh.md#版本管理与发布流水线) - PR 验证与 tag 发布
+6. [VERIFY.md](./VERIFY.zh.md) - 构建完整性验证
 
 ---
 

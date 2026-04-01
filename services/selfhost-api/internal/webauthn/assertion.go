@@ -94,6 +94,10 @@ func (NativeVerifier) VerifyAssertion(_ context.Context, input AssertionInput) (
 		return AssertionResult{}, errors.New("signature verification failed")
 	}
 
+	if input.StoredSignCount > 0 && int64(authData.SignCount) <= input.StoredSignCount {
+		return AssertionResult{}, errors.New("sign count is not monotonically increasing (possible cloned authenticator)")
+	}
+
 	return AssertionResult{
 		NewSignCount: int64(authData.SignCount),
 	}, nil

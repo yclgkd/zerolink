@@ -12,6 +12,7 @@ import (
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/buildinfo"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/protocol"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/service"
 )
 
@@ -19,6 +20,7 @@ type Dependencies struct {
 	Logger        *slog.Logger
 	Services      *service.Container
 	AllowedOrigin string
+	Realtime      *realtime.Hub
 }
 
 type errorResponse struct {
@@ -55,7 +57,10 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	for _, route := range protocol.RouteSpecs() {
 		if route.Name == "ws" {
-			mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, websocketPlaceholder(logger)))
+			mux.HandleFunc(
+				route.Pattern,
+				methodOnly(route.Method, logger, websocketHandler(deps.Services.Protocol, deps.Realtime, logger, deps.AllowedOrigin)),
+			)
 			continue
 		}
 		mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, protocolHandler(route.Name, deps.Services.Protocol, logger)))

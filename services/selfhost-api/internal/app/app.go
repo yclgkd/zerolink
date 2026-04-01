@@ -29,20 +29,22 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	realtimeHub := realtime.NopHub{}
+	realtimeHub := realtime.NewHub(logger)
 	verifier := webauthn.NewVerifier()
+	protocolService := service.NewProtocolService(
+		db,
+		service.ProtocolConfig{
+			RPID:      cfg.RP.ID,
+			RPOrigin:  cfg.RP.Origin,
+			Verifier:  verifier,
+			Publisher: realtimeHub,
+		},
+	)
 	services := service.New(
 		db,
 		verifier,
 		realtimeHub,
-		service.NewProtocolService(
-			db,
-			service.ProtocolConfig{
-				RPID:     cfg.RP.ID,
-				RPOrigin: cfg.RP.Origin,
-				Verifier: verifier,
-			},
-		),
+		protocolService,
 		logger,
 	)
 
@@ -50,14 +52,17 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		Logger:        logger,
 		Services:      services,
 		AllowedOrigin: cfg.RP.Origin,
+		Realtime:      realtimeHub,
 	})
 
+	// WriteTimeout is intentionally 0: hijacked WebSocket connections
+	// inherit the server-level deadline, which would kill long-lived
+	// sessions. Per-write deadlines are enforced inside the realtime hub.
 	server := &http.Server{
 		Addr:              cfg.HTTP.BindAddr,
 		Handler:           handler,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
-		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 

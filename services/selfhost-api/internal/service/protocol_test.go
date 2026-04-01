@@ -85,7 +85,7 @@ func TestProtocolServiceCreateQuickChannelAndReadPublicStatus(t *testing.T) {
 		if channel.AdminMode == nil || *channel.AdminMode != store.AdminModePassword {
 			t.Fatalf("channel adminMode = %v, want password", channel.AdminMode)
 		}
-		if !bytes.Contains(channel.AdminCredential, []byte(`"type":"softkey"`)) {
+		if !bytes.Contains(channel.AdminCredential, []byte(`"type": "softkey"`)) {
 			t.Fatalf("admin credential = %s, want softkey payload", string(channel.AdminCredential))
 		}
 		if channel.LockKey == nil || *channel.LockKey == "" {
@@ -184,13 +184,13 @@ func TestProtocolServiceCreateSecureChannelPersistsVerifiedCredential(t *testing
 		if channel == nil {
 			t.Fatal("expected channel row to exist")
 		}
-		if !bytes.Contains(channel.AdminCredential, []byte(`"credentialId":"c3RvcmVkLWNyZWRlbnRpYWw"`)) {
+		if !bytes.Contains(channel.AdminCredential, []byte(`"credentialId": "c3RvcmVkLWNyZWRlbnRpYWw"`)) {
 			t.Fatalf("admin credential = %s, want stored credential id", string(channel.AdminCredential))
 		}
-		if !bytes.Contains(channel.AdminCredential, []byte(`"publicKey":"Y29zZS1wdWJsaWMta2V5"`)) {
+		if !bytes.Contains(channel.AdminCredential, []byte(`"publicKey": "Y29zZS1wdWJsaWMta2V5"`)) {
 			t.Fatalf("admin credential = %s, want stored public key", string(channel.AdminCredential))
 		}
-		if !bytes.Contains(channel.AdminCredential, []byte(`"aaguid":"MDEyMzQ1Njc4OWFiY2RlZg"`)) {
+		if !bytes.Contains(channel.AdminCredential, []byte(`"aaguid": "MDEyMzQ1Njc4OWFiY2RlZg"`)) {
 			t.Fatalf("admin credential = %s, want stored aaguid", string(channel.AdminCredential))
 		}
 		if bytes.Contains(channel.AdminCredential, []byte(`"attestationObject"`)) {

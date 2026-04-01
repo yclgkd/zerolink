@@ -13,6 +13,24 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-03-31] Split self-hosted manage protocol flow from payload and crypto helpers to enforce the 800-line limit
+
+**Decision**: Keep `services/selfhost-api/internal/service/protocol_manage.go` focused on transactional manage-flow entrypoints and state transitions, and move payload validation / canonicalization / proof-building / crypto-adjacent helpers into `services/selfhost-api/internal/service/protocol_manage_helpers.go`.
+**Context**: PR #220 follow-up fixes included a review finding that `protocol_manage.go` had grown past the repo's hard 800-line limit while also carrying duplicated delivery validation across the WebAuthn and password/softkey branches.
+**Options Considered**: Leave the file oversized until a later cleanup; split by auth mode and duplicate shared helpers; keep one flow file and extract the shared manage payload and delivery helpers into a companion file.
+**Choice**: Add `validateAndApplyDelivery(...)` for the shared delivery transition path and extract the validation / proof / crypto helpers into `protocol_manage_helpers.go` while preserving package-local access.
+**Reasoning**: This keeps the behavior-critical transaction flow readable in one place, removes duplicate delivery validation logic, and satisfies the repo file-size rule without widening the public surface or changing protocol semantics.
+**Trade-offs**: The `service` package now spreads manage logic across two files, so future edits need to check both the flow file and the helper file together.
+
+## [2026-03-31] Self-hosted local packaging ships as single-node realtime plus Caddy compose bundle
+
+**Decision**: The self-hosted path now ships a first-party local deployment bundle under `deploy/selfhost/` and exposes `/api/ws/:uuid` from the Go API using an in-memory single-node realtime hub, while keeping the frontend's existing HTTP polling fallback unchanged.
+**Context**: Issue #208 required the self-hosted track to stop being a partial backend spike and become an executable local deployment story. The missing gaps were realtime compatibility for the frontend sync client, an opinionated local packaging path, and operator-facing documentation/templates.
+**Options Considered**: Keep `/api/ws/:uuid` unimplemented and document polling-only behavior; add Redis/pubsub and multi-node fan-out immediately; implement the frozen WebSocket contract in-process for one-node deployments and defer cross-node broadcast until there is a concrete scaling requirement.
+**Choice**: Implement the exact WebSocket contract now with a process-local hub, wire service-layer state transitions to publish `state_changed` / `channel_closed`, package the stack as `db + migrate + api + web` via Docker Compose, and front it with Caddy for SPA fallback plus `/api/*` proxying.
+**Reasoning**: This satisfies frontend compatibility and gives operators a runnable self-hosted path without prematurely committing to Redis or a distributed topology. The frontend already has polling fallback, so single-node realtime is a strict improvement over the previous placeholder while preserving a safe degradation path.
+**Trade-offs**: Realtime fan-out is intentionally limited to a single API process. Operators who scale the API horizontally will need a later shared pubsub layer to preserve cross-node websocket delivery semantics.
+
 ## [2026-03-31] Self-hosted RP_ORIGIN must be stored as a canonical origin, not an arbitrary URL
 
 **Decision**: Self-hosted config loading now parses `SELFHOST_API_RP_ORIGIN` as an origin-only URL, rejects path/query/fragment/userinfo, lowercases scheme and host, and strips default ports before storing it.

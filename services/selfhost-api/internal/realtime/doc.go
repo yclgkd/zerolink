@@ -1,2 +1,3 @@
-// Package realtime reserves the boundary for websocket/pubsub delivery in M6.
+// Package realtime provides the single-node websocket fan-out used by the
+// self-hosted deployment path.
 package realtime
