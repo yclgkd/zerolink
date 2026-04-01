@@ -1,7 +1,7 @@
 # Project Context
 
 ## Product
-ZeroLink is a zero-knowledge secret sharing tool for passwords, API keys, and short private messages. The server must never see plaintext secrets or private keys.
+ZeroLink is a zero-knowledge secret sharing tool for passwords, API keys, tokens, recovery codes, private messages, and other sensitive content. The server must never see plaintext secrets or private keys.
 
 ## Protocol
 1. Create: the sender creates a channel and shares a link with key material in the URL fragment.
