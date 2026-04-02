@@ -39,6 +39,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 ### 快速开始
 - [快速启动指南](./docs/QUICK_START.zh.md) - 从零到运行开发环境
 - [部署指南](./docs/DEPLOYMENT.zh.md) - 手动部署到 Cloudflare Workers
+- [自部署部署指南](./docs/SELF_HOSTED_DEPLOYMENT.zh.md) - 使用发布的 Docker Compose 栈或本地 build override
 - [技术栈规范](./docs/TECH_STACK.zh.md) - 完整技术栈与工具链
 
 ### 设计文档
@@ -61,7 +62,7 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ### 后端
 - Cloudflare Workers + Durable Objects（提供免费层，支持 SQLite 后端）
-- 可选：Docker Compose 自托管（计划中，尚未实现）
+- 可选：通过 GHCR 预构建镜像或本地 build override 运行 Docker Compose 自部署
 
 ## 浏览器兼容性
 
@@ -98,14 +99,38 @@ ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
 
 ## 部署 / Deploy
 
-ZeroLink 当前文档仅保留 Cloudflare Workers 的手动部署路径，不再提供通用的一键部署入口。
+ZeroLink 目前提供两条部署路径：
 
-### 前提条件 / Prerequisites
+- Cloudflare Workers 手动部署，见 [部署指南](./docs/DEPLOYMENT.zh.md)
+- Docker Compose 自部署，见 [自部署部署指南](./docs/SELF_HOSTED_DEPLOYMENT.zh.md)
+
+### Cloudflare 部署前提 / Cloudflare Deployment Prerequisites
 
 - Cloudflare 账号（免费计划即可，支持 Durable Objects 免费层）
 - Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
-完整部署文档见 [部署指南](./docs/DEPLOYMENT.zh.md)
+完整部署文档见 [部署指南](./docs/DEPLOYMENT.zh.md)。Docker Compose 自部署不需要
+Cloudflare 工具链。
+
+### 自部署快速开始 / Self-Hosted Quick Start
+
+请使用已发布版本号，这样下载到的 Compose 文件与拉取的镜像 tag 保持一致：
+
+```bash
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
+mkdir zerolink-selfhost
+cd zerolink-selfhost
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
+cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
+docker compose up -d
+```
+
+默认栈会拉取 `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api` 和
+`${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web`。
+如果镜像来自 fork 或组织镜像仓库，可在 `.env` 里设置 `ZEROLINK_IMAGE_REPOSITORY`；
+如果要本地源码构建，请看 [自部署部署指南](./docs/SELF_HOSTED_DEPLOYMENT.zh.md)。
 
 ---
 

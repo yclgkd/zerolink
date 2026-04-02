@@ -37,6 +37,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 ### Getting Started
 - [Quick Start Guide](./docs/QUICK_START.md) - From zero to running dev environment
 - [Deployment Guide](./docs/DEPLOYMENT.md) - Deploy to Cloudflare Workers manually
+- [Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md) - Run the published Docker Compose stack or local build override
 - [Tech Stack Specification](./docs/TECH_STACK.md) - Complete tech stack and toolchain
 
 ### Design Documents
@@ -59,7 +60,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ### Backend
 - Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported)
-- Optional: Docker Compose self-hosted (planned, not yet implemented)
+- Optional: Docker Compose self-hosted stack via published GHCR images or local build override
 
 ## Browser Compatibility
 
@@ -96,14 +97,38 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ## Deploy
 
-ZeroLink currently documents manual deployment to Cloudflare Workers rather than a generic deploy button flow.
+ZeroLink supports two deployment paths:
 
-### Prerequisites
+- Cloudflare Workers manual deployment, documented in [Deployment Guide](./docs/DEPLOYMENT.md)
+- Docker Compose self-hosting, documented in [Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md)
+
+### Cloudflare Deployment Prerequisites
 
 - Cloudflare account (free plan is sufficient; Durable Objects free tier supported)
 - Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
-For the full step-by-step process, see the [Deployment Guide](./docs/DEPLOYMENT.md).
+For the full step-by-step process, see the [Deployment Guide](./docs/DEPLOYMENT.md). Self-hosting
+with Docker Compose does not require the Cloudflare toolchain.
+
+### Self-Hosted Quick Start
+
+Use a released image tag so the downloaded Compose file and pulled images stay aligned:
+
+```bash
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
+mkdir zerolink-selfhost
+cd zerolink-selfhost
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
+cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
+docker compose up -d
+```
+
+The default stack pulls `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api` and
+`${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web`.
+Set `ZEROLINK_IMAGE_REPOSITORY` in `.env` when consuming images from a fork or org mirror, or use
+[Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md) for the local build override.
 
 ---
 

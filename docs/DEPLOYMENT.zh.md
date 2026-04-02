@@ -342,8 +342,9 @@ routes = [
 项目包含一个独立的部署工作流 `.github/workflows/deploy.yml`，支持：
 - 命中 workflow 触发条件的 `push` 到 `main` 时自动部署 staging
 - 命中 workflow 触发条件的 `v*` tag 推送时自动部署 production
+- 命中 `v*` tag 推送时自动发布 self-host 用的 `zerolink-api` 与 `zerolink-web` GHCR 镜像
 
-工作流执行顺序：`install → preflight cloudflare → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
+工作流执行顺序：`install → preflight cloudflare → build frontend → generate manifest → sign manifest → verify manifest → publish ghcr images（仅 tag）→ wrangler deploy`
 
 前端构建开始前，workflow 会先运行 `pnpm deploy:preflight`。当 Cloudflare 允许 token 自检时，它会先验证当前 token 处于 active 状态，再校验该 token 是否对当前 account / zone 实际拥有 `Workers Scripts Write`、`Workers Routes Write` 和 `Workers R2 Storage Write`，最后确认当前环境要求的 R2 bucket 已存在。有些 account-owned deploy token 无法读取自己的 policy 详情；这种情况下，preflight 会回退为 best-effort 的 Workers / Routes 可达性检查、一个无效请求的 R2 写权限探针，以及 bucket 存在性检查，输出 warning，并把最终的 route / script 写权限约束交给 `wrangler deploy`。
 
@@ -351,17 +352,32 @@ routes = [
 - 更新根目录 `version.txt`
 - 维护根目录 `CHANGELOG.md`
 - 创建新的 `v*` tag 和 GitHub Release
-- 通过该 tag 继续复用现有 production deploy workflow
+- 通过该 tag 继续复用现有 production deploy workflow，同时发布 self-host GHCR 镜像
 
 版本来源约定：
 - production 构建以 git tag 为唯一发布版本来源，`v1.2.3` 会注入为 `ZEROLINK_VERSION=1.2.3`
 - staging 构建固定注入 `ZEROLINK_VERSION=0.0.0-dev+<short_sha>`，用于在 `Verified Release` 卡片和 `manifest.json` 中追踪部署来源
 - `packages/frontend/package.json` 的 `version` 仅作为本地/未注入环境的兜底值，不再代表正式发布版本
 
+对于 production tag，同一个 workflow 还会发布：
+
+- `ghcr.io/<repository-owner>/zerolink-api:latest`
+- `ghcr.io/<repository-owner>/zerolink-api:<tag-version>`
+- `ghcr.io/<repository-owner>/zerolink-web:latest`
+- `ghcr.io/<repository-owner>/zerolink-web:<tag-version>`
+
+这些镜像会以 `linux/amd64` 和 `linux/arm64` 多架构 manifest 的形式推送，并附带 Buildx
+生成的 provenance 与 SBOM attestation。workflow 使用仓库自带的 `GITHUB_TOKEN` 和
+`packages: write` 权限完成公开包发布，不需要额外新增 GHCR secret。使用发布版 self-host
+Compose 文件的运维用户，应从同一个 `v*` tag 下载 Compose 文件，并把 `ZEROLINK_IMAGE_TAG`
+设置为对应发布版本，以获得可复现的拉取结果。如果 workflow 运行在 fork 或组织镜像仓库里，
+请在 `.env` 中设置 `ZEROLINK_IMAGE_REPOSITORY`，让 Compose 从该仓库自己的 GHCR namespace
+拉取，而不是默认回落到上游地址。
+
 ### 配置步骤
 
 1. 在 GitHub 仓库 Settings → Secrets and variables → Actions 中添加所有必要 Secrets
-2. 推送 `v*` tag 触发自动部署：
+2. 推送 `v*` tag 触发自动部署和 GHCR 镜像发布：
 
 ```bash
 git tag v1.0.0

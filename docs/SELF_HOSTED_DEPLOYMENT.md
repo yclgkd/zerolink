@@ -2,7 +2,7 @@
 
 # Self-Hosted Deployment Guide
 
-This guide packages the current ZeroLink frontend and Go self-hosted backend into a local Docker Compose stack.
+This guide runs the published ZeroLink self-hosted stack from GitHub Container Registry (GHCR), with an opt-in local build override for developers who prefer compiling from source.
 
 ## What This Stack Includes
 
@@ -20,13 +20,43 @@ This guide packages the current ZeroLink frontend and Go self-hosted backend int
 
 ## Start The Stack
 
+Choose a released ZeroLink version first so the downloaded Compose file and pulled images stay in sync:
+
 ```bash
-cp deploy/selfhost/.env.example deploy/selfhost/.env
-docker compose -f deploy/selfhost/docker-compose.yml up --build
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
+mkdir zerolink-selfhost
+cd zerolink-selfhost
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
+cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
+docker compose up -d
 ```
 
 The bundled `.env.example` defaults to `SELFHOST_API_FILE_STORAGE_BACKEND=minio`, which enables
 multipart file delivery up to `512 MiB` with `4 MiB` encrypted chunks.
+
+The default Compose file pulls these public images:
+
+- `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
+- `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}`
+
+Set `ZEROLINK_IMAGE_TAG` in `.env` to pin a specific release instead of following `latest`, and set
+`ZEROLINK_IMAGE_REPOSITORY` when consuming images published from a fork or org mirror.
+
+## Local Build Override
+
+If you want to build the images from the current source checkout instead of pulling GHCR artifacts:
+
+```bash
+git clone https://github.com/yclgkd/ZeroLink.git
+cd ZeroLink/deploy/selfhost
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
+`docker-compose.build.yml` restores the original local `build:` definitions for `migrate`, `api`,
+and `web`, while keeping the default image-based stack unchanged for ordinary operators.
 
 Then open:
 
@@ -38,6 +68,8 @@ Then open:
 
 - `SELFHOST_API_RP_ID=localhost`
 - `SELFHOST_API_RP_ORIGIN=http://localhost:8080`
+- `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` selects which GHCR namespace `migrate`, `api`, and `web` pull from
+- `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
 - `SELFHOST_API_FILE_STORAGE_BACKEND=minio` enables multipart delivery through presigned MinIO PUT/GET URLs
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` keeps the inline cutoff below the legacy inline envelope limit
@@ -56,7 +88,7 @@ Compose file.
 
 ## Smoke Test
 
-1. Start the stack with `docker compose -f deploy/selfhost/docker-compose.yml up --build`.
+1. Start the stack with `docker compose up -d`.
 2. Confirm `curl http://localhost:8080/readyz` returns `200`.
 3. Confirm `curl http://localhost:8080/api/file_policy` reports `multipartSupported: true` when running the default MinIO-backed stack.
 4. Open `http://localhost:8080` in one browser window and create a Quick Share channel.
@@ -71,6 +103,7 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 ## Operational Notes
 
 - This package serves the default frontend build. It does not enable the signed `Verified Release` bootstrap gate.
+- Production tag releases publish the GHCR images with multi-arch `linux/amd64` + `linux/arm64` manifests and Buildx provenance/SBOM attestations, so operators can trace a pulled image back to the release commit and GitHub Actions run.
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.
 - Compose stores MinIO object data in the `minio-data` volume.
@@ -80,11 +113,11 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 ## Stop The Stack
 
 ```bash
-docker compose -f deploy/selfhost/docker-compose.yml down
+docker compose down
 ```
 
 To remove local database state too:
 
 ```bash
-docker compose -f deploy/selfhost/docker-compose.yml down -v
+docker compose down -v
 ```

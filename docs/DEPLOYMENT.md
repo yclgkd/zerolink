@@ -343,8 +343,9 @@ Or via the Cloudflare Dashboard: **Workers > <your-worker-name> > Settings > Dom
 The project includes a standalone deployment workflow `.github/workflows/deploy.yml` that supports:
 - Automatic staging deployment on `push` to `main` when workflow trigger conditions are met
 - Automatic production deployment on `v*` tag push when workflow trigger conditions are met
+- Automatic GHCR publication of self-hosted `zerolink-api` and `zerolink-web` images on `v*` tag push
 
-Workflow execution order: `install > preflight cloudflare > build frontend > generate manifest > sign manifest > verify manifest > wrangler deploy`
+Workflow execution order: `install > preflight cloudflare > build frontend > generate manifest > sign manifest > verify manifest > publish ghcr images (tag only) > wrangler deploy`
 
 Before the frontend build starts, the workflow runs `pnpm deploy:preflight`. When Cloudflare allows token introspection, the preflight verifies the current token is active, checks that it effectively grants `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` for the configured account/zone, and then confirms the required environment-specific R2 bucket exists. Some account-owned deploy tokens cannot inspect their own policy details; in that case, the preflight falls back to best-effort Workers/Routes reachability checks, an invalid-request R2 write probe, and bucket existence, logs a warning, and leaves final route/script write-scope enforcement to `wrangler deploy`.
 
@@ -352,17 +353,32 @@ A separate `.github/workflows/release-please.yml` workflow is responsible for ge
 - Update `version.txt` in the root directory
 - Maintain the root `CHANGELOG.md`
 - Create a new `v*` tag and GitHub Release
-- Trigger the existing production deploy workflow via that tag
+- Trigger the existing production deploy workflow via that tag, which also publishes the self-hosted GHCR images
 
 Version source conventions:
 - Production builds use the git tag as the sole release version source; `v1.2.3` is injected as `ZEROLINK_VERSION=1.2.3`
 - Staging builds always inject `ZEROLINK_VERSION=0.0.0-dev+<short_sha>`, used to track deployment origin in the `Verified Release` card and `manifest.json`
 - The `version` field in `packages/frontend/package.json` serves only as a fallback for local/un-injected environments and no longer represents the official release version
 
+On production tags, the same workflow also publishes:
+
+- `ghcr.io/<repository-owner>/zerolink-api:latest`
+- `ghcr.io/<repository-owner>/zerolink-api:<tag-version>`
+- `ghcr.io/<repository-owner>/zerolink-web:latest`
+- `ghcr.io/<repository-owner>/zerolink-web:<tag-version>`
+
+These images are pushed as multi-arch manifests for `linux/amd64` and `linux/arm64`, and Buildx
+attaches provenance plus SBOM attestations. The workflow uses the repository `GITHUB_TOKEN` with
+`packages: write`, so no additional GHCR secret is required for public package publishing. Operators
+using the published self-host Compose files should download them from the same `v*` tag and set
+`ZEROLINK_IMAGE_TAG` to that release version for reproducible pulls. If the workflow runs from a fork
+or org mirror, set `ZEROLINK_IMAGE_REPOSITORY` in `.env` so Compose pulls from that repository's GHCR
+namespace instead of the upstream default.
+
 ### Configuration Steps
 
 1. Add all required Secrets in the GitHub repository under Settings > Secrets and variables > Actions
-2. Push a `v*` tag to trigger automatic deployment:
+2. Push a `v*` tag to trigger automatic deployment and GHCR image publication:
 
 ```bash
 git tag v1.0.0
