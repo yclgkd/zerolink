@@ -81,7 +81,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
 	mux.HandleFunc("/api/file_policy", methodOnly(http.MethodGet, logger, filePolicyHandler(deps.FilePolicy, logger)))
-	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.FileStore, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, logger, maxCompoundCommitBodyBytes)))
 	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, logger, maxCompoundCommitBodyBytes)))
 	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, logger)))
 
@@ -187,10 +187,20 @@ func filePolicyHandler(filePolicy FilePolicy, logger *slog.Logger) http.HandlerF
 	}
 }
 
-func fileInitiateHandler(fileStore FileStore, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func fileInitiateHandler(
+	protocolService service.Protocol,
+	fileStore FileStore,
+	filePolicy FilePolicy,
+	logger *slog.Logger,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if fileStore == nil {
 			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
+			return
+		}
+		if protocolService == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "protocol service is not configured")
 			return
 		}
 
@@ -200,6 +210,18 @@ func fileInitiateHandler(fileStore FileStore, logger *slog.Logger, maxProtocolBo
 		}
 		if err := input.Validate(); err != nil {
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		if !filePolicy.MultipartSupported {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "multipart file delivery is disabled")
+			return
+		}
+		if int64(input.ChunkCount) > filePolicy.MaxChunks {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunkCount exceeds deployment file policy")
+			return
+		}
+		if _, err := protocolService.PublicStatus(r.Context(), input.ChannelUUID); err != nil {
+			writeProtocolError(logger, w, err)
 			return
 		}
 

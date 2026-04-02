@@ -9,11 +9,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/service"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
@@ -31,6 +34,14 @@ type stubProtocol struct {
 	publicStatus   func(context.Context, string) (service.PublicStatusOutput, error)
 	decryptFetch   func(context.Context, string) (service.DecryptFetchOutput, error)
 	realtimeState  func(context.Context, string) (service.RealtimeStateOutput, error)
+}
+
+type stubFileStore struct {
+	initiate          func(context.Context, string, int) error
+	presignedUpload   func(context.Context, string, int, time.Duration) (string, error)
+	completeUpload    func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
+	presignedDownload func(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
+	deleteUpload      func(context.Context, filestore.MultipartFileRef) error
 }
 
 func (s stubChecker) Ping(context.Context) error {
@@ -134,6 +145,41 @@ func (s stubProtocol) RealtimeState(ctx context.Context, uuid string) (service.R
 		}
 	}
 	return s.realtimeState(ctx, uuid)
+}
+
+func (s stubFileStore) Initiate(ctx context.Context, uploadID string, chunkCount int) error {
+	if s.initiate == nil {
+		return nil
+	}
+	return s.initiate(ctx, uploadID, chunkCount)
+}
+
+func (s stubFileStore) PresignedUpload(ctx context.Context, uploadID string, index int, ttl time.Duration) (string, error) {
+	if s.presignedUpload == nil {
+		return "https://minio.example/upload", nil
+	}
+	return s.presignedUpload(ctx, uploadID, index, ttl)
+}
+
+func (s stubFileStore) CompleteUpload(ctx context.Context, req filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+	if s.completeUpload == nil {
+		return filestore.MultipartFileRef{}, nil
+	}
+	return s.completeUpload(ctx, req)
+}
+
+func (s stubFileStore) PresignedDownload(ctx context.Context, fileRef filestore.MultipartFileRef, index int, ttl time.Duration) (string, error) {
+	if s.presignedDownload == nil {
+		return "https://minio.example/download", nil
+	}
+	return s.presignedDownload(ctx, fileRef, index, ttl)
+}
+
+func (s stubFileStore) DeleteUpload(ctx context.Context, fileRef filestore.MultipartFileRef) error {
+	if s.deleteUpload == nil {
+		return nil
+	}
+	return s.deleteUpload(ctx, fileRef)
 }
 
 func newTestRouter(checker stubChecker, protocol stubProtocol) http.Handler {
@@ -491,6 +537,113 @@ func TestPublicStatusRouteReturnsProtocolPayload(t *testing.T) {
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.Code)
+	}
+}
+
+func TestFileInitiateRouteAcceptsNanoIDUUIDAndReturnsTargets(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":64}`),
+	)
+	res := httptest.NewRecorder()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FileStore: stubFileStore{
+			presignedUpload: func(_ context.Context, uploadID string, index int, _ time.Duration) (string, error) {
+				return "https://minio.example/upload/" + uploadID + "/" + strconv.Itoa(index), nil
+			},
+		},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            536_870_912,
+			MultipartThresholdBytes: 2_080_760,
+			ChunkSizeBytes:          4 * 1024 * 1024,
+			MaxChunks:               128,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(_ context.Context, uuid string) (service.PublicStatusOutput, error) {
+					if uuid != "aaaaaaaaaaaaaaaaaaaaa" {
+						t.Fatalf("unexpected uuid %q", uuid)
+					}
+					return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+				},
+			},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", res.Code, res.Body.String())
+	}
+
+	var payload filestore.FileUploadInitiateResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Chunks) != 2 {
+		t.Fatalf("chunk count = %d, want 2", len(payload.Chunks))
+	}
+}
+
+func TestFileInitiateRouteRejectsUnknownChannel(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":32}`),
+	)
+	res := httptest.NewRecorder()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FileStore:     stubFileStore{},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            536_870_912,
+			MultipartThresholdBytes: 2_080_760,
+			ChunkSizeBytes:          4 * 1024 * 1024,
+			MaxChunks:               128,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(context.Context, string) (service.PublicStatusOutput, error) {
+					return service.PublicStatusOutput{}, &service.ProtocolError{
+						Code:    "NOT_FOUND",
+						Status:  http.StatusNotFound,
+						Message: "channel not found",
+					}
+				},
+			},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", res.Code)
 	}
 }
 

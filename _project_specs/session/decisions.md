@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-02] Self-host multipart initiation must validate real channel UUIDs and storage readiness
+
+**Decision**: Keep self-host multipart upload initiation aligned with the shipped protocol by validating `channelUuid` against the project NanoID format, rejecting uploads when multipart delivery is disabled or the channel does not exist, and gating the bundled MinIO service on its `/minio/health/ready` endpoint instead of the weaker liveness check.
+**Context**: The post-review deploy pass found two runtime mismatches in the self-host path: `file/initiate` treated channel UUIDs as raw base64url payloads even though ZeroLink UUIDs are 21-character NanoIDs, and the Docker Compose MinIO healthcheck had been loosened to `/live`, which can report healthy before the object API is ready for bucket initialization.
+**Options Considered**: Keep the existing request validator and rely on frontend UUID generation; accept presigned upload requests for any syntactically valid body; keep MinIO startup gated only on liveness.
+**Choice**: Introduce a dedicated NanoID-shaped UUID validator in the MinIO filestore package, make the self-host `/api/file/initiate` route enforce `multipartSupported`, `maxChunks`, and channel existence through `PublicStatus`, and restore the Compose healthcheck to `curl .../minio/health/ready`.
+**Reasoning**: These checks close a real protocol-compatibility bug for legitimate channel IDs, restore Worker/self-host parity on multipart gating, and make the packaged deployment wait for an actually usable object store before starting the API.
+**Trade-offs**: Self-host multipart initiation now depends on the protocol service as well as the file store, and manual clients probing `/api/file/initiate` will see earlier `400/404` rejections instead of opportunistically receiving presigned URLs.
+
 ## [2026-04-02] Multipart review fixes favor best-effort cleanup and signed direct chunk downloads
 
 **Decision**: Keep multipart terminalization best-effort on self-hosted MinIO cleanup, and switch Worker chunk downloads to signed per-chunk URLs so `/api/file/dl` no longer re-queries the Durable Object for every chunk.

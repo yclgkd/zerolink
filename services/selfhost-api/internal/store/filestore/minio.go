@@ -21,6 +21,7 @@ const (
 	defaultUploadURLTTL   = 15 * time.Minute
 	defaultDownloadURLTTL = 5 * time.Minute
 	chunkObjectPrefix     = "files"
+	channelUUIDLength     = 21
 )
 
 type FileStorageBackend string
@@ -353,8 +354,8 @@ func (req FileUploadInitiateRequest) Validate() error {
 	if req.ChannelUUID == "" {
 		return errors.New("channelUuid is required")
 	}
-	if !isBase64URL(req.ChannelUUID) {
-		return errors.New("channelUuid must be base64url")
+	if !isChannelUUID(req.ChannelUUID) {
+		return fmt.Errorf("channelUuid must be %d base64url-alphabet characters", channelUUIDLength)
 	}
 	if req.ChunkCount <= 0 {
 		return errors.New("chunkCount must be positive")
@@ -471,6 +472,23 @@ func isBase64URL(value string) bool {
 	}
 	_, err := base64.RawURLEncoding.DecodeString(value)
 	return err == nil
+}
+
+func isChannelUUID(value string) bool {
+	if len(value) != channelUUIDLength {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'A' && r <= 'Z':
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func isHexString(value string, length int) bool {
