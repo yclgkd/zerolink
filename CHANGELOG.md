@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/yclgkd/ZeroLink/compare/v0.4.0...v0.5.0) (2026-04-02)
+
+
+### Features
+
+* add multipart file delivery ([b85dcd6](https://github.com/yclgkd/ZeroLink/commit/b85dcd6e8ff94e1c53bb9c11871221b8183ba21a))
+* publish self-host images to ghcr ([#235](https://github.com/yclgkd/ZeroLink/issues/235)) ([742b550](https://github.com/yclgkd/ZeroLink/commit/742b5501e06bb55762d8566e59799afd4bc63ab7))
+
+
+### Bug Fixes
+
+* allow non-introspectable deploy tokens ([#232](https://github.com/yclgkd/ZeroLink/issues/232)) ([205495a](https://github.com/yclgkd/ZeroLink/commit/205495a4e5113abc86b88119d46c621af35fb8f0))
+* harden object storage file delivery ([#234](https://github.com/yclgkd/ZeroLink/issues/234)) ([a2a38e8](https://github.com/yclgkd/ZeroLink/commit/a2a38e8c66bdc7fb93ff2cf0c3fddca3482e966d))
+* harden R2 fallback write probe ([#233](https://github.com/yclgkd/ZeroLink/issues/233)) ([becdc8b](https://github.com/yclgkd/ZeroLink/commit/becdc8b4b866fcae55c6490cfeff44a7ecbd1508))
+
 ## [0.4.0](https://github.com/yclgkd/ZeroLink/compare/v0.3.0...v0.4.0) (2026-04-01)
 
 
