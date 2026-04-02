@@ -40,7 +40,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - wget -q -O /dev/null http://127.0.0.1:9000/minio/health/ready || exit 1
+        - curl -sf http://127.0.0.1:9000/minio/health/live || exit 1
       interval: 5s
       timeout: 5s
       retries: 20

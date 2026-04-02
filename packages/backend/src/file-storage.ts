@@ -199,14 +199,6 @@ export function buildMultipartChunkStorageKey(
   return `${FILE_CHUNK_PREFIX}/${channelUuid}/${uploadId}/${String(index).padStart(4, '0')}.${FILE_CHUNK_SUFFIX}`;
 }
 
-export function buildMultipartChunkDownloadUrl(
-  requestUrl: string,
-  uuid: string,
-  index: number
-): string {
-  return new URL(`/api/file/dl/${uuid}/${index}`, requestUrl).toString();
-}
-
 export async function createFileUploadId(
   secret: string,
   session: FileUploadSession

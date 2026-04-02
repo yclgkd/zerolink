@@ -160,6 +160,10 @@ export async function handleFileChunkUpload(
     return errorResponse('BAD_REQUEST', 400);
   }
 
+  if (Number(uploadSession.expiresAt) < Date.now()) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
   if (!Number.isInteger(index) || index < 0 || index >= uploadSession.chunkCount) {
     return errorResponse('BAD_REQUEST', 400);
   }
