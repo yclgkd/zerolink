@@ -43,6 +43,17 @@ type FileConfig struct {
 	ChunkSizeBytes          int64
 	MaxChunks               int64
 	MultipartSupported      bool
+	StorageBackend          string
+	MinIO                   MinIOConfig
+}
+
+type MinIOConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	UseSSL    bool
+	Region    string
 }
 
 type RPConfig struct {
@@ -181,6 +192,13 @@ func loadDatabaseConfig(lookup func(string) (string, bool), url string) (Databas
 }
 
 func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
+	storageBackend := strings.ToLower(strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_FILE_STORAGE_BACKEND", "inline")))
+	switch storageBackend {
+	case "inline", "minio":
+	default:
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_STORAGE_BACKEND must be inline or minio")
+	}
+
 	maxBytes, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_BYTES", defaultFileMaxBytes)
 	if err != nil {
 		return FileConfig{}, err
@@ -237,12 +255,57 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 		return FileConfig{}, err
 	}
 
+	minIOCfg, err := loadMinIOConfig(lookup, storageBackend)
+	if err != nil {
+		return FileConfig{}, err
+	}
+
 	return FileConfig{
 		MaxBytes:                maxBytes,
 		MultipartThresholdBytes: multipartThresholdBytes,
 		ChunkSizeBytes:          chunkSizeBytes,
 		MaxChunks:               maxChunks,
 		MultipartSupported:      multipartSupported,
+		StorageBackend:          storageBackend,
+		MinIO:                   minIOCfg,
+	}, nil
+}
+
+func loadMinIOConfig(lookup func(string) (string, bool), storageBackend string) (MinIOConfig, error) {
+	if storageBackend != "minio" {
+		return MinIOConfig{}, nil
+	}
+
+	endpoint := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_ENDPOINT", ""))
+	accessKey := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_ACCESS_KEY", ""))
+	secretKey := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_SECRET_KEY", ""))
+	bucket := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_BUCKET", "zerolink-files"))
+	useSSL, err := parseBoolEnv(lookup, "SELFHOST_API_MINIO_USE_SSL", false)
+	if err != nil {
+		return MinIOConfig{}, err
+	}
+	region := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_REGION", ""))
+
+	if endpoint == "" {
+		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_ENDPOINT is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+	}
+	if accessKey == "" {
+		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_ACCESS_KEY is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+	}
+	if secretKey == "" {
+		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_SECRET_KEY is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+	}
+	if bucket == "" {
+		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_BUCKET is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+	}
+
+	return MinIOConfig{
+		Endpoint:  endpoint,
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Bucket:    bucket,
+		UseSSL:    useSSL,
+		Region:    region,
 	}, nil
 }
 

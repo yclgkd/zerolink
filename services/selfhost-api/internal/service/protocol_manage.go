@@ -8,6 +8,7 @@ import (
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
@@ -107,15 +108,16 @@ type CipherBundle struct {
 }
 
 type ManageIntent struct {
-	Op             string          `json:"op"`
-	UUID           string          `json:"uuid"`
-	Version        int64           `json:"version"`
-	Timestamp      int64           `json:"timestamp"`
-	Nonce          string          `json:"nonce"`
-	ReceiverPubFpr string          `json:"receiverPubFpr,omitempty"`
-	PayloadKind    string          `json:"payloadKind,omitempty"`
-	CipherBundle   *CipherBundle   `json:"cipherBundle,omitempty"`
-	ExpireAt       json.RawMessage `json:"expireAt,omitempty"`
+	Op             string                      `json:"op"`
+	UUID           string                      `json:"uuid"`
+	Version        int64                       `json:"version"`
+	Timestamp      int64                       `json:"timestamp"`
+	Nonce          string                      `json:"nonce"`
+	ReceiverPubFpr string                      `json:"receiverPubFpr,omitempty"`
+	PayloadKind    string                      `json:"payloadKind,omitempty"`
+	CipherBundle   *CipherBundle               `json:"cipherBundle,omitempty"`
+	FileRef        *filestore.MultipartFileRef `json:"fileRef,omitempty"`
+	ExpireAt       json.RawMessage             `json:"expireAt,omitempty"`
 }
 
 type CompoundCommitInput struct {
@@ -132,12 +134,13 @@ type CompoundCommitOutput struct {
 }
 
 type DecryptFetchOutput struct {
-	OK             bool            `json:"ok"`
-	CipherBundle   CipherBundle    `json:"cipherBundle"`
-	ReceiverPubFpr string          `json:"receiverPubFpr"`
-	CipherVersion  int64           `json:"cipherVersion"`
-	DeliveryAuth   json.RawMessage `json:"deliveryAuth,omitempty"`
-	DeliveredAt    int64           `json:"deliveredAt"`
+	OK             bool                        `json:"ok"`
+	CipherBundle   *CipherBundle               `json:"cipherBundle,omitempty"`
+	FileRef        *filestore.MultipartFileRef `json:"fileRef,omitempty"`
+	ReceiverPubFpr string                      `json:"receiverPubFpr"`
+	CipherVersion  int64                       `json:"cipherVersion"`
+	DeliveryAuth   json.RawMessage             `json:"deliveryAuth,omitempty"`
+	DeliveredAt    int64                       `json:"deliveredAt"`
 }
 
 func (s *ProtocolService) LockBegin(ctx context.Context, input LockBeginInput) (LockBeginOutput, error) {
@@ -584,17 +587,28 @@ func (s *ProtocolService) applyDelivery(
 		expiresAt = unixMilliToTime(*expireAt)
 	}
 
-	cipherBundle, err := json.Marshal(input.Intent.CipherBundle)
-	if err != nil {
-		return err
-	}
 	updateProof, err := buildStoredUpdateDeliveryProofJSON(resolveChannelAdminMode(channel), input)
 	if err != nil {
 		return err
 	}
 
 	channel.State = store.ChannelStateDelivered
-	channel.CipherBundle = cipherBundle
+	if input.Intent.CipherBundle != nil {
+		cipherBundle, err := json.Marshal(input.Intent.CipherBundle)
+		if err != nil {
+			return err
+		}
+		channel.CipherBundle = cipherBundle
+		channel.FileRef = nil
+	}
+	if input.Intent.FileRef != nil {
+		fileRef, err := json.Marshal(input.Intent.FileRef)
+		if err != nil {
+			return err
+		}
+		channel.FileRef = fileRef
+		channel.CipherBundle = nil
+	}
 	channel.UpdateDeliveryProof = updateProof
 	deliveredAt := unixMilliToTime(input.Intent.Timestamp)
 	channel.DeliveredAt = &deliveredAt
@@ -634,13 +648,23 @@ func (s *ProtocolService) validateAndApplyDelivery(
 	if err != nil {
 		return RealtimeStateOutput{}, err
 	}
-	if err := validateCipherBundle(
-		*input.Intent.CipherBundle,
-		input.Intent,
-		*channel.ReceiverPubFpr,
-		s.filePolicy.MaxFileBytes,
-	); err != nil {
-		return RealtimeStateOutput{}, err
+	if input.Intent.CipherBundle != nil {
+		if err := validateCipherBundle(
+			*input.Intent.CipherBundle,
+			input.Intent,
+			*channel.ReceiverPubFpr,
+			s.filePolicy.MaxFileBytes,
+		); err != nil {
+			return RealtimeStateOutput{}, err
+		}
+	}
+	if input.Intent.FileRef != nil {
+		if !s.filePolicy.MultipartSupported {
+			return RealtimeStateOutput{}, badRequest("multipart files are not supported")
+		}
+		if err := validateMultipartFileRef(*input.Intent.FileRef); err != nil {
+			return RealtimeStateOutput{}, err
+		}
 	}
 	if err := s.applyDelivery(ctx, tx, channel, input, now, expireAt); err != nil {
 		return RealtimeStateOutput{}, err
@@ -664,21 +688,29 @@ func (s *ProtocolService) DecryptFetch(ctx context.Context, uuid string) (Decryp
 		if err != nil {
 			return err
 		}
-		if channel.State != store.ChannelStateDelivered || len(channel.CipherBundle) == 0 || channel.DeliveredAt == nil || channel.ReceiverPubFpr == nil {
+		if channel.State != store.ChannelStateDelivered || (len(channel.CipherBundle) == 0 && len(channel.FileRef) == 0) || channel.DeliveredAt == nil || channel.ReceiverPubFpr == nil {
 			return channelNotDelivered("ciphertext is not available yet")
-		}
-
-		var cipherBundle CipherBundle
-		if err := json.Unmarshal(channel.CipherBundle, &cipherBundle); err != nil {
-			return err
 		}
 
 		output = DecryptFetchOutput{
 			OK:             true,
-			CipherBundle:   cipherBundle,
 			ReceiverPubFpr: *channel.ReceiverPubFpr,
 			CipherVersion:  channel.Version - 1,
 			DeliveredAt:    channel.DeliveredAt.UTC().UnixMilli(),
+		}
+
+		if len(channel.FileRef) > 0 {
+			var fileRef filestore.MultipartFileRef
+			if err := json.Unmarshal(channel.FileRef, &fileRef); err != nil {
+				return err
+			}
+			output.FileRef = &fileRef
+		} else {
+			var cipherBundle CipherBundle
+			if err := json.Unmarshal(channel.CipherBundle, &cipherBundle); err != nil {
+				return err
+			}
+			output.CipherBundle = &cipherBundle
 		}
 
 		if len(channel.UpdateDeliveryProof) == 0 {

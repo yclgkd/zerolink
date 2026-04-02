@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS channels (
   receiver_pub_fpr TEXT,
   locked_at TIMESTAMPTZ,
   cipher_bundle JSONB,
+  file_ref JSONB,
   update_delivery_proof JSONB,
   delivered_at TIMESTAMPTZ,
   version BIGINT NOT NULL CHECK (version >= 0),
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS channels (
     (receiver_pub_jwk IS NULL AND receiver_pub_fpr IS NULL AND locked_at IS NULL)
     OR (receiver_pub_jwk IS NOT NULL AND receiver_pub_fpr IS NOT NULL AND locked_at IS NOT NULL)
   ),
-  CHECK (delivered_at IS NULL OR cipher_bundle IS NOT NULL)
+  CHECK (delivered_at IS NULL OR (cipher_bundle IS NOT NULL OR file_ref IS NOT NULL))
 );
 
 CREATE INDEX IF NOT EXISTS channels_expires_at_idx ON channels (expires_at);

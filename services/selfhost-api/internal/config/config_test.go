@@ -11,23 +11,24 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 
 	cfg, err := LoadFromEnv(func(key string) (string, bool) {
 		values := map[string]string{
-			"SELFHOST_API_DATABASE_URL":             "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
-			"SELFHOST_API_APP_ENV":                  "production",
-			"SELFHOST_API_LOG_LEVEL":                "debug",
-			"SELFHOST_API_BIND_ADDR":                ":9999",
-			"SELFHOST_API_RP_ID":                    "localhost",
-			"SELFHOST_API_RP_ORIGIN":                "http://localhost:5173",
-			"SELFHOST_API_HTTP_SHUTDOWN_TIMEOUT":    "30s",
-			"SELFHOST_API_DB_MAX_CONNS":             "12",
-			"SELFHOST_API_DB_MIN_CONNS":             "2",
-			"SELFHOST_API_DB_CONNECT_TIMEOUT":       "7s",
-			"SELFHOST_API_DB_HEALTH_TIMEOUT":        "3s",
-			"SELFHOST_API_HTTP_READ_TIMEOUT":        "11s",
-			"SELFHOST_API_HTTP_READ_HEADER_TIMEOUT": "6s",
-			"SELFHOST_API_FILE_MAX_BYTES":           "1048576",
+			"SELFHOST_API_DATABASE_URL":                   "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_APP_ENV":                        "production",
+			"SELFHOST_API_LOG_LEVEL":                      "debug",
+			"SELFHOST_API_BIND_ADDR":                      ":9999",
+			"SELFHOST_API_RP_ID":                          "localhost",
+			"SELFHOST_API_RP_ORIGIN":                      "http://localhost:5173",
+			"SELFHOST_API_HTTP_SHUTDOWN_TIMEOUT":          "30s",
+			"SELFHOST_API_DB_MAX_CONNS":                   "12",
+			"SELFHOST_API_DB_MIN_CONNS":                   "2",
+			"SELFHOST_API_DB_CONNECT_TIMEOUT":             "7s",
+			"SELFHOST_API_DB_HEALTH_TIMEOUT":              "3s",
+			"SELFHOST_API_HTTP_READ_TIMEOUT":              "11s",
+			"SELFHOST_API_HTTP_READ_HEADER_TIMEOUT":       "6s",
+			"SELFHOST_API_FILE_MAX_BYTES":                 "1048576",
 			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES": "1048576",
-			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":    "262144",
-			"SELFHOST_API_FILE_MAX_CHUNKS":          "4",
+			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":          "262144",
+			"SELFHOST_API_FILE_MAX_CHUNKS":                "4",
+			"SELFHOST_API_FILE_STORAGE_BACKEND":           "inline",
 		}
 
 		value, ok := values[key]
@@ -66,6 +67,9 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 	}
 	if cfg.File.MaxChunks != 4 {
 		t.Fatalf("File.MaxChunks = %d, want 4", cfg.File.MaxChunks)
+	}
+	if cfg.File.StorageBackend != "inline" {
+		t.Fatalf("File.StorageBackend = %q, want inline", cfg.File.StorageBackend)
 	}
 }
 
@@ -146,13 +150,13 @@ func TestLoadFromEnvRejectsInvalidFilePolicy(t *testing.T) {
 
 	_, err := LoadFromEnv(func(key string) (string, bool) {
 		values := map[string]string{
-			"SELFHOST_API_DATABASE_URL":                     "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
-			"SELFHOST_API_RP_ID":                            "localhost",
-			"SELFHOST_API_RP_ORIGIN":                        "http://localhost:5173",
-			"SELFHOST_API_FILE_MAX_BYTES":                   "2048",
-			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES":   "4096",
-			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":            "512",
-			"SELFHOST_API_FILE_MAX_CHUNKS":                  "4",
+			"SELFHOST_API_DATABASE_URL":                   "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":                          "localhost",
+			"SELFHOST_API_RP_ORIGIN":                      "http://localhost:5173",
+			"SELFHOST_API_FILE_MAX_BYTES":                 "2048",
+			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES": "4096",
+			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":          "512",
+			"SELFHOST_API_FILE_MAX_CHUNKS":                "4",
 		}
 		value, ok := values[key]
 		return value, ok
@@ -162,6 +166,27 @@ func TestLoadFromEnvRejectsInvalidFilePolicy(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES") {
 		t.Fatalf("LoadFromEnv() error = %v, want SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES mention", err)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidFileStorageBackend(t *testing.T) {
+	t.Parallel()
+
+	_, err := LoadFromEnv(func(key string) (string, bool) {
+		values := map[string]string{
+			"SELFHOST_API_DATABASE_URL":         "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":                "localhost",
+			"SELFHOST_API_RP_ORIGIN":            "http://localhost:5173",
+			"SELFHOST_API_FILE_STORAGE_BACKEND": "unknown",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil {
+		t.Fatal("LoadFromEnv() error = nil, want invalid backend error")
+	}
+	if !strings.Contains(err.Error(), "SELFHOST_API_FILE_STORAGE_BACKEND") {
+		t.Fatalf("LoadFromEnv() error = %v, want SELFHOST_API_FILE_STORAGE_BACKEND mention", err)
 	}
 }
 

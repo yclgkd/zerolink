@@ -12,6 +12,7 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/service"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
@@ -45,6 +46,23 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 
 	realtimeHub := realtime.NewHub(logger)
 	verifier := webauthn.NewVerifier()
+
+	var fileStore httpapi.FileStore
+	if cfg.File.StorageBackend == "minio" {
+		minioStore, err := filestore.NewMinIO(ctx, filestore.Config{
+			Endpoint:  cfg.File.MinIO.Endpoint,
+			AccessKey: cfg.File.MinIO.AccessKey,
+			SecretKey: cfg.File.MinIO.SecretKey,
+			Bucket:    cfg.File.MinIO.Bucket,
+			UseSSL:    cfg.File.MinIO.UseSSL,
+			Region:    cfg.File.MinIO.Region,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("init file storage: %w", err)
+		}
+		fileStore = minioStore
+	}
+
 	protocolService := service.NewProtocolService(
 		db,
 		service.ProtocolConfig{
@@ -74,6 +92,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		Services:      services,
 		AllowedOrigin: cfg.RP.Origin,
 		Realtime:      realtimeHub,
+		FileStore:     fileStore,
 		FilePolicy: httpapi.FilePolicy{
 			MaxFileBytes:            cfg.File.MaxBytes,
 			MultipartThresholdBytes: cfg.File.MultipartThresholdBytes,
