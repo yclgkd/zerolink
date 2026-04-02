@@ -264,6 +264,8 @@ curl -s https://<your-origin>/api/file_policy
 - Zone：部署目标 zone 的 `Workers Routes (edit)`
 - User token 补充：Cloudflare Workers Builds 文档里，自动生成的 user token 还会带上 `Account Settings (read)`、`User Details (read)` 和 `Memberships (read)`
 
+ZeroLink 的 deploy preflight 以这些写权限为准。如果 token 可以通过 Cloudflare token API 自检，workflow 会在前端构建前直接验证这些 scope；如果 token 不能调用这些 introspection endpoint，workflow 会降级为 best-effort 的 Workers / R2 可达性检查，并输出 warning，而不是在 deploy 之前直接阻断。
+
 如果你使用的是 account-owned token，而不是 user token，请确保授予与上述相同的 account / zone 权限。
 
 ---
@@ -343,7 +345,7 @@ routes = [
 
 工作流执行顺序：`install → preflight cloudflare → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
 
-前端构建开始前，workflow 会先运行 `pnpm deploy:preflight`。它会先验证当前 token 处于 active 状态，再校验该 token 是否对当前 account / zone 实际拥有 `Workers Scripts Write`、`Workers Routes Write` 和 `Workers R2 Storage Write`，最后确认当前环境要求的 R2 bucket 已存在。
+前端构建开始前，workflow 会先运行 `pnpm deploy:preflight`。当 Cloudflare 允许 token 自检时，它会先验证当前 token 处于 active 状态，再校验该 token 是否对当前 account / zone 实际拥有 `Workers Scripts Write`、`Workers Routes Write` 和 `Workers R2 Storage Write`，最后确认当前环境要求的 R2 bucket 已存在。有些 account-owned deploy token 无法读取自己的 policy 详情；这种情况下，preflight 会回退为 best-effort 的 Workers / R2 可达性检查加 bucket 存在性检查，输出 warning，并把最终写权限约束交给 `wrangler deploy`。
 
 另有独立的 `.github/workflows/release-please.yml` 负责在 `main` 上生成或更新 Release PR。该 workflow 会先预检查 `RELEASE_PLEASE_TOKEN`，然后继续执行 commit-pinned 官方 `release-please` action。当前上游 action 仍声明 `runs: node20`，因此 GitHub 可能显示 Node 20 deprecation warning；ZeroLink 暂不通过运行时安装 npm 包去规避这个告警，待上游升级后再更新 pin。合并 Release PR 后，Release Please 会：
 - 更新根目录 `version.txt`
