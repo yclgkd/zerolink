@@ -475,7 +475,7 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     if (!isValidUuid(uuid) || !Number.isInteger(index) || index < 0) {
       return errorResponse('BAD_REQUEST', 400);
     }
-    return handleFileDownload(env, uuid, index);
+    return handleFileDownload(request, env, uuid, index);
   }
 
   const wsMatch = pathname.match(WS_SUBSCRIBE_PATH);

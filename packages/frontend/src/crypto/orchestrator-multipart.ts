@@ -262,14 +262,6 @@ export async function uploadMultipartFile(
   }
 }
 
-async function fetchBinaryChunk(downloadUrl: string): Promise<Uint8Array> {
-  const response = await fetch(downloadUrl);
-  if (!response.ok) {
-    throw new Error('DOWNLOAD_FAILED');
-  }
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 export async function decryptMultipartFile(
   deps: ResolvedDeps,
   uuid: string,
@@ -289,6 +281,7 @@ export async function decryptMultipartFile(
   const expectedBaseIv = decodeBase64UrlBytes(fileRef.baseIv);
   let wrappedContentKey: Uint8Array | null = null;
   let rawContentKey: Uint8Array | null = null;
+  const plaintextChunks: Uint8Array[] = [];
 
   try {
     const receiverPrivateKey = await unwrapPrivateKey({
@@ -304,7 +297,6 @@ export async function decryptMultipartFile(
     });
     const aesKey = await importAesKeyFromBytes(rawContentKey, ['decrypt']);
 
-    const plaintextChunks: Uint8Array[] = [];
     let totalCiphertextBytes = 0;
 
     for (const target of downloadTargets) {
@@ -314,7 +306,11 @@ export async function decryptMultipartFile(
       let plaintextChunk: Uint8Array | null = null;
 
       try {
-        ciphertextChunk = await fetchBinaryChunk(target.downloadUrl);
+        const downloadRes = await deps.client.fileDownloadChunk(target.downloadUrl);
+        if (!downloadRes.ok) {
+          return toError(downloadRes.error.code, 'decrypt.file-chunk.download');
+        }
+        ciphertextChunk = downloadRes.data;
         totalCiphertextBytes += ciphertextChunk.byteLength;
         const expectedHash = fileRef.chunks[target.index]?.ciphertextHash ?? '';
         const actualHash = await computeSha256Hex(ciphertextChunk);
@@ -334,13 +330,7 @@ export async function decryptMultipartFile(
           iv: ivBytes,
         });
         plaintextChunks.push(plaintextChunk.slice());
-      } catch (error) {
-        if (error instanceof Error && error.message === 'DOWNLOAD_FAILED') {
-          return toError('NETWORK_ERROR', 'decrypt.file-chunk.download');
-        }
-        if (error instanceof Error && error.message === 'INTEGRITY_MISMATCH') {
-          return toError('INTEGRITY_MISMATCH', 'decrypt.file-chunk.decrypt');
-        }
+      } catch {
         return toError('CRYPTO_ERROR', 'decrypt.file-chunk.decrypt');
       } finally {
         wipeBytes(ciphertextChunk);
@@ -355,14 +345,14 @@ export async function decryptMultipartFile(
     }
 
     const plaintextBytes = concatBytes(plaintextChunks);
-    for (const chunk of plaintextChunks) {
-      wipeBytes(chunk);
-    }
     return {
       ok: true,
       data: plaintextBytes,
     };
   } finally {
+    for (const chunk of plaintextChunks) {
+      wipeBytes(chunk);
+    }
     wipeBytes(expectedBaseIv);
     wipeBytes(wrappedContentKey);
     wipeBytes(rawContentKey);

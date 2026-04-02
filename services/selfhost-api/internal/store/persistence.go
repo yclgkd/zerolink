@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/sqlcgen"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/sqlcgen"
 )
 
 const advisoryLockNamespace = "zerolink/selfhost/channel"
@@ -279,9 +280,7 @@ func (tx *ChannelTx) FinalizeTerminalState(
 	reason TerminalReason,
 	finalizedAt time.Time,
 ) (*TerminalTombstone, error) {
-	if err := tx.deleteMultipartUpload(ctx); err != nil {
-		return nil, err
-	}
+	tx.deleteMultipartUpload(ctx)
 
 	row, err := tx.queries.UpsertTerminalTombstone(ctx, sqlcgen.UpsertTerminalTombstoneParams{
 		ChannelID:   tx.channelID,
@@ -300,27 +299,28 @@ func (tx *ChannelTx) FinalizeTerminalState(
 	return &tombstone, nil
 }
 
-func (tx *ChannelTx) deleteMultipartUpload(ctx context.Context) error {
+func (tx *ChannelTx) deleteMultipartUpload(ctx context.Context) {
 	if tx.db == nil || tx.db.multipartCleaner == nil {
-		return nil
+		return
 	}
 
 	channel, err := tx.GetChannel(ctx)
 	if err != nil {
-		return err
+		slog.Default().Error("load multipart cleanup channel failed", "channel_id", tx.channelID, "error", err)
+		return
 	}
 	if channel == nil || len(channel.FileRef) == 0 {
-		return nil
+		return
 	}
 
 	var fileRef filestore.MultipartFileRef
 	if err := json.Unmarshal(channel.FileRef, &fileRef); err != nil {
-		return fmt.Errorf("decode multipart fileRef: %w", err)
+		slog.Default().Error("decode multipart fileRef failed", "channel_id", tx.channelID, "error", err)
+		return
 	}
 	if err := tx.db.multipartCleaner.DeleteUpload(ctx, fileRef); err != nil {
-		return fmt.Errorf("delete multipart upload: %w", err)
+		slog.Default().Error("delete multipart upload failed", "channel_id", tx.channelID, "error", err)
 	}
-	return nil
 }
 
 func (d *Database) SweepExpiredChannels(ctx context.Context, now time.Time) (int64, error) {

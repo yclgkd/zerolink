@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -105,9 +107,11 @@ type FileFetchResponse struct {
 }
 
 type Store struct {
-	client *minio.Client
-	bucket string
-	region string
+	client      *minio.Client
+	bucket      string
+	region      string
+	bucketReady atomic.Bool
+	bucketMu    sync.Mutex
 }
 
 func NewMinIO(ctx context.Context, cfg Config) (*Store, error) {
@@ -151,13 +155,14 @@ func NewUploadID() (string, error) {
 }
 
 func (s *Store) Initiate(ctx context.Context, uploadID string, chunkCount int) error {
+	_ = ctx
 	if err := validateUploadID(uploadID); err != nil {
 		return err
 	}
 	if chunkCount <= 0 {
 		return errors.New("chunkCount must be positive")
 	}
-	return s.ensureBucket(ctx)
+	return nil
 }
 
 func (s *Store) PutChunk(ctx context.Context, uploadID string, index int, body io.Reader, size int64) (string, error) {
@@ -169,9 +174,6 @@ func (s *Store) PutChunk(ctx context.Context, uploadID string, index int, body i
 	}
 	if size < 0 {
 		return "", errors.New("chunk size must be non-negative")
-	}
-	if err := s.ensureBucket(ctx); err != nil {
-		return "", err
 	}
 
 	objectKey := uploadObjectKey(uploadID, index)
@@ -192,9 +194,6 @@ func (s *Store) PresignedUpload(ctx context.Context, uploadID string, index int,
 	if ttl <= 0 {
 		ttl = defaultUploadURLTTL
 	}
-	if err := s.ensureBucket(ctx); err != nil {
-		return "", err
-	}
 
 	objectKey := uploadObjectKey(uploadID, index)
 	u, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, ttl)
@@ -206,9 +205,6 @@ func (s *Store) PresignedUpload(ctx context.Context, uploadID string, index int,
 
 func (s *Store) CompleteUpload(ctx context.Context, req FileUploadCompleteRequest) (MultipartFileRef, error) {
 	if err := req.Validate(); err != nil {
-		return MultipartFileRef{}, err
-	}
-	if err := s.ensureBucket(ctx); err != nil {
 		return MultipartFileRef{}, err
 	}
 
@@ -273,9 +269,6 @@ func (s *Store) PresignedDownload(ctx context.Context, fileRef MultipartFileRef,
 	if ttl <= 0 {
 		ttl = defaultDownloadURLTTL
 	}
-	if err := s.ensureBucket(ctx); err != nil {
-		return "", err
-	}
 
 	chunk, ok := fileRef.chunkByIndex(index)
 	if !ok {
@@ -293,17 +286,15 @@ func (s *Store) DeleteUpload(ctx context.Context, fileRef MultipartFileRef) erro
 	if err := fileRef.Validate(); err != nil {
 		return err
 	}
-	if err := s.ensureBucket(ctx); err != nil {
-		return err
-	}
 
+	var errs []error
 	for _, chunk := range fileRef.Chunks {
 		if err := s.client.RemoveObject(ctx, s.bucket, chunk.StorageKey, minio.RemoveObjectOptions{}); err != nil {
-			return fmt.Errorf("delete chunk %d: %w", chunk.Index, err)
+			errs = append(errs, fmt.Errorf("delete chunk %d: %w", chunk.Index, err))
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (ref MultipartFileRef) Validate() error {
@@ -423,16 +414,28 @@ func (ref MultipartFileRef) chunkByIndex(index int) (MultipartFileRefChunk, bool
 }
 
 func (s *Store) ensureBucket(ctx context.Context) error {
+	if s.bucketReady.Load() {
+		return nil
+	}
+
+	s.bucketMu.Lock()
+	defer s.bucketMu.Unlock()
+	if s.bucketReady.Load() {
+		return nil
+	}
+
 	exists, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
 		return fmt.Errorf("check minio bucket %s: %w", s.bucket, err)
 	}
 	if exists {
+		s.bucketReady.Store(true)
 		return nil
 	}
 	if err := s.client.MakeBucket(ctx, s.bucket, minio.MakeBucketOptions{Region: s.region}); err != nil {
 		return fmt.Errorf("create minio bucket %s: %w", s.bucket, err)
 	}
+	s.bucketReady.Store(true)
 	return nil
 }
 

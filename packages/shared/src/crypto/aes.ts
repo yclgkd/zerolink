@@ -214,9 +214,8 @@ export async function encryptAesGcmRaw({
   iv,
 }: EncryptAesGcmRawParams): Promise<EncryptAesGcmRawResult> {
   const cryptoApi = getCryptoApi();
-  const resolvedIv = iv ? iv.slice() : cryptoApi.getRandomValues(new Uint8Array(AES_GCM.IV_LENGTH));
-
-  assertIvLength(resolvedIv);
+  assertIvLength(iv);
+  const resolvedIv = iv.slice();
 
   const ciphertextBuffer = await cryptoApi.subtle.encrypt(
     buildAesGcmParams(resolvedIv, aad),

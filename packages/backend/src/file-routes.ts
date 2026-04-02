@@ -6,15 +6,19 @@ import {
   type HexString,
   type MultipartFileRef,
   type UnixMs,
+  type UUID,
 } from '@zerolink/shared';
 import { resolveFilePolicy } from './file-policy.ts';
 import {
   buildMultipartChunkStorageKey,
   buildMultipartFileRef,
+  createFileDownloadToken,
   createFileUploadId,
+  FILE_DOWNLOAD_TTL_MS,
   FILE_UPLOAD_TTL_MS,
   makeFileCompleteResponse,
   makeFileUploadResponse,
+  parseFileDownloadToken,
   parseFileUploadId,
 } from './file-storage.ts';
 import type { Env } from './worker.ts';
@@ -77,6 +81,27 @@ async function forwardFilePayloadLookup(env: Env, uuid: string): Promise<Multipa
   return payload.fileRef;
 }
 
+async function channelExists(env: Env, uuid: string): Promise<boolean> {
+  const durableObjectId = env.SECRET_VAULT.idFromName(uuid);
+  const stub = env.SECRET_VAULT.get(durableObjectId);
+  const response = await stub.fetch('https://secret-vault.internal/get_public_state', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (response.ok) {
+    return true;
+  }
+  if (response.status === 404) {
+    return false;
+  }
+
+  throw new Error(`load public state failed with status ${response.status}`);
+}
+
 export async function handleFileUploadInitiate(request: Request, env: Env): Promise<Response> {
   const body = await readJsonBody(request);
   if (body == null) {
@@ -94,6 +119,13 @@ export async function handleFileUploadInitiate(request: Request, env: Env): Prom
   }
   if (parsed.data.chunkCount > policy.maxChunks) {
     return errorResponse('BAD_REQUEST', 400);
+  }
+  try {
+    if (!(await channelExists(env, parsed.data.channelUuid))) {
+      return errorResponse('NOT_FOUND', 404);
+    }
+  } catch {
+    return errorResponse('INTERNAL_ERROR', 500);
   }
 
   const now = Date.now() as UnixMs;
@@ -225,32 +257,53 @@ export async function handleFileFetch(env: Env, uuid: string): Promise<Response>
     return errorResponse('CHANNEL_NOT_MULTIPART', 409);
   }
 
+  const now = Date.now() as UnixMs;
   const response = FileFetchResponseSchema.parse({
     ok: true,
-    chunks: fileRef.chunks.map((chunk) => ({
-      index: chunk.index,
-      downloadUrl: `/api/file/dl/${uuid}/${chunk.index}`,
-    })),
+    chunks: await Promise.all(
+      fileRef.chunks.map(async (chunk) => ({
+        index: chunk.index,
+        downloadUrl: `/api/file/dl/${uuid}/${chunk.index}?token=${await createFileDownloadToken(
+          env.COMMIT_TOKEN_SECRET,
+          {
+            v: '1',
+            channelUuid: uuid as UUID,
+            index: chunk.index,
+            storageKey: chunk.storageKey,
+            issuedAt: now,
+            expiresAt: (Number(now) + FILE_DOWNLOAD_TTL_MS) as UnixMs,
+          }
+        )}`,
+      }))
+    ),
   });
   return jsonResponse(response, 200);
 }
 
-export async function handleFileDownload(env: Env, uuid: string, index: number): Promise<Response> {
+export async function handleFileDownload(
+  request: Request,
+  env: Env,
+  uuid: string,
+  index: number
+): Promise<Response> {
   if (!env.FILE_BUCKET || !Number.isInteger(index) || index < 0) {
     return errorResponse('BAD_REQUEST', 400);
   }
 
-  const fileRef = await forwardFilePayloadLookup(env, uuid);
-  if (!fileRef) {
-    return errorResponse('CHANNEL_NOT_MULTIPART', 409);
-  }
-
-  const chunk = fileRef.chunks.find((entry) => entry.index === index);
-  if (!chunk) {
+  const token = new URL(request.url).searchParams.get('token');
+  const downloadSession = token
+    ? await parseFileDownloadToken(env.COMMIT_TOKEN_SECRET, token)
+    : null;
+  if (
+    !downloadSession ||
+    downloadSession.channelUuid !== uuid ||
+    downloadSession.index !== index ||
+    Number(downloadSession.expiresAt) < Date.now()
+  ) {
     return errorResponse('NOT_FOUND', 404);
   }
 
-  const object = await env.FILE_BUCKET.get(chunk.storageKey);
+  const object = await env.FILE_BUCKET.get(downloadSession.storageKey);
   if (!object) {
     return errorResponse('NOT_FOUND', 404);
   }

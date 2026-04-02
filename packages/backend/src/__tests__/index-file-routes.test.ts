@@ -7,6 +7,17 @@ describe('backend worker routing — file upload and fetch routes', () => {
   it('handles multipart initiate, chunk upload, completion, fetch, and download', async () => {
     let currentFileRef: MultipartFileRef | null = null;
     const { env, calls } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_public_state')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            state: 'locked',
+            securityProfile: 'secure',
+          }),
+          { status: 200 }
+        );
+      }
+
       if (request.url.endsWith('/get_file_payload')) {
         if (!currentFileRef) {
           return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND' }), {
@@ -51,7 +62,8 @@ describe('backend worker routing — file upload and fetch routes', () => {
     expect(initiatePayload.chunks[0]?.uploadUrl).toContain(
       `/api/file/chunk/${VALID_UUID}/${initiatePayload.uploadId}/0`
     );
-    expect(calls).toHaveLength(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/get_public_state');
 
     const chunk0Body = 'cipher-0';
     const chunk1Body = 'cipher-1';
@@ -118,17 +130,29 @@ describe('backend worker routing — file upload and fetch routes', () => {
     };
 
     expect(fetchResponse.status).toBe(200);
-    expect(fetchPayload.chunks).toEqual([
-      { index: 0, downloadUrl: `/api/file/dl/${VALID_UUID}/0` },
-      { index: 1, downloadUrl: `/api/file/dl/${VALID_UUID}/1` },
-    ]);
+    expect(fetchPayload.chunks).toHaveLength(2);
+    const firstDownloadUrl = new URL(
+      fetchPayload.chunks[0]?.downloadUrl ?? '',
+      'https://example.test'
+    );
+    const secondDownloadUrl = new URL(
+      fetchPayload.chunks[1]?.downloadUrl ?? '',
+      'https://example.test'
+    );
+    expect(firstDownloadUrl.pathname).toBe(`/api/file/dl/${VALID_UUID}/0`);
+    expect(secondDownloadUrl.pathname).toBe(`/api/file/dl/${VALID_UUID}/1`);
+    expect(firstDownloadUrl.searchParams.get('token')).toBeTruthy();
+    expect(secondDownloadUrl.searchParams.get('token')).toBeTruthy();
 
-    const downloadResponse = await dispatch(env, `/api/file/dl/${VALID_UUID}/0`, 'GET');
+    const downloadResponse = await dispatch(
+      env,
+      `${firstDownloadUrl.pathname}${firstDownloadUrl.search}`,
+      'GET'
+    );
     expect(downloadResponse.status).toBe(200);
     expect(await downloadResponse.text()).toBe(chunk0Body);
 
     expect(calls).toHaveLength(2);
-    expect(calls[0]?.pathname).toBe('/get_file_payload');
     expect(calls[1]?.pathname).toBe('/get_file_payload');
   });
 });

@@ -933,3 +933,11 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Enforce in the protocol service
 **Reasoning**: The service layer already owns protocol state transitions, so it is the narrowest place to preserve Worker parity across HTTP handlers and future callers
 **Trade-offs**: Rate limiting is process-local instead of Durable Object-local, so multi-instance deployments still need edge or infra throttling for global enforcement
+## [2026-04-02] Multipart review fixes favor best-effort cleanup and signed direct chunk downloads
+
+**Decision**: Keep multipart terminalization best-effort on self-hosted MinIO cleanup, and switch Worker chunk downloads to signed per-chunk URLs so `/api/file/dl` no longer re-queries the Durable Object for every chunk.
+**Context**: PR #229 review found two correctness issues and several cleanup/perf gaps: plaintext chunk buffers could survive early returns, MinIO cleanup failures could block terminal tombstoning, and Worker chunk downloads performed a redundant Durable Object lookup per chunk.
+**Options Considered**: Fail terminalization when object cleanup fails; keep download authorization coupled to per-request Durable Object reads; rely on raw fetch in the frontend multipart decrypt path.
+**Choice**: Wipe accumulated plaintext chunks in a single outer `finally`, log-and-continue on MinIO cleanup failures, and authorize Worker downloads with short-lived HMAC-signed chunk tokens returned by `/api/file/fetch`. Also reject `/api/file/initiate` when the channel UUID does not resolve to an existing record.
+**Reasoning**: Terminal state persistence is more important than opportunistic object deletion, and signed chunk URLs preserve the untrusted-storage model while removing unnecessary Durable Object pressure on large downloads. Routing multipart downloads through the shared API client keeps frontend tests and error handling consistent.
+**Trade-offs**: Signed download URLs add token parsing logic to the Worker, and self-hosted orphan cleanup still depends on later sweep/lifecycle enforcement rather than immediate deletion guarantees.

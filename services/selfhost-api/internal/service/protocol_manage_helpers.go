@@ -123,9 +123,6 @@ func (intent ManageIntent) Validate() error {
 				return badRequest("invalid intent")
 			}
 		}
-		if intent.CipherBundle == nil && intent.FileRef == nil {
-			return badRequest("invalid intent")
-		}
 		if _, err := intent.ParseExpireAt(); err != nil {
 			return badRequest("invalid intent")
 		}
