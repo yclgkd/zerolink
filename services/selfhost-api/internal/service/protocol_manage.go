@@ -653,7 +653,6 @@ func (s *ProtocolService) validateAndApplyDelivery(
 			*input.Intent.CipherBundle,
 			input.Intent,
 			*channel.ReceiverPubFpr,
-			s.filePolicy.MultipartThresholdBytes,
 		); err != nil {
 			return RealtimeStateOutput{}, err
 		}

@@ -15,7 +15,11 @@ not_found_handling = "single-page-application"
 
 [vars]
 APP_ENV = "production"
+FILE_MAX_BYTES = "5242880"
 FILE_MULTIPART_SUPPORTED = "true"
+
+[triggers]
+crons = ["0 * * * *"]
 
 [observability]
 enabled = true
@@ -64,7 +68,11 @@ not_found_handling = "single-page-application"
 
 [env.staging.vars]
 APP_ENV = "staging"
+FILE_MAX_BYTES = "5242880"
 FILE_MULTIPART_SUPPORTED = "true"
+
+[env.staging.triggers]
+crons = ["0 * * * *"]
 
 [env.staging.observability]
 enabled = true

@@ -17,6 +17,7 @@ import {
   INTERNAL_COMMIT_TOKEN_HEADER,
   readInternalCommitCookieSignal,
 } from './commitTokens.ts';
+import { cleanupOrphanMultipartChunks } from './file-cleanup.ts';
 import { toFilePolicyResponse } from './file-policy.ts';
 import {
   handleFileChunkUpload,
@@ -586,6 +587,21 @@ const worker: ExportedHandler<Env> = {
     } catch {
       return errorResponse('INTERNAL_ERROR', 500);
     }
+  },
+  async scheduled(controller, env, ctx): Promise<void> {
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const summary = await cleanupOrphanMultipartChunks(env, controller.scheduledTime);
+          // biome-ignore lint/suspicious/noConsole: intentional operational signal for scheduled cleanup
+          console.info('[file-cleanup] scheduled_orphan_scan_complete', summary);
+        } catch (error) {
+          // biome-ignore lint/suspicious/noConsole: intentional operational signal for scheduled cleanup
+          console.error('[file-cleanup] scheduled_orphan_scan_failed', error);
+          throw error;
+        }
+      })()
+    );
   },
 };
 

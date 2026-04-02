@@ -244,3 +244,34 @@ export async function dispatch(
 
   return invoke(request, env, ctx);
 }
+
+export async function dispatchScheduled(
+  env: Env,
+  scheduledTime: number = Date.now()
+): Promise<void> {
+  const scheduledHandler = worker.scheduled;
+  if (!scheduledHandler) {
+    throw new Error('worker scheduled handler is missing');
+  }
+
+  const pending: Promise<unknown>[] = [];
+  const scheduledCtx = {
+    passThroughOnException(): void {},
+    waitUntil(promise: Promise<unknown>): void {
+      pending.push(promise);
+    },
+  } as ExecutionContext;
+
+  await scheduledHandler(
+    {
+      cron: '0 * * * *',
+      scheduledTime,
+      type: 'scheduled',
+      noRetry(): void {},
+    } as unknown as ScheduledController,
+    env,
+    scheduledCtx
+  );
+
+  await Promise.all(pending);
+}

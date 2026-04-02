@@ -7,7 +7,7 @@ import { deserializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { useDeliverStore } from '../../stores/deliver-store';
 import type { ChannelClosedReason, ChannelStateUpdate } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
-import { canComposeDelivery, isTerminalManageState } from './manage-utils';
+import { canComposeDelivery, isTerminalManageState, mapActionError } from './manage-utils';
 import { useManageDeliveryLogic, useManageDestructionLogic } from './use-manage-actions';
 import { usePublicStatusFetcher } from './use-manage-status';
 
@@ -224,12 +224,7 @@ export function useManagePageState(uuid?: string) {
           void apiClient.filePolicy().then((result) => {
             if (!mountedRef.current) return;
             if (result.ok) {
-              setFilePolicyMaxBytes(
-                Math.min(
-                  result.data.policy.maxFileBytes,
-                  result.data.policy.multipartThresholdBytes
-                )
-              );
+              setFilePolicyMaxBytes(result.data.policy.maxFileBytes);
               return;
             }
             filePolicyFetchedRef.current = false;
@@ -245,11 +240,19 @@ export function useManagePageState(uuid?: string) {
       }
     },
     handleFileSelect: (file: File | null) => {
+      if (file && filePolicyMaxBytes !== null && file.size > filePolicyMaxBytes) {
+        setSelectedFile(null);
+        setActionError(mapActionError('FILE_TOO_LARGE'));
+        setIsSecretInputInvalid(false);
+        return false;
+      }
+
       setSelectedFile(file);
       if (actionError || isSecretInputInvalid) {
         setActionError(null);
         setIsSecretInputInvalid(false);
       }
+      return true;
     },
     handleSoftkeyPassphraseChange: (value: string) => {
       setSoftkeyPassphrase(value);

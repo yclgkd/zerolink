@@ -131,11 +131,11 @@ export const handlers = [
     const payload = {
       ok: true,
       policy: {
-        maxFileBytes: 2_097_152,
-        multipartThresholdBytes: 2_097_152,
-        chunkSizeBytes: 262_144,
-        maxChunks: 8,
-        multipartSupported: false,
+        maxFileBytes: 5_242_880,
+        multipartThresholdBytes: 2_080_760,
+        chunkSizeBytes: 4_194_304,
+        maxChunks: 2,
+        multipartSupported: true,
       },
     };
     const parsedPayload = FilePolicyResponseSchema.safeParse(payload);

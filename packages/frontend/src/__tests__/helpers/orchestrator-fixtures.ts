@@ -8,6 +8,7 @@ import {
   type DecryptFetchResponse,
   type DecryptFetchSoftkeyDeliveryAuth,
   type ECDSAPublicKeyJWK,
+  encodeFileSharePayload,
   type HexString,
   HexStringSchema,
   type RSAPublicKeyJWK,
@@ -314,7 +315,15 @@ export async function buildDeliveredDecryptFixtureBase(
       useFastKdf: params.useFastKdf,
     }
   );
-  const plaintext = params.plaintext ?? 'receiver can decrypt this';
+  const plaintextText = params.plaintext ?? 'receiver can decrypt this';
+  const plaintext: string | Uint8Array =
+    params.file == null
+      ? plaintextText
+      : encodeFileSharePayload({
+          fileName: params.file.fileName,
+          mediaType: params.file.mediaType,
+          bytes: params.file.bytes,
+        });
   const expectedPayload: DecryptedSharePayload = params.file
     ? {
         kind: 'file',
@@ -325,7 +334,7 @@ export async function buildDeliveredDecryptFixtureBase(
       }
     : {
         kind: 'text',
-        text: plaintext,
+        text: plaintextText,
       };
 
   vi.mocked(apiClient.lockBegin).mockResolvedValue({
@@ -376,21 +385,6 @@ export async function buildDeliveredDecryptFixtureBase(
     ok: true,
     data: VALID_ASSERTION,
   } satisfies WebAuthnAdapterResult<AssertionJSON>);
-  vi.mocked(apiClient.filePolicy).mockResolvedValue({
-    ok: true,
-    status: 200,
-    data: {
-      ok: true,
-      policy: {
-        maxFileBytes: 2_097_152,
-        multipartThresholdBytes: 2_097_152,
-        chunkSizeBytes: 262_144,
-        maxChunks: 8,
-        multipartSupported: false,
-      },
-    },
-  });
-
   let committedCipherBundle: InlineCipherBundle | null = null;
   vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
     if (input.intent.op === 'update') {
@@ -402,8 +396,7 @@ export async function buildDeliveredDecryptFixtureBase(
   const deliverResult = await orchestrator.deliverSecret({
     uuid: VALID_UUID,
     profile: SECURITY_PROFILE.SECURE,
-    plaintext: params.file ? '' : plaintext,
-    ...(params.file ? { file: params.file } : {}),
+    plaintext,
   });
   expect(deliverResult.ok).toBe(true);
   expect(committedCipherBundle).not.toBeNull();
@@ -421,7 +414,7 @@ export async function buildDeliveredDecryptFixtureBase(
     cipherBundle: cloneCipherBundle(committedCipherBundle),
     receiverPubFpr: lockResult.data.receiverPubFpr,
     receiverKeyEnvelope: cloneReceiverKeyEnvelope(receiverKeyEnvelope),
-    plaintext: params.file ? null : plaintext,
+    plaintext: params.file ? null : plaintextText,
     expectedPayload,
   };
 }
@@ -552,6 +545,14 @@ export async function buildAnchoredSoftkeyDeliveryBase(
   }
 
   const senderAuthFpr = extractSenderAuthFprFromShareUrl(createResult.data.shareUrlWithFragment);
+  const plaintext =
+    params.file == null
+      ? (params.plaintext ?? 'anchored softkey plaintext')
+      : encodeFileSharePayload({
+          fileName: params.file.fileName,
+          mediaType: params.file.mediaType,
+          bytes: params.file.bytes,
+        });
 
   vi.mocked(apiClient.lockBegin).mockResolvedValue({
     ok: true,
@@ -616,29 +617,12 @@ export async function buildAnchoredSoftkeyDeliveryBase(
   if (!createResult.data.wrappedPrivateKey) {
     throw new Error('expected wrappedPrivateKey in createResult');
   }
-  if (params.file) {
-    vi.mocked(apiClient.filePolicy).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        policy: {
-          maxFileBytes: 2_097_152,
-          multipartThresholdBytes: 2_097_152,
-          chunkSizeBytes: 262_144,
-          maxChunks: 8,
-          multipartSupported: false,
-        },
-      },
-    });
-  }
   const deliverResult = await orchestrator.deliverSecret({
     uuid,
     profile: SECURITY_PROFILE.QUICK,
-    plaintext: params.file ? '' : (params.plaintext ?? 'anchored softkey plaintext'),
+    plaintext,
     softkeyPassphrase: passphrase,
     wrappedPrivateKey: createResult.data.wrappedPrivateKey,
-    ...(params.file ? { file: params.file } : {}),
   });
   expect(deliverResult.ok).toBe(true);
   expect(committed).not.toBeNull();
