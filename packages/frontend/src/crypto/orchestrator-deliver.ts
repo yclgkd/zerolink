@@ -16,6 +16,7 @@ import {
 } from '@zerolink/shared';
 import { encryptAesGcm, importAesKeyFromBytes, wipeBytes } from '@zerolink/shared/crypto/aes';
 import { importReceiverPublicKeyFromJwk, wrapContentKey } from '@zerolink/shared/crypto/rsa';
+import { readWholeFileInputBytes, uploadMultipartFile } from './orchestrator-multipart';
 import type {
   CryptoOrchestratorResult,
   DeliverSecretInput,
@@ -51,7 +52,7 @@ async function buildDeliverUpdateIntent(
     intent: UpdateIntent;
     intentHash: HexString;
     expectedChallenge: Base64Url;
-    cipherBundle: DeliverSecretOutput['cipherBundle'];
+    cipherBundle?: DeliverSecretOutput['cipherBundle'];
     payloadKind: DeliverSecretOutput['payloadKind'];
   }>
 > {
@@ -66,21 +67,69 @@ async function buildDeliverUpdateIntent(
   try {
     if (input.file) {
       const { policy, inlineMaxBytes } = resolveInlineFilePolicy(filePolicy);
-      if (input.file.bytes.byteLength > policy.maxFileBytes) {
+      const fileSize =
+        input.file.size ?? input.file.bytes?.byteLength ?? input.file.blob?.size ?? 0;
+      if (fileSize > policy.maxFileBytes) {
         return toError(
           'FILE_TOO_LARGE',
           'deliver.file-policy',
           `Selected file exceeds the deployment limit (${policy.maxFileBytes} bytes).`
         );
       }
+
+      if (fileSize > inlineMaxBytes) {
+        if (!policy.multipartSupported) {
+          return toError(
+            'MULTIPART_REQUIRED',
+            'deliver.file-policy',
+            'Selected file exceeds the inline delivery limit for this deployment.'
+          );
+        }
+
+        const multipartRes = await uploadMultipartFile(
+          deps,
+          input,
+          policy,
+          beginData.receiverPubJwk,
+          asUuid(input.uuid)
+        );
+        if (!multipartRes.ok) {
+          return multipartRes;
+        }
+
+        const intent: UpdateIntent = {
+          op: 'update',
+          uuid: asUuid(input.uuid),
+          version: beginData.currentVersion,
+          timestamp: asUnixMs(deps.now()),
+          nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
+          receiverPubFpr: beginData.receiverPubFpr,
+          payloadKind: 'file',
+          fileRef: multipartRes.data,
+          expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
+        };
+        const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
+        const expectedChallenge = await deriveUpdateProofChallengeB64u({
+          uuid: input.uuid,
+          intentHash,
+        });
+
+        return {
+          ok: true,
+          data: {
+            intent,
+            intentHash,
+            expectedChallenge,
+            payloadKind: 'file',
+          },
+        };
+      }
+
       plaintextBytes = encodeFileSharePayload({
         fileName: input.file.fileName,
         mediaType: input.file.mediaType,
-        bytes: input.file.bytes,
+        bytes: await readWholeFileInputBytes(input.file),
       });
-      // Compare the full envelope (magic + header + body) against the inline
-      // limit. The envelope is always larger than the raw file bytes due to
-      // framing overhead, so this is the authoritative check.
       if (plaintextBytes.byteLength > inlineMaxBytes) {
         return toError(
           'MULTIPART_REQUIRED',
@@ -93,6 +142,7 @@ async function buildDeliverUpdateIntent(
     } else {
       plaintextBytes = toPlaintextBytes(input.plaintext);
     }
+
     aad = buildCipherBundleAadBytes({
       uuid: asUuid(input.uuid),
       version: beginData.currentVersion,
@@ -176,8 +226,9 @@ export async function executeDeliverSecret(
 
   const beginData = beginRes.data;
   if (!beginData.challenge) return toError('MISSING_LOCK_CHALLENGE', 'deliver.validate');
-  if (!beginData.receiverPubJwk || !beginData.receiverPubFpr)
+  if (!beginData.receiverPubJwk || !beginData.receiverPubFpr) {
     return toError('MISSING_RECEIVER_IDENTITY', 'deliver.validate');
+  }
 
   const resolvedBeginData = {
     ...beginData,

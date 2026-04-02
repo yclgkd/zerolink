@@ -147,11 +147,16 @@ interface CreateOrchestratorTestOptions {
   useFastKdf?: boolean | undefined;
 }
 
-function cloneCipherBundle(
-  cipherBundle: DecryptFetchResponse['cipherBundle']
-): DecryptFetchResponse['cipherBundle'] {
+type InlineCipherBundle = NonNullable<DecryptFetchResponse['cipherBundle']>;
+
+function cloneCipherBundle(cipherBundle: InlineCipherBundle): InlineCipherBundle {
   return {
-    ...cipherBundle,
+    ciphertext: cipherBundle.ciphertext,
+    iv: cipherBundle.iv,
+    aad: cipherBundle.aad,
+    encContentKey: cipherBundle.encContentKey,
+    ciphertextHash: cipherBundle.ciphertextHash,
+    padBlock: cipherBundle.padBlock,
   };
 }
 
@@ -209,6 +214,11 @@ export function createApiClientMock(): ApiClient {
     publicStatus: vi.fn(),
     decryptFetch: vi.fn(),
     filePolicy: vi.fn(),
+    fileUploadInitiate: vi.fn(),
+    fileUploadChunk: vi.fn(),
+    fileDownloadChunk: vi.fn(),
+    fileUploadComplete: vi.fn(),
+    fileFetch: vi.fn(),
   };
 }
 
@@ -271,7 +281,7 @@ export function extractSenderAuthFprFromShareUrl(shareUrlWithFragment: string): 
 // ---------------------------------------------------------------------------
 
 export interface DeliveredDecryptFixtureBase {
-  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  cipherBundle: InlineCipherBundle;
   receiverPubFpr: HexString;
   receiverKeyEnvelope: ReceiverKeyEnvelope;
   plaintext: string | null;
@@ -381,10 +391,10 @@ export async function buildDeliveredDecryptFixtureBase(
     },
   });
 
-  let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+  let committedCipherBundle: InlineCipherBundle | null = null;
   vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
     if (input.intent.op === 'update') {
-      committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      committedCipherBundle = input.intent.cipherBundle as InlineCipherBundle;
     }
     return { ok: true, status: 200, data: { ok: true } };
   });
@@ -426,7 +436,7 @@ export async function seedDeliveredDecryptFixture(
   apiClient: ApiClient;
   orchestrator: CryptoOrchestrator;
   receiverKeyStorage: ReceiverKeyStorage;
-  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  cipherBundle: InlineCipherBundle;
   receiverPubFpr: HexString;
   plaintext: string | null;
   expectedPayload: DecryptedSharePayload;
@@ -465,7 +475,7 @@ export async function seedDeliveredDecryptFixture(
 }
 
 export interface AnchoredSoftkeyDeliveryBase {
-  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  cipherBundle: InlineCipherBundle;
   deliveryAuth: DecryptFetchSoftkeyDeliveryAuth;
   receiverPubFpr: HexString;
   receiverKeyEnvelope: ReceiverKeyEnvelope;
@@ -649,9 +659,13 @@ export async function buildAnchoredSoftkeyDeliveryBase(
   if (!receiverKeyEnvelope) {
     throw new Error('expected receiver key envelope');
   }
+  const cipherBundle = capturedCommit.intent.cipherBundle;
+  if (!cipherBundle) {
+    throw new Error('expected captured inline cipherBundle');
+  }
 
   return {
-    cipherBundle: cloneCipherBundle(capturedCommit.intent.cipherBundle),
+    cipherBundle: cloneCipherBundle(cipherBundle),
     deliveryAuth: cloneDeliveryAuth({
       adminMode: 'password',
       meta: {
@@ -686,7 +700,7 @@ export async function prepareAnchoredSoftkeyDelivery(
   apiClient: ApiClient;
   orchestrator: CryptoOrchestrator;
   receiverKeyStorage: ReceiverKeyStorage;
-  cipherBundle: DecryptFetchResponse['cipherBundle'];
+  cipherBundle: InlineCipherBundle;
   deliveryAuth: DecryptFetchSoftkeyDeliveryAuth;
   receiverPubFpr: HexString;
   senderAuthFpr: HexString;
@@ -726,7 +740,7 @@ export async function prepareAnchoredSoftkeyDelivery(
 
 export async function deliverAndCaptureCipherBundle(
   profile: SecurityProfile
-): Promise<DecryptFetchResponse['cipherBundle']> {
+): Promise<InlineCipherBundle> {
   const { orchestrator, apiClient } = createOrchestrator();
   const receiverKeyPair = await generateReceiverKeyPair();
   const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
@@ -754,10 +768,10 @@ export async function deliverAndCaptureCipherBundle(
     data: VALID_ASSERTION,
   } satisfies WebAuthnAdapterResult<AssertionJSON>);
 
-  let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+  let committedCipherBundle: InlineCipherBundle | null = null;
   vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
     if (input.intent.op === 'update') {
-      committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+      committedCipherBundle = input.intent.cipherBundle as InlineCipherBundle;
     }
     return { ok: true, status: 200, data: { ok: true } };
   });

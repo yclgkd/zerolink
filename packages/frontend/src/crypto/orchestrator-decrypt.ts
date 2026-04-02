@@ -16,6 +16,7 @@ import { decryptAesGcm, importAesKeyFromBytes, wipeBytes } from '@zerolink/share
 import type { Argon2idKdfParams } from '@zerolink/shared/crypto/kdf';
 import { unwrapPrivateKey } from '@zerolink/shared/crypto/kdf';
 import { unwrapContentKey } from '@zerolink/shared/crypto/rsa';
+import { decryptMultipartFile } from './orchestrator-multipart';
 import type {
   CryptoOrchestratorResult,
   DecryptDeliveredInput,
@@ -72,7 +73,8 @@ async function resolveAnchoredCipherVersion(
       ...(payload.deliveryAuth.meta.payloadKind
         ? { payloadKind: payload.deliveryAuth.meta.payloadKind }
         : {}),
-      cipherBundle: payload.cipherBundle,
+      ...(payload.cipherBundle ? { cipherBundle: payload.cipherBundle } : {}),
+      ...(payload.fileRef ? { fileRef: payload.fileRef } : {}),
       expireAt: payload.deliveryAuth.meta.expireAt,
     };
     const intentHash = await computeIntentHash(signedIntent as unknown as Record<string, unknown>);
@@ -165,7 +167,7 @@ function decodeDeliveredPayload(
 function assertMonotonicDeliveryState(
   envelope: ReceiverKeyEnvelope,
   version: number,
-  ciphertextHash: string
+  deliveryHash: string
 ): void {
   const lastAccepted = envelope.lastAcceptedDelivery;
   if (!lastAccepted) {
@@ -176,22 +178,37 @@ function assertMonotonicDeliveryState(
     throw new Error('INTEGRITY_MISMATCH');
   }
 
+  const previousHash = lastAccepted.deliveryHash ?? lastAccepted.ciphertextHash;
   if (
     version === lastAccepted.version &&
-    !constantTimeHexEqual(ciphertextHash, lastAccepted.ciphertextHash)
+    (!previousHash || !constantTimeHexEqual(deliveryHash, previousHash))
   ) {
     throw new Error('INTEGRITY_MISMATCH');
   }
 }
 
-async function performDecryptionPipeline(
+async function resolveDeliveredPayloadHash(payload: DecryptFetchResponse): Promise<string> {
+  if (payload.cipherBundle) {
+    return payload.cipherBundle.ciphertextHash;
+  }
+  if (payload.fileRef) {
+    return computeIntentHash(payload.fileRef as unknown as Record<string, unknown>);
+  }
+  throw new Error('INTEGRITY_MISMATCH');
+}
+
+async function performInlineDecryptionPipeline(
   payload: DecryptFetchResponse,
   passphrase: string,
   envelope: ReceiverKeyEnvelope,
   uuid: string,
   cipherVersion: number,
   kdfParams?: Argon2idKdfParams
-) {
+): Promise<{ plaintextBytes: Uint8Array }> {
+  if (!payload.cipherBundle) {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+
   let ciphertextBytes: Uint8Array | null = null;
   let wrappedKeyBytes: Uint8Array | null = null;
   let ivBytes: Uint8Array | null = null;
@@ -226,10 +243,10 @@ async function performDecryptionPipeline(
       receiverPrivateKey,
       wrappedKey: wrappedKeyBytes,
     });
-    // L-4: Validate content key is exactly 32 bytes (AES-256)
     if (contentKeyBytes.byteLength !== AES_GCM.KEY_LENGTH_BITS / 8) {
       throw new Error('INTEGRITY_MISMATCH');
     }
+
     const contentKey = await importAesKeyFromBytes(contentKeyBytes, ['decrypt']);
     wipeBytes(contentKeyBytes);
     contentKeyBytes = null;
@@ -301,20 +318,49 @@ export async function executeDecryptDelivered(
   } catch (error) {
     return toError(toStorageErrorCode(error), 'decrypt.load-key');
   }
-  if (!envelope) return toError('KEY_STORAGE_ERROR', 'decrypt.load-key', 'missing key');
+  if (!envelope) {
+    return toError('KEY_STORAGE_ERROR', 'decrypt.load-key', 'missing key');
+  }
 
   try {
     const cipherVersion = await resolveCipherVersionForDecrypt(payload, envelope, input.uuid);
-    assertMonotonicDeliveryState(envelope, cipherVersion, payload.cipherBundle.ciphertextHash);
+    const deliveryHash = await resolveDeliveredPayloadHash(payload);
+    assertMonotonicDeliveryState(envelope, cipherVersion, deliveryHash);
 
-    const { plaintextBytes } = await performDecryptionPipeline(
-      payload,
-      normalizedPassphrase,
-      envelope,
-      input.uuid,
-      cipherVersion,
-      deps.kdfParams
-    );
+    const plaintextResult = payload.fileRef
+      ? await decryptMultipartFile(
+          deps,
+          input.uuid,
+          payload.fileRef,
+          normalizedPassphrase,
+          envelope.wrappedPrivateKey
+        )
+      : await (async () => {
+          const result = await performInlineDecryptionPipeline(
+            payload,
+            normalizedPassphrase,
+            envelope,
+            input.uuid,
+            cipherVersion,
+            deps.kdfParams
+          );
+          return {
+            ok: true as const,
+            data: result.plaintextBytes,
+          };
+        })();
+
+    if (!plaintextResult.ok) {
+      if (plaintextResult.error.code === 'INTEGRITY_MISMATCH') {
+        return toError('INTEGRITY_MISMATCH', plaintextResult.error.stage);
+      }
+      if (plaintextResult.error.code === 'NETWORK_ERROR') {
+        return toError('NETWORK_ERROR', plaintextResult.error.stage);
+      }
+      return toError('CRYPTO_ERROR', plaintextResult.error.stage);
+    }
+
+    const plaintextBytes = plaintextResult.data;
     const decryptedPayload = decodeDeliveredPayload(
       plaintextBytes,
       payload.deliveryAuth?.meta.payloadKind,
@@ -326,7 +372,8 @@ export async function executeDecryptDelivered(
         ...envelope,
         lastAcceptedDelivery: {
           version: cipherVersion,
-          ciphertextHash: payload.cipherBundle.ciphertextHash,
+          deliveryHash,
+          ...(payload.cipherBundle ? { ciphertextHash: payload.cipherBundle.ciphertextHash } : {}),
           acceptedAt: deps.now(),
         },
         updatedAt: deps.now(),

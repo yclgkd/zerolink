@@ -2,9 +2,7 @@ import { CHANNEL_STATE, type SecurityProfile, type WrappedPrivateKey } from '@ze
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { apiClient } from '../../api/client';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
-import { resolveInlineFilePolicy } from '../../crypto/orchestrator-utils';
 import { useDeliverStore } from '../../stores/deliver-store';
 import {
   getChannelPasswordValidationErrorI18n,
@@ -76,36 +74,16 @@ export function useManageDeliveryLogic(
         | {
             fileName: string;
             mediaType: string;
-            bytes: Uint8Array;
+            blob?: Blob;
+            size?: number;
           }
         | undefined;
       if (selectedFile) {
-        const filePolicyResult = await apiClient.filePolicy();
-        if (!isActiveActionContext(actionScope, actionUuid)) {
-          return;
-        }
-        if (!filePolicyResult.ok) {
-          setIsActionPending(false);
-          setIsSecretInputInvalid(false);
-          return setActionError(mapActionError(filePolicyResult.error.code));
-        }
-
-        const { policy, inlineMaxBytes } = resolveInlineFilePolicy(filePolicyResult.data.policy);
-        if (selectedFile.size > policy.maxFileBytes) {
-          setIsActionPending(false);
-          setIsSecretInputInvalid(false);
-          return setActionError(mapActionError('FILE_TOO_LARGE'));
-        }
-        if (selectedFile.size > inlineMaxBytes) {
-          setIsActionPending(false);
-          setIsSecretInputInvalid(false);
-          return setActionError(mapActionError('MULTIPART_REQUIRED'));
-        }
-
         fileInput = {
           fileName: selectedFile.name,
           mediaType: selectedFile.type || 'application/octet-stream',
-          bytes: new Uint8Array(await selectedFile.arrayBuffer()),
+          blob: selectedFile,
+          size: selectedFile.size,
         };
       }
       result = await cryptoOrchestrator.deliverSecret({

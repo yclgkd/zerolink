@@ -37,6 +37,8 @@ import {
   VALID_UUID,
 } from './helpers/orchestrator-fixtures';
 
+type InlineCipherBundle = NonNullable<DecryptFetchResponse['cipherBundle']>;
+
 beforeEach(() => {
   vi.clearAllMocks();
   useCreateStore.getState().resetCreateStore();
@@ -179,10 +181,10 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
       data: VALID_ASSERTION,
     } satisfies WebAuthnAdapterResult<AssertionJSON>);
 
-    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    let committedCipherBundle: InlineCipherBundle | null = null;
     vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
       if (input.intent.op === 'update') {
-        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+        committedCipherBundle = input.intent.cipherBundle as InlineCipherBundle;
       }
       return { ok: true, status: 200, data: { ok: true } };
     });
@@ -291,10 +293,10 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
       data: VALID_ASSERTION,
     } satisfies WebAuthnAdapterResult<AssertionJSON>);
 
-    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    let committedCipherBundle: InlineCipherBundle | null = null;
     vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
       if (input.intent.op === 'update') {
-        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+        committedCipherBundle = input.intent.cipherBundle as InlineCipherBundle;
       }
       return { ok: true, status: 200, data: { ok: true } };
     });
@@ -307,7 +309,7 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
     expect(deliverResult.ok).toBe(true);
     expect(committedCipherBundle).not.toBeNull();
     if (!committedCipherBundle) return;
-    const deliveredCipherBundle = committedCipherBundle as DecryptFetchResponse['cipherBundle'];
+    const deliveredCipherBundle = committedCipherBundle as InlineCipherBundle;
 
     vi.mocked(apiClient.publicStatus).mockResolvedValue({
       ok: true,
@@ -319,15 +321,17 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
         securityProfile: SECURITY_PROFILE.SECURE,
       },
     });
+    const tamperedAadBundle: InlineCipherBundle = {
+      ...deliveredCipherBundle,
+      aad: Base64UrlSchema.parse('dGFtcGVyZWQtYWFk'),
+    };
+
     vi.mocked(apiClient.decryptFetch).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
         ok: true,
-        cipherBundle: {
-          ...deliveredCipherBundle,
-          aad: Base64UrlSchema.parse('dGFtcGVyZWQtYWFk'),
-        },
+        cipherBundle: tamperedAadBundle,
         receiverPubFpr: lockResult.data.receiverPubFpr,
         cipherVersion: 0,
         deliveredAt: NOW,
@@ -484,10 +488,10 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
       data: VALID_ASSERTION,
     } satisfies WebAuthnAdapterResult<AssertionJSON>);
 
-    let committedCipherBundle: DecryptFetchResponse['cipherBundle'] | null = null;
+    let committedCipherBundle: InlineCipherBundle | null = null;
     vi.mocked(apiClient.compoundCommit).mockImplementation(async (input) => {
       if (input.intent.op === 'update') {
-        committedCipherBundle = input.intent.cipherBundle as DecryptFetchResponse['cipherBundle'];
+        committedCipherBundle = input.intent.cipherBundle as InlineCipherBundle;
       }
       return { ok: true, status: 200, data: { ok: true } };
     });
@@ -500,9 +504,9 @@ describe('crypto orchestrator – decryptDelivered (integrity checks)', () => {
     expect(deliverResult.ok).toBe(true);
     expect(committedCipherBundle).not.toBeNull();
     if (!committedCipherBundle) return;
-    const deliveredCipherBundle = committedCipherBundle as DecryptFetchResponse['cipherBundle'];
+    const deliveredCipherBundle = committedCipherBundle as InlineCipherBundle;
 
-    const tamperedBundle: DecryptFetchResponse['cipherBundle'] = {
+    const tamperedBundle: InlineCipherBundle = {
       ...deliveredCipherBundle,
       ciphertextHash: deliveredCipherBundle.ciphertextHash,
       encContentKey: Base64UrlSchema.parse('dG9vc2hvcnQ'),

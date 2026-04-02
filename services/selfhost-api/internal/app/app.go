@@ -31,11 +31,11 @@ type Runtime struct {
 	logger          *slog.Logger
 }
 
-func resolveMaxProtocolBodyBytes(fileMaxBytes int64) int64 {
-	if fileMaxBytes <= 0 {
+func resolveMaxProtocolBodyBytes(inlineMaxBytes int64) int64 {
+	if inlineMaxBytes <= 0 {
 		return minInlineProtocolBodyBytes
 	}
-	return max(fileMaxBytes*inlineBase64Overhead, minInlineProtocolBodyBytes)
+	return max(inlineMaxBytes*inlineBase64Overhead, minInlineProtocolBodyBytes)
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
@@ -61,6 +61,9 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			return nil, fmt.Errorf("init file storage: %w", err)
 		}
 		fileStore = minioStore
+	}
+	if fileStore != nil {
+		db.SetMultipartCleaner(fileStore)
 	}
 
 	protocolService := service.NewProtocolService(
@@ -100,7 +103,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			MaxChunks:               cfg.File.MaxChunks,
 			MultipartSupported:      cfg.File.MultipartSupported,
 		},
-		MaxProtocolBodyBytes: resolveMaxProtocolBodyBytes(cfg.File.MaxBytes),
+		MaxProtocolBodyBytes: resolveMaxProtocolBodyBytes(min(cfg.File.MaxBytes, cfg.File.MultipartThresholdBytes)),
 	})
 
 	// WriteTimeout is intentionally 0: hijacked WebSocket connections

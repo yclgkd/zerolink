@@ -772,7 +772,7 @@ describe('ManagePage – deliver actions', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('passes selected file bytes to deliverSecret and clears text mode', async () => {
+  it('passes selected file metadata to deliverSecret and clears text mode', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
 
@@ -812,10 +812,10 @@ describe('ManagePage – deliver actions', () => {
     expect(callArg?.file).toMatchObject({
       fileName: 'secret.bin',
       mediaType: 'application/octet-stream',
+      blob: file,
+      size: file.size,
     });
-    expect(Array.from(callArg.file.bytes)).toEqual(
-      Array.from(new Uint8Array(await file.arrayBuffer()))
-    );
+    expect(callArg?.file?.bytes).toBeUndefined();
     filePolicySpy.mockRestore();
   });
 
@@ -857,7 +857,7 @@ describe('ManagePage – deliver actions', () => {
     filePolicySpy.mockRestore();
   });
 
-  it('shows the effective inline file limit and blocks oversized files before reading bytes', async () => {
+  it('shows the effective inline file limit and delegates larger files without pre-reading bytes', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
 
@@ -899,10 +899,18 @@ describe('ManagePage – deliver actions', () => {
     await screen.findByTestId('manage-file-selected');
     fireEvent.click(screen.getByTestId('manage-deliver-button'));
 
-    const error = await screen.findByTestId('manage-action-error');
-    expect(error.textContent).toContain('inline delivery limit');
+    await waitFor(() => {
+      expect(deliverSecretMock).toHaveBeenCalledTimes(1);
+    });
+    const callArg = deliverSecretMock.mock.calls[0]?.[0];
+    expect(callArg?.file).toMatchObject({
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      blob: file,
+      size: 2_000_000,
+    });
     expect(arrayBufferSpy).not.toHaveBeenCalled();
-    expect(deliverSecretMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('manage-action-error')).toBeNull();
     filePolicySpy.mockRestore();
   });
 

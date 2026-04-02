@@ -4,6 +4,8 @@ import { installStatefulApiMock } from './support/mock-api';
 import { installVirtualAuthenticator } from './support/webauthn';
 
 test.describe('ZL-032 e2e happy path', () => {
+  test.setTimeout(60_000);
+
   test('Create -> Lock -> Deliver -> Decrypt -> Local Burn -> Re-decrypt', async ({ page }) => {
     await installStatefulApiMock(page);
     const authenticator = await installVirtualAuthenticator(page);

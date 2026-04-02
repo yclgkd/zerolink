@@ -4,6 +4,8 @@ import { type ChannelMap, installStatefulApiMock } from './support/mock-api';
 import { installVirtualAuthenticator } from './support/webauthn';
 
 test.describe('Real-time sync fallback and cross-device guard', () => {
+  test.setTimeout(60_000);
+
   test('Sender ManagePage auto-updates when receiver locks (polling fallback)', async ({
     browser,
   }) => {

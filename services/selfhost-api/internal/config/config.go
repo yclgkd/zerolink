@@ -64,11 +64,14 @@ type RPConfig struct {
 const (
 	fileEnvelopeFixedBytes             = int64(8)
 	fileHeaderMaxBytes                 = int64(16 * 1024)
-	defaultFileMaxBytes                = int64(2_097_152) - fileEnvelopeFixedBytes - fileHeaderMaxBytes
-	defaultFileMultipartThresholdBytes = defaultFileMaxBytes
-	defaultFileChunkSizeBytes          = int64(262_144)
-	defaultFileMaxChunks               = int64(8)
-	maxInlineFileBytes                 = defaultFileMaxBytes
+	maxInlineFileBytes                 = int64(2_097_152) - fileEnvelopeFixedBytes - fileHeaderMaxBytes
+	defaultInlineFileMaxBytes          = maxInlineFileBytes
+	defaultInlineChunkSizeBytes        = int64(262_144)
+	defaultInlineMaxChunks             = int64(8)
+	defaultMultipartFileMaxBytes       = int64(512 * 1024 * 1024)
+	defaultMultipartThresholdBytes     = maxInlineFileBytes
+	defaultMultipartChunkSizeBytes     = int64(4 * 1024 * 1024)
+	defaultMultipartMaxChunks          = int64(128)
 )
 
 func Load() (Config, error) {
@@ -199,7 +202,18 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_STORAGE_BACKEND must be inline or minio")
 	}
 
-	maxBytes, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_BYTES", defaultFileMaxBytes)
+	defaultMaxBytes := defaultInlineFileMaxBytes
+	defaultChunkSizeBytes := defaultInlineChunkSizeBytes
+	defaultMaxChunks := defaultInlineMaxChunks
+	defaultMultipartSupported := false
+	if storageBackend == "minio" {
+		defaultMaxBytes = defaultMultipartFileMaxBytes
+		defaultChunkSizeBytes = defaultMultipartChunkSizeBytes
+		defaultMaxChunks = defaultMultipartMaxChunks
+		defaultMultipartSupported = true
+	}
+
+	maxBytes, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_BYTES", defaultMaxBytes)
 	if err != nil {
 		return FileConfig{}, err
 	}
@@ -207,7 +221,7 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 	multipartThresholdBytes, err := parseInt64Env(
 		lookup,
 		"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES",
-		defaultFileMultipartThresholdBytes,
+		defaultMultipartThresholdBytes,
 	)
 	if err != nil {
 		return FileConfig{}, err
@@ -216,26 +230,24 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 	chunkSizeBytes, err := parseInt64Env(
 		lookup,
 		"SELFHOST_API_FILE_CHUNK_SIZE_BYTES",
-		defaultFileChunkSizeBytes,
+		defaultChunkSizeBytes,
 	)
 	if err != nil {
 		return FileConfig{}, err
 	}
 
-	maxChunks, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_CHUNKS", defaultFileMaxChunks)
+	maxChunks, err := parseInt64Env(lookup, "SELFHOST_API_FILE_MAX_CHUNKS", defaultMaxChunks)
 	if err != nil {
 		return FileConfig{}, err
 	}
 
-	if maxBytes <= 0 || maxBytes > maxInlineFileBytes {
-		return FileConfig{}, fmt.Errorf(
-			"SELFHOST_API_FILE_MAX_BYTES must be between 1 and %d",
-			maxInlineFileBytes,
-		)
+	if maxBytes <= 0 {
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_MAX_BYTES must be positive")
 	}
-	if multipartThresholdBytes <= 0 || multipartThresholdBytes > maxBytes {
+	if multipartThresholdBytes <= 0 || multipartThresholdBytes > maxInlineFileBytes || multipartThresholdBytes > maxBytes {
 		return FileConfig{}, fmt.Errorf(
-			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES must be between 1 and SELFHOST_API_FILE_MAX_BYTES",
+			"SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES must be between 1 and min(SELFHOST_API_FILE_MAX_BYTES, %d)",
+			maxInlineFileBytes,
 		)
 	}
 	if chunkSizeBytes <= 0 {
@@ -244,15 +256,34 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 	if maxChunks <= 0 {
 		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_MAX_CHUNKS must be positive")
 	}
-	if chunkSizeBytes*maxChunks < maxBytes {
+	if storageBackend == "inline" && maxBytes > maxInlineFileBytes {
 		return FileConfig{}, fmt.Errorf(
-			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES * SELFHOST_API_FILE_MAX_CHUNKS must cover SELFHOST_API_FILE_MAX_BYTES",
+			"SELFHOST_API_FILE_MAX_BYTES must be <= %d when SELFHOST_API_FILE_STORAGE_BACKEND=inline",
+			maxInlineFileBytes,
 		)
 	}
 
-	multipartSupported, err := parseBoolEnv(lookup, "SELFHOST_API_FILE_MULTIPART_SUPPORTED", false)
+	multipartSupported, err := parseBoolEnv(
+		lookup,
+		"SELFHOST_API_FILE_MULTIPART_SUPPORTED",
+		defaultMultipartSupported,
+	)
 	if err != nil {
 		return FileConfig{}, err
+	}
+	if storageBackend == "inline" && multipartSupported {
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_MULTIPART_SUPPORTED requires SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+	}
+	if !multipartSupported && maxBytes > maxInlineFileBytes {
+		return FileConfig{}, fmt.Errorf(
+			"SELFHOST_API_FILE_MAX_BYTES must be <= %d when multipart upload is disabled",
+			maxInlineFileBytes,
+		)
+	}
+	if multipartSupported && chunkSizeBytes*maxChunks < maxBytes {
+		return FileConfig{}, fmt.Errorf(
+			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES * SELFHOST_API_FILE_MAX_CHUNKS must cover SELFHOST_API_FILE_MAX_BYTES",
+		)
 	}
 
 	minIOCfg, err := loadMinIOConfig(lookup, storageBackend)

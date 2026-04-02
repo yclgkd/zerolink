@@ -8,11 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/config"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 )
 
+type MultipartCleaner interface {
+	DeleteUpload(context.Context, filestore.MultipartFileRef) error
+}
+
 type Database struct {
-	pool          *pgxpool.Pool
-	healthTimeout time.Duration
+	pool             *pgxpool.Pool
+	healthTimeout    time.Duration
+	multipartCleaner MultipartCleaner
 }
 
 func Open(ctx context.Context, cfg config.DatabaseConfig) (*Database, error) {
@@ -48,6 +54,10 @@ func Open(ctx context.Context, cfg config.DatabaseConfig) (*Database, error) {
 
 func (d *Database) Pool() *pgxpool.Pool {
 	return d.pool
+}
+
+func (d *Database) SetMultipartCleaner(cleaner MultipartCleaner) {
+	d.multipartCleaner = cleaner
 }
 
 func (d *Database) Ping(ctx context.Context) error {

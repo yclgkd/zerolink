@@ -23,6 +23,19 @@ interface FilePayloadHeader {
 
 type PayloadHeader = TextPayloadHeader | FilePayloadHeader;
 
+export type ParsedSharePayloadEnvelopeHeader =
+  | {
+      kind: 'text';
+      bodyOffset: number;
+    }
+  | {
+      kind: 'file';
+      fileName: string;
+      mediaType: string;
+      size: number;
+      bodyOffset: number;
+    };
+
 function isFilePayloadHeader(value: unknown): value is FilePayloadHeader {
   return (
     typeof value === 'object' &&
@@ -51,6 +64,7 @@ export interface DecryptedFilePayload {
   mediaType: string;
   size: number;
   bytes: Uint8Array;
+  parts?: Uint8Array[] | undefined;
 }
 
 export type DecryptedSharePayload = DecryptedTextPayload | DecryptedFilePayload;
@@ -108,21 +122,41 @@ function encodeHeader(header: PayloadHeader): Uint8Array {
   return textEncoder.encode(JSON.stringify(header));
 }
 
-function buildEnvelope(header: PayloadHeader, body: Uint8Array): Uint8Array {
+function buildEnvelopePrefix(header: PayloadHeader): Uint8Array {
   const headerBytes = encodeHeader(header);
   if (headerBytes.byteLength > MAX_HEADER_BYTES) {
     throw new Error('payload header exceeds MAX_HEADER_BYTES');
   }
 
-  const envelope = new Uint8Array(
-    MAGIC_BYTES.byteLength + HEADER_LENGTH_BYTES + headerBytes.byteLength + body.byteLength
+  const prefix = new Uint8Array(
+    MAGIC_BYTES.byteLength + HEADER_LENGTH_BYTES + headerBytes.byteLength
   );
-  envelope.set(MAGIC_BYTES, 0);
-  const view = new DataView(envelope.buffer);
+  prefix.set(MAGIC_BYTES, 0);
+  const view = new DataView(prefix.buffer);
   view.setUint32(MAGIC_BYTES.byteLength, headerBytes.byteLength, false);
-  envelope.set(headerBytes, MAGIC_BYTES.byteLength + HEADER_LENGTH_BYTES);
-  envelope.set(body, MAGIC_BYTES.byteLength + HEADER_LENGTH_BYTES + headerBytes.byteLength);
+  prefix.set(headerBytes, MAGIC_BYTES.byteLength + HEADER_LENGTH_BYTES);
+  return prefix;
+}
+
+function buildEnvelope(header: PayloadHeader, body: Uint8Array): Uint8Array {
+  const prefix = buildEnvelopePrefix(header);
+  const envelope = new Uint8Array(prefix.byteLength + body.byteLength);
+  envelope.set(prefix, 0);
+  envelope.set(body, prefix.byteLength);
   return envelope;
+}
+
+export function encodeFileSharePayloadEnvelopeHeader(input: {
+  fileName: string;
+  mediaType: string;
+  size: number;
+}): Uint8Array {
+  return buildEnvelopePrefix({
+    kind: 'file',
+    fileName: input.fileName,
+    mediaType: input.mediaType,
+    size: input.size,
+  });
 }
 
 function hasEnvelopeMagic(bytes: Uint8Array): boolean {
@@ -196,6 +230,30 @@ function tryParseHeader(bytes: Uint8Array): {
   return null;
 }
 
+export function parseSharePayloadEnvelopeHeader(
+  bytes: Uint8Array
+): ParsedSharePayloadEnvelopeHeader | null {
+  const parsed = tryParseHeader(bytes);
+  if (!parsed) {
+    return null;
+  }
+
+  if (parsed.header.kind === 'text') {
+    return {
+      kind: 'text',
+      bodyOffset: parsed.bodyOffset,
+    };
+  }
+
+  return {
+    kind: 'file',
+    fileName: parsed.header.fileName,
+    mediaType: parsed.header.mediaType,
+    size: parsed.header.size,
+    bodyOffset: parsed.bodyOffset,
+  };
+}
+
 export function encodeTextSharePayload(text: string): Uint8Array {
   return buildEnvelope({ kind: 'text' }, textEncoder.encode(text));
 }
@@ -214,6 +272,19 @@ export function encodeFileSharePayload(input: {
     },
     input.bytes
   );
+}
+
+export function encodeFileSharePayloadPrefix(input: {
+  fileName: string;
+  mediaType: string;
+  size: number;
+}): Uint8Array {
+  return buildEnvelopePrefix({
+    kind: 'file',
+    fileName: input.fileName,
+    mediaType: input.mediaType,
+    size: input.size,
+  });
 }
 
 export function decodeSharePayload(bytes: Uint8Array): DecryptedSharePayload {
