@@ -295,7 +295,7 @@ export function FileInput({
 }: {
   selectedFile: File | null;
   disabled: boolean;
-  onSelect: (file: File | null) => void;
+  onSelect: (file: File | null) => boolean;
   maxFileBytes: number | null;
 }) {
   const { t } = useTranslation();
@@ -309,9 +309,9 @@ export function FileInput({
   }
 
   const sizeHint =
-    maxFileBytes !== null
-      ? t('manage.fileSizeLimit', { size: formatFileSize(maxFileBytes) })
-      : t('manage.fileSizeLimitLoading');
+    maxFileBytes === null
+      ? t('manage.fileSizeLimitLoading')
+      : t('manage.fileSizeLimit', { size: formatFileSize(maxFileBytes) });
 
   return (
     <section className="flex flex-col gap-3">
@@ -323,7 +323,12 @@ export function FileInput({
         data-testid="manage-file-input"
         disabled={disabled}
         id="manage-file-input"
-        onChange={(event) => onSelect(event.target.files?.[0] ?? null)}
+        onChange={(event) => {
+          const accepted = onSelect(event.target.files?.[0] ?? null);
+          if (!accepted) {
+            event.target.value = '';
+          }
+        }}
         ref={inputRef}
         type="file"
       />

@@ -35,7 +35,6 @@ import {
 } from '../crypto/bytes.ts';
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { verifyAssertion } from '../crypto/webauthn.ts';
-import { resolveFilePolicy, resolveMaxFileCiphertextBytes } from '../file-policy.ts';
 import { assertMultipartChunksExist } from '../file-storage.ts';
 import {
   buildCommitCookieSignal,
@@ -78,7 +77,6 @@ interface CommitRequestContext extends BeginRequestContext {
 // ---------------------------------------------------------------------------
 
 async function validateCipherBundle(
-  vc: VaultContext,
   intent: UpdateIntent,
   lockedReceiverPubFpr: HexString
 ): Promise<void> {
@@ -120,16 +118,7 @@ async function validateCipherBundle(
   }
 
   if (intent.payloadKind === 'file') {
-    const maxCiphertextBytes = resolveMaxFileCiphertextBytes(
-      resolveFilePolicy(vc.env).maxFileBytes,
-      cipherBundle.padBlock
-    );
-    if (ciphertextBytes.byteLength > maxCiphertextBytes) {
-      throw new StateTransitionError(
-        'CIPHER_BUNDLE_INVALID',
-        'cipherBundle.ciphertext exceeds the configured inline file limit'
-      );
-    }
+    throw new StateTransitionError('CIPHER_BUNDLE_INVALID', 'file updates must use fileRef');
   }
 }
 
@@ -142,6 +131,13 @@ async function validateMultipartFileRef(vc: VaultContext, intent: UpdateIntent):
     throw new StateTransitionError(
       'CIPHER_BUNDLE_INVALID',
       'fileRef is required for multipart updates'
+    );
+  }
+
+  if (intent.payloadKind !== 'file') {
+    throw new StateTransitionError(
+      'CIPHER_BUNDLE_INVALID',
+      'multipart updates must declare payloadKind=file'
     );
   }
 
@@ -421,7 +417,7 @@ export async function commitCompoundInternal(
       if (intent.fileRef) {
         await validateMultipartFileRef(vc, intent);
       } else {
-        await validateCipherBundle(vc, intent, record.receiver.pubFpr);
+        await validateCipherBundle(intent, record.receiver.pubFpr);
       }
     }
 

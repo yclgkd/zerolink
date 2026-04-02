@@ -8,6 +8,7 @@ import {
   CHANNEL_STATE,
   deriveUpdateProofChallengeB64u,
   MAX_PLAINTEXT_BYTES,
+  MultipartFileRefSchema,
   SECURITY_PROFILE,
 } from '@zerolink/shared';
 import { exportReceiverPublicKeyToJwk, generateReceiverKeyPair } from '@zerolink/shared/crypto/rsa';
@@ -352,6 +353,23 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
     const receiverKeyPair = await generateReceiverKeyPair();
     const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
     const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
+    const fileRef = MultipartFileRefSchema.parse({
+      storageBackend: 'minio',
+      chunkSizeBytes: 262_144,
+      chunkCount: 1,
+      totalPlaintextBytes: 68,
+      totalCiphertextBytes: 84,
+      baseIv: VALID_B64U,
+      encContentKey: VALID_B64U,
+      chunks: [
+        {
+          index: 0,
+          storageKey: 'files/upload-1/0000.bin',
+          ciphertextBytes: 84,
+          ciphertextHash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        },
+      ],
+    });
 
     vi.mocked(apiClient.compoundBegin).mockResolvedValue({
       ok: true,
@@ -381,9 +399,28 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
           multipartThresholdBytes: MAX_PLAINTEXT_BYTES,
           chunkSizeBytes: 262_144,
           maxChunks: 8,
-          multipartSupported: false,
+          multipartSupported: true,
         },
       },
+    });
+    vi.mocked(apiClient.fileUploadInitiate).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        uploadId: VALID_B64U,
+        chunks: [{ index: 0, uploadUrl: 'https://upload.test/0' }],
+      },
+    });
+    vi.mocked(apiClient.fileUploadChunk).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { etag: 'etag-0' },
+    });
+    vi.mocked(apiClient.fileUploadComplete).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ok: true, fileRef },
     });
     vi.mocked(assertWithWebAuthn).mockResolvedValue({
       ok: true,
@@ -409,11 +446,16 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.payloadKind).toBe('file');
+    expect(result.data.intent.cipherBundle).toBeUndefined();
+    expect(result.data.intent.fileRef).toEqual(fileRef);
     expect(vi.mocked(apiClient.filePolicy)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiClient.fileUploadInitiate)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiClient.fileUploadChunk)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apiClient.fileUploadComplete)).toHaveBeenCalledTimes(1);
     expect(useDeliverStore.getState().channelState).toBe(CHANNEL_STATE.DELIVERED);
   });
 
-  it('returns MULTIPART_REQUIRED when file exceeds the inline threshold', async () => {
+  it('returns FILE_STORAGE_UNAVAILABLE when deployment disables file uploads', async () => {
     const { orchestrator, apiClient } = createOrchestrator();
     const receiverKeyPair = await generateReceiverKeyPair();
     const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
@@ -467,72 +509,9 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
       ok: false,
       error: {
         ok: false,
-        code: 'MULTIPART_REQUIRED',
+        code: 'FILE_STORAGE_UNAVAILABLE',
         stage: 'deliver.file-policy',
-        message: 'Selected file exceeds the inline delivery limit for this deployment.',
-      },
-    });
-    expect(vi.mocked(assertWithWebAuthn)).not.toHaveBeenCalled();
-    expect(vi.mocked(apiClient.compoundCommit)).not.toHaveBeenCalled();
-  });
-
-  it('returns MULTIPART_REQUIRED when the file envelope exceeds the inline threshold', async () => {
-    const { orchestrator, apiClient } = createOrchestrator();
-    const receiverKeyPair = await generateReceiverKeyPair();
-    const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
-    const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
-
-    vi.mocked(apiClient.compoundBegin).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        challenge: {
-          id: VALID_B64U,
-          seed: VALID_B64U,
-          expiresAt: CHALLENGE_EXPIRES_AT,
-        },
-        allowCredentials: VALID_ALLOW_CREDENTIALS,
-        receiverPubFpr,
-        receiverPubJwk: toMutableReceiverJwk(receiverPubJwk),
-        currentVersion: 0,
-        securityProfile: SECURITY_PROFILE.SECURE,
-        adminMode: 'webauthn',
-      },
-    });
-    vi.mocked(apiClient.filePolicy).mockResolvedValue({
-      ok: true,
-      status: 200,
-      data: {
-        ok: true,
-        policy: {
-          maxFileBytes: 32,
-          multipartThresholdBytes: 32,
-          chunkSizeBytes: 32,
-          maxChunks: 1,
-          multipartSupported: false,
-        },
-      },
-    });
-
-    const result = await orchestrator.deliverSecret({
-      uuid: VALID_UUID,
-      profile: SECURITY_PROFILE.SECURE,
-      plaintext: '',
-      file: {
-        fileName: 'secret.bin',
-        mediaType: 'application/octet-stream',
-        bytes: new Uint8Array(32),
-      },
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        ok: false,
-        code: 'MULTIPART_REQUIRED',
-        stage: 'deliver.file-policy',
-        message: 'Selected file exceeds the inline delivery limit for this deployment.',
+        message: 'This deployment does not support file uploads.',
       },
     });
     expect(vi.mocked(assertWithWebAuthn)).not.toHaveBeenCalled();

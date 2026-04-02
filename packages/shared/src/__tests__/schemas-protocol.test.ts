@@ -175,6 +175,23 @@ describe('schemas - protocol', () => {
       cipherBundle: validCipherBundle,
       expireAt: null,
     };
+    const validFileRef = {
+      storageBackend: 'r2' as const,
+      chunkSizeBytes: 262_144,
+      chunkCount: 1,
+      totalPlaintextBytes: 64,
+      totalCiphertextBytes: 80,
+      baseIv: b64,
+      encContentKey: b64,
+      chunks: [
+        {
+          index: 0,
+          storageKey: 'files/channel/upload/0000.bin',
+          ciphertextBytes: 80,
+          ciphertextHash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        },
+      ],
+    };
 
     it('accepts an update intent with expireAt null', () => {
       expect(UpdateIntentSchema.parse(valid)).toMatchObject({ op: 'update' });
@@ -191,6 +208,25 @@ describe('schemas - protocol', () => {
     it('rejects missing cipherBundle', () => {
       const { cipherBundle: _, ...rest } = valid;
       expect(() => UpdateIntentSchema.parse(rest)).toThrow();
+    });
+
+    it('accepts file updates only when they carry fileRef', () => {
+      const result = UpdateIntentSchema.parse({
+        ...valid,
+        payloadKind: 'file',
+        cipherBundle: undefined,
+        fileRef: validFileRef,
+      });
+      expect(result.fileRef).toEqual(validFileRef);
+    });
+
+    it('rejects file updates that still carry cipherBundle', () => {
+      expect(() =>
+        UpdateIntentSchema.parse({
+          ...valid,
+          payloadKind: 'file',
+        })
+      ).toThrow();
     });
   });
 

@@ -22,6 +22,34 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: GHCR matches the repository's existing GitHub-hosted release flow, works with the built-in `GITHUB_TOKEN`, and removes the local toolchain requirement for ordinary operators. Keeping the source-build overlay preserves a trust-minimized path for users who prefer compiling from checked-out source.
 **Trade-offs**: Default self-host operators now trust the release pipeline in addition to the published source tree. Attestations improve traceability, but they do not replace independently rebuilding or auditing the source when a stricter trust model is required.
 
+## [2026-04-02] New file deliveries now store bytes only in object storage
+
+**Decision**: Make every new `payloadKind=file` delivery upload encrypted bytes to object storage first and commit only a `fileRef`; keep inline `cipherBundle` file handling only as a decrypt-time compatibility path for already-delivered legacy records.
+**Context**: ZeroLink previously mixed two storage semantics for files: small files were encrypted inline into Durable Object state while larger files used multipart object storage. That split complicated limits, cleanup, and protocol validation.
+**Options Considered**: Keep the size-based split; move all new file bytes to object storage while preserving legacy decrypt compatibility; remove legacy inline file compatibility entirely.
+**Choice**: Standardize new file writes on object storage across hosted and self-hosted runtimes, reject `payloadKind=file` intents that still carry `cipherBundle`, and leave receiver decrypt logic backward-compatible with historical inline file payloads.
+**Reasoning**: Files now have one write path, one cleanup model, and one server-side validation rule, while text delivery remains inline and legacy delivered records continue to decrypt without migration.
+**Trade-offs**: Deployments without multipart/object-storage support can no longer deliver files at all, so the frontend must surface that capability gap explicitly instead of silently falling back to inline file storage.
+
+## [2026-04-02] Hourly Worker sweep now reclaims stale orphan R2 upload chunks
+
+**Decision**: Add a Worker `scheduled` cleanup pass that scans `files/` objects hourly, keeps any chunk still referenced by the channel's active multipart `fileRef`, and deletes only chunks older than the upload-token TTL that are no longer referenced.
+**Context**: ZeroLink already deleted multipart R2 chunks when a channel reached a terminal state, but aborted uploads could still leave orphan chunk objects behind because they were written as ordinary `FILE_BUCKET.put(...)` objects rather than native R2 multipart uploads.
+**Options Considered**: Rely only on channel terminal-state cleanup; move the fix entirely to bucket lifecycle rules; add an application-level scheduled sweep that understands active channel state and orphan age.
+**Choice**: Ship the scheduled sweep in the Worker and configure hourly cron triggers in both production and staging, while keeping the existing channel terminal-state deletion path in place.
+**Reasoning**: The Worker can safely distinguish live multipart payloads from abandoned uploads by consulting the channel Durable Object before deleting anything. That preserves current active file shares while reclaiming dead R2 objects that lifecycle rules cannot identify correctly.
+**Trade-offs**: The sweep adds periodic R2 listing plus one Durable Object lookup per channel that has stale chunk objects, so cleanup cost scales with abandoned uploads. On lookup failure the job skips that channel to avoid false-positive deletion, which means some orphan objects can survive until the next successful run.
+
+## [2026-04-02] Default hosted file uploads are capped at 5 MiB
+
+**Decision**: Reduce the default hosted `maxFileBytes` policy to 5 MiB, expose the same limit explicitly in `wrangler.toml`, and reject oversize files in the sender UI before delivery starts.
+**Context**: The previous hosted default allowed very large multipart uploads, while the sender UI surfaced the inline threshold instead of the real total file limit. That combination made the limit look smaller than it was and left too much room for abuse.
+**Options Considered**: Keep the large backend default and only change copy; lower the backend limit but keep delivery-time-only enforcement; lower the backend limit and add immediate sender-side rejection before encryption/upload work begins.
+**Choice**: Enforce 5 MiB on both the Worker policy and sender flow, update the Manage page hint to show the total file limit, and keep multipart available only for files within that 5 MiB ceiling.
+**Reasoning**: The hosted product gets a predictable abuse boundary, users see the real limit up front, and oversize files fail fast before any encryption or upload work starts.
+**Trade-offs**: Hosted multipart sharing now covers a smaller range of files, so larger payloads require a future product decision instead of "just working" through the previous permissive default.
+
+
 ## [2026-04-02] Deploy workflow must fail fast on Cloudflare route and R2 prerequisites
 
 **Decision**: Add a dedicated `pnpm deploy:preflight` step before the frontend build in `.github/workflows/deploy.yml`, and document the Cloudflare token/bucket requirements in the deployment guides.
@@ -32,6 +60,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Trade-offs**: The preflight duplicates a small amount of repo-specific Cloudflare configuration knowledge (zone name and bucket names), so future route or bucket renames must update both `wrangler.toml` and the preflight mapping.
 **Follow-up (2026-04-02, review fix)**: The preflight must not rely on read-only Cloudflare endpoints as proof of deploy readiness. It now verifies the current token, inspects its effective allow/deny policies, requires `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` on the configured resources, and only uses the bucket GET call for existence checking after permission validation passes.
 **Follow-up (2026-04-02, CI regression fix)**: Some real account-owned deploy tokens can deploy Workers and R2 bindings but still cannot inspect themselves through Cloudflare's token APIs. The preflight now keeps strict write-scope validation when token introspection is available, but degrades to explicit best-effort Workers/R2 reachability checks plus bucket existence when introspection is denied, so CI no longer blocks legitimate deploy tokens solely on missing token-management visibility.
+**Follow-up (2026-04-02, R2 fallback hardening)**: The fallback path must still reject read-only R2 tokens. It now probes `POST /accounts/{account_id}/r2/buckets` with an intentionally invalid bucket name, treats the expected validation rejection as proof that the write endpoint is reachable, and treats auth failures as missing `Workers R2 Storage Write` instead of letting bucket-read visibility pass the preflight.
 
 ## [2026-04-02] Self-host multipart initiation must validate real channel UUIDs and storage readiness
 

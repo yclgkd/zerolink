@@ -104,7 +104,7 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
     expect(useDecryptStore.getState().file).toBeNull();
   });
 
-  it('decrypts delivered file payload and stores download metadata', async () => {
+  it('decrypts legacy inline file payloads and stores download metadata', async () => {
     const storage = createIndexedDbReceiverKeyStorage({
       dbName: 'test-orchestrator-decrypt-file',
       storeName: 'receiver-keys',

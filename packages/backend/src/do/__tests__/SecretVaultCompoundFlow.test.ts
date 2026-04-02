@@ -17,7 +17,6 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createMockR2Bucket } from '../../__tests__/helpers/r2-fixtures.ts';
 import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
-import { resolveMaxFileCiphertextBytes } from '../../file-policy.ts';
 import {
   CHANNEL_RECORD_KEY,
   COMPOUND_CHALLENGE_KEY,
@@ -41,13 +40,11 @@ import {
   createMockState,
   createNonceIndexKey,
   createUpdateIntent,
-  encodeBase64Url,
   env,
   RP_ID,
   RP_ORIGIN,
   readTerminalTombstone,
   setupRealReceiverKey,
-  sha256Hex,
   toRecord,
 } from './helpers/vault-fixtures.ts';
 
@@ -887,24 +884,15 @@ describe('SecretVault compound/delete flow', () => {
     ).rejects.toMatchObject({ code: 'CIPHER_BUNDLE_INVALID' });
   });
 
-  it('rejects file compound commit when ciphertext exceeds the configured file policy', async () => {
+  it('rejects file compound commit when inline ciphertext is supplied', async () => {
     const now = 1_730_001_395_000;
     const lockParams = createCommitLockParams();
     const lockedRecord = new SecretVaultStateMachine(
       createChannelRecord(CHANNEL_STATE.WAITING)
     ).commitLock(lockParams);
     const { state, snapshot } = createMockState(lockedRecord);
-    const vault = new SecretVault(state, {
-      ...env,
-      FILE_MAX_BYTES: '1',
-      FILE_MULTIPART_THRESHOLD_BYTES: '1',
-      FILE_CHUNK_SIZE_BYTES: '1',
-      FILE_MAX_CHUNKS: '1',
-      FILE_MULTIPART_SUPPORTED: 'false',
-    });
+    const vault = new SecretVault(state, env);
     await vault.beginCompoundChallenge(lockedRecord.uuid, now);
-    const maxCiphertextBytes = resolveMaxFileCiphertextBytes(1, 4_096);
-    const ciphertext = new Uint8Array(maxCiphertextBytes + 1).fill(7);
     const intent = createUpdateIntent(
       lockedRecord.uuid,
       lockedRecord.version,
@@ -916,12 +904,7 @@ describe('SecretVault compound/delete flow', () => {
     intent.cipherBundle = createCipherBundle(
       lockedRecord.uuid,
       lockedRecord.version,
-      lockParams.receiverPubFpr,
-      {
-        ciphertext: encodeBase64Url(ciphertext),
-        ciphertextHash: await sha256Hex([ciphertext]),
-        padBlock: 4_096,
-      }
+      lockParams.receiverPubFpr
     );
     const intentHash = await computeIntentHash(toRecord(intent));
     const assertionFixture = await createMockAssertion({

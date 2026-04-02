@@ -6,7 +6,6 @@ import type {
   DecryptedFilePayload,
   DecryptedSharePayload,
   DeleteIntent,
-  FileSharePolicy,
   HexString,
   MultipartFileRef,
   RSAPublicKeyJWK,
@@ -42,6 +41,7 @@ export type CryptoOrchestratorErrorCode =
   | 'CHANNEL_NOT_DELIVERED'
   | 'INTEGRITY_MISMATCH'
   | 'FILE_TOO_LARGE'
+  | 'FILE_STORAGE_UNAVAILABLE'
   | 'MULTIPART_REQUIRED'
   | 'CRYPTO_ERROR'
   | 'INTERNAL_ERROR';
@@ -239,11 +239,6 @@ export type ResolvedDeliverBeginData = CompoundBeginResponse & {
   receiverPubJwk: NonNullable<CompoundBeginResponse['receiverPubJwk']>;
   receiverPubFpr: NonNullable<CompoundBeginResponse['receiverPubFpr']>;
 };
-
-export interface FileDeliveryPolicyResolution {
-  policy: FileSharePolicy;
-  inlineMaxBytes: number;
-}
 
 export type { DecryptedFilePayload };
 

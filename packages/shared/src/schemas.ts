@@ -559,6 +559,10 @@ export const UpdateIntentSchema = z
   .refine((value) => value.fileRef == null || value.payloadKind === 'file', {
     path: ['payloadKind'],
     message: 'multipart fileRef updates must declare payloadKind=file',
+  })
+  .refine((value) => value.payloadKind !== 'file' || value.fileRef != null, {
+    path: ['fileRef'],
+    message: 'file updates must include fileRef',
   });
 
 export const DeleteIntentSchema = z.object({

@@ -87,11 +87,18 @@ export class CloudflareApiError extends Error {
   }
 }
 
+type CloudflareApiMethod = 'GET' | 'POST';
 export type CloudflareApiGet = <T>(path: string) => Promise<CloudflareApiEnvelope<T>>;
+export type CloudflareApiRequest = <T>(
+  method: CloudflareApiMethod,
+  path: string,
+  body?: unknown
+) => Promise<CloudflareApiEnvelope<T>>;
 
 export interface CloudflareDeployPreflightOptions {
   accountId: string;
   apiGet?: CloudflareApiGet;
+  apiRequest?: CloudflareApiRequest;
   apiToken: string;
   deployEnv: DeployEnvironment;
   write?: (chunk: string) => void;
@@ -122,6 +129,7 @@ const TOKEN_INSPECTION_STRATEGIES: TokenInspectionStrategy[] = [
     verifyPath: (accountId) => `/accounts/${accountId}/tokens/verify`,
   },
 ];
+const R2_WRITE_PROBE_BODY = { name: 'A' } as const;
 
 function out(write: (chunk: string) => void, line: string): void {
   write(`${line}\n`);
@@ -132,6 +140,16 @@ function getApiErrorCode(error: unknown): number | null {
     return null;
   }
   return error.errors.find((item) => typeof item.code === 'number')?.code ?? null;
+}
+
+function getApiErrorCodes(error: unknown): number[] {
+  if (!(error instanceof CloudflareApiError)) {
+    return [];
+  }
+
+  return error.errors
+    .map((item) => item.code)
+    .filter((code): code is number => typeof code === 'number');
 }
 
 function describeApiError(error: unknown): string {
@@ -157,13 +175,17 @@ function describeApiError(error: unknown): string {
   return error.message;
 }
 
-function createCloudflareApiGet(accountId: string, apiToken: string): CloudflareApiGet {
-  return async function apiGet<T>(path: string): Promise<CloudflareApiEnvelope<T>> {
-    const body = await requestJson(path, apiToken);
+function createCloudflareApiRequest(accountId: string, apiToken: string): CloudflareApiRequest {
+  return async function apiRequest<T>(
+    method: CloudflareApiMethod,
+    path: string,
+    body?: unknown
+  ): Promise<CloudflareApiEnvelope<T>> {
+    const responseBody = await requestJson(method, path, apiToken, body);
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(body) as unknown;
+      parsed = JSON.parse(responseBody) as unknown;
     } catch {
       throw new CloudflareApiError(`Cloudflare API returned invalid JSON for ${path}`);
     }
@@ -183,6 +205,12 @@ function createCloudflareApiGet(accountId: string, apiToken: string): Cloudflare
   };
 }
 
+function createCloudflareApiGet(apiRequest: CloudflareApiRequest): CloudflareApiGet {
+  return async function apiGet<T>(path: string): Promise<CloudflareApiEnvelope<T>> {
+    return apiRequest<T>('GET', path);
+  };
+}
+
 function isCloudflareEnvelope<T>(value: unknown): value is CloudflareApiEnvelope<T> {
   if (!value || typeof value !== 'object') {
     return false;
@@ -192,16 +220,22 @@ function isCloudflareEnvelope<T>(value: unknown): value is CloudflareApiEnvelope
   return typeof candidate.success === 'boolean' && 'result' in candidate;
 }
 
-function requestJson(path: string, apiToken: string): Promise<string> {
+function requestJson(
+  method: CloudflareApiMethod,
+  path: string,
+  apiToken: string,
+  body?: unknown
+): Promise<string> {
   return new Promise((resolve, reject) => {
+    const requestBody = body == null ? undefined : JSON.stringify(body);
     const req = httpsRequest(
       {
         headers: {
           Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
+          ...(requestBody ? { 'Content-Type': 'application/json' } : {}),
         },
         hostname: 'api.cloudflare.com',
-        method: 'GET',
+        method,
         path: `/client/v4${path}`,
       },
       (res) => {
@@ -244,6 +278,9 @@ function requestJson(path: string, apiToken: string): Promise<string> {
       reject(error);
     });
 
+    if (requestBody) {
+      req.write(requestBody);
+    }
     req.end();
   });
 }
@@ -351,6 +388,33 @@ function isTokenInspectionFallbackEligible(error: unknown): boolean {
   }
 
   return errorCodes.every((code) => code === 1000 || code === 9106 || code === 9109);
+}
+
+function isAuthorizationError(error: unknown): boolean {
+  if (!(error instanceof CloudflareApiError)) {
+    return false;
+  }
+
+  if (error.statusCode === 401 || error.statusCode === 403) {
+    return true;
+  }
+
+  const errorCodes = getApiErrorCodes(error);
+  if (errorCodes.length === 0) {
+    return false;
+  }
+
+  return errorCodes.every(
+    (code) => code === 1000 || code === 9106 || code === 9109 || code === 10000
+  );
+}
+
+function isExpectedR2WriteProbeValidationError(error: unknown): boolean {
+  if (!(error instanceof CloudflareApiError)) {
+    return false;
+  }
+
+  return error.statusCode === 400 && !isAuthorizationError(error);
 }
 
 async function inspectCurrentToken(
@@ -541,20 +605,35 @@ function verifyR2StorageWritePermission(
 
 async function verifyR2StorageApiReachable(
   accountId: string,
-  apiGet: CloudflareApiGet,
+  apiRequest: CloudflareApiRequest,
   write: (chunk: string) => void
 ): Promise<void> {
-  out(write, '[5/6] Checking Workers R2 Storage API reachability (best effort)...');
+  out(write, '[5/6] Probing Workers R2 Storage write permission (best effort)...');
 
   try {
-    await apiGet(`/accounts/${accountId}/r2/buckets`);
+    await apiRequest('POST', `/accounts/${accountId}/r2/buckets`, R2_WRITE_PROBE_BODY);
+    throw new Error('Cloudflare unexpectedly accepted an invalid R2 bucket create probe.');
   } catch (error) {
+    if (error instanceof CloudflareApiError) {
+      if (isAuthorizationError(error)) {
+        throw new Error(
+          `Workers R2 Storage write probe failed for account ${accountId}. Ensure the deploy token grants write access to R2. Details: ${describeApiError(error)}`
+        );
+      }
+
+      if (isExpectedR2WriteProbeValidationError(error)) {
+        out(
+          write,
+          'PASS  Workers R2 Storage write endpoint rejected the invalid probe as expected.'
+        );
+        return;
+      }
+    }
+
     throw new Error(
-      `Workers R2 Storage API check failed for account ${accountId}. Ensure the deploy token can access R2 bucket metadata. Details: ${describeApiError(error)}`
+      `Workers R2 Storage write probe failed for account ${accountId}. Details: ${describeApiError(error)}`
     );
   }
-
-  out(write, 'PASS  Workers R2 Storage API is reachable.');
 }
 
 async function verifyBucketExists(
@@ -587,7 +666,9 @@ export async function runCloudflareDeployPreflight(
 ): Promise<void> {
   const write = options.write ?? ((chunk: string) => process.stdout.write(chunk));
   const target = resolveDeployTarget(options.deployEnv);
-  const apiGet = options.apiGet ?? createCloudflareApiGet(options.accountId, options.apiToken);
+  const apiRequest =
+    options.apiRequest ?? createCloudflareApiRequest(options.accountId, options.apiToken);
+  const apiGet = options.apiGet ?? createCloudflareApiGet(apiRequest);
 
   out(write, `ZeroLink Cloudflare deploy preflight (${target.label})`);
   out(write, '==================================================');
@@ -603,7 +684,7 @@ export async function runCloudflareDeployPreflight(
   } else {
     await verifyWorkersScriptsApiReachable(options.accountId, apiGet, write);
     await verifyWorkersRoutesApiReachable(zoneId, target.zoneName, apiGet, write);
-    await verifyR2StorageApiReachable(options.accountId, apiGet, write);
+    await verifyR2StorageApiReachable(options.accountId, apiRequest, write);
   }
 
   await verifyBucketExists(options.accountId, target.bucketName, apiGet, write);

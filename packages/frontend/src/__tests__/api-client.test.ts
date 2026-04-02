@@ -256,7 +256,7 @@ describe('api client', () => {
     if (!result.ok) return;
 
     expect(FilePolicyResponseSchema.safeParse(result.data).success).toBe(true);
-    expect(result.data.policy.multipartSupported).toBe(false);
+    expect(result.data.policy.multipartSupported).toBe(true);
   });
 
   it('returns INVALID_REQUEST without calling fetch when request input is invalid', async () => {
