@@ -20,12 +20,16 @@ This guide runs the published ZeroLink self-hosted stack from GitHub Container R
 
 ## Start The Stack
 
+Choose a released ZeroLink version first so the downloaded Compose file and pulled images stay in sync:
+
 ```bash
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
-curl -fsSLO https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/docker-compose.yml
-curl -fsSLo .env.example https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/.env.example
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
 docker compose up -d
 ```
 
@@ -34,10 +38,11 @@ multipart file delivery up to `512 MiB` with `4 MiB` encrypted chunks.
 
 The default Compose file pulls these public images:
 
-- `ghcr.io/yclgkd/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
-- `ghcr.io/yclgkd/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}`
+- `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
+- `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}`
 
-Set `ZEROLINK_IMAGE_TAG` in `.env` to pin a specific release instead of following `latest`.
+Set `ZEROLINK_IMAGE_TAG` in `.env` to pin a specific release instead of following `latest`, and set
+`ZEROLINK_IMAGE_REPOSITORY` when consuming images published from a fork or org mirror.
 
 ## Local Build Override
 
@@ -63,6 +68,7 @@ Then open:
 
 - `SELFHOST_API_RP_ID=localhost`
 - `SELFHOST_API_RP_ORIGIN=http://localhost:8080`
+- `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` selects which GHCR namespace `migrate`, `api`, and `web` pull from
 - `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
 - `SELFHOST_API_FILE_STORAGE_BACKEND=minio` enables multipart delivery through presigned MinIO PUT/GET URLs

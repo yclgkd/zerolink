@@ -361,14 +361,18 @@ routes = [
 
 对于 production tag，同一个 workflow 还会发布：
 
-- `ghcr.io/yclgkd/zerolink-api:latest`
-- `ghcr.io/yclgkd/zerolink-api:<tag-version>`
-- `ghcr.io/yclgkd/zerolink-web:latest`
-- `ghcr.io/yclgkd/zerolink-web:<tag-version>`
+- `ghcr.io/<repository-owner>/zerolink-api:latest`
+- `ghcr.io/<repository-owner>/zerolink-api:<tag-version>`
+- `ghcr.io/<repository-owner>/zerolink-web:latest`
+- `ghcr.io/<repository-owner>/zerolink-web:<tag-version>`
 
 这些镜像会以 `linux/amd64` 和 `linux/arm64` 多架构 manifest 的形式推送，并附带 Buildx
 生成的 provenance 与 SBOM attestation。workflow 使用仓库自带的 `GITHUB_TOKEN` 和
-`packages: write` 权限完成公开包发布，不需要额外新增 GHCR secret。
+`packages: write` 权限完成公开包发布，不需要额外新增 GHCR secret。使用发布版 self-host
+Compose 文件的运维用户，应从同一个 `v*` tag 下载 Compose 文件，并把 `ZEROLINK_IMAGE_TAG`
+设置为对应发布版本，以获得可复现的拉取结果。如果 workflow 运行在 fork 或组织镜像仓库里，
+请在 `.env` 中设置 `ZEROLINK_IMAGE_REPOSITORY`，让 Compose 从该仓库自己的 GHCR namespace
+拉取，而不是默认回落到上游地址。
 
 ### 配置步骤
 

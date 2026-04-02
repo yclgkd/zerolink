@@ -112,17 +112,22 @@ with Docker Compose does not require the Cloudflare toolchain.
 
 ### Self-Hosted Quick Start
 
+Use a released image tag so the downloaded Compose file and pulled images stay aligned:
+
 ```bash
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
-curl -fsSLO https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/docker-compose.yml
-curl -fsSLo .env.example https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/.env.example
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
 docker compose up -d
 ```
 
-The default stack pulls `ghcr.io/yclgkd/zerolink-api` and `ghcr.io/yclgkd/zerolink-web`.
-Set `ZEROLINK_IMAGE_TAG` in `.env` to pin a specific release, or use
+The default stack pulls `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api` and
+`${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web`.
+Set `ZEROLINK_IMAGE_REPOSITORY` in `.env` when consuming images from a fork or org mirror, or use
 [Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md) for the local build override.
 
 ---

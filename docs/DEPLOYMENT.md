@@ -362,14 +362,18 @@ Version source conventions:
 
 On production tags, the same workflow also publishes:
 
-- `ghcr.io/yclgkd/zerolink-api:latest`
-- `ghcr.io/yclgkd/zerolink-api:<tag-version>`
-- `ghcr.io/yclgkd/zerolink-web:latest`
-- `ghcr.io/yclgkd/zerolink-web:<tag-version>`
+- `ghcr.io/<repository-owner>/zerolink-api:latest`
+- `ghcr.io/<repository-owner>/zerolink-api:<tag-version>`
+- `ghcr.io/<repository-owner>/zerolink-web:latest`
+- `ghcr.io/<repository-owner>/zerolink-web:<tag-version>`
 
 These images are pushed as multi-arch manifests for `linux/amd64` and `linux/arm64`, and Buildx
 attaches provenance plus SBOM attestations. The workflow uses the repository `GITHUB_TOKEN` with
-`packages: write`, so no additional GHCR secret is required for public package publishing.
+`packages: write`, so no additional GHCR secret is required for public package publishing. Operators
+using the published self-host Compose files should download them from the same `v*` tag and set
+`ZEROLINK_IMAGE_TAG` to that release version for reproducible pulls. If the workflow runs from a fork
+or org mirror, set `ZEROLINK_IMAGE_REPOSITORY` in `.env` so Compose pulls from that repository's GHCR
+namespace instead of the upstream default.
 
 ### Configuration Steps
 

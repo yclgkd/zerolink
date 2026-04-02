@@ -46,7 +46,7 @@ services:
       retries: 20
 
   migrate:
-    image: ghcr.io/yclgkd/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}
+    image: ${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}
     env_file:
       - path: .env
         required: true
@@ -58,7 +58,7 @@ services:
     restart: "no"
 
   api:
-    image: ghcr.io/yclgkd/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}
+    image: ${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - path: .env
@@ -81,7 +81,7 @@ services:
       retries: 20
 
   web:
-    image: ghcr.io/yclgkd/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}
+    image: ${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       api:

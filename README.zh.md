@@ -114,18 +114,23 @@ Cloudflare 工具链。
 
 ### 自部署快速开始 / Self-Hosted Quick Start
 
+请使用已发布版本号，这样下载到的 Compose 文件与拉取的镜像 tag 保持一致：
+
 ```bash
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
-curl -fsSLO https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/docker-compose.yml
-curl -fsSLo .env.example https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/.env.example
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
 docker compose up -d
 ```
 
-默认栈会拉取 `ghcr.io/yclgkd/zerolink-api` 和 `ghcr.io/yclgkd/zerolink-web`。
-如果要固定某个发布版本，可在 `.env` 里设置 `ZEROLINK_IMAGE_TAG`；如果要本地源码构建，
-请看 [自部署部署指南](./docs/SELF_HOSTED_DEPLOYMENT.zh.md) 里的 build override 用法。
+默认栈会拉取 `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api` 和
+`${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web`。
+如果镜像来自 fork 或组织镜像仓库，可在 `.env` 里设置 `ZEROLINK_IMAGE_REPOSITORY`；
+如果要本地源码构建，请看 [自部署部署指南](./docs/SELF_HOSTED_DEPLOYMENT.zh.md)。
 
 ---
 

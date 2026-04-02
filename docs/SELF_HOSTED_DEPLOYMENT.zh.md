@@ -20,12 +20,16 @@
 
 ## 启动
 
+请先选择一个已发布的 ZeroLink 版本，这样下载到的 Compose 文件与拉取的镜像可以保持同步：
+
 ```bash
+export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
-curl -fsSLO https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/docker-compose.yml
-curl -fsSLo .env.example https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/.env.example
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
+sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
 docker compose up -d
 ```
 
@@ -34,10 +38,11 @@ docker compose up -d
 
 默认 Compose 会拉取以下公开镜像：
 
-- `ghcr.io/yclgkd/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
-- `ghcr.io/yclgkd/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}`
+- `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
+- `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}`
 
-如果你想固定到某个发布版本，而不是跟随 `latest`，请在 `.env` 中设置 `ZEROLINK_IMAGE_TAG`。
+如果你想固定到某个发布版本，而不是跟随 `latest`，请在 `.env` 中设置 `ZEROLINK_IMAGE_TAG`；
+如果镜像来自 fork 或组织镜像仓库，请同时设置 `ZEROLINK_IMAGE_REPOSITORY`。
 
 ## 本地 build override
 
@@ -63,6 +68,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 
 - `SELFHOST_API_RP_ID=localhost`
 - `SELFHOST_API_RP_ORIGIN=http://localhost:8080`
+- `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` 控制 `migrate`、`api`、`web` 默认从哪个 GHCR namespace 拉取镜像
 - `ZEROLINK_IMAGE_TAG=latest` 控制 `migrate`、`api`、`web` 默认拉取的发布镜像 tag
 - 默认 `SELFHOST_API_DATABASE_URL` 已指向 Compose 里的 `db` 服务
 - `SELFHOST_API_FILE_STORAGE_BACKEND=minio` 会通过 MinIO 预签名 PUT/GET URL 启用 multipart 文件传输
