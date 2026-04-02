@@ -67,7 +67,7 @@ Two tiers available at creation:
 ### 3.5 New: Self-Hosting / Verifiable Releases
 
 - Official Cloudflare version remains the default
-- Docker Compose one-click self-hosting (protocol-equivalent implementation of Worker/DO self-hosting: HTTP service + Postgres/SQLite + Redis/transaction locks; or protocol-equivalent implementation if Cloudflare-compatible runtime is impractical)
+- Docker Compose one-click self-hosting (current package: Caddy + Go API + PostgreSQL + MinIO, with protocol-equivalent routes for the shipped frontend contract)
 - Release chain: Signed Manifest + reproducible builds + optional offline static packages (users can open locally/deploy on their own domain)
 
 ---
@@ -169,7 +169,7 @@ v2.5 provides three layers of response:
 
 1. **Verifiable release chain (Signed Manifest + reproducible builds)**: Increases the probability that "tampering can be detected"
 2. **Offline package/local opening** (planned, not yet implemented): Users can optionally download an offline static package from the release page (reducing online delivery risk)
-3. **Self-hosting** (planned, not yet implemented): Provides Docker Compose protocol-equivalent implementation, completely handing the trust root to the user
+3. **Self-hosting** (current): Docker Compose package provides a protocol-equivalent implementation, completely handing the trust root to the user
 
 ---
 
@@ -568,7 +568,7 @@ sequenceDiagram
 - LOCK_KEY_BYTES = 32 (server storage, sha256 output)
 - PAD_BLOCK_DEFAULT = 4096 (configurable to 8192)
 - PAD_BLOCK_MAX = 65536 (upper limit)
-- MAX_PLAINTEXT_BYTES = 2MB (recommended; adjustable per product positioning)
+- MAX_PLAINTEXT_BYTES = 2MB (inline plaintext ceiling; larger files switch to multipart when supported)
 - WebAuthn: default alg = -7 (ES256), UV required (Strict/HardwareOnly)
 
 ---
@@ -748,7 +748,7 @@ Error semantics (coarse-grained):
 
 - PAD_BLOCK defaults to 4096; can be included in the update payload as pad_block (for audit consistency; not recommended for public display)
 - pad_rand must be cryptographically secure random numbers
-- If orig_len approaches the upper limit, reject or prompt for "file mode/chunk mode" (if supported in the future) per MAX_PLAINTEXT_BYTES
+- If orig_len stays within the inline ceiling, keep the legacy inline path; otherwise switch to multipart file mode when the deployment advertises support, or reject the payload per MAX_PLAINTEXT_BYTES
 
 ### E3. Decoding Rules (Receiver)
 

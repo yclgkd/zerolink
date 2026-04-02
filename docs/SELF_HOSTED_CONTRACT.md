@@ -1,6 +1,6 @@
 # Self-Hosted Backend Contract Freeze
 
-This document freezes the protocol-facing contract that the self-hosted backend must reproduce before any Go implementation starts.
+This document freezes the protocol-facing contract that the self-hosted backend reproduces today.
 
 ## Scope
 
@@ -8,6 +8,7 @@ This document freezes the protocol-facing contract that the self-hosted backend 
 - Freeze the exact-match surfaces that must stay byte-for-byte compatible
 - Document the externally visible error semantics
 - Call out open ambiguities that must be resolved explicitly instead of drifting implicitly
+- Include the file-policy and multipart file-delivery overlay the frontend now depends on
 
 ## Exact-Match Surfaces
 
@@ -22,6 +23,7 @@ These helpers are implementation details today, but their outputs are protocol c
 | `lock_proof = SHA-256("GL-lock" || uuid || challenge_id || challenge || lock_key)` | `packages/frontend/src/crypto/protocol-utils.ts` | TOFU preemption defense | `challengeDerivation.lock` |
 | `expectedCompoundChallenge = SHA-256("GLv2.5" || uuid || challenge_id || intent_hash || seed)` | `packages/frontend/src/crypto/protocol-utils.ts` | Intent-bound WebAuthn challenge | `challengeDerivation.compound` |
 | `deliveryProofChallenge = SHA-256("GL-delivery-proof" || uuid || intent_hash)` | `packages/shared/src/senderAuth.ts` | Detached delivery proof verification | `challengeDerivation.deliveryProof` |
+| Multipart chunk IV/AAD derivation (`baseIv XOR chunkIndex`, AAD = `uuid || "chunk" || be32(index)`) | `packages/shared/src/multipart.ts` | Large-file decrypt integrity and anti-reordering | — |
 | WebSocket message schemas | `packages/shared/src/ws.ts` | Realtime sync compatibility | `ws` |
 
 The frozen JSON fixtures live at `protocol-fixtures/selfhost-contract-v1.json`.
@@ -69,8 +71,23 @@ Output encoding varies per function:
 | `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` or `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | Handles update delivery flow; may clear or rotate commit-cookie state via response headers |
 | `/api/delete_commit/:uuid` | `POST` | Same commit unions with `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path; inherits the same commit-cookie caller-binding semantics |
 | `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Active-channel public snapshot only; once a channel is tombstoned or lazily purged, canonical external behavior is `404 NOT_FOUND` rather than a `200` terminal snapshot |
-| `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery; `cipherVersion` is the delivered payload version (`record.version - 1` in the current DO implementation), not the raw channel record version |
+| `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery; the response includes exactly one of `cipherBundle` or `fileRef`, and `cipherVersion` is the delivered payload version (`record.version - 1` in the current DO implementation), not the raw channel record version |
+| `/api/file_policy` | `GET` | none | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | Returns deployment file ceilings, inline threshold, chunk sizing, and multipart capability; frontend uses this to choose inline vs multipart delivery |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | Self-host returns MinIO presigned PUT targets per chunk; the Go API coordinates metadata only and does not proxy chunk bytes |
+| `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | Validates uploaded chunk metadata and returns the typed `fileRef` later embedded in `compound_commit` |
+| `/api/file/fetch/:uuid` | `GET` | none | `FileFetchResponseSchema` | `apiClient.fileFetch()` | For delivered multipart payloads, returns one presigned GET URL per chunk; inline payloads continue through `decrypt_fetch` only |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |
+
+The self-hosted API does **not** expose a stable `/api/file/chunk/...` route. Upload and download
+chunk bytes go directly to the MinIO presigned URLs returned by `/api/file/initiate` and
+`/api/file/fetch/:uuid`.
+
+### Multipart Delivery Overlay
+
+- `/api/file_policy` publishes the inline cutoff as `multipartThresholdBytes`; files at or below that threshold stay on the legacy inline `cipherBundle` path.
+- Update intents must carry exactly one of `cipherBundle` or `fileRef`; multipart deliveries also require `payloadKind: "file"`.
+- `/api/decrypt_fetch/:uuid` still remains the source of truth for delivery metadata and returns exactly one of `cipherBundle` or `fileRef`.
+- `/api/file/fetch/:uuid` is only meaningful after `decrypt_fetch` reveals a multipart `fileRef`.
 
 ## Error Semantics Matrix
 
@@ -79,7 +96,8 @@ Output encoding varies per function:
 | `BAD_REQUEST` | `400` | Worker edge validation | Malformed JSON, schema mismatch, invalid UUID, path/body UUID mismatch |
 | `BAD_REQUEST` | `426` | Worker WS upgrade gate | `/api/ws/:uuid` hit without `Upgrade: websocket` |
 | `METHOD_NOT_ALLOWED` | `405` | Worker router | Wrong HTTP verb; `Allow` header is set |
-| `NOT_FOUND` | `404` | Worker router or DO | Unknown API route, missing channel, or finalized terminal state |
+| `NOT_FOUND` | `404` | Worker router or DO | Unknown API route, missing channel, finalized terminal state, or `/api/file/fetch/:uuid` when no multipart file payload is available |
+| `BAD_REQUEST` | `400` | File coordination routes / MinIO metadata validation | Invalid file-policy input, malformed multipart metadata, missing chunks, or MinIO presign/stat validation failure |
 | `NOT_IMPLEMENTED` | `501` | Worker router | Placeholder route matched but no implementation exists |
 | `INTERNAL_ERROR` | `500` | Worker or DO | Unexpected exception or invalid upstream response |
 | `RATE_LIMITED` | `429` | DO | Application-layer throttling; `Retry-After` may be present |

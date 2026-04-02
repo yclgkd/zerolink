@@ -52,18 +52,23 @@ npm install -g wrangler
 Frontend SPA    ──→    Worker (zerolink-api)
   + API 请求             │  ├─ run_worker_first = true
                          │  ├─ 注入安全响应头
-                         │  ├─ /api/* → 业务逻辑
+                         │  ├─ /api/* → 业务逻辑 + multipart 协调
                          │  └─ 其余路径 → Workers Assets (静态文件)
                          │
                          │
                     Durable Object
                     (SecretVault)
                     [状态机/SQLite]
+                         │
+                         ▼
+                   R2 FILE_BUCKET
+                  （加密文件分片）
 ```
 
 - **Cloudflare Worker**：统一处理所有请求（API + 静态文件），注入安全响应头
 - **Workers Assets**：Worker 内置静态资源托管，静态资源请求免费无限额
-- **Durable Object**：每个 Secret 的原子状态机（SQLite 后端）
+- **Durable Object**：每个 Secret 的原子状态机（SQLite 后端）；存储 inline 密文或 multipart `fileRef` 元数据
+- **R2 FILE_BUCKET**：存储大文件的加密分片；由 Worker 通过 `/api/file/*` 路由做协调
 
 > **架构说明 / Architecture Note**: 本项目采用 **Workers Assets 统一部署**模式，不使用
 > Cloudflare Pages。前端构建产物通过 `wrangler.toml` 的 `[assets]` 绑定随 Worker 一起部署，
@@ -87,7 +92,21 @@ pnpm install --frozen-lockfile
 npx wrangler login
 ```
 
-### 第 3 步：在设置 Secrets 前先确定最终访问域名
+### 第 3 步：先创建 R2 bucket
+
+先创建 `packages/backend/wrangler.toml` 里声明的 bucket。
+
+```bash
+# Production
+npx wrangler r2 bucket create zerolink-files
+
+# Staging（如果你也部署 staging，就一起创建）
+npx wrangler r2 bucket create zerolink-files-staging
+```
+
+如果 `wrangler.toml` 里引用的 bucket 不存在，`wrangler deploy` 会直接失败。
+
+### 第 4 步：在设置 Secrets 前先确定最终访问域名
 
 在运行 `pnpm setup` 之前，先决定 ZeroLink 最终是挂在自定义域名，还是挂在
 `*.workers.dev` 主机名上。`RP_ID` 和 `RP_ORIGIN` 必须与最终浏览器访问的 Origin
@@ -115,7 +134,7 @@ Worker 挂到默认的 `*.workers.dev` 主机名上。
 - 如果你还不知道最终主机名，可以先在没有 routes 的情况下部署一次，记下生成的
   `*.workers.dev` URL，再重新运行 `pnpm setup` 并重新部署。
 
-### 第 4 步：运行 setup 脚本
+### 第 5 步：运行 setup 脚本
 
 ```bash
 pnpm setup
@@ -126,7 +145,7 @@ pnpm setup
 - 提示输入 `RP_ID` 和 `RP_ORIGIN`，设置为 Worker Secret
 - 让你选择 `production`、`staging` 或 `both`
 
-这里输入的值必须与第 3 步确定的最终 Origin 完全一致。如果之后改了访问域名，需要重新运行
+这里输入的值必须与第 4 步确定的最终 Origin 完全一致。如果之后改了访问域名，需要重新运行
 `pnpm setup` 更新 Secrets，再继续依赖 WebAuthn。
 
 ```
@@ -148,7 +167,7 @@ WebAuthn configuration for production:
 🎉 Setup complete!
 ```
 
-### 第 5 步：构建前端
+### 第 6 步：构建前端
 
 ```bash
 pnpm --filter @zerolink/frontend build
@@ -158,7 +177,7 @@ pnpm --filter @zerolink/frontend build
 默认的 `pnpm build` 产物是可运行但**未验证**的前端壳。它不会启用 fail-closed 的
 `Verified Release` 启动门禁，因此适用于本地预览和未签名的手动部署。
 
-### 第 6 步：部署
+### 第 7 步：部署
 
 根据你实际要部署的环境选择对应命令：
 
@@ -181,7 +200,7 @@ npx wrangler deploy --env staging
 >   `worker-name.<subdomain>.workers.dev` 主机名推导
 > - 这两个值必须与实际访问域名完全匹配，否则 WebAuthn 认证会失败
 
-### 第 7 步：验证部署
+### 第 8 步：验证部署
 
 ```bash
 cd packages/backend
@@ -194,7 +213,12 @@ npx wrangler tail --env staging
 
 # 验证 Worker 可达（把 <your-origin> 替换成实际访问域名）
 curl -s https://<your-origin>/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
+
+# 验证文件策略与 multipart 开关
+curl -s https://<your-origin>/api/file_policy
 ```
+
+默认 Worker 配置下，`/api/file_policy` 应返回 `"multipartSupported": true`。
 
 ---
 
@@ -206,7 +230,18 @@ curl -s https://<your-origin>/api/public/00000000-0000-0000-0000-000000000000 | 
 |--------|------|------|------|
 | `RP_ID` | ✅ | WebAuthn Relying Party ID（域名，不含协议） | `zerolink.dev` |
 | `RP_ORIGIN` | ✅ | WebAuthn Origin（完整 URL） | `https://zerolink.dev` |
-| `COMMIT_TOKEN_SECRET` | ✅ | Commit Token HMAC 密钥，防止重放攻击（随机 32 字节 hex） | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `COMMIT_TOKEN_SECRET` | ✅ | 用于 commit-cookie 绑定和 multipart upload session 签名的 HMAC 密钥（随机 32 字节 hex） | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+
+### Cloudflare 绑定（在 `wrangler.toml` 中声明）
+
+| 绑定名 | 类型 | 说明 |
+|--------|------|------|
+| `SECRET_VAULT` | Durable Object | Channel 生命周期状态机 |
+| `ASSETS` | Workers Assets | 前端静态文件 |
+| `FILE_BUCKET` | R2 bucket | multipart 文件加密分片 |
+
+`packages/backend/wrangler.toml` 已在 production 和 staging 的 `[vars]` 里默认开启
+`FILE_MULTIPART_SUPPORTED=true`。
 
 ### CI/CD Secrets（GitHub Actions）
 
