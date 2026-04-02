@@ -11,8 +11,19 @@ import (
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/config"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/sqlcgen"
 )
+
+type failingMultipartCleaner struct {
+	calls int
+	err   error
+}
+
+func (c *failingMultipartCleaner) DeleteUpload(context.Context, filestore.MultipartFileRef) error {
+	c.calls++
+	return c.err
+}
 
 func TestWithChannelTxSerializesSameChannel(t *testing.T) {
 	db := openTestDatabase(t)
@@ -300,6 +311,70 @@ func TestFinalizeTerminalStatePreservesDeleteTombstone(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("re-finalize deleted tombstone as expired: %v", err)
 	}
+}
+
+func TestFinalizeTerminalStateBestEffortMultipartCleanup(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	cleaner := &failingMultipartCleaner{err: errors.New("minio unavailable")}
+	db.SetMultipartCleaner(cleaner)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	fileRefJSON, err := json.Marshal(filestore.MultipartFileRef{
+		StorageBackend:       filestore.FileStorageBackendMinIO,
+		ChunkSizeBytes:       8,
+		ChunkCount:           1,
+		TotalPlaintextBytes:  4,
+		TotalCiphertextBytes: 20,
+		BaseIV:               "YmFzZS1pdg",
+		EncContentKey:        "ZW5jLWtleQ",
+		Chunks: []filestore.MultipartFileRefChunk{
+			{
+				Index:           0,
+				StorageKey:      "files/upload/0000.bin",
+				CiphertextBytes: 20,
+				CiphertextHash:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal multipart fileRef: %v", err)
+	}
+
+	channel := Channel{
+		UUID:            "channel-delete-best-effort-cleanup",
+		State:           ChannelStateDelivered,
+		CreatedAt:       now.Add(-time.Hour),
+		ExpiresAt:       now.Add(30 * time.Minute),
+		TTLMS:           int64(time.Hour / time.Millisecond),
+		SecurityProfile: SecurityProfileSecure,
+		FileRef:         fileRefJSON,
+		DeliveredAt:     timePtrValue(now.Add(-5 * time.Minute)),
+		Version:         1,
+	}
+
+	if err := db.WithChannelTx(ctx, channel.UUID, func(ctx context.Context, tx *ChannelTx) error {
+		if _, err := tx.SaveChannel(ctx, channel); err != nil {
+			return err
+		}
+		tombstone, err := tx.FinalizeTerminalState(ctx, TerminalReasonDeleted, now)
+		if err != nil {
+			return err
+		}
+		if tombstone.Reason != TerminalReasonDeleted {
+			t.Fatalf("tombstone reason = %s, want %s", tombstone.Reason, TerminalReasonDeleted)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("finalize deleted channel with cleanup error: %v", err)
+	}
+
+	if cleaner.calls != 1 {
+		t.Fatalf("multipart cleaner calls = %d, want 1", cleaner.calls)
+	}
+	assertNoChannelRow(t, db, channel.UUID)
 }
 
 func TestSaveChannelRejectsTombstonedUUID(t *testing.T) {

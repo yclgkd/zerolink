@@ -69,7 +69,7 @@ v3.0 的产品目标：
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
 - 官方 Cloudflare 版保持默认
-- 提供 Docker Compose 一键自托管（Worker/DO 的自托管等价实现：HTTP 服务 + Postgres/SQLite + Redis/事务锁；或 Cloudflare 兼容运行时不现实则做协议等价实现）
+- 提供 Docker Compose 一键自托管（当前打包为 Caddy + Go API + PostgreSQL + MinIO，对已发布前端契约提供协议等价实现）
 - 发布链：签名 Manifest + 可复现构建 + 可选离线静态包（用户可在本地打开/本域部署）
 
 ---
@@ -171,7 +171,7 @@ v2.5 给出三层应对：
 
 1. **可验证发布链（Signed Manifest + 可复现构建）**：提升"被篡改可被发现"的概率
 2. **离线包/本地打开**（计划中，尚未实现）：用户可选择从发布页下载离线静态包（减少在线下发风险）
-3. **自托管**（计划中，尚未实现）：提供 Docker Compose 协议等价实现，彻底把信任根交给用户
+3. **自托管**（当前）：Docker Compose 打包已提供协议等价实现，彻底把信任根交给用户
 
 ---
 
@@ -570,7 +570,7 @@ sequenceDiagram
 - LOCK_KEY_BYTES = 32（server 存储，sha256 输出）
 - PAD_BLOCK_DEFAULT = 4096（可配置 8192）
 - PAD_BLOCK_MAX = 65536（上限）
-- MAX_PLAINTEXT_BYTES = 2MB（建议；可按产品定位调整）
+- MAX_PLAINTEXT_BYTES = 2MB（inline 明文上限；更大的文件在支持时切 multipart）
 - WebAuthn：默认 alg = -7 (ES256)、UV required（Strict/HardwareOnly）
 
 ---
@@ -750,7 +750,7 @@ Response：
 
 - PAD_BLOCK 默认 4096，可在 update payload 中带 pad_block（用于审计一致性；不建议公开展示）
 - pad_rand 必须为加密安全随机数
-- 若 orig_len 已接近上限，按 MAX_PLAINTEXT_BYTES 拒绝或提示"文件模式/分片模式"（若未来支持）
+- 若 orig_len 仍在 inline 上限内，则继续走 legacy inline 路径；否则在部署声明支持时切到 multipart 文件模式，不支持时按 MAX_PLAINTEXT_BYTES 拒绝
 
 ### E3. 解码规则（接收方）
 

@@ -2,7 +2,7 @@
 
 # 自部署后端契约冻结
 
-这份文档用于冻结自部署后端在开始 Go 实现前必须复现的协议外观契约。
+这份文档用于冻结自部署后端当前对外复现的协议契约。
 
 ## 范围
 
@@ -10,6 +10,7 @@
 - 冻结必须逐字节一致的输出面
 - 记录对前端可见的错误语义
 - 明确列出当前不能靠”实现时猜测”解决的开放问题
+- 覆盖前端现在依赖的文件策略与 multipart 文件传输叠加层
 
 ## 必须精确复现的输出面
 
@@ -22,6 +23,7 @@
 | `lock_proof = SHA-256(“GL-lock” || uuid || challenge_id || challenge || lock_key)` | `packages/frontend/src/crypto/protocol-utils.ts` | TOFU 防抢锁核心 | `challengeDerivation.lock` |
 | `expectedCompoundChallenge = SHA-256(“GLv2.5” || uuid || challenge_id || intent_hash || seed)` | `packages/frontend/src/crypto/protocol-utils.ts` | WebAuthn challenge 绑定操作意图 | `challengeDerivation.compound` |
 | `deliveryProofChallenge = SHA-256(“GL-delivery-proof” || uuid || intent_hash)` | `packages/shared/src/senderAuth.ts` | detached delivery proof 校验依赖它 | `challengeDerivation.deliveryProof` |
+| Multipart chunk IV/AAD 推导（`baseIv XOR chunkIndex`，AAD = `uuid || "chunk" || be32(index)`） | `packages/shared/src/multipart.ts` | 大文件解密完整性与防重排 | — |
 | WebSocket 消息 schema | `packages/shared/src/ws.ts` | 实时同步兼容性 | `ws` |
 
 冻结用的 JSON fixture 位于 `protocol-fixtures/selfhost-contract-v1.json`。
@@ -69,8 +71,22 @@
 | `/api/manage/compound_commit/:uuid` | `POST` | `CompoundCommitRequestSchema` 或 `SoftkeyCompoundCommitRequestSchema` | `CompoundCommitResponseSchema` | `apiClient.compoundCommit()` | update / deliver 主路径；响应头可能清理或轮转 commit-cookie 状态 |
 | `/api/delete_commit/:uuid` | `POST` | 同 commit union，但 `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | compound commit 的 delete-only alias；继承相同的 commit-cookie caller-binding 语义 |
 | `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回活跃 channel 的公开状态；一旦 channel 已 tombstone 化或被 lazy purge，规范外部行为是 `404 NOT_FOUND`，而不是 `200` 终态快照 |
-| `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷；其中 `cipherVersion` 表示本次已交付密文的版本（当前 DO 实现里等于 `record.version - 1`），不是原始 channel record 的 `version` |
+| `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷；响应里会且只会出现 `cipherBundle` 或 `fileRef` 其中之一，`cipherVersion` 表示本次已交付密文的版本（当前 DO 实现里等于 `record.version - 1`），不是原始 channel record 的 `version` |
+| `/api/file_policy` | `GET` | 无 | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | 返回部署侧文件上限、inline 阈值、chunk 参数和 multipart 能力；前端据此决定走 inline 还是 multipart |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | self-host 返回每个 chunk 的 MinIO 预签名 PUT URL；Go API 只协调元数据，不代理 chunk 字节 |
+| `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | 校验已上传 chunk 的元数据，并返回后续写入 `compound_commit` 的 `fileRef` |
+| `/api/file/fetch/:uuid` | `GET` | 无 | `FileFetchResponseSchema` | `apiClient.fileFetch()` | 对已交付的 multipart payload 返回每个 chunk 的预签名 GET URL；inline payload 仍只走 `decrypt_fetch` |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | 升级后走 `WsClientMessageSchema` | `WsServerMessageSchema` | `ChannelSync.connect()` | 当前未带 `Upgrade: websocket` 会返回 `426` + `{ ok: false, code: "BAD_REQUEST" }` |
+
+self-host API **不会** 暴露稳定的 `/api/file/chunk/...` 路由。分片上传和下载都直接走
+`/api/file/initiate` 和 `/api/file/fetch/:uuid` 返回的 MinIO 预签名 URL。
+
+### Multipart 传输叠加层
+
+- `/api/file_policy` 里的 `multipartThresholdBytes` 就是 inline 分界线；不超过它的文件继续走 legacy `cipherBundle`。
+- update intent 必须在 `cipherBundle` 与 `fileRef` 之间二选一；multipart 交付还要求 `payloadKind: "file"`。
+- `/api/decrypt_fetch/:uuid` 仍是交付元数据的权威来源，并且只会返回 `cipherBundle` 或 `fileRef` 二者之一。
+- 只有当 `decrypt_fetch` 暴露出 multipart `fileRef` 时，`/api/file/fetch/:uuid` 才有意义。
 
 ## 错误语义矩阵
 
@@ -79,7 +95,8 @@
 | `BAD_REQUEST` | `400` | Worker 边缘校验 | JSON 非法、schema 不匹配、UUID 非法、path/body UUID 不一致 |
 | `BAD_REQUEST` | `426` | Worker WS upgrade gate | 命中 `/api/ws/:uuid` 但没有 WebSocket 升级头 |
 | `METHOD_NOT_ALLOWED` | `405` | Worker router | HTTP 方法不对；会带 `Allow` 头 |
-| `NOT_FOUND` | `404` | Worker router 或 DO | 路由不存在、channel 不存在、或终态已 finalize |
+| `NOT_FOUND` | `404` | Worker router 或 DO | 路由不存在、channel 不存在、终态已 finalize，或 `/api/file/fetch/:uuid` 当前没有 multipart 文件载荷 |
+| `BAD_REQUEST` | `400` | 文件协调路由 / MinIO 元数据校验 | 文件策略输入非法、multipart 元数据格式错误、chunk 缺失，或 MinIO 预签名/Stat 校验失败 |
 | `NOT_IMPLEMENTED` | `501` | Worker router | 命中占位路由但未实现 |
 | `INTERNAL_ERROR` | `500` | Worker 或 DO | 未预期异常或上游响应无效 |
 | `RATE_LIMITED` | `429` | DO | 应用层限流；可能带 `Retry-After` |

@@ -263,6 +263,100 @@ export const FileSharePolicySchema = z
     message: 'chunkSizeBytes * maxChunks must cover maxFileBytes',
   });
 
+export const FileStorageBackendSchema = z.enum(['r2', 'minio']);
+
+export const FileUploadInitiateRequestSchema = z.object({
+  channelUuid: UUIDSchema,
+  chunkCount: z.number().int().positive(),
+  totalCiphertextBytes: z.number().int().positive(),
+});
+
+export const FileUploadChunkTargetSchema = z.object({
+  index: z.number().int().nonnegative(),
+  uploadUrl: z.string().min(1),
+});
+
+export const FileUploadInitiateResponseSchema = z.object({
+  ok: z.literal(true),
+  uploadId: Base64UrlSchema,
+  chunks: z.array(FileUploadChunkTargetSchema),
+});
+
+export const FileUploadCompleteChunkSchema = z.object({
+  index: z.number().int().nonnegative(),
+  etag: z.string().min(1),
+  ciphertextBytes: z.number().int().positive(),
+  ciphertextHash: HexStringSchema,
+});
+
+export const MultipartFileRefChunkSchema = z.object({
+  index: z.number().int().nonnegative(),
+  storageKey: z.string().min(1),
+  ciphertextBytes: z.number().int().positive(),
+  ciphertextHash: HexStringSchema,
+});
+
+export const MultipartFileRefSchema = z
+  .object({
+    storageBackend: FileStorageBackendSchema,
+    chunkSizeBytes: z.number().int().positive(),
+    chunkCount: z.number().int().positive(),
+    totalPlaintextBytes: z.number().int().positive(),
+    totalCiphertextBytes: z.number().int().positive(),
+    baseIv: Base64UrlSchema,
+    encContentKey: Base64UrlSchema,
+    chunks: z.array(MultipartFileRefChunkSchema).min(1),
+  })
+  .refine((value) => value.chunks.length === value.chunkCount, {
+    path: ['chunks'],
+    message: 'chunks length must equal chunkCount',
+  })
+  .refine(
+    (value) =>
+      value.chunks.every(
+        (chunk, index) =>
+          chunk.index === index && chunk.ciphertextBytes <= value.chunkSizeBytes + 16
+      ),
+    {
+      path: ['chunks'],
+      message: 'chunks must be ordered and bounded by chunkSizeBytes + tag size',
+    }
+  )
+  .refine(
+    (value) =>
+      value.chunks.reduce((sum, chunk) => sum + chunk.ciphertextBytes, 0) ===
+      value.totalCiphertextBytes,
+    {
+      path: ['totalCiphertextBytes'],
+      message: 'totalCiphertextBytes must match chunk sum',
+    }
+  );
+
+export const FileUploadCompleteRequestSchema = z.object({
+  uploadId: Base64UrlSchema,
+  baseIv: Base64UrlSchema,
+  encContentKey: Base64UrlSchema,
+  chunkSizeBytes: z.number().int().positive(),
+  totalPlaintextBytes: z.number().int().positive(),
+  totalCiphertextBytes: z.number().int().positive(),
+  chunks: z.array(FileUploadCompleteChunkSchema),
+});
+
+export const FileUploadCompleteResponseSchema = z.object({
+  ok: z.literal(true),
+  fileRef: MultipartFileRefSchema,
+});
+
+export const FileDownloadChunkTargetSchema = z.object({
+  index: z.number().int().nonnegative(),
+  downloadUrl: z.string().min(1),
+});
+
+export const FileFetchResponseSchema = z.object({
+  ok: z.literal(true),
+  chunks: z.array(FileDownloadChunkTargetSchema),
+});
+
 // ─── Serialised WebAuthn Schemas ──────────────────────────────────────────────
 
 export const AttestationJSONSchema = z.object({
@@ -444,18 +538,28 @@ export const CompoundBeginResponseSchema = z.object({
 
 // ─── Intent Schemas ───────────────────────────────────────────────────────────
 
-export const UpdateIntentSchema = z.object({
-  op: z.literal('update'),
-  uuid: UUIDSchema,
-  version: z.number().int().nonnegative(),
-  timestamp: UnixMsSchema,
-  nonce: Base64UrlSchema,
-  receiverPubFpr: HexStringSchema,
-  payloadKind: SharePayloadKindSchema.optional(),
-  cipherBundle: CipherBundleSchema,
-  // null means "retain the channel's original TTL".
-  expireAt: z.union([UnixMsSchema, z.null()]),
-});
+export const UpdateIntentSchema = z
+  .object({
+    op: z.literal('update'),
+    uuid: UUIDSchema,
+    version: z.number().int().nonnegative(),
+    timestamp: UnixMsSchema,
+    nonce: Base64UrlSchema,
+    receiverPubFpr: HexStringSchema,
+    payloadKind: SharePayloadKindSchema.optional(),
+    cipherBundle: CipherBundleSchema.optional(),
+    fileRef: MultipartFileRefSchema.optional(),
+    // null means "retain the channel's original TTL".
+    expireAt: z.union([UnixMsSchema, z.null()]),
+  })
+  .refine((value) => (value.cipherBundle == null) !== (value.fileRef == null), {
+    path: ['cipherBundle'],
+    message: 'update intent must include exactly one of cipherBundle or fileRef',
+  })
+  .refine((value) => value.fileRef == null || value.payloadKind === 'file', {
+    path: ['payloadKind'],
+    message: 'multipart fileRef updates must declare payloadKind=file',
+  });
 
 export const DeleteIntentSchema = z.object({
   op: z.literal('delete'),
@@ -507,14 +611,20 @@ export const PublicStatusResponseSchema = z.object({
   receiverPubFpr: HexStringSchema.optional(),
 });
 
-export const DecryptFetchResponseSchema = z.object({
-  ok: z.literal(true),
-  cipherBundle: CipherBundleSchema,
-  receiverPubFpr: HexStringSchema,
-  cipherVersion: z.number().int().nonnegative(),
-  deliveryAuth: DecryptFetchDeliveryAuthSchema.optional(),
-  deliveredAt: UnixMsSchema,
-});
+export const DecryptFetchResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    cipherBundle: CipherBundleSchema.optional(),
+    fileRef: MultipartFileRefSchema.optional(),
+    receiverPubFpr: HexStringSchema,
+    cipherVersion: z.number().int().nonnegative(),
+    deliveryAuth: DecryptFetchDeliveryAuthSchema.optional(),
+    deliveredAt: UnixMsSchema,
+  })
+  .refine((value) => (value.cipherBundle == null) !== (value.fileRef == null), {
+    path: ['cipherBundle'],
+    message: 'decrypt fetch response must include exactly one of cipherBundle or fileRef',
+  });
 
 export const FilePolicyResponseSchema = z.object({
   ok: z.literal(true),

@@ -454,7 +454,7 @@ const NONCE_BYTES = 24;              // nonce
 // Padding
 const PAD_BLOCK_DEFAULT = 4096;      // 4KB
 const PAD_BLOCK_MAX = 65536;         // 64KB
-const MAX_PLAINTEXT_BYTES = 2097152; // 2MB
+const MAX_PLAINTEXT_BYTES = 2097152; // 2MB inline plaintext ceiling before multipart
 
 // WebAuthn
 const WEBAUTHN_ALG = -7;             // ES256
@@ -486,6 +486,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - [ ] Receiver private key wrapped with Argon2id
 - [ ] Padding randomness is secure (crypto.getRandomValues)
 - [ ] AAD binds uuid/version/fpr
+- [ ] Multipart file chunks derive per-chunk IV/AAD (`baseIv XOR index`, `uuid || "chunk" || index`) to prevent storage-side reordering
 - [ ] Anchored channel locally pins `sender_auth_fpr`
 - [ ] Anchored channel locally re-verifies `deliveryAuth` proof
 - [ ] Locally persists `lastAcceptedDelivery(version,ciphertextHash)` to prevent rollback
@@ -516,7 +517,6 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 6. **Freshness boundary**: anchored A+B can only prevent on-device rollback and forgery of unanchored sender proofs; it alone cannot prove "the server is not withholding updates" — that requires future witness / transparency schemes
 
 ### Future Improvements
-- 🔮 **E2EE file sharing**: large file chunking + streaming encryption
 - 🔮 **Multiple receivers**: group encryption (one enc_content_key per person)
 - 🔮 **Revocable links**: receiver cannot decrypt after sender destroys
 - 🔮 **Forward Secrecy**: periodic AES key rotation (re-encrypt on update)

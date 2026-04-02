@@ -81,7 +81,13 @@ export function resolveFilePolicy(env: FilePolicyEnv): FileSharePolicy {
     ),
   });
 
-  if (policy.maxFileBytes > MAX_INLINE_FILE_BYTES) {
+  if (policy.multipartThresholdBytes > MAX_INLINE_FILE_BYTES) {
+    throw new Error(
+      `FILE_MULTIPART_THRESHOLD_BYTES must be <= ${MAX_INLINE_FILE_BYTES} for inline delivery`
+    );
+  }
+
+  if (!policy.multipartSupported && policy.maxFileBytes > MAX_INLINE_FILE_BYTES) {
     throw new Error(`FILE_MAX_BYTES must be <= ${MAX_INLINE_FILE_BYTES} for inline delivery`);
   }
 
@@ -98,6 +104,13 @@ export function resolveMaxFileCiphertextBytes(maxFileBytes: number, padBlock: nu
       (AES_GCM.PAD_LENGTH_PREFIX_BYTES + resolveInlineFilePlaintextBytes(maxFileBytes)) / padBlock
     ) * padBlock;
   return paddedPlaintextBytes + AES_GCM.TAG_LENGTH_BITS / 8;
+}
+
+export function resolveMaxInlineFileCiphertextBytes(
+  multipartThresholdBytes: number,
+  padBlock: number
+): number {
+  return resolveMaxFileCiphertextBytes(multipartThresholdBytes, padBlock);
 }
 
 export function toFilePolicyResponse(env: FilePolicyEnv): FilePolicyResponse {

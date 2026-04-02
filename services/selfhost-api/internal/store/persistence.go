@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/sqlcgen"
 )
 
@@ -20,6 +22,7 @@ const advisoryLockNamespace = "zerolink/selfhost/channel"
 type ChannelTx struct {
 	queries   *sqlcgen.Queries
 	channelID string
+	db        *Database
 }
 
 func (d *Database) WithChannelTx(
@@ -54,6 +57,7 @@ func (d *Database) WithChannelTx(
 	channelTx := &ChannelTx{
 		queries:   queries,
 		channelID: channelID,
+		db:        d,
 	}
 
 	if err := fn(ctx, channelTx); err != nil {
@@ -127,6 +131,7 @@ func (tx *ChannelTx) SaveChannel(ctx context.Context, channel Channel) (*Channel
 		ReceiverPubFpr:      stringPointer(normalized.ReceiverPubFpr),
 		LockedAt:            optionalTimestamp(normalized.LockedAt),
 		CipherBundle:        cloneJSON(normalized.CipherBundle),
+		FileRef:             cloneJSON(normalized.FileRef),
 		UpdateDeliveryProof: cloneJSON(normalized.UpdateDeliveryProof),
 		DeliveredAt:         optionalTimestamp(normalized.DeliveredAt),
 		Version:             normalized.Version,
@@ -275,6 +280,8 @@ func (tx *ChannelTx) FinalizeTerminalState(
 	reason TerminalReason,
 	finalizedAt time.Time,
 ) (*TerminalTombstone, error) {
+	tx.deleteMultipartUpload(ctx)
+
 	row, err := tx.queries.UpsertTerminalTombstone(ctx, sqlcgen.UpsertTerminalTombstoneParams{
 		ChannelID:   tx.channelID,
 		Reason:      string(reason),
@@ -290,6 +297,30 @@ func (tx *ChannelTx) FinalizeTerminalState(
 
 	tombstone := terminalTombstoneFromSQL(row)
 	return &tombstone, nil
+}
+
+func (tx *ChannelTx) deleteMultipartUpload(ctx context.Context) {
+	if tx.db == nil || tx.db.multipartCleaner == nil {
+		return
+	}
+
+	channel, err := tx.GetChannel(ctx)
+	if err != nil {
+		slog.Default().Error("load multipart cleanup channel failed", "channel_id", tx.channelID, "error", err)
+		return
+	}
+	if channel == nil || len(channel.FileRef) == 0 {
+		return
+	}
+
+	var fileRef filestore.MultipartFileRef
+	if err := json.Unmarshal(channel.FileRef, &fileRef); err != nil {
+		slog.Default().Error("decode multipart fileRef failed", "channel_id", tx.channelID, "error", err)
+		return
+	}
+	if err := tx.db.multipartCleaner.DeleteUpload(ctx, fileRef); err != nil {
+		slog.Default().Error("delete multipart upload failed", "channel_id", tx.channelID, "error", err)
+	}
 }
 
 func (d *Database) SweepExpiredChannels(ctx context.Context, now time.Time) (int64, error) {
@@ -444,6 +475,7 @@ func channelFromSQL(row sqlcgen.Channel) Channel {
 		ReceiverPubFpr:      stringPointerFromSQL(row.ReceiverPubFpr),
 		LockedAt:            timestampPointerFromSQL(row.LockedAt),
 		CipherBundle:        cloneJSON(row.CipherBundle),
+		FileRef:             cloneJSON(row.FileRef),
 		UpdateDeliveryProof: cloneJSON(row.UpdateDeliveryProof),
 		DeliveredAt:         timestampPointerFromSQL(row.DeliveredAt),
 		Version:             row.Version,

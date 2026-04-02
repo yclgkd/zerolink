@@ -455,7 +455,7 @@ const NONCE_BYTES = 24;              // nonce
 // Padding
 const PAD_BLOCK_DEFAULT = 4096;      // 4KB
 const PAD_BLOCK_MAX = 65536;         // 64KB
-const MAX_PLAINTEXT_BYTES = 2097152; // 2MB
+const MAX_PLAINTEXT_BYTES = 2097152; // 2MB inline 明文上限，超过后切 multipart
 
 // WebAuthn
 const WEBAUTHN_ALG = -7;             // ES256
@@ -487,6 +487,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - [ ] 接收方私钥用 Argon2id 包裹
 - [ ] padding 随机安全（crypto.getRandomValues）
 - [ ] AAD 绑定 uuid/version/fpr
+- [ ] multipart 文件分片使用按 chunk 派生的 IV/AAD（`baseIv XOR index`、`uuid || "chunk" || index`），防止存储侧重排
 - [ ] anchored channel 本地 pin `sender_auth_fpr`
 - [ ] anchored channel 本地复验 `deliveryAuth` proof
 - [ ] 本地持久化 `lastAcceptedDelivery(version,ciphertextHash)` 防回滚
@@ -517,7 +518,6 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 6. **新鲜性边界**：anchored A+B 只能防本设备回滚和未锚定 sender proof 的伪造，仍不能单独证明“服务器没有藏起更新”；那需要未来的 witness / transparency 方案
 
 ### 未来改进
-- 🔮 **E2EE 文件分享**：大文件分片 + 流式加密
 - 🔮 **多接收方**：群组加密（每人一个 enc_content_key）
 - 🔮 **可撤销链接**：发送方销毁后接收方无法解密
 - 🔮 **Forward Secrecy**：定期轮换 AES key（更新时重新加密）

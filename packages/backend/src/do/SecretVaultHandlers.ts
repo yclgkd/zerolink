@@ -74,6 +74,28 @@ function buildDecryptFetchDeliveryAuth(
   };
 }
 
+function buildDeliveredPayload(record: ChannelRecord): {
+  payloadTransport: 'inline' | 'multipart';
+  cipherBundle?: ChannelRecord['cipherBundle'];
+  fileRef?: ChannelRecord['fileRef'];
+} | null {
+  if (record.fileRef) {
+    return {
+      payloadTransport: 'multipart',
+      fileRef: record.fileRef,
+    };
+  }
+
+  if (record.cipherBundle) {
+    return {
+      payloadTransport: 'inline',
+      cipherBundle: record.cipherBundle,
+    };
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // HTTP handler functions
 // ---------------------------------------------------------------------------
@@ -243,9 +265,10 @@ export async function handleGetPublicState(vc: VaultContext): Promise<Response> 
 export async function handleGetDecryptPayload(vc: VaultContext): Promise<Response> {
   try {
     const record = await loadActiveRecord(vc);
+    const payload = buildDeliveredPayload(record);
     if (
       record.state !== CHANNEL_STATE.DELIVERED ||
-      !record.cipherBundle ||
+      !payload ||
       !record.receiver ||
       record.deliveredAt == null ||
       record.version < 1
@@ -255,7 +278,9 @@ export async function handleGetDecryptPayload(vc: VaultContext): Promise<Respons
     return jsonResponse(
       {
         ok: true,
-        cipherBundle: record.cipherBundle,
+        payloadTransport: payload.payloadTransport,
+        ...(payload.cipherBundle ? { cipherBundle: payload.cipherBundle } : {}),
+        ...(payload.fileRef ? { fileRef: payload.fileRef } : {}),
         receiverPubFpr: record.receiver.pubFpr,
         cipherVersion: record.version - 1,
         ...(record.updateDeliveryProof
@@ -267,5 +292,36 @@ export async function handleGetDecryptPayload(vc: VaultContext): Promise<Respons
     );
   } catch (error) {
     return mapError(error, { appEnv: vc.env.APP_ENV, handler: 'get_decrypt_payload' });
+  }
+}
+
+export async function handleGetFilePayload(vc: VaultContext): Promise<Response> {
+  try {
+    const record = await loadActiveRecord(vc);
+    const payload = buildDeliveredPayload(record);
+    if (
+      record.state !== CHANNEL_STATE.DELIVERED ||
+      !payload ||
+      payload.payloadTransport !== 'multipart' ||
+      !record.receiver ||
+      record.deliveredAt == null ||
+      record.version < 1
+    ) {
+      return jsonError('CHANNEL_NOT_DELIVERED', 409);
+    }
+
+    return jsonResponse(
+      {
+        ok: true,
+        payloadTransport: 'multipart',
+        fileRef: payload.fileRef,
+        receiverPubFpr: record.receiver.pubFpr,
+        cipherVersion: record.version - 1,
+        deliveredAt: record.deliveredAt,
+      },
+      200
+    );
+  } catch (error) {
+    return mapError(error, { appEnv: vc.env.APP_ENV, handler: 'get_file_payload' });
   }
 }

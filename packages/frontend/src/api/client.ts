@@ -11,7 +11,12 @@ import {
   DecryptFetchResponseSchema,
   DeleteIntentSchema,
   ErrorResponseSchema,
+  FileFetchResponseSchema,
   FilePolicyResponseSchema,
+  FileUploadCompleteRequestSchema,
+  FileUploadCompleteResponseSchema,
+  FileUploadInitiateRequestSchema,
+  FileUploadInitiateResponseSchema,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
   LockCommitRequestSchema,
@@ -132,6 +137,17 @@ export interface ApiClient {
     uuid: z.input<typeof UUIDSchema>
   ) => Promise<ApiResult<z.output<typeof DecryptFetchResponseSchema>>>;
   filePolicy: () => Promise<ApiResult<z.output<typeof FilePolicyResponseSchema>>>;
+  fileUploadInitiate: (
+    input: z.input<typeof FileUploadInitiateRequestSchema>
+  ) => Promise<ApiResult<z.output<typeof FileUploadInitiateResponseSchema>>>;
+  fileUploadChunk: (uploadUrl: string, body: Uint8Array) => Promise<ApiResult<{ etag: string }>>;
+  fileDownloadChunk: (downloadUrl: string) => Promise<ApiResult<Uint8Array>>;
+  fileUploadComplete: (
+    input: z.input<typeof FileUploadCompleteRequestSchema>
+  ) => Promise<ApiResult<z.output<typeof FileUploadCompleteResponseSchema>>>;
+  fileFetch: (
+    uuid: z.input<typeof UUIDSchema>
+  ) => Promise<ApiResult<z.output<typeof FileFetchResponseSchema>>>;
 }
 
 interface RequestJsonOptions<TInput, TRequest, TResponse> {
@@ -153,6 +169,13 @@ function joinPath(basePath: string, path: string): string {
   const normalizedBase = normalizeBasePath(basePath);
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${normalizedBase}${normalizedPath}`;
+}
+
+function resolveRequestUrl(basePath: string, pathOrUrl: string): string {
+  if (/^https?:\/\//u.test(pathOrUrl) || pathOrUrl.startsWith('/')) {
+    return pathOrUrl;
+  }
+  return joinPath(basePath, pathOrUrl);
 }
 
 function createError(
@@ -237,6 +260,92 @@ async function executeRequest<TInput, TRequest, TResponse>(
   }
 
   return { ok: true, data: parsedResponse.data, status: response.status };
+}
+
+async function executeBinaryUpload(
+  basePath: string,
+  fetchImpl: typeof fetch,
+  uploadUrl: string,
+  body: Uint8Array
+): Promise<ApiResult<{ etag: string }>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(resolveRequestUrl(basePath, uploadUrl), {
+      method: 'PUT',
+      body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    return { ok: false, error: createError('NETWORK_ERROR', null, message) };
+  }
+
+  if (!response.ok) {
+    const errorPayload = await readJson(response);
+    const parsedError = ErrorResponseSchema.safeParse(errorPayload);
+    if (parsedError.success) {
+      return {
+        ok: false,
+        error: createError(parsedError.data.code, response.status),
+      };
+    }
+    return { ok: false, error: createError('HTTP_ERROR', response.status) };
+  }
+
+  const headerEtag = response.headers.get('ETag') ?? response.headers.get('etag');
+  if (headerEtag) {
+    return { ok: true, data: { etag: headerEtag.replaceAll('"', '') }, status: response.status };
+  }
+
+  const payload = await readJson(response);
+  const parsedPayload = z
+    .object({
+      ok: z.literal(true).optional(),
+      etag: z.string().min(1),
+    })
+    .safeParse(payload);
+  if (!parsedPayload.success) {
+    return { ok: false, error: createError('INVALID_RESPONSE', response.status) };
+  }
+
+  return { ok: true, data: { etag: parsedPayload.data.etag }, status: response.status };
+}
+
+async function executeBinaryDownload(
+  basePath: string,
+  fetchImpl: typeof fetch,
+  downloadUrl: string
+): Promise<ApiResult<Uint8Array>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(resolveRequestUrl(basePath, downloadUrl), {
+      method: 'GET',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    return { ok: false, error: createError('NETWORK_ERROR', null, message) };
+  }
+
+  if (!response.ok) {
+    const errorPayload = await readJson(response);
+    const parsedError = ErrorResponseSchema.safeParse(errorPayload);
+    if (parsedError.success) {
+      return {
+        ok: false,
+        error: createError(parsedError.data.code, response.status),
+      };
+    }
+    return { ok: false, error: createError('HTTP_ERROR', response.status) };
+  }
+
+  try {
+    return {
+      ok: true,
+      data: new Uint8Array(await response.arrayBuffer()),
+      status: response.status,
+    };
+  } catch {
+    return { ok: false, error: createError('INVALID_RESPONSE', response.status) };
+  }
 }
 
 function buildCreateApi(basePath: string, fetchImpl: typeof fetch) {
@@ -372,6 +481,46 @@ function buildPublicApi(basePath: string, fetchImpl: typeof fetch) {
           requestSchema: z.string(),
           buildPath: () => 'file_policy',
           responseSchema: FilePolicyResponseSchema,
+        },
+        basePath,
+        fetchImpl
+      ),
+    fileUploadInitiate: (input: z.input<typeof FileUploadInitiateRequestSchema>) =>
+      executeRequest(
+        {
+          method: 'POST',
+          input,
+          requestSchema: FileUploadInitiateRequestSchema,
+          buildPath: () => 'file/initiate',
+          responseSchema: FileUploadInitiateResponseSchema,
+        },
+        basePath,
+        fetchImpl
+      ),
+    fileUploadChunk: (uploadUrl: string, body: Uint8Array) =>
+      executeBinaryUpload(basePath, fetchImpl, uploadUrl, body),
+    fileDownloadChunk: (downloadUrl: string) =>
+      executeBinaryDownload(basePath, fetchImpl, downloadUrl),
+    fileUploadComplete: (input: z.input<typeof FileUploadCompleteRequestSchema>) =>
+      executeRequest(
+        {
+          method: 'POST',
+          input,
+          requestSchema: FileUploadCompleteRequestSchema,
+          buildPath: () => 'file/complete',
+          responseSchema: FileUploadCompleteResponseSchema,
+        },
+        basePath,
+        fetchImpl
+      ),
+    fileFetch: (uuid: z.input<typeof UUIDSchema>) =>
+      executeRequest(
+        {
+          method: 'GET',
+          input: uuid,
+          requestSchema: UUIDSchema,
+          buildPath: (request) => `file/fetch/${request}`,
+          responseSchema: FileFetchResponseSchema,
         },
         basePath,
         fetchImpl

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
@@ -134,6 +135,9 @@ func TestProtocolServicePasswordHappyPathLockDeliverDecrypt(t *testing.T) {
 	if decryptFetch.DeliveredAt != intent.Timestamp {
 		t.Fatalf("decryptFetch.DeliveredAt = %d, want %d", decryptFetch.DeliveredAt, intent.Timestamp)
 	}
+	if decryptFetch.CipherBundle == nil {
+		t.Fatal("decryptFetch.CipherBundle = nil, want inline payload")
+	}
 	if decryptFetch.CipherBundle.Ciphertext != intent.CipherBundle.Ciphertext {
 		t.Fatalf("decryptFetch.CipherBundle.Ciphertext = %q, want %q", decryptFetch.CipherBundle.Ciphertext, intent.CipherBundle.Ciphertext)
 	}
@@ -196,6 +200,146 @@ func TestProtocolServicePasswordHappyPathLockDeliverDecrypt(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("inspect delivered channel: %v", err)
+	}
+}
+
+func TestProtocolServiceMultipartFileRefHappyPath(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+		File: FilePolicy{
+			MaxFileBytes:            1_048_576,
+			MultipartThresholdBytes: 1_048_576,
+			ChunkSizeBytes:          262_144,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+	})
+
+	ctx := context.Background()
+	timestamp := time.Now().UTC().UnixMilli()
+	uuid := "mmmmmmmmmmmmmmmmmmmmm"
+	lockKeyB64u := encodeBase64URL([]byte("lock-key-manage-flow-000000000002"))
+	softkeyPrivateKey, softkeyPubJWK := generateSoftkeyKeyPair(t)
+
+	if _, err := svc.CreateBegin(ctx, CreateBeginInput{
+		UUID:            uuid,
+		Timestamp:       &timestamp,
+		SecurityProfile: string(store.SecurityProfileQuick),
+	}); err != nil {
+		t.Fatalf("CreateBegin() error = %v", err)
+	}
+	if _, err := svc.CreateFinish(ctx, CreateFinishInput{
+		AdminMode:     string(store.AdminModePassword),
+		UUID:          uuid,
+		SoftkeyPubJWK: softkeyPubJWK,
+		LockKeyB64u:   lockKeyB64u,
+		Timestamp:     &timestamp,
+	}); err != nil {
+		t.Fatalf("CreateFinish() error = %v", err)
+	}
+
+	lockBegin, err := svc.LockBegin(ctx, LockBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("LockBegin() error = %v", err)
+	}
+	receiverPubJWK, receiverPubFpr := generateReceiverPublicKey(t)
+	lockProof, err := computeLockProof(uuid, lockBegin.LockChallenge.ID, lockBegin.LockChallenge.Challenge, lockKeyB64u)
+	if err != nil {
+		t.Fatalf("computeLockProof() error = %v", err)
+	}
+	if _, err := svc.LockCommit(ctx, LockCommitInput{
+		UUID:            uuid,
+		LockChallengeID: lockBegin.LockChallenge.ID,
+		LockProof:       lockProof,
+		ReceiverPubJWK:  receiverPubJWK,
+		ReceiverPubFpr:  receiverPubFpr,
+		LockedAt:        timestamp + 1_000,
+	}); err != nil {
+		t.Fatalf("LockCommit() error = %v", err)
+	}
+
+	compoundBegin, err := svc.CompoundBegin(ctx, CompoundBeginInput{UUID: uuid})
+	if err != nil {
+		t.Fatalf("CompoundBegin() error = %v", err)
+	}
+
+	fileRef := filestore.MultipartFileRef{
+		StorageBackend:       filestore.FileStorageBackendMinIO,
+		ChunkSizeBytes:       262_144,
+		ChunkCount:           1,
+		TotalPlaintextBytes:  64,
+		TotalCiphertextBytes: 80,
+		BaseIV:               encodeBase64URL([]byte("base-iv")),
+		EncContentKey:        encodeBase64URL([]byte("enc-key")),
+		Chunks: []filestore.MultipartFileRefChunk{
+			{
+				Index:           0,
+				StorageKey:      "files/upload-1/0000.bin",
+				CiphertextBytes: 80,
+				CiphertextHash:  strings.Repeat("a", 64),
+			},
+		},
+	}
+
+	intent := ManageIntent{
+		Op:             "update",
+		UUID:           uuid,
+		Version:        0,
+		Timestamp:      timestamp + 2_000,
+		Nonce:          encodeBase64URL([]byte("nonce-manage-flow-000002")),
+		ReceiverPubFpr: receiverPubFpr,
+		PayloadKind:    "file",
+		FileRef:        &fileRef,
+		ExpireAt:       json.RawMessage("null"),
+	}
+	intentHash, err := intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("intent.ComputeHash() error = %v", err)
+	}
+	expectedChallenge, err := computeExpectedCompoundChallengeBytes(
+		uuid,
+		intentHash,
+		&store.ActiveChallenge{
+			ChallengeID:   stringPtr(compoundBegin.Challenge.ID),
+			ChallengeSeed: stringPtr(compoundBegin.Challenge.Seed),
+		},
+		intent.Op,
+	)
+	if err != nil {
+		t.Fatalf("computeExpectedCompoundChallengeBytes() error = %v", err)
+	}
+	signature := signSoftkeyPayload(t, softkeyPrivateKey, expectedChallenge)
+
+	if _, err := svc.CompoundCommit(ctx, CompoundCommitInput{
+		AdminMode:        string(store.AdminModePassword),
+		UUID:             uuid,
+		SoftkeySignature: signature,
+		IntentHash:       intentHash,
+		Intent:           intent,
+	}); err != nil {
+		t.Fatalf("CompoundCommit() error = %v", err)
+	}
+
+	decryptFetch, err := svc.DecryptFetch(ctx, uuid)
+	if err != nil {
+		t.Fatalf("DecryptFetch() error = %v", err)
+	}
+	if decryptFetch.FileRef == nil {
+		t.Fatal("decryptFetch.FileRef = nil, want multipart payload")
+	}
+	if decryptFetch.CipherBundle != nil {
+		t.Fatal("decryptFetch.CipherBundle != nil, want multipart payload only")
+	}
+	if decryptFetch.FileRef.StorageBackend != filestore.FileStorageBackendMinIO {
+		t.Fatalf("decryptFetch.FileRef.StorageBackend = %q, want minio", decryptFetch.FileRef.StorageBackend)
+	}
+	if decryptFetch.FileRef.Chunks[0].StorageKey != fileRef.Chunks[0].StorageKey {
+		t.Fatalf("decryptFetch.FileRef.Chunks[0].StorageKey = %q, want %q", decryptFetch.FileRef.Chunks[0].StorageKey, fileRef.Chunks[0].StorageKey)
 	}
 }
 

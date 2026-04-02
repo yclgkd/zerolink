@@ -17,7 +17,26 @@ export interface EncryptAesGcmResult {
   padBlock: number;
 }
 
+export interface EncryptAesGcmRawResult {
+  ciphertext: Uint8Array;
+  iv: Uint8Array;
+}
+
 export interface DecryptAesGcmParams {
+  key: CryptoKey;
+  ciphertext: Uint8Array;
+  iv: Uint8Array;
+  aad?: Uint8Array;
+}
+
+export interface EncryptAesGcmRawParams {
+  key: CryptoKey;
+  plaintext: Uint8Array;
+  iv: Uint8Array;
+  aad?: Uint8Array;
+}
+
+export interface DecryptAesGcmRawParams {
   key: CryptoKey;
   ciphertext: Uint8Array;
   iv: Uint8Array;
@@ -188,6 +207,28 @@ export async function encryptAesGcm({
   };
 }
 
+export async function encryptAesGcmRaw({
+  key,
+  plaintext,
+  aad,
+  iv,
+}: EncryptAesGcmRawParams): Promise<EncryptAesGcmRawResult> {
+  const cryptoApi = getCryptoApi();
+  assertIvLength(iv);
+  const resolvedIv = iv.slice();
+
+  const ciphertextBuffer = await cryptoApi.subtle.encrypt(
+    buildAesGcmParams(resolvedIv, aad),
+    key,
+    toBufferSource(plaintext)
+  );
+
+  return {
+    ciphertext: new Uint8Array(ciphertextBuffer),
+    iv: resolvedIv,
+  };
+}
+
 export async function decryptAesGcm({
   key,
   ciphertext,
@@ -206,5 +247,26 @@ export async function decryptAesGcm({
     return unpadPlaintext(new Uint8Array(plaintextBuffer));
   } catch (error) {
     throw new Error('AES-GCM decryption failed', { cause: error });
+  }
+}
+
+export async function decryptAesGcmRaw({
+  key,
+  ciphertext,
+  iv,
+  aad,
+}: DecryptAesGcmRawParams): Promise<Uint8Array> {
+  assertIvLength(iv);
+  const cryptoApi = getCryptoApi();
+
+  try {
+    const plaintextBuffer = await cryptoApi.subtle.decrypt(
+      buildAesGcmParams(iv, aad),
+      key,
+      toBufferSource(ciphertext)
+    );
+    return new Uint8Array(plaintextBuffer);
+  } catch (error) {
+    throw new Error('AES-GCM raw decryption failed', { cause: error });
   }
 }

@@ -47,7 +47,7 @@ User Browser                Cloudflare Edge
 Frontend SPA    ──→    Worker (zerolink-api)
   + API requests        │  ├─ run_worker_first = true
                         │  ├─ Injects security response headers
-                        │  ├─ /api/* → Business logic
+                        │  ├─ /api/* → Business logic + multipart coordination
                         │  └─ Other paths → Workers Assets (static files)
                         │
                         │
@@ -55,11 +55,16 @@ Frontend SPA    ──→    Worker (zerolink-api)
                    (SecretVault)
                    [State machine
                     / SQLite]
+                        │
+                        ▼
+                  R2 FILE_BUCKET
+                (encrypted file chunks)
 ```
 
 - **Cloudflare Worker**: Handles all requests (API + static files) and injects security response headers
 - **Workers Assets**: Built-in static asset hosting within the Worker; static asset requests are free and unlimited
-- **Durable Object**: Atomic state machine for each Secret (SQLite backend)
+- **Durable Object**: Atomic state machine for each Secret (SQLite backend); stores inline ciphertext or typed multipart `fileRef` metadata
+- **R2 FILE_BUCKET**: Stores encrypted multipart chunks for large file delivery; the Worker serves `/api/file/*` coordination routes around it
 
 > **Architecture Note**: This project uses the **Workers Assets unified deployment** model, not
 > Cloudflare Pages. Frontend build artifacts are deployed alongside the Worker via the `[assets]`
@@ -84,7 +89,21 @@ pnpm install --frozen-lockfile
 npx wrangler login
 ```
 
-### Step 3: Choose the final access origin before setting secrets
+### Step 3: Create the R2 bucket binding targets
+
+Create the bucket(s) referenced by `packages/backend/wrangler.toml` before the first deploy.
+
+```bash
+# Production
+npx wrangler r2 bucket create zerolink-files
+
+# Staging (create this too if you deploy staging)
+npx wrangler r2 bucket create zerolink-files-staging
+```
+
+`wrangler deploy` will fail if the configured bucket names do not already exist.
+
+### Step 4: Choose the final access origin before setting secrets
 
 Before you run `pnpm setup`, decide whether ZeroLink will be served from a custom domain or from a
 `*.workers.dev` hostname. `RP_ID` and `RP_ORIGIN` must exactly match the final browser origin.
@@ -111,7 +130,7 @@ are deploying. Cloudflare will then serve the Worker from its default `*.workers
 - If you do not know that hostname yet, deploy once without routes, note the generated
   `*.workers.dev` URL, then rerun `pnpm setup` and deploy again.
 
-### Step 4: Run the setup script
+### Step 5: Run the setup script
 
 ```bash
 pnpm setup
@@ -122,7 +141,7 @@ The script interactively performs the following:
 - Prompts for `RP_ID` and `RP_ORIGIN`, setting them as Worker Secrets
 - Lets you choose `production`, `staging`, or `both`
 
-Enter the exact values from Step 3. If the deployed origin changes later, rerun `pnpm setup` and
+Enter the exact values from Step 4. If the deployed origin changes later, rerun `pnpm setup` and
 update the secrets before relying on WebAuthn.
 
 ```
@@ -144,7 +163,7 @@ WebAuthn configuration for production:
 🎉 Setup complete!
 ```
 
-### Step 5: Build the frontend
+### Step 6: Build the frontend
 
 ```bash
 pnpm --filter @zerolink/frontend build
@@ -155,7 +174,7 @@ The default `pnpm build` output is a runnable but **unverified** frontend shell.
 the fail-closed `Verified Release` startup gate, making it suitable for local preview and unsigned
 manual deployments.
 
-### Step 6: Deploy
+### Step 7: Deploy
 
 Choose the command for the environment you actually want to deploy:
 
@@ -178,7 +197,7 @@ A single command deploys both the Worker code and frontend static assets.
 >   `worker-name.<your-workers-subdomain>.workers.dev` hostname
 > - These two values must exactly match the actual access domain, otherwise WebAuthn authentication will fail
 
-### Step 7: Verify deployment
+### Step 8: Verify deployment
 
 ```bash
 cd packages/backend
@@ -191,7 +210,12 @@ npx wrangler tail --env staging
 
 # Verify the Worker is reachable (replace with your actual origin)
 curl -s https://<your-origin>/api/public/00000000-0000-0000-0000-000000000000 | head -c 200
+
+# Verify file policy and multipart support
+curl -s https://<your-origin>/api/file_policy
 ```
+
+For the default Worker config, `/api/file_policy` should report `"multipartSupported": true`.
 
 ---
 
@@ -203,7 +227,18 @@ curl -s https://<your-origin>/api/public/00000000-0000-0000-0000-000000000000 | 
 |----------|----------|-------------|---------|
 | `RP_ID` | Yes | WebAuthn Relying Party ID (domain, without protocol) | `zerolink.dev` |
 | `RP_ORIGIN` | Yes | WebAuthn Origin (full URL) | `https://zerolink.dev` |
-| `COMMIT_TOKEN_SECRET` | Yes | Commit Token HMAC key to prevent replay attacks (random 32-byte hex) | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `COMMIT_TOKEN_SECRET` | Yes | HMAC key for commit-cookie binding and multipart upload-session signing (random 32-byte hex) | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+
+### Cloudflare Bindings (declared in `wrangler.toml`)
+
+| Binding | Type | Description |
+|---------|------|-------------|
+| `SECRET_VAULT` | Durable Object | Channel lifecycle state machine |
+| `ASSETS` | Workers Assets | Frontend static files |
+| `FILE_BUCKET` | R2 bucket | Encrypted multipart file chunks |
+
+`FILE_MULTIPART_SUPPORTED=true` is already enabled in `[vars]` for both production and staging in
+`packages/backend/wrangler.toml`.
 
 ### CI/CD Secrets (GitHub Actions)
 

@@ -16,6 +16,7 @@ SELECT
   receiver_pub_fpr,
   locked_at,
   cipher_bundle,
+  file_ref,
   update_delivery_proof,
   delivered_at,
   version
@@ -38,6 +39,7 @@ INSERT INTO channels (
   receiver_pub_fpr,
   locked_at,
   cipher_bundle,
+  file_ref,
   update_delivery_proof,
   delivered_at,
   version
@@ -57,7 +59,8 @@ INSERT INTO channels (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 ON CONFLICT (uuid) DO UPDATE SET
   state = EXCLUDED.state,
@@ -72,6 +75,7 @@ ON CONFLICT (uuid) DO UPDATE SET
   receiver_pub_fpr = EXCLUDED.receiver_pub_fpr,
   locked_at = EXCLUDED.locked_at,
   cipher_bundle = EXCLUDED.cipher_bundle,
+  file_ref = EXCLUDED.file_ref,
   update_delivery_proof = EXCLUDED.update_delivery_proof,
   delivered_at = EXCLUDED.delivered_at,
   version = EXCLUDED.version
@@ -89,6 +93,7 @@ RETURNING
   receiver_pub_fpr,
   locked_at,
   cipher_bundle,
+  file_ref,
   update_delivery_proof,
   delivered_at,
   version;

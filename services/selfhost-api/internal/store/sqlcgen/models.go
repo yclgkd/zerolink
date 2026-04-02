@@ -34,6 +34,7 @@ type Channel struct {
 	ReceiverPubFpr      *string
 	LockedAt            pgtype.Timestamptz
 	CipherBundle        []byte
+	FileRef             []byte
 	UpdateDeliveryProof []byte
 	DeliveredAt         pgtype.Timestamptz
 	Version             int64

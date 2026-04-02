@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { AES_GCM, MAX_PLAINTEXT_BYTES } from '../../constants.ts';
 import {
   decryptAesGcm,
+  decryptAesGcmRaw,
   encryptAesGcm,
+  encryptAesGcmRaw,
   generateAesKey,
   importAesKeyFromBytes,
   padPlaintext,
@@ -178,6 +180,29 @@ describe('AES-256-GCM', () => {
         iv: tamperedIv,
       })
     ).rejects.toThrow('AES-GCM decryption failed');
+  });
+
+  it('uses the caller-provided IV for raw AES-GCM operations', async () => {
+    const key = await generateAesKey();
+    const iv = randomBytes(AES_GCM.IV_LENGTH);
+    const aad = toBytes('raw aad');
+    const plaintext = toBytes('raw ciphertext');
+
+    const encrypted = await encryptAesGcmRaw({
+      key,
+      plaintext,
+      iv,
+      aad,
+    });
+    const decrypted = await decryptAesGcmRaw({
+      key,
+      ciphertext: encrypted.ciphertext,
+      iv,
+      aad,
+    });
+
+    expect(encrypted.iv).toEqual(iv);
+    expect(toText(decrypted)).toBe('raw ciphertext');
   });
 
   it('rejects invalid IV length for encrypt and decrypt', async () => {

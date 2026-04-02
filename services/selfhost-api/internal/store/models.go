@@ -68,6 +68,7 @@ type Channel struct {
 	ReceiverPubFpr      *string
 	LockedAt            *time.Time
 	CipherBundle        json.RawMessage
+	FileRef             json.RawMessage
 	UpdateDeliveryProof json.RawMessage
 	DeliveredAt         *time.Time
 	Version             int64

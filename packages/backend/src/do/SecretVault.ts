@@ -24,6 +24,7 @@ import {
   handleCompoundBegin,
   handleCompoundCommit,
   handleGetDecryptPayload,
+  handleGetFilePayload,
   handleGetPublicState,
   handleLockBegin,
   handleLockCommit,
@@ -213,6 +214,11 @@ export class SecretVault implements VaultContext {
         return handleGetDecryptPayload(this);
       }
 
+      if (url.pathname === '/get_file_payload') {
+        handler = 'get_file_payload';
+        return handleGetFilePayload(this);
+      }
+
       handler = 'not_found';
       return notFound();
     } catch (error) {
@@ -248,7 +254,7 @@ export class SecretVault implements VaultContext {
     return this.ctx.blockConcurrencyWhile(async () => {
       const current = await loadActiveRecord(this);
       const next = new SecretVaultStateMachine(current).commitDelete();
-      await finalizeTerminalState(this, current.uuid, 'deleted');
+      await finalizeTerminalState(this, current.uuid, 'deleted', undefined, current.fileRef);
       return next;
     });
   }
@@ -257,7 +263,7 @@ export class SecretVault implements VaultContext {
     return this.ctx.blockConcurrencyWhile(async () => {
       const current = await loadActiveRecord(this);
       const next = new SecretVaultStateMachine(current).expire();
-      await finalizeTerminalState(this, current.uuid, 'expired');
+      await finalizeTerminalState(this, current.uuid, 'expired', undefined, current.fileRef);
       return next;
     });
   }

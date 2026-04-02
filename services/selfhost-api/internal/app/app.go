@@ -12,6 +12,7 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/service"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
@@ -30,11 +31,11 @@ type Runtime struct {
 	logger          *slog.Logger
 }
 
-func resolveMaxProtocolBodyBytes(fileMaxBytes int64) int64 {
-	if fileMaxBytes <= 0 {
+func resolveMaxProtocolBodyBytes(inlineMaxBytes int64) int64 {
+	if inlineMaxBytes <= 0 {
 		return minInlineProtocolBodyBytes
 	}
-	return max(fileMaxBytes*inlineBase64Overhead, minInlineProtocolBodyBytes)
+	return max(inlineMaxBytes*inlineBase64Overhead, minInlineProtocolBodyBytes)
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
@@ -45,6 +46,26 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 
 	realtimeHub := realtime.NewHub(logger)
 	verifier := webauthn.NewVerifier()
+
+	var fileStore httpapi.FileStore
+	if cfg.File.StorageBackend == "minio" {
+		minioStore, err := filestore.NewMinIO(ctx, filestore.Config{
+			Endpoint:  cfg.File.MinIO.Endpoint,
+			AccessKey: cfg.File.MinIO.AccessKey,
+			SecretKey: cfg.File.MinIO.SecretKey,
+			Bucket:    cfg.File.MinIO.Bucket,
+			UseSSL:    cfg.File.MinIO.UseSSL,
+			Region:    cfg.File.MinIO.Region,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("init file storage: %w", err)
+		}
+		fileStore = minioStore
+	}
+	if fileStore != nil {
+		db.SetMultipartCleaner(fileStore)
+	}
+
 	protocolService := service.NewProtocolService(
 		db,
 		service.ProtocolConfig{
@@ -74,6 +95,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		Services:      services,
 		AllowedOrigin: cfg.RP.Origin,
 		Realtime:      realtimeHub,
+		FileStore:     fileStore,
 		FilePolicy: httpapi.FilePolicy{
 			MaxFileBytes:            cfg.File.MaxBytes,
 			MultipartThresholdBytes: cfg.File.MultipartThresholdBytes,
@@ -81,7 +103,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			MaxChunks:               cfg.File.MaxChunks,
 			MultipartSupported:      cfg.File.MultipartSupported,
 		},
-		MaxProtocolBodyBytes: resolveMaxProtocolBodyBytes(cfg.File.MaxBytes),
+		MaxProtocolBodyBytes: resolveMaxProtocolBodyBytes(min(cfg.File.MaxBytes, cfg.File.MultipartThresholdBytes)),
 	})
 
 	// WriteTimeout is intentionally 0: hijacked WebSocket connections

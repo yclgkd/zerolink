@@ -18,6 +18,13 @@ import {
   readInternalCommitCookieSignal,
 } from './commitTokens.ts';
 import { toFilePolicyResponse } from './file-policy.ts';
+import {
+  handleFileChunkUpload,
+  handleFileDownload,
+  handleFileFetch,
+  handleFileUploadComplete,
+  handleFileUploadInitiate,
+} from './file-routes.ts';
 import { applySecurityHeaders } from './security-headers.ts';
 
 export interface Env {
@@ -32,6 +39,7 @@ export interface Env {
   FILE_CHUNK_SIZE_BYTES?: string | number;
   FILE_MAX_CHUNKS?: string | number;
   FILE_MULTIPART_SUPPORTED?: string | boolean;
+  FILE_BUCKET?: R2Bucket;
 }
 
 const UUID_REGEX = /^[A-Za-z0-9_-]{21}$/u;
@@ -40,7 +48,7 @@ function isValidUuid(value: string): boolean {
   return UUID_REGEX.test(value);
 }
 
-type ApiMethod = 'GET' | 'POST';
+type ApiMethod = 'GET' | 'POST' | 'PUT';
 
 interface ApiRoute {
   method: ApiMethod;
@@ -48,7 +56,7 @@ interface ApiRoute {
 }
 
 const API_PREFIX = '/api';
-const ALLOW_METHODS = 'GET,POST,OPTIONS';
+const ALLOW_METHODS = 'GET,POST,PUT,OPTIONS';
 const ALLOW_HEADERS = 'Content-Type, Authorization';
 const CORS_ALLOW_ORIGIN = '*';
 const LOCK_BEGIN_PATH = /^\/api\/lock_begin\/([^/]+)$/u;
@@ -60,6 +68,11 @@ const PUBLIC_STATUS_PATH = /^\/api\/public\/([^/]+)$/u;
 const DECRYPT_FETCH_PATH = /^\/api\/decrypt_fetch\/([^/]+)$/u;
 const WS_SUBSCRIBE_PATH = /^\/api\/ws\/([^/]+)$/u;
 const FILE_POLICY_PATH = '/api/file_policy';
+const FILE_UPLOAD_INITIATE_PATH = '/api/file/initiate';
+const FILE_UPLOAD_COMPLETE_PATH = '/api/file/complete';
+const FILE_FETCH_PATH = /^\/api\/file\/fetch\/([^/]+)$/u;
+const FILE_CHUNK_PATH = /^\/api\/file\/chunk\/([^/]+)\/([^/]+)\/(\d+)$/u;
+const FILE_DOWNLOAD_PATH = /^\/api\/file\/dl\/([^/]+)\/(\d+)$/u;
 
 const API_ROUTES: readonly ApiRoute[] = [
   { method: 'POST', pattern: /^\/api\/create_begin\/[^/]+$/u },
@@ -153,7 +166,8 @@ async function forwardToSecretVault(
     | '/create_begin'
     | '/create_finish'
     | '/get_public_state'
-    | '/get_decrypt_payload',
+    | '/get_decrypt_payload'
+    | '/get_file_payload',
   payload: Record<string, unknown>
 ): Promise<Response> {
   try {
@@ -225,6 +239,7 @@ function shouldAttachCallerKey(
     | '/create_finish'
     | '/get_public_state'
     | '/get_decrypt_payload'
+    | '/get_file_payload'
 ): boolean {
   return (
     path === '/lock_begin' ||
@@ -244,6 +259,7 @@ function resolveCommitCookieKind(
     | '/create_finish'
     | '/get_public_state'
     | '/get_decrypt_payload'
+    | '/get_file_payload'
 ): CommitCookieKind | null {
   if (path === '/lock_commit') {
     return 'lock';
@@ -419,6 +435,47 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
   if (pathname === FILE_POLICY_PATH) {
     if (request.method !== 'GET') return methodNotAllowed('GET');
     return jsonApiResponse(toFilePolicyResponse(env), 200);
+  }
+
+  if (pathname === FILE_UPLOAD_INITIATE_PATH) {
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    return handleFileUploadInitiate(request, env);
+  }
+
+  if (pathname === FILE_UPLOAD_COMPLETE_PATH) {
+    if (request.method !== 'POST') return methodNotAllowed('POST');
+    return handleFileUploadComplete(request, env);
+  }
+
+  const fileChunkMatch = pathname.match(FILE_CHUNK_PATH);
+  if (fileChunkMatch) {
+    if (request.method !== 'PUT') return methodNotAllowed('PUT');
+    const uuid = fileChunkMatch[1] ?? '';
+    const uploadId = fileChunkMatch[2] ?? '';
+    const index = Number(fileChunkMatch[3] ?? '');
+    if (!isValidUuid(uuid) || !Number.isInteger(index) || index < 0) {
+      return errorResponse('BAD_REQUEST', 400);
+    }
+    return handleFileChunkUpload(request, env, uuid, uploadId, index);
+  }
+
+  const fileFetchMatch = pathname.match(FILE_FETCH_PATH);
+  if (fileFetchMatch) {
+    if (request.method !== 'GET') return methodNotAllowed('GET');
+    const uuid = fileFetchMatch[1] ?? '';
+    if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
+    return handleFileFetch(env, uuid);
+  }
+
+  const fileDownloadMatch = pathname.match(FILE_DOWNLOAD_PATH);
+  if (fileDownloadMatch) {
+    if (request.method !== 'GET') return methodNotAllowed('GET');
+    const uuid = fileDownloadMatch[1] ?? '';
+    const index = Number(fileDownloadMatch[2] ?? '');
+    if (!isValidUuid(uuid) || !Number.isInteger(index) || index < 0) {
+      return errorResponse('BAD_REQUEST', 400);
+    }
+    return handleFileDownload(request, env, uuid, index);
   }
 
   const wsMatch = pathname.match(WS_SUBSCRIBE_PATH);

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/protocol"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/service"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 )
 
 type Dependencies struct {
@@ -21,8 +23,17 @@ type Dependencies struct {
 	Services             *service.Container
 	AllowedOrigin        string
 	Realtime             *realtime.Hub
+	FileStore            FileStore
 	FilePolicy           FilePolicy
 	MaxProtocolBodyBytes int64
+}
+
+type FileStore interface {
+	Initiate(context.Context, string, int) error
+	PresignedUpload(context.Context, string, int, time.Duration) (string, error)
+	CompleteUpload(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
+	PresignedDownload(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
+	DeleteUpload(context.Context, filestore.MultipartFileRef) error
 }
 
 type FilePolicy struct {
@@ -70,6 +81,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
 	mux.HandleFunc("/api/file_policy", methodOnly(http.MethodGet, logger, filePolicyHandler(deps.FilePolicy, logger)))
+	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, logger)))
 
 	for _, route := range protocol.RouteSpecs() {
 		if route.Name == "ws" {
@@ -169,6 +183,142 @@ func filePolicyHandler(filePolicy FilePolicy, logger *slog.Logger) http.HandlerF
 				"maxChunks":               filePolicy.MaxChunks,
 				"multipartSupported":      filePolicy.MultipartSupported,
 			},
+		})
+	}
+}
+
+func fileInitiateHandler(
+	protocolService service.Protocol,
+	fileStore FileStore,
+	filePolicy FilePolicy,
+	logger *slog.Logger,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fileStore == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
+			return
+		}
+		if protocolService == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "protocol service is not configured")
+			return
+		}
+
+		var input filestore.FileUploadInitiateRequest
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
+			return
+		}
+		if err := input.Validate(); err != nil {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		if !filePolicy.MultipartSupported {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "multipart file delivery is disabled")
+			return
+		}
+		if int64(input.ChunkCount) > filePolicy.MaxChunks {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunkCount exceeds deployment file policy")
+			return
+		}
+		if _, err := protocolService.PublicStatus(r.Context(), input.ChannelUUID); err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+
+		uploadID, err := filestore.NewUploadID()
+		if err != nil {
+			writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate upload id")
+			return
+		}
+		if err := fileStore.Initiate(r.Context(), uploadID, input.ChunkCount); err != nil {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+
+		chunks := make([]filestore.FileUploadChunkTarget, 0, input.ChunkCount)
+		for index := 0; index < input.ChunkCount; index++ {
+			uploadURL, err := fileStore.PresignedUpload(r.Context(), uploadID, index, 15*time.Minute)
+			if err != nil {
+				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+				return
+			}
+			chunks = append(chunks, filestore.FileUploadChunkTarget{Index: index, UploadURL: uploadURL})
+		}
+
+		writeJSON(logger, w, http.StatusOK, filestore.FileUploadInitiateResponse{
+			OK:       true,
+			UploadID: uploadID,
+			Chunks:   chunks,
+		})
+	}
+}
+
+func fileCompleteHandler(fileStore FileStore, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fileStore == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
+			return
+		}
+
+		var input filestore.FileUploadCompleteRequest
+		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
+			return
+		}
+		if err := input.Validate(); err != nil {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+
+		fileRef, err := fileStore.CompleteUpload(r.Context(), input)
+		if err != nil {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+
+		writeJSON(logger, w, http.StatusOK, filestore.FileUploadCompleteResponse{
+			OK:      true,
+			FileRef: fileRef,
+		})
+	}
+}
+
+func fileFetchHandler(protocolService service.Protocol, fileStore FileStore, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fileStore == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
+			return
+		}
+		if protocolService == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "protocol service is not configured")
+			return
+		}
+
+		output, err := protocolService.DecryptFetch(r.Context(), r.PathValue("uuid"))
+		if err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
+		if output.FileRef == nil {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "file payload is not available")
+			return
+		}
+
+		chunks := make([]filestore.FileDownloadChunkTarget, 0, len(output.FileRef.Chunks))
+		for _, chunk := range output.FileRef.Chunks {
+			downloadURL, err := fileStore.PresignedDownload(r.Context(), *output.FileRef, chunk.Index, 5*time.Minute)
+			if err != nil {
+				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+				return
+			}
+			chunks = append(chunks, filestore.FileDownloadChunkTarget{
+				Index:       chunk.Index,
+				DownloadURL: downloadURL,
+			})
+		}
+
+		writeJSON(logger, w, http.StatusOK, filestore.FileFetchResponse{
+			OK:     true,
+			Chunks: chunks,
 		})
 	}
 }

@@ -86,6 +86,8 @@ export interface ChannelRecord {
 
   /** Encrypted secret payload. Set after a successful compound_commit update. */
   cipherBundle?: CipherBundle;
+  /** Multipart encrypted file payload reference. */
+  fileRef?: MultipartFileRef;
   /** Detached sender proof for the delivered update intent. */
   updateDeliveryProof?: StoredUpdateDeliveryProof;
 
@@ -561,6 +563,75 @@ export interface CompoundBeginResponse {
   adminMode: AdminMode;
 }
 
+export type FileStorageBackend = 'r2' | 'minio';
+
+export interface FileUploadInitiateRequest {
+  channelUuid: UUID;
+  chunkCount: number;
+  totalCiphertextBytes: number;
+}
+
+export interface FileUploadChunkTarget {
+  index: number;
+  uploadUrl: string;
+}
+
+export interface FileUploadInitiateResponse {
+  ok: true;
+  uploadId: Base64Url;
+  chunks: FileUploadChunkTarget[];
+}
+
+export interface FileUploadCompleteChunk {
+  index: number;
+  etag: string;
+  ciphertextBytes: number;
+  ciphertextHash: HexString;
+}
+
+export interface MultipartFileRefChunk {
+  index: number;
+  storageKey: string;
+  ciphertextBytes: number;
+  ciphertextHash: HexString;
+}
+
+export interface MultipartFileRef {
+  storageBackend: FileStorageBackend;
+  chunkSizeBytes: number;
+  chunkCount: number;
+  totalPlaintextBytes: number;
+  totalCiphertextBytes: number;
+  baseIv: Base64Url;
+  encContentKey: Base64Url;
+  chunks: MultipartFileRefChunk[];
+}
+
+export interface FileUploadCompleteRequest {
+  uploadId: Base64Url;
+  baseIv: Base64Url;
+  encContentKey: Base64Url;
+  chunkSizeBytes: number;
+  totalPlaintextBytes: number;
+  totalCiphertextBytes: number;
+  chunks: FileUploadCompleteChunk[];
+}
+
+export interface FileUploadCompleteResponse {
+  ok: true;
+  fileRef: MultipartFileRef;
+}
+
+export interface FileDownloadChunkTarget {
+  index: number;
+  downloadUrl: string;
+}
+
+export interface FileFetchResponse {
+  ok: true;
+  chunks: FileDownloadChunkTarget[];
+}
+
 /** Canonical update payload; SHA-256 of its JSON form becomes intent_hash. */
 export interface UpdateIntent {
   op: 'update';
@@ -570,7 +641,8 @@ export interface UpdateIntent {
   nonce: Base64Url;
   receiverPubFpr: HexString;
   payloadKind?: SharePayloadKind | undefined;
-  cipherBundle: CipherBundle;
+  cipherBundle?: CipherBundle | undefined;
+  fileRef?: MultipartFileRef | undefined;
   /** null means "use channel's default TTL". */
   expireAt: UnixMs | null;
 }
@@ -643,7 +715,8 @@ export interface PublicStatusResponse {
 
 export interface DecryptFetchResponse {
   ok: true;
-  cipherBundle: CipherBundle;
+  cipherBundle?: CipherBundle | undefined;
+  fileRef?: MultipartFileRef | undefined;
   receiverPubFpr: HexString;
   cipherVersion: number;
   deliveryAuth?: DecryptFetchDeliveryAuth | undefined;

@@ -8,6 +8,7 @@ import type {
   DeleteIntent,
   FileSharePolicy,
   HexString,
+  MultipartFileRef,
   RSAPublicKeyJWK,
   SecurityProfile,
   UpdateIntent,
@@ -137,7 +138,9 @@ export interface DeliverSecretInput {
   file?: {
     fileName: string;
     mediaType: string;
-    bytes: Uint8Array;
+    bytes?: Uint8Array;
+    blob?: Blob;
+    size?: number;
   };
   expireAt?: number | null;
   /** Required when the channel uses softkey/password mode. Must match the passphrase used at create time. */
@@ -153,7 +156,8 @@ export interface DeliverSecretOutput {
   intentHash: string;
   intent: UpdateIntent;
   expectedChallenge: string;
-  cipherBundle: CipherBundle;
+  cipherBundle?: CipherBundle | undefined;
+  fileRef?: MultipartFileRef | undefined;
   payloadKind: DecryptedSharePayload['kind'];
 }
 

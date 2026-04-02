@@ -8,6 +8,7 @@ import {
   INTERNAL_COMMIT_TOKEN_HEADER,
 } from '../../commitTokens.ts';
 import worker, { type Env } from '../../index.ts';
+import { createMockR2Bucket } from './r2-fixtures.ts';
 
 export {
   computeCallerKey,
@@ -174,6 +175,7 @@ export function createMockEnv(responder: (request: Request) => Promise<Response>
     },
   } as unknown as DurableObjectNamespace;
 
+  const fileBucket = createMockR2Bucket();
   const assets = {
     async fetch(_request: Request): Promise<Response> {
       return new Response('<html>ZeroLink</html>', {
@@ -187,6 +189,7 @@ export function createMockEnv(responder: (request: Request) => Promise<Response>
     env: {
       SECRET_VAULT: namespace,
       ASSETS: assets,
+      FILE_BUCKET: fileBucket,
       APP_ENV: 'test',
       COMMIT_TOKEN_SECRET: 'commit-token-secret',
       RP_ID: 'zerolink.test',

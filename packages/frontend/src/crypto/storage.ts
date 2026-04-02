@@ -2,7 +2,8 @@ import type { HexString, UUID, WrappedPrivateKey } from '@zerolink/shared';
 
 export interface LastAcceptedDelivery {
   version: number;
-  ciphertextHash: HexString | string;
+  deliveryHash?: HexString | string;
+  ciphertextHash?: HexString | string;
   acceptedAt: number;
 }
 

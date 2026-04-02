@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store"
+	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 )
 
 const (
@@ -105,8 +106,22 @@ func (intent ManageIntent) Validate() error {
 		if intent.PayloadKind != "" && intent.PayloadKind != "text" && intent.PayloadKind != "file" {
 			return badRequest("invalid intent")
 		}
-		if !isLowerHex(intent.ReceiverPubFpr, 64) || intent.CipherBundle == nil || !intent.CipherBundle.Valid() {
+		if !isLowerHex(intent.ReceiverPubFpr, 64) {
 			return badRequest("invalid intent")
+		}
+		if (intent.CipherBundle == nil) == (intent.FileRef == nil) {
+			return badRequest("invalid intent")
+		}
+		if intent.CipherBundle != nil && !intent.CipherBundle.Valid() {
+			return badRequest("invalid intent")
+		}
+		if intent.FileRef != nil {
+			if err := validateMultipartFileRef(*intent.FileRef); err != nil {
+				return badRequest("invalid intent")
+			}
+			if intent.PayloadKind != "file" {
+				return badRequest("invalid intent")
+			}
 		}
 		if _, err := intent.ParseExpireAt(); err != nil {
 			return badRequest("invalid intent")
@@ -142,18 +157,23 @@ func (intent ManageIntent) CanonicalValue() map[string]any {
 			"timestamp":      intent.Timestamp,
 			"nonce":          intent.Nonce,
 			"receiverPubFpr": intent.ReceiverPubFpr,
-			"cipherBundle": map[string]any{
+			"expireAt":       nullableInt64ToAny(expireAt),
+		}
+		if intent.PayloadKind != "" {
+			payload["payloadKind"] = intent.PayloadKind
+		}
+		if intent.CipherBundle != nil {
+			payload["cipherBundle"] = map[string]any{
 				"ciphertext":     intent.CipherBundle.Ciphertext,
 				"iv":             intent.CipherBundle.IV,
 				"aad":            intent.CipherBundle.AAD,
 				"encContentKey":  intent.CipherBundle.EncContentKey,
 				"ciphertextHash": intent.CipherBundle.CiphertextHash,
 				"padBlock":       intent.CipherBundle.PadBlock,
-			},
-			"expireAt": nullableInt64ToAny(expireAt),
+			}
 		}
-		if intent.PayloadKind != "" {
-			payload["payloadKind"] = intent.PayloadKind
+		if intent.FileRef != nil {
+			payload["fileRef"] = intent.FileRef
 		}
 		return payload
 	default:
@@ -189,6 +209,16 @@ func (bundle CipherBundle) Valid() bool {
 		isLowerHex(bundle.CiphertextHash, 64) &&
 		bundle.PadBlock > 0 &&
 		bundle.PadBlock <= padBlockMax
+}
+
+func validateMultipartFileRef(fileRef filestore.MultipartFileRef) error {
+	if err := fileRef.Validate(); err != nil {
+		return err
+	}
+	if fileRef.StorageBackend != filestore.FileStorageBackendMinIO {
+		return fmt.Errorf("unsupported storage backend %q", fileRef.StorageBackend)
+	}
+	return nil
 }
 
 func (a AssertionJSON) Valid() bool {

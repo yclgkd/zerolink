@@ -139,6 +139,7 @@ SELECT
   receiver_pub_fpr,
   locked_at,
   cipher_bundle,
+  file_ref,
   update_delivery_proof,
   delivered_at,
   version
@@ -164,6 +165,7 @@ func (q *Queries) GetChannel(ctx context.Context, uuid string) (Channel, error) 
 		&i.ReceiverPubFpr,
 		&i.LockedAt,
 		&i.CipherBundle,
+		&i.FileRef,
 		&i.UpdateDeliveryProof,
 		&i.DeliveredAt,
 		&i.Version,
@@ -415,6 +417,7 @@ INSERT INTO channels (
   receiver_pub_fpr,
   locked_at,
   cipher_bundle,
+  file_ref,
   update_delivery_proof,
   delivered_at,
   version
@@ -434,7 +437,8 @@ INSERT INTO channels (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 ON CONFLICT (uuid) DO UPDATE SET
   state = EXCLUDED.state,
@@ -449,6 +453,7 @@ ON CONFLICT (uuid) DO UPDATE SET
   receiver_pub_fpr = EXCLUDED.receiver_pub_fpr,
   locked_at = EXCLUDED.locked_at,
   cipher_bundle = EXCLUDED.cipher_bundle,
+  file_ref = EXCLUDED.file_ref,
   update_delivery_proof = EXCLUDED.update_delivery_proof,
   delivered_at = EXCLUDED.delivered_at,
   version = EXCLUDED.version
@@ -466,6 +471,7 @@ RETURNING
   receiver_pub_fpr,
   locked_at,
   cipher_bundle,
+  file_ref,
   update_delivery_proof,
   delivered_at,
   version
@@ -485,6 +491,7 @@ type UpsertChannelParams struct {
 	ReceiverPubFpr      *string
 	LockedAt            pgtype.Timestamptz
 	CipherBundle        []byte
+	FileRef             []byte
 	UpdateDeliveryProof []byte
 	DeliveredAt         pgtype.Timestamptz
 	Version             int64
@@ -505,6 +512,7 @@ func (q *Queries) UpsertChannel(ctx context.Context, arg UpsertChannelParams) (C
 		arg.ReceiverPubFpr,
 		arg.LockedAt,
 		arg.CipherBundle,
+		arg.FileRef,
 		arg.UpdateDeliveryProof,
 		arg.DeliveredAt,
 		arg.Version,
@@ -524,6 +532,7 @@ func (q *Queries) UpsertChannel(ctx context.Context, arg UpsertChannelParams) (C
 		&i.ReceiverPubFpr,
 		&i.LockedAt,
 		&i.CipherBundle,
+		&i.FileRef,
 		&i.UpdateDeliveryProof,
 		&i.DeliveredAt,
 		&i.Version,
