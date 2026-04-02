@@ -21,6 +21,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Introduce `scripts/check-cloudflare-deploy-prereqs.ts`, run it from CI immediately after dependency install, and make it verify Workers API reachability, route access for `zerolink.dev`, and the target environment's R2 bucket before continuing. Update both deployment guides to describe the required token scope and the new fail-fast stage.
 **Reasoning**: The failure mode is infrastructure-specific, deterministic, and cheap to detect. Catching it before the frontend build saves CI time and gives a more actionable error than Wrangler's later deploy-time output.
 **Trade-offs**: The preflight duplicates a small amount of repo-specific Cloudflare configuration knowledge (zone name and bucket names), so future route or bucket renames must update both `wrangler.toml` and the preflight mapping.
+**Follow-up (2026-04-02, review fix)**: The preflight must not rely on read-only Cloudflare endpoints as proof of deploy readiness. It now verifies the current token, inspects its effective allow/deny policies, requires `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` on the configured resources, and only uses the bucket GET call for existence checking after permission validation passes.
 
 ## [2026-04-02] Self-host multipart initiation must validate real channel UUIDs and storage readiness
 

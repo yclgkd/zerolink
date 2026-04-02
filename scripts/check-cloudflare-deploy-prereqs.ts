@@ -21,6 +21,51 @@ interface CloudflareApiEnvelope<T> {
   success: boolean;
 }
 
+interface CloudflareZoneSummary {
+  id?: string;
+  name?: string;
+}
+
+interface CloudflareResourceMap {
+  [key: string]: CloudflareResourceValue;
+}
+
+type CloudflareResourceValue = string | CloudflareResourceMap;
+
+interface CloudflareTokenPermissionGroup {
+  name?: string;
+}
+
+interface CloudflareTokenPolicy {
+  effect?: 'allow' | 'deny';
+  permission_groups?: CloudflareTokenPermissionGroup[];
+  resources?: CloudflareResourceMap;
+}
+
+interface CloudflareTokenDetailsResult {
+  id?: string;
+  name?: string;
+  policies?: CloudflareTokenPolicy[];
+  status?: 'active' | 'disabled' | 'expired' | string;
+}
+
+interface CloudflareTokenVerifyResult {
+  id?: string;
+  status?: 'active' | 'disabled' | 'expired' | string;
+}
+
+interface TokenInspectionStrategy {
+  detailsPath: (accountId: string, tokenId: string) => string;
+  label: string;
+  verifyPath: (accountId: string) => string;
+}
+
+interface PermissionRequirement {
+  permissionGroupName: string;
+  resourceDescription: string;
+  resourceMatcher: (resourceKeys: Set<string>) => boolean;
+}
+
 export class CloudflareApiError extends Error {
   constructor(
     message: string,
@@ -55,6 +100,18 @@ const DEPLOY_TARGETS: Record<DeployEnvironment, DeployTarget> = {
     zoneName: 'zerolink.dev',
   },
 };
+const TOKEN_INSPECTION_STRATEGIES: TokenInspectionStrategy[] = [
+  {
+    detailsPath: (_accountId, tokenId) => `/user/tokens/${tokenId}`,
+    label: 'user-owned token',
+    verifyPath: () => '/user/tokens/verify',
+  },
+  {
+    detailsPath: (accountId, tokenId) => `/accounts/${accountId}/tokens/${tokenId}`,
+    label: 'account-owned token',
+    verifyPath: (accountId) => `/accounts/${accountId}/tokens/verify`,
+  },
+];
 
 function out(write: (chunk: string) => void, line: string): void {
   write(`${line}\n`);
@@ -202,22 +259,117 @@ export function resolveDeployTarget(deployEnv: DeployEnvironment): DeployTarget 
   return DEPLOY_TARGETS[deployEnv];
 }
 
-async function verifyWorkersScriptsAccess(
-  accountId: string,
-  apiGet: CloudflareApiGet,
-  write: (chunk: string) => void
-): Promise<void> {
-  out(write, '[1/4] Checking Workers API access...');
+function collectGrantedResourceKeys(
+  resources: CloudflareResourceMap | undefined,
+  keys = new Set<string>()
+): Set<string> {
+  if (!resources) {
+    return keys;
+  }
 
-  try {
-    await apiGet<unknown[]>(`/accounts/${accountId}/workers/scripts`);
-  } catch (error) {
+  for (const [resourceKey, value] of Object.entries(resources)) {
+    if (typeof value === 'string') {
+      if (value === '*') {
+        keys.add(resourceKey);
+      }
+      continue;
+    }
+
+    if (value && typeof value === 'object') {
+      collectGrantedResourceKeys(value, keys);
+    }
+  }
+
+  return keys;
+}
+
+function policyMatchesRequirement(
+  policy: CloudflareTokenPolicy,
+  requirement: PermissionRequirement
+): boolean {
+  const permissionGroupNames = policy.permission_groups?.map((group) => group.name).filter(Boolean);
+  if (!permissionGroupNames?.includes(requirement.permissionGroupName)) {
+    return false;
+  }
+
+  const resourceKeys = collectGrantedResourceKeys(policy.resources);
+  return requirement.resourceMatcher(resourceKeys);
+}
+
+function assertPermissionGranted(
+  policies: CloudflareTokenPolicy[],
+  requirement: PermissionRequirement
+): void {
+  const isDenied = policies.some(
+    (policy) => policy.effect === 'deny' && policyMatchesRequirement(policy, requirement)
+  );
+  if (isDenied) {
     throw new Error(
-      `Workers API access check failed. Ensure CLOUDFLARE_API_TOKEN grants account-level Workers Scripts access. Details: ${describeApiError(error)}`
+      `Token is explicitly denied ${requirement.permissionGroupName} for ${requirement.resourceDescription}.`
     );
   }
 
-  out(write, 'PASS  Workers Scripts API is reachable.');
+  const isAllowed = policies.some(
+    (policy) => policy.effect === 'allow' && policyMatchesRequirement(policy, requirement)
+  );
+  if (!isAllowed) {
+    throw new Error(
+      `Token is missing ${requirement.permissionGroupName} for ${requirement.resourceDescription}.`
+    );
+  }
+}
+
+function createExactOrWildcardMatcher(exactKey: string, wildcardKey: string) {
+  return (resourceKeys: Set<string>): boolean =>
+    resourceKeys.has(exactKey) || resourceKeys.has(wildcardKey);
+}
+
+async function verifyCurrentToken(
+  accountId: string,
+  apiGet: CloudflareApiGet,
+  write: (chunk: string) => void
+): Promise<CloudflareTokenDetailsResult> {
+  out(write, '[1/6] Verifying current Cloudflare API token...');
+
+  const failures: string[] = [];
+
+  for (const strategy of TOKEN_INSPECTION_STRATEGIES) {
+    try {
+      const verifyEnvelope = await apiGet<CloudflareTokenVerifyResult>(
+        strategy.verifyPath(accountId)
+      );
+      const tokenId = verifyEnvelope.result.id?.trim();
+      const tokenStatus = verifyEnvelope.result.status;
+
+      if (!tokenId) {
+        throw new Error('Token verification did not return a token id.');
+      }
+      if (tokenStatus !== 'active') {
+        throw new Error(`Token status is "${tokenStatus ?? 'unknown'}".`);
+      }
+
+      const detailsEnvelope = await apiGet<CloudflareTokenDetailsResult>(
+        strategy.detailsPath(accountId, tokenId)
+      );
+      const details = detailsEnvelope.result;
+
+      if (details.status !== 'active') {
+        throw new Error(
+          `Token details returned non-active status "${details.status ?? 'unknown'}".`
+        );
+      }
+
+      out(
+        write,
+        `PASS  Verified active ${strategy.label}${details.name ? ` "${details.name}"` : ''}.`
+      );
+      return details;
+    } catch (error) {
+      failures.push(`${strategy.label}: ${describeApiError(error)}`);
+    }
+  }
+
+  throw new Error(`Unable to inspect the current Cloudflare API token. ${failures.join(' | ')}`);
 }
 
 async function resolveZoneId(
@@ -225,12 +377,12 @@ async function resolveZoneId(
   apiGet: CloudflareApiGet,
   write: (chunk: string) => void
 ): Promise<string> {
-  out(write, '[2/4] Resolving Cloudflare zone...');
+  out(write, '[2/6] Resolving Cloudflare zone...');
 
-  let envelope: CloudflareApiEnvelope<Array<{ id?: string; name?: string }>>;
+  let envelope: CloudflareApiEnvelope<CloudflareZoneSummary[]>;
   try {
     const params = new URLSearchParams({ name: zoneName });
-    envelope = await apiGet<Array<{ id?: string; name?: string }>>(`/zones?${params.toString()}`);
+    envelope = await apiGet<CloudflareZoneSummary[]>(`/zones?${params.toString()}`);
   } catch (error) {
     throw new Error(
       `Zone lookup failed for "${zoneName}". Ensure the deploy token can read the target zone. Details: ${describeApiError(error)}`
@@ -250,32 +402,71 @@ async function resolveZoneId(
   return zone.id;
 }
 
-async function verifyWorkersRoutesAccess(
-  zoneId: string,
-  zoneName: string,
-  apiGet: CloudflareApiGet,
+function verifyWorkersScriptsWritePermission(
+  accountId: string,
+  policies: CloudflareTokenPolicy[],
   write: (chunk: string) => void
-): Promise<void> {
-  out(write, '[3/4] Checking Workers Routes access...');
+): void {
+  out(write, '[3/6] Validating Workers Scripts write permission...');
 
-  try {
-    await apiGet<unknown[]>(`/zones/${zoneId}/workers/routes`);
-  } catch (error) {
-    throw new Error(
-      `Workers Routes access check failed for "${zoneName}". Ensure CLOUDFLARE_API_TOKEN grants zone-level Workers Routes access. Details: ${describeApiError(error)}`
-    );
-  }
+  assertPermissionGranted(policies, {
+    permissionGroupName: 'Workers Scripts Write',
+    resourceDescription: `account ${accountId}`,
+    resourceMatcher: createExactOrWildcardMatcher(
+      `com.cloudflare.api.account.${accountId}`,
+      'com.cloudflare.api.account.*'
+    ),
+  });
 
-  out(write, `PASS  Workers Routes API is reachable for "${zoneName}".`);
+  out(write, 'PASS  Token grants Workers Scripts Write.');
 }
 
-async function verifyBucketAccess(
+function verifyWorkersRoutesWritePermission(
+  zoneId: string,
+  zoneName: string,
+  policies: CloudflareTokenPolicy[],
+  write: (chunk: string) => void
+): void {
+  out(write, '[4/6] Validating Workers Routes write permission...');
+
+  assertPermissionGranted(policies, {
+    permissionGroupName: 'Workers Routes Write',
+    resourceDescription: `zone ${zoneName}`,
+    resourceMatcher: createExactOrWildcardMatcher(
+      `com.cloudflare.api.account.zone.${zoneId}`,
+      'com.cloudflare.api.account.zone.*'
+    ),
+  });
+
+  out(write, `PASS  Token grants Workers Routes Write for "${zoneName}".`);
+}
+
+function verifyR2StorageWritePermission(
+  accountId: string,
+  policies: CloudflareTokenPolicy[],
+  write: (chunk: string) => void
+): void {
+  out(write, '[5/6] Validating Workers R2 Storage write permission...');
+
+  assertPermissionGranted(policies, {
+    permissionGroupName: 'Workers R2 Storage Write',
+    resourceDescription: `account ${accountId}`,
+    resourceMatcher: createExactOrWildcardMatcher(
+      `com.cloudflare.api.account.${accountId}`,
+      'com.cloudflare.api.account.*'
+    ),
+  });
+
+  out(write, 'PASS  Token grants Workers R2 Storage Write.');
+}
+
+async function verifyBucketExists(
   accountId: string,
   bucketName: string,
   apiGet: CloudflareApiGet,
   write: (chunk: string) => void
 ): Promise<void> {
-  out(write, '[4/4] Checking R2 bucket access...');
+  out(write, '[6/6] Checking required R2 bucket...');
 
   try {
     await apiGet(`/accounts/${accountId}/r2/buckets/${bucketName}`);
@@ -287,11 +478,11 @@ async function verifyBucketAccess(
     }
 
     throw new Error(
-      `R2 bucket access check failed for "${bucketName}". Ensure CLOUDFLARE_API_TOKEN grants account-level Workers R2 Storage access. Details: ${describeApiError(error)}`
+      `R2 bucket lookup failed for "${bucketName}". Ensure the token can read the bound bucket metadata. Details: ${describeApiError(error)}`
     );
   }
 
-  out(write, `PASS  R2 bucket "${bucketName}" is reachable.`);
+  out(write, `PASS  R2 bucket "${bucketName}" exists.`);
 }
 
 export async function runCloudflareDeployPreflight(
@@ -304,10 +495,14 @@ export async function runCloudflareDeployPreflight(
   out(write, `ZeroLink Cloudflare deploy preflight (${target.label})`);
   out(write, '==================================================');
 
-  await verifyWorkersScriptsAccess(options.accountId, apiGet, write);
+  const tokenDetails = await verifyCurrentToken(options.accountId, apiGet, write);
+  const policies = tokenDetails.policies ?? [];
   const zoneId = await resolveZoneId(target.zoneName, apiGet, write);
-  await verifyWorkersRoutesAccess(zoneId, target.zoneName, apiGet, write);
-  await verifyBucketAccess(options.accountId, target.bucketName, apiGet, write);
+
+  verifyWorkersScriptsWritePermission(options.accountId, policies, write);
+  verifyWorkersRoutesWritePermission(zoneId, target.zoneName, policies, write);
+  verifyR2StorageWritePermission(options.accountId, policies, write);
+  await verifyBucketExists(options.accountId, target.bucketName, apiGet, write);
 
   out(write, '');
   out(write, 'All checks passed. Cloudflare deploy prerequisites are ready.');

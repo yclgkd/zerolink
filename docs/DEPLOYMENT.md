@@ -344,7 +344,7 @@ The project includes a standalone deployment workflow `.github/workflows/deploy.
 
 Workflow execution order: `install > preflight cloudflare > build frontend > generate manifest > sign manifest > verify manifest > wrangler deploy`
 
-Before the frontend build starts, the workflow runs `pnpm deploy:preflight`. This fails fast when the deploy token cannot reach the Workers APIs, cannot inspect routes for `zerolink.dev`, or cannot access the required environment-specific R2 bucket.
+Before the frontend build starts, the workflow runs `pnpm deploy:preflight`. This verifies the current token is active, checks that it effectively grants `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` for the configured account/zone, and then confirms the required environment-specific R2 bucket exists.
 
 A separate `.github/workflows/release-please.yml` workflow is responsible for generating or updating Release PRs on `main`. This workflow first pre-checks `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action. The current upstream action still declares `runs: node20`, so GitHub may show a Node 20 deprecation warning; ZeroLink does not work around this warning by installing npm packages at runtime, and will update the pin once the upstream action upgrades. After merging a Release PR, Release Please will:
 - Update `version.txt` in the root directory
