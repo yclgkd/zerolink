@@ -111,7 +111,7 @@ const en = {
     secretPlaceholder: 'Type or paste your secret here',
     fileLabel: 'File to Deliver',
     fileClearButton: 'Remove File',
-    fileSizeLimit: 'Max file size: {{size}}',
+    fileSizeLimit: 'Maximum file size: {{size}}',
     fileSizeLimitLoading: 'Checking file size limit\u2026',
     softkeyPassphraseHint:
       'This channel uses a password-protected management key. Enter the password you set when creating this channel.',
@@ -327,7 +327,7 @@ const en = {
     missingReceiverIdentity: 'Receiver identity is unavailable. Ask receiver to lock again.',
     networkError: 'Network error while performing manage action. Please retry.',
     badRequest: 'Manage request was rejected. Please retry.',
-    fileTooLarge: 'The selected file exceeds the file size limit for this deployment.',
+    fileTooLarge: 'The selected file exceeds the 5 MiB limit.',
     multipartRequired: 'The selected file is larger than the inline delivery limit.',
     webauthnError: 'WebAuthn verification was not completed.',
     cryptoError: 'Incorrect channel password. Please try again.',

@@ -1,4 +1,4 @@
-import { CHANNEL_STATE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
+import { CHANNEL_STATE, FILE_SHARE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '../../api/client';
@@ -7,7 +7,7 @@ import { deserializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { useDeliverStore } from '../../stores/deliver-store';
 import type { ChannelClosedReason, ChannelStateUpdate } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
-import { canComposeDelivery, isTerminalManageState } from './manage-utils';
+import { canComposeDelivery, isTerminalManageState, mapActionError } from './manage-utils';
 import { useManageDeliveryLogic, useManageDestructionLogic } from './use-manage-actions';
 import { usePublicStatusFetcher } from './use-manage-status';
 
@@ -19,7 +19,9 @@ export function useManagePageState(uuid?: string) {
   const latestManageHashRef = useRef(location.hash);
 
   const [deliveryMode, setDeliveryMode] = useState<'text' | 'file'>('text');
-  const [filePolicyMaxBytes, setFilePolicyMaxBytes] = useState<number | null>(null);
+  const [filePolicyMaxBytes, setFilePolicyMaxBytes] = useState<number>(
+    FILE_SHARE.MAX_BYTES_DEFAULT
+  );
   const filePolicyFetchedRef = useRef(false);
   const [secretInput, setSecretInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -224,12 +226,7 @@ export function useManagePageState(uuid?: string) {
           void apiClient.filePolicy().then((result) => {
             if (!mountedRef.current) return;
             if (result.ok) {
-              setFilePolicyMaxBytes(
-                Math.min(
-                  result.data.policy.maxFileBytes,
-                  result.data.policy.multipartThresholdBytes
-                )
-              );
+              setFilePolicyMaxBytes(result.data.policy.maxFileBytes);
               return;
             }
             filePolicyFetchedRef.current = false;
@@ -245,11 +242,19 @@ export function useManagePageState(uuid?: string) {
       }
     },
     handleFileSelect: (file: File | null) => {
+      if (file && file.size > filePolicyMaxBytes) {
+        setSelectedFile(null);
+        setActionError(mapActionError('FILE_TOO_LARGE'));
+        setIsSecretInputInvalid(false);
+        return false;
+      }
+
       setSelectedFile(file);
       if (actionError || isSecretInputInvalid) {
         setActionError(null);
         setIsSecretInputInvalid(false);
       }
+      return true;
     },
     handleSoftkeyPassphraseChange: (value: string) => {
       setSoftkeyPassphrase(value);
