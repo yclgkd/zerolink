@@ -261,6 +261,8 @@ For GitHub Actions deploys, ZeroLink expects a token equivalent to these permiss
 - Zone: `Workers Routes (edit)` for the deployment zone
 - User token note: Cloudflare's Workers Builds docs also include `Account Settings (read)`, `User Details (read)`, and `Memberships (read)` on the automatically generated user token
 
+ZeroLink's deploy preflight treats those write scopes as the source of truth. If the token can inspect itself through Cloudflare's token APIs, the workflow proves the scopes before the frontend build starts. If the token cannot call those introspection endpoints, the workflow degrades to best-effort Workers/R2 reachability checks and logs a warning instead of blocking the deploy step up front.
+
 If you use an account-owned token instead of a user token, grant the equivalent account and zone permissions above.
 
 ---
@@ -344,7 +346,7 @@ The project includes a standalone deployment workflow `.github/workflows/deploy.
 
 Workflow execution order: `install > preflight cloudflare > build frontend > generate manifest > sign manifest > verify manifest > wrangler deploy`
 
-Before the frontend build starts, the workflow runs `pnpm deploy:preflight`. This verifies the current token is active, checks that it effectively grants `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` for the configured account/zone, and then confirms the required environment-specific R2 bucket exists.
+Before the frontend build starts, the workflow runs `pnpm deploy:preflight`. When Cloudflare allows token introspection, the preflight verifies the current token is active, checks that it effectively grants `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` for the configured account/zone, and then confirms the required environment-specific R2 bucket exists. Some account-owned deploy tokens cannot inspect their own policy details; in that case, the preflight falls back to best-effort Workers/R2 reachability checks plus bucket existence, logs a warning, and leaves final write-scope enforcement to `wrangler deploy`.
 
 A separate `.github/workflows/release-please.yml` workflow is responsible for generating or updating Release PRs on `main`. This workflow first pre-checks `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action. The current upstream action still declares `runs: node20`, so GitHub may show a Node 20 deprecation warning; ZeroLink does not work around this warning by installing npm packages at runtime, and will update the pin once the upstream action upgrades. After merging a Release PR, Release Please will:
 - Update `version.txt` in the root directory

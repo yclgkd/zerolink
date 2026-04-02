@@ -22,6 +22,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: The failure mode is infrastructure-specific, deterministic, and cheap to detect. Catching it before the frontend build saves CI time and gives a more actionable error than Wrangler's later deploy-time output.
 **Trade-offs**: The preflight duplicates a small amount of repo-specific Cloudflare configuration knowledge (zone name and bucket names), so future route or bucket renames must update both `wrangler.toml` and the preflight mapping.
 **Follow-up (2026-04-02, review fix)**: The preflight must not rely on read-only Cloudflare endpoints as proof of deploy readiness. It now verifies the current token, inspects its effective allow/deny policies, requires `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` on the configured resources, and only uses the bucket GET call for existence checking after permission validation passes.
+**Follow-up (2026-04-02, CI regression fix)**: Some real account-owned deploy tokens can deploy Workers and R2 bindings but still cannot inspect themselves through Cloudflare's token APIs. The preflight now keeps strict write-scope validation when token introspection is available, but degrades to explicit best-effort Workers/R2 reachability checks plus bucket existence when introspection is denied, so CI no longer blocks legitimate deploy tokens solely on missing token-management visibility.
 
 ## [2026-04-02] Self-host multipart initiation must validate real channel UUIDs and storage readiness
 

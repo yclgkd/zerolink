@@ -197,6 +197,99 @@ describe('runCloudflareDeployPreflight', () => {
     ]);
   });
 
+  it('falls back to best-effort resource checks when token introspection is unavailable', async () => {
+    const apiGet = createApiGetMock(async (path) => {
+      if (path === '/user/tokens/verify') {
+        throw new CloudflareApiError('invalid token for user endpoint', [
+          { code: 1000, message: 'Invalid API Token' },
+        ]);
+      }
+      if (path === '/accounts/account-123/tokens/verify') {
+        throw new CloudflareApiError('token inspection forbidden', [
+          { code: 9109, message: 'Unauthorized to access requested resource' },
+        ]);
+      }
+      if (path === '/zones?name=zerolink.dev') {
+        return {
+          errors: [],
+          result: [{ id: 'zone-123', name: 'zerolink.dev' }],
+          success: true,
+        };
+      }
+      if (path === '/accounts/account-123/workers/scripts') {
+        return { errors: [], result: [{ id: 'zerolink' }], success: true };
+      }
+      if (path === '/zones/zone-123/workers/routes') {
+        return {
+          errors: [],
+          result: [{ id: 'route-123', pattern: 'staging.zerolink.dev/*', script: 'zerolink' }],
+          success: true,
+        };
+      }
+      if (path === '/accounts/account-123/r2/buckets') {
+        return {
+          errors: [],
+          result: [{ name: 'zerolink-files-staging' }],
+          success: true,
+        };
+      }
+      if (path === '/accounts/account-123/r2/buckets/zerolink-files-staging') {
+        return { errors: [], result: { name: 'zerolink-files-staging' }, success: true };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    let output = '';
+    await runCloudflareDeployPreflight({
+      accountId: 'account-123',
+      apiGet,
+      apiToken: 'token-123',
+      deployEnv: 'staging',
+      write: (chunk) => {
+        output += chunk;
+      },
+    });
+
+    expect(apiGet.mock.mock.calls.map(([path]) => path)).toEqual([
+      '/user/tokens/verify',
+      '/accounts/account-123/tokens/verify',
+      '/zones?name=zerolink.dev',
+      '/accounts/account-123/workers/scripts',
+      '/zones/zone-123/workers/routes',
+      '/accounts/account-123/r2/buckets',
+      '/accounts/account-123/r2/buckets/zerolink-files-staging',
+    ]);
+    expect(output).toContain('WARN  Token introspection is unavailable');
+    expect(output).toContain('best-effort resource access checks');
+    expect(output).toContain('Best-effort checks passed');
+  });
+
+  it('does not fall back on unexpected token introspection errors', async () => {
+    const apiGet = createApiGetMock(async (path) => {
+      if (path === '/user/tokens/verify') {
+        throw new Error('socket hang up');
+      }
+      if (path === '/accounts/account-123/tokens/verify') {
+        throw new CloudflareApiError('token inspection forbidden', [
+          { code: 9109, message: 'Unauthorized to access requested resource' },
+        ]);
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    await expect(
+      runCloudflareDeployPreflight({
+        accountId: 'account-123',
+        apiGet,
+        apiToken: 'token-123',
+        deployEnv: 'staging',
+        write: () => {},
+      })
+    ).rejects.toThrow('Unable to inspect the current Cloudflare API token');
+
+    expect(apiGet.mock).not.toHaveBeenCalledWith('/accounts/account-123/workers/scripts');
+  });
+
   it('rejects read-only Workers Scripts permission groups', async () => {
     const apiGet = createApiGetMock(async (path) => {
       if (path === '/user/tokens/verify') {

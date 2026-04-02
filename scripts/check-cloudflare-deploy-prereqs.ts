@@ -66,6 +66,16 @@ interface PermissionRequirement {
   resourceMatcher: (resourceKeys: Set<string>) => boolean;
 }
 
+type TokenInspectionResult =
+  | {
+      details: CloudflareTokenDetailsResult;
+      mode: 'strict';
+    }
+  | {
+      failures: string[];
+      mode: 'fallback';
+    };
+
 export class CloudflareApiError extends Error {
   constructor(
     message: string,
@@ -324,14 +334,34 @@ function createExactOrWildcardMatcher(exactKey: string, wildcardKey: string) {
     resourceKeys.has(exactKey) || resourceKeys.has(wildcardKey);
 }
 
-async function verifyCurrentToken(
+function isTokenInspectionFallbackEligible(error: unknown): boolean {
+  if (!(error instanceof CloudflareApiError)) {
+    return false;
+  }
+
+  if (error.statusCode === 401 || error.statusCode === 403) {
+    return true;
+  }
+
+  const errorCodes = error.errors
+    .map((item) => item.code)
+    .filter((code): code is number => typeof code === 'number');
+  if (errorCodes.length === 0) {
+    return false;
+  }
+
+  return errorCodes.every((code) => code === 1000 || code === 9106 || code === 9109);
+}
+
+async function inspectCurrentToken(
   accountId: string,
   apiGet: CloudflareApiGet,
   write: (chunk: string) => void
-): Promise<CloudflareTokenDetailsResult> {
+): Promise<TokenInspectionResult> {
   out(write, '[1/6] Verifying current Cloudflare API token...');
 
   const failures: string[] = [];
+  let canFallbackToReadChecks = true;
 
   for (const strategy of TOKEN_INSPECTION_STRATEGIES) {
     try {
@@ -363,10 +393,22 @@ async function verifyCurrentToken(
         write,
         `PASS  Verified active ${strategy.label}${details.name ? ` "${details.name}"` : ''}.`
       );
-      return details;
+      return { details, mode: 'strict' };
     } catch (error) {
       failures.push(`${strategy.label}: ${describeApiError(error)}`);
+      canFallbackToReadChecks &&= isTokenInspectionFallbackEligible(error);
     }
+  }
+
+  if (canFallbackToReadChecks) {
+    out(
+      write,
+      `WARN  Token introspection is unavailable (${failures.join(' | ')}). Falling back to best-effort resource access checks; deploy-time write scopes cannot be proven ahead of wrangler deploy.`
+    );
+    return {
+      failures,
+      mode: 'fallback',
+    };
   }
 
   throw new Error(`Unable to inspect the current Cloudflare API token. ${failures.join(' | ')}`);
@@ -421,6 +463,24 @@ function verifyWorkersScriptsWritePermission(
   out(write, 'PASS  Token grants Workers Scripts Write.');
 }
 
+async function verifyWorkersScriptsApiReachable(
+  accountId: string,
+  apiGet: CloudflareApiGet,
+  write: (chunk: string) => void
+): Promise<void> {
+  out(write, '[3/6] Checking Workers Scripts API reachability (best effort)...');
+
+  try {
+    await apiGet(`/accounts/${accountId}/workers/scripts`);
+  } catch (error) {
+    throw new Error(
+      `Workers script API check failed for account ${accountId}. Ensure the deploy token can access Workers scripts. Details: ${describeApiError(error)}`
+    );
+  }
+
+  out(write, 'PASS  Workers Scripts API is reachable.');
+}
+
 function verifyWorkersRoutesWritePermission(
   zoneId: string,
   zoneName: string,
@@ -441,6 +501,25 @@ function verifyWorkersRoutesWritePermission(
   out(write, `PASS  Token grants Workers Routes Write for "${zoneName}".`);
 }
 
+async function verifyWorkersRoutesApiReachable(
+  zoneId: string,
+  zoneName: string,
+  apiGet: CloudflareApiGet,
+  write: (chunk: string) => void
+): Promise<void> {
+  out(write, '[4/6] Checking Workers Routes API reachability (best effort)...');
+
+  try {
+    await apiGet(`/zones/${zoneId}/workers/routes`);
+  } catch (error) {
+    throw new Error(
+      `Workers routes API check failed for zone "${zoneName}". Ensure the deploy token can access zone routes. Details: ${describeApiError(error)}`
+    );
+  }
+
+  out(write, `PASS  Workers Routes API is reachable for "${zoneName}".`);
+}
+
 function verifyR2StorageWritePermission(
   accountId: string,
   policies: CloudflareTokenPolicy[],
@@ -458,6 +537,24 @@ function verifyR2StorageWritePermission(
   });
 
   out(write, 'PASS  Token grants Workers R2 Storage Write.');
+}
+
+async function verifyR2StorageApiReachable(
+  accountId: string,
+  apiGet: CloudflareApiGet,
+  write: (chunk: string) => void
+): Promise<void> {
+  out(write, '[5/6] Checking Workers R2 Storage API reachability (best effort)...');
+
+  try {
+    await apiGet(`/accounts/${accountId}/r2/buckets`);
+  } catch (error) {
+    throw new Error(
+      `Workers R2 Storage API check failed for account ${accountId}. Ensure the deploy token can access R2 bucket metadata. Details: ${describeApiError(error)}`
+    );
+  }
+
+  out(write, 'PASS  Workers R2 Storage API is reachable.');
 }
 
 async function verifyBucketExists(
@@ -495,17 +592,32 @@ export async function runCloudflareDeployPreflight(
   out(write, `ZeroLink Cloudflare deploy preflight (${target.label})`);
   out(write, '==================================================');
 
-  const tokenDetails = await verifyCurrentToken(options.accountId, apiGet, write);
-  const policies = tokenDetails.policies ?? [];
+  const tokenInspection = await inspectCurrentToken(options.accountId, apiGet, write);
   const zoneId = await resolveZoneId(target.zoneName, apiGet, write);
 
-  verifyWorkersScriptsWritePermission(options.accountId, policies, write);
-  verifyWorkersRoutesWritePermission(zoneId, target.zoneName, policies, write);
-  verifyR2StorageWritePermission(options.accountId, policies, write);
+  if (tokenInspection.mode === 'strict') {
+    const policies = tokenInspection.details.policies ?? [];
+    verifyWorkersScriptsWritePermission(options.accountId, policies, write);
+    verifyWorkersRoutesWritePermission(zoneId, target.zoneName, policies, write);
+    verifyR2StorageWritePermission(options.accountId, policies, write);
+  } else {
+    await verifyWorkersScriptsApiReachable(options.accountId, apiGet, write);
+    await verifyWorkersRoutesApiReachable(zoneId, target.zoneName, apiGet, write);
+    await verifyR2StorageApiReachable(options.accountId, apiGet, write);
+  }
+
   await verifyBucketExists(options.accountId, target.bucketName, apiGet, write);
 
   out(write, '');
-  out(write, 'All checks passed. Cloudflare deploy prerequisites are ready.');
+  if (tokenInspection.mode === 'strict') {
+    out(write, 'All checks passed. Cloudflare deploy prerequisites are ready.');
+    return;
+  }
+
+  out(
+    write,
+    'Best-effort checks passed. Cloudflare resources are reachable, but deploy-time write scopes could not be pre-verified for this token.'
+  );
 }
 
 function readRequiredEnv(name: string, env: NodeJS.ProcessEnv = process.env): string {
