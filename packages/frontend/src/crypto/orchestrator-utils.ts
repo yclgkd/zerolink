@@ -20,7 +20,6 @@ import type {
   DecryptStoreStateSnapshot,
   DeliverStore,
   DeliverStoreStateSnapshot,
-  FileDeliveryPolicyResolution,
 } from './orchestrator-types';
 import {
   getPassphraseValidationMessage,
@@ -176,14 +175,6 @@ export function resolveFileSharePolicy(policy?: FileSharePolicy): FileSharePolic
       multipartSupported: FILE_SHARE.MULTIPART_SUPPORTED,
     }
   );
-}
-
-export function resolveInlineFilePolicy(policy?: FileSharePolicy): FileDeliveryPolicyResolution {
-  const resolvedPolicy = resolveFileSharePolicy(policy);
-  return {
-    policy: resolvedPolicy,
-    inlineMaxBytes: Math.min(resolvedPolicy.maxFileBytes, resolvedPolicy.multipartThresholdBytes),
-  };
 }
 
 export function isDeliveredState(state: ChannelState): boolean {

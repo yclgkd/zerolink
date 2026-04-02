@@ -115,6 +115,9 @@ func (intent ManageIntent) Validate() error {
 		if intent.CipherBundle != nil && !intent.CipherBundle.Valid() {
 			return badRequest("invalid intent")
 		}
+		if intent.PayloadKind == "file" && intent.FileRef == nil {
+			return badRequest("invalid intent")
+		}
 		if intent.FileRef != nil {
 			if err := validateMultipartFileRef(*intent.FileRef); err != nil {
 				return badRequest("invalid intent")
@@ -274,7 +277,6 @@ func validateCipherBundle(
 	bundle CipherBundle,
 	intent ManageIntent,
 	receiverPubFpr string,
-	maxFileBytes int64,
 ) error {
 	ciphertextBytes, err := base64.RawURLEncoding.DecodeString(bundle.Ciphertext)
 	if err != nil {
@@ -292,10 +294,7 @@ func validateCipherBundle(
 	}
 
 	if intent.PayloadKind == "file" {
-		maxCiphertextBytes := resolveMaxFileCiphertextBytes(maxFileBytes, bundle.PadBlock)
-		if int64(len(ciphertextBytes)) > maxCiphertextBytes {
-			return cipherBundleInvalid("cipherBundle.ciphertext exceeds the configured inline file limit")
-		}
+		return cipherBundleInvalid("file updates must use fileRef")
 	}
 
 	return nil

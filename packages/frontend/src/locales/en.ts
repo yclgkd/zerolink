@@ -328,6 +328,7 @@ const en = {
     networkError: 'Network error while performing manage action. Please retry.',
     badRequest: 'Manage request was rejected. Please retry.',
     fileTooLarge: 'The selected file exceeds the 5 MiB limit.',
+    fileStorageUnavailable: 'This deployment does not support file uploads.',
     multipartRequired: 'The selected file is larger than the inline delivery limit.',
     webauthnError: 'WebAuthn verification was not completed.',
     cryptoError: 'Incorrect channel password. Please try again.',

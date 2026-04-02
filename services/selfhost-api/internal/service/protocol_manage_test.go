@@ -426,7 +426,7 @@ func TestProtocolServiceDeleteCommitFinalizesDeletedTombstone(t *testing.T) {
 	}
 }
 
-func TestProtocolServiceRejectsOversizedFileCiphertext(t *testing.T) {
+func TestProtocolServiceRejectsInlineFileCiphertext(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
 
@@ -434,13 +434,6 @@ func TestProtocolServiceRejectsOversizedFileCiphertext(t *testing.T) {
 		RPID:     "localhost",
 		RPOrigin: "http://localhost:5173",
 		Verifier: webauthn.NoopVerifier{},
-		File: FilePolicy{
-			MaxFileBytes:            1,
-			MultipartThresholdBytes: 1,
-			ChunkSizeBytes:          1,
-			MaxChunks:               1,
-			MultipartSupported:      false,
-		},
 	})
 
 	ctx := context.Background()
@@ -504,7 +497,7 @@ func TestProtocolServiceRejectsOversizedFileCiphertext(t *testing.T) {
 			uuid,
 			0,
 			receiverPubFpr,
-			make([]byte, int(resolveMaxFileCiphertextBytes(1, 4096)+1)),
+			[]byte("legacy-inline-file"),
 		),
 		ExpireAt: json.RawMessage("null"),
 	}

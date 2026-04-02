@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-02] New file deliveries now store bytes only in object storage
+
+**Decision**: Make every new `payloadKind=file` delivery upload encrypted bytes to object storage first and commit only a `fileRef`; keep inline `cipherBundle` file handling only as a decrypt-time compatibility path for already-delivered legacy records.
+**Context**: ZeroLink previously mixed two storage semantics for files: small files were encrypted inline into Durable Object state while larger files used multipart object storage. That split complicated limits, cleanup, and protocol validation.
+**Options Considered**: Keep the size-based split; move all new file bytes to object storage while preserving legacy decrypt compatibility; remove legacy inline file compatibility entirely.
+**Choice**: Standardize new file writes on object storage across hosted and self-hosted runtimes, reject `payloadKind=file` intents that still carry `cipherBundle`, and leave receiver decrypt logic backward-compatible with historical inline file payloads.
+**Reasoning**: Files now have one write path, one cleanup model, and one server-side validation rule, while text delivery remains inline and legacy delivered records continue to decrypt without migration.
+**Trade-offs**: Deployments without multipart/object-storage support can no longer deliver files at all, so the frontend must surface that capability gap explicitly instead of silently falling back to inline file storage.
+
 ## [2026-04-02] Hourly Worker sweep now reclaims stale orphan R2 upload chunks
 
 **Decision**: Add a Worker `scheduled` cleanup pass that scans `files/` objects hourly, keeps any chunk still referenced by the channel's active multipart `fileRef`, and deletes only chunks older than the upload-token TTL that are no longer referenced.

@@ -306,6 +306,7 @@ const zh: Translation = {
     networkError: '执行管理操作时发生网络错误，请重试。',
     badRequest: '管理请求被拒绝，请重试。',
     fileTooLarge: '所选文件超过 5 MiB 上限。',
+    fileStorageUnavailable: '当前部署未启用文件上传。',
     multipartRequired: '所选文件超过当前内联传递上限，需要分片流程支持。',
     webauthnError: 'WebAuthn 验证未完成。',
     cryptoError: '频道密码错误，请重试。',

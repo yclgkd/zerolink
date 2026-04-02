@@ -10,13 +10,12 @@ import {
   buildCipherBundleAadBytes,
   computeIntentHash,
   deriveUpdateProofChallengeB64u,
-  encodeFileSharePayload,
   NONCE_BYTES,
   type UpdateIntent,
 } from '@zerolink/shared';
 import { encryptAesGcm, importAesKeyFromBytes, wipeBytes } from '@zerolink/shared/crypto/aes';
 import { importReceiverPublicKeyFromJwk, wrapContentKey } from '@zerolink/shared/crypto/rsa';
-import { readWholeFileInputBytes, uploadMultipartFile } from './orchestrator-multipart';
+import { uploadMultipartFile } from './orchestrator-multipart';
 import type {
   CryptoOrchestratorResult,
   DeliverSecretInput,
@@ -32,7 +31,7 @@ import {
   mapWebAuthnError,
   normalizePassphrase,
   randomBase64Url,
-  resolveInlineFilePolicy,
+  resolveFileSharePolicy,
   resolvePadBlockForProfile,
   signChallengeWithWrappedKey,
   toCipherBundleTransport,
@@ -61,12 +60,12 @@ async function buildDeliverUpdateIntent(
   let rawContentKey: Uint8Array | null = null;
   let encrypted: Awaited<ReturnType<typeof encryptAesGcm>> | null = null;
   let encContentKey: Uint8Array | null = null;
-  let payloadKind: DeliverSecretOutput['payloadKind'] = 'text';
+  const payloadKind: DeliverSecretOutput['payloadKind'] = 'text';
   let maxPlaintextBytes: number | undefined;
 
   try {
     if (input.file) {
-      const { policy, inlineMaxBytes } = resolveInlineFilePolicy(filePolicy);
+      const policy = resolveFileSharePolicy(filePolicy);
       const fileSize =
         input.file.size ?? input.file.bytes?.byteLength ?? input.file.blob?.size ?? 0;
       if (fileSize > policy.maxFileBytes) {
@@ -77,68 +76,51 @@ async function buildDeliverUpdateIntent(
         );
       }
 
-      if (fileSize > inlineMaxBytes) {
-        if (!policy.multipartSupported) {
-          return toError(
-            'MULTIPART_REQUIRED',
-            'deliver.file-policy',
-            'Selected file exceeds the inline delivery limit for this deployment.'
-          );
-        }
-
-        const multipartRes = await uploadMultipartFile(
-          deps,
-          input,
-          policy,
-          beginData.receiverPubJwk,
-          asUuid(input.uuid)
-        );
-        if (!multipartRes.ok) {
-          return multipartRes;
-        }
-
-        const intent: UpdateIntent = {
-          op: 'update',
-          uuid: asUuid(input.uuid),
-          version: beginData.currentVersion,
-          timestamp: asUnixMs(deps.now()),
-          nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
-          receiverPubFpr: beginData.receiverPubFpr,
-          payloadKind: 'file',
-          fileRef: multipartRes.data,
-          expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
-        };
-        const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
-        const expectedChallenge = await deriveUpdateProofChallengeB64u({
-          uuid: input.uuid,
-          intentHash,
-        });
-
-        return {
-          ok: true,
-          data: {
-            intent,
-            intentHash,
-            expectedChallenge,
-            payloadKind: 'file',
-          },
-        };
-      }
-
-      plaintextBytes = encodeFileSharePayload({
-        fileName: input.file.fileName,
-        mediaType: input.file.mediaType,
-        bytes: await readWholeFileInputBytes(input.file),
-      });
-      if (plaintextBytes.byteLength > inlineMaxBytes) {
+      if (!policy.multipartSupported) {
         return toError(
-          'MULTIPART_REQUIRED',
+          'FILE_STORAGE_UNAVAILABLE',
           'deliver.file-policy',
-          'Selected file exceeds the inline delivery limit for this deployment.'
+          'This deployment does not support file uploads.'
         );
       }
-      maxPlaintextBytes = inlineMaxBytes;
-      payloadKind = 'file';
+
+      const multipartRes = await uploadMultipartFile(
+        deps,
+        input,
+        policy,
+        beginData.receiverPubJwk,
+        asUuid(input.uuid)
+      );
+      if (!multipartRes.ok) {
+        return multipartRes;
+      }
+
+      const intent: UpdateIntent = {
+        op: 'update',
+        uuid: asUuid(input.uuid),
+        version: beginData.currentVersion,
+        timestamp: asUnixMs(deps.now()),
+        nonce: randomBase64Url(NONCE_BYTES, deps.randomBytes),
+        receiverPubFpr: beginData.receiverPubFpr,
+        payloadKind: 'file',
+        fileRef: multipartRes.data,
+        expireAt: input.expireAt == null ? null : asUnixMs(input.expireAt),
+      };
+      const intentHash = await computeIntentHash(intent as unknown as Record<string, unknown>);
+      const expectedChallenge = await deriveUpdateProofChallengeB64u({
+        uuid: input.uuid,
+        intentHash,
+      });
+
+      return {
+        ok: true,
+        data: {
+          intent,
+          intentHash,
+          expectedChallenge,
+          payloadKind: 'file',
+        },
+      };
     } else {
       plaintextBytes = toPlaintextBytes(input.plaintext);
     }
