@@ -1,0 +1,15 @@
+services:
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/api.Dockerfile
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/api.Dockerfile
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/frontend.Dockerfile

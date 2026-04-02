@@ -15,6 +15,7 @@ UPDATE WHEN:
 | `GEMINI.md` | Gemini CLI router |
 | `.ai/README.md` | Shared guidance index |
 | `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
+| `.github/workflows/deploy.yml` | Staging/production release workflow — deploys Cloudflare assets and, on `v*` tags, publishes GHCR self-host images with Buildx provenance/SBOM attestations |
 | `docs/SELF_HOSTED_CONTRACT.md` | Self-hosted backend contract freeze: exact-match protocol surfaces, route matrix, error semantics, and open ambiguities |
 | `docs/SELF_HOSTED_CONTRACT.zh.md` | Chinese mirror of the self-hosted backend contract freeze |
 | `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
@@ -30,6 +31,8 @@ UPDATE WHEN:
 | `packages/backend/src/index.staging.ts` | Staging-only Worker entry — mirrors production exports while keeping staging on its own Worker and namespace |
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
+| `deploy/selfhost/docker-compose.yml` | Default self-host Compose entrypoint — pulls published GHCR `api`/`web` images while running PostgreSQL and MinIO locally |
+| `deploy/selfhost/docker-compose.build.yml` | Opt-in self-host Compose overlay — restores local source builds for `migrate`, `api`, and `web` without changing the default operator path |
 | `services/selfhost-api/cmd/selfhost-api/main.go` | Self-hosted Go API entrypoint — loads config, opens PostgreSQL, boots the in-memory realtime hub, and serves health, protocol routes, and `/api/ws/:uuid` |
 | `services/selfhost-api/cmd/selfhost-migrate/main.go` | Self-hosted Go migration entrypoint — runs embedded SQL migrations against PostgreSQL |
 
@@ -84,13 +87,14 @@ UPDATE WHEN:
 | `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — now also owns file policy env vars (`SELFHOST_API_FILE_*`) and enforces phase-1 inline file ceilings at startup |
 | `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — now serves `/api/file_policy` and applies a config-driven JSON body limit for file-capable protocol requests |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
-| `deploy/selfhost/docker-compose.yml` | Self-hosted local stack bundle — starts PostgreSQL, migration job, Go API, and Caddy-served frontend with `.env` fallback to `.env.example` |
+| `deploy/selfhost/docker-compose.yml` | Self-hosted stack bundle — defaults to published GHCR `api`/`web` images while still starting PostgreSQL, migration job, MinIO, and the Caddy-served frontend with `.env` values |
+| `deploy/selfhost/docker-compose.build.yml` | Self-hosted source-build overlay — reintroduces local Docker `build:` definitions for operators who want to compile from the checked-out repo |
 | `deploy/selfhost/Caddyfile` | Self-hosted reverse-proxy and SPA fallback config — `/api/*`, `/healthz`, and `/readyz` must route before static fallback |
 | `deploy/selfhost/api.Dockerfile` | Multi-stage image build for `selfhost-api` and `selfhost-migrate` |
 | `deploy/selfhost/frontend.Dockerfile` | Frontend build + Caddy runtime image for the self-hosted local stack |
 | `services/selfhost-api/.env.example` | Self-hosted Go service env template — bind address, RP ID/origin, pool sizing, and PostgreSQL DSN |
 | `services/selfhost-api/go.mod` | Nested Go module for the self-hosted backend track |
-| `.github/workflows/deploy.yml` | Post-merge CI/CD: resolve `ZEROLINK_VERSION`, frontend build, manifest generate/sign/verify, then Worker deploy; staging adds a post-deploy smoke test |
+| `.github/workflows/deploy.yml` | Post-merge CI/CD: resolve `ZEROLINK_VERSION`, frontend build, manifest generate/sign/verify, publish GHCR self-host images on `v*` tags, then deploy the Worker; staging adds a post-deploy smoke test |
 | `version.txt` | Root release state tracked by Release Please's `simple` strategy; seed value is the last manual release (`0.2.0`) |
 
 ## File Size Rule
@@ -156,4 +160,5 @@ UPDATE WHEN:
 | `packages/backend/src/security-headers.ts` | `Cache-Control: no-store` on SPA entry paths is intentional | Changing to `no-cache` causes stale HTML replay across signed deployments and breaks the Verified Release gate — see decisions.md [2026-03-10] |
 | `packages/frontend/e2e/support/mock-api.ts` | Stateful mock E2E helper intentionally disables `window.WebSocket` before navigation | Mocked suites should exercise HTTP route mocks and the explicit polling fallback path without generating Vite proxy noise; real WebSocket transport coverage belongs in `realtime-smoke.spec.ts` |
 | `deploy/selfhost/Caddyfile` | Handler order is a correctness boundary | Keep `/api/*`, `/healthz`, and `/readyz` inside the proxy route before `try_files` / `file_server`, or the SPA fallback will swallow API traffic and make the local stack look healthy while realtime and health checks are broken |
+| `deploy/selfhost/docker-compose.yml` + `deploy/selfhost/.env.example` | Published-image self-hosting defaults to `ZEROLINK_IMAGE_TAG=latest` | Set `ZEROLINK_IMAGE_TAG` to a release tag for deterministic pulls, or layer `docker-compose.build.yml` when you need to rebuild from the checked-out source instead of trusting GHCR artifacts |
 | `services/selfhost-api/internal/realtime/hub.go` | Self-hosted websocket fan-out is intentionally process-local | The frontend sync client still works because it already falls back to HTTP polling, but only connections attached to the same API process receive live pushes until a future shared pubsub layer exists |

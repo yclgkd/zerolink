@@ -37,6 +37,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 ### Getting Started
 - [Quick Start Guide](./docs/QUICK_START.md) - From zero to running dev environment
 - [Deployment Guide](./docs/DEPLOYMENT.md) - Deploy to Cloudflare Workers manually
+- [Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md) - Run the published Docker Compose stack or local build override
 - [Tech Stack Specification](./docs/TECH_STACK.md) - Complete tech stack and toolchain
 
 ### Design Documents
@@ -59,7 +60,7 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ### Backend
 - Cloudflare Workers + Durable Objects (free tier available, SQLite backend supported)
-- Optional: Docker Compose self-hosted (planned, not yet implemented)
+- Optional: Docker Compose self-hosted stack via published GHCR images or local build override
 
 ## Browser Compatibility
 
@@ -96,14 +97,33 @@ ZeroLink is a security-first secret sharing tool with the following features:
 
 ## Deploy
 
-ZeroLink currently documents manual deployment to Cloudflare Workers rather than a generic deploy button flow.
+ZeroLink supports two deployment paths:
 
-### Prerequisites
+- Cloudflare Workers manual deployment, documented in [Deployment Guide](./docs/DEPLOYMENT.md)
+- Docker Compose self-hosting, documented in [Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md)
+
+### Cloudflare Deployment Prerequisites
 
 - Cloudflare account (free plan is sufficient; Durable Objects free tier supported)
 - Node.js 22+ · pnpm 9+ · Wrangler CLI 4+
 
-For the full step-by-step process, see the [Deployment Guide](./docs/DEPLOYMENT.md).
+For the full step-by-step process, see the [Deployment Guide](./docs/DEPLOYMENT.md). Self-hosting
+with Docker Compose does not require the Cloudflare toolchain.
+
+### Self-Hosted Quick Start
+
+```bash
+mkdir zerolink-selfhost
+cd zerolink-selfhost
+curl -fsSLO https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/docker-compose.yml
+curl -fsSLo .env.example https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/.env.example
+cp .env.example .env
+docker compose up -d
+```
+
+The default stack pulls `ghcr.io/yclgkd/zerolink-api` and `ghcr.io/yclgkd/zerolink-web`.
+Set `ZEROLINK_IMAGE_TAG` in `.env` to pin a specific release, or use
+[Self-Hosted Deployment Guide](./docs/SELF_HOSTED_DEPLOYMENT.md) for the local build override.
 
 ---
 

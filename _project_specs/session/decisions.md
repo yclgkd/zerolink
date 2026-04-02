@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-02] Self-host releases default to GHCR images with source-build fallback
+
+**Decision**: Publish versioned `ghcr.io/yclgkd/zerolink-api` and `ghcr.io/yclgkd/zerolink-web` multi-arch images from the tag-driven release workflow, switch `deploy/selfhost/docker-compose.yml` to those published images by default, and keep `deploy/selfhost/docker-compose.build.yml` as the opt-in source-build override.
+**Context**: The self-host stack previously required operators to clone the whole repository and perform the full local Go and Node.js build before Docker Compose could start. That was too heavy for the intended "download a Compose file and run it" operator path.
+**Options Considered**: Keep source builds as the only supported path; publish images but leave the build-based Compose file as the default; publish images and make them the default while preserving a local-build escape hatch.
+**Choice**: Extend `.github/workflows/deploy.yml` so production tag releases also build and push `linux/amd64` + `linux/arm64` GHCR images with Buildx provenance/SBOM attestations. The default self-host Compose file now pulls `latest` or an explicit `ZEROLINK_IMAGE_TAG`, while developers who need source reproducibility can layer in `docker-compose.build.yml`.
+**Reasoning**: GHCR matches the repository's existing GitHub-hosted release flow, works with the built-in `GITHUB_TOKEN`, and removes the local toolchain requirement for ordinary operators. Keeping the source-build overlay preserves a trust-minimized path for users who prefer compiling from checked-out source.
+**Trade-offs**: Default self-host operators now trust the release pipeline in addition to the published source tree. Attestations improve traceability, but they do not replace independently rebuilding or auditing the source when a stricter trust model is required.
+
 ## [2026-04-02] Deploy workflow must fail fast on Cloudflare route and R2 prerequisites
 
 **Decision**: Add a dedicated `pnpm deploy:preflight` step before the frontend build in `.github/workflows/deploy.yml`, and document the Cloudflare token/bucket requirements in the deployment guides.

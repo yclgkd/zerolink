@@ -2,7 +2,7 @@
 
 # 自部署部署指南
 
-这份文档说明如何用 Docker Compose 启动当前 ZeroLink 前端和 Go 自部署后端。
+这份文档说明如何用 GitHub Container Registry (GHCR) 发布的镜像运行 ZeroLink 自部署栈，同时给开发者保留本地源码构建的 override。
 
 ## 组件
 
@@ -21,12 +21,37 @@
 ## 启动
 
 ```bash
-cp deploy/selfhost/.env.example deploy/selfhost/.env
-docker compose -f deploy/selfhost/docker-compose.yml up --build
+mkdir zerolink-selfhost
+cd zerolink-selfhost
+curl -fsSLO https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/docker-compose.yml
+curl -fsSLo .env.example https://raw.githubusercontent.com/yclgkd/ZeroLink/main/deploy/selfhost/.env.example
+cp .env.example .env
+docker compose up -d
 ```
 
-当前 `deploy/selfhost/.env.example` 默认使用 `SELFHOST_API_FILE_STORAGE_BACKEND=minio`，
+下载得到的 `.env.example` 默认使用 `SELFHOST_API_FILE_STORAGE_BACKEND=minio`，
 会开启 multipart 文件传输，默认总文件上限 `512 MiB`、分片大小 `4 MiB`。
+
+默认 Compose 会拉取以下公开镜像：
+
+- `ghcr.io/yclgkd/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
+- `ghcr.io/yclgkd/zerolink-web:${ZEROLINK_IMAGE_TAG:-latest}`
+
+如果你想固定到某个发布版本，而不是跟随 `latest`，请在 `.env` 中设置 `ZEROLINK_IMAGE_TAG`。
+
+## 本地 build override
+
+如果你希望直接从当前源码 checkout 构建镜像，而不是拉取 GHCR 制品：
+
+```bash
+git clone https://github.com/yclgkd/ZeroLink.git
+cd ZeroLink/deploy/selfhost
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
+`docker-compose.build.yml` 会把 `migrate`、`api` 和 `web` 恢复为本地 `build:` 路径，
+而默认的镜像分发方式仍保持给普通运维用户使用。
 
 访问：
 
@@ -38,6 +63,7 @@ docker compose -f deploy/selfhost/docker-compose.yml up --build
 
 - `SELFHOST_API_RP_ID=localhost`
 - `SELFHOST_API_RP_ORIGIN=http://localhost:8080`
+- `ZEROLINK_IMAGE_TAG=latest` 控制 `migrate`、`api`、`web` 默认拉取的发布镜像 tag
 - 默认 `SELFHOST_API_DATABASE_URL` 已指向 Compose 里的 `db` 服务
 - `SELFHOST_API_FILE_STORAGE_BACKEND=minio` 会通过 MinIO 预签名 PUT/GET URL 启用 multipart 文件传输
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 把 inline 分界线限制在旧的 inline envelope 上限之内
@@ -55,7 +81,7 @@ docker compose -f deploy/selfhost/docker-compose.yml up --build
 
 ## Smoke Test
 
-1. 用 `docker compose -f deploy/selfhost/docker-compose.yml up --build` 启动。
+1. 用 `docker compose up -d` 启动。
 2. 确认 `curl http://localhost:8080/readyz` 返回 `200`。
 3. 确认 `curl http://localhost:8080/api/file_policy` 在默认 MinIO 配置下返回 `multipartSupported: true`。
 4. 在一个窗口打开 `http://localhost:8080`，创建一个 Quick Share channel。
@@ -70,6 +96,7 @@ docker compose -f deploy/selfhost/docker-compose.yml up --build
 ## 运行说明
 
 - 这个打包使用默认前端 build，不启用签名后的 `Verified Release` 启动校验。
+- production tag 发布时，GHCR 镜像会附带 `linux/amd64` + `linux/arm64` 多架构 manifest，以及 Buildx 生成的 provenance / SBOM attestation，便于把拉取到的镜像追溯回具体 release commit 和 GitHub Actions run。
 - realtime hub 是进程内实现；如果要跑多个 API 副本，需要共享 pub/sub。
 - PostgreSQL 数据存放在 `postgres-data` volume 中。
 - MinIO 对象数据存放在 `minio-data` volume 中。
@@ -79,11 +106,11 @@ docker compose -f deploy/selfhost/docker-compose.yml up --build
 ## 停止
 
 ```bash
-docker compose -f deploy/selfhost/docker-compose.yml down
+docker compose down
 ```
 
 如果要一并删除本地数据库数据：
 
 ```bash
-docker compose -f deploy/selfhost/docker-compose.yml down -v
+docker compose down -v
 ```
