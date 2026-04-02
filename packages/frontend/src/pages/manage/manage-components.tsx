@@ -296,7 +296,7 @@ export function FileInput({
   selectedFile: File | null;
   disabled: boolean;
   onSelect: (file: File | null) => boolean;
-  maxFileBytes: number;
+  maxFileBytes: number | null;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -308,7 +308,10 @@ export function FileInput({
     onSelect(null);
   }
 
-  const sizeHint = t('manage.fileSizeLimit', { size: formatFileSize(maxFileBytes) });
+  const sizeHint =
+    maxFileBytes === null
+      ? t('manage.fileSizeLimitLoading')
+      : t('manage.fileSizeLimit', { size: formatFileSize(maxFileBytes) });
 
   return (
     <section className="flex flex-col gap-3">

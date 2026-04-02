@@ -39,7 +39,7 @@ UPDATE WHEN:
 | `packages/shared/src/crypto/` | Argon2id KDF, AES-GCM, HKDF, Ed25519 helpers |
 | `packages/backend/src/do/SecretVault.ts` | Durable Object — atomic channel lifecycle state machine |
 | `packages/backend/src/file-cleanup.ts` | Hourly R2 orphan-chunk reclaimer — scans `files/`, consults the channel DO for active multipart `fileRef`s, and deletes only stale unreferenced chunk objects |
-| `packages/backend/src/do/SecretVaultCompound.ts` | Durable Object compound-commit path — validates signed update/delete intents, accepts typed multipart `fileRef` payloads when present, enforces inline file ciphertext ceilings for `payloadKind: "file"`, and persists delivery proofs used by anchored decrypt verification |
+| `packages/backend/src/do/SecretVaultCompound.ts` | Durable Object compound-commit path — validates signed update/delete intents, requires `fileRef` for new `payloadKind: "file"` writes, and persists delivery proofs used by anchored decrypt verification |
 | `packages/backend/src/do/SecretVaultWebSocket.ts` | Durable Object WebSocket accept/broadcast helpers for channel state sync |
 | `packages/frontend/src/crypto/orchestrator.ts` | Frontend crypto orchestration (create / lock / deliver / decrypt) |
 | `packages/frontend/src/crypto/orchestrator-multipart.ts` | Frontend multipart file transport helper — streams `Blob`/byte inputs into chunked AES-GCM encryption, coordinates `/api/file/*` upload/download orchestration, and reassembles decrypted file bytes on receipt |
@@ -82,7 +82,7 @@ UPDATE WHEN:
 | `.github/workflows/pr-validate.yml` | PR CI gates: root/workspace typecheck, root/workspace unit tests, frontend build on `pull_request` / `merge_group` (E2E suites run in `e2e-full.yml` nightly/manual only — PR #184 free-tier budget) |
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
-| `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — now also owns file policy env vars (`SELFHOST_API_FILE_*`) and enforces phase-1 inline file ceilings at startup |
+| `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — owns file policy env vars (`SELFHOST_API_FILE_*`) and still caps the legacy inline threshold for compatibility even though new file writes require object storage |
 | `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — now serves `/api/file_policy` and applies a config-driven JSON body limit for file-capable protocol requests |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
 | `deploy/selfhost/docker-compose.yml` | Self-hosted local stack bundle — starts PostgreSQL, migration job, Go API, and Caddy-served frontend with `.env` fallback to `.env.example` |

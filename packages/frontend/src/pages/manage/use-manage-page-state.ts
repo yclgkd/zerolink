@@ -1,4 +1,4 @@
-import { CHANNEL_STATE, FILE_SHARE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
+import { CHANNEL_STATE, parseManageFragment, UUIDSchema } from '@zerolink/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '../../api/client';
@@ -19,9 +19,7 @@ export function useManagePageState(uuid?: string) {
   const latestManageHashRef = useRef(location.hash);
 
   const [deliveryMode, setDeliveryMode] = useState<'text' | 'file'>('text');
-  const [filePolicyMaxBytes, setFilePolicyMaxBytes] = useState<number>(
-    FILE_SHARE.MAX_BYTES_DEFAULT
-  );
+  const [filePolicyMaxBytes, setFilePolicyMaxBytes] = useState<number | null>(null);
   const filePolicyFetchedRef = useRef(false);
   const [secretInput, setSecretInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -242,7 +240,7 @@ export function useManagePageState(uuid?: string) {
       }
     },
     handleFileSelect: (file: File | null) => {
-      if (file && file.size > filePolicyMaxBytes) {
+      if (file && filePolicyMaxBytes !== null && file.size > filePolicyMaxBytes) {
         setSelectedFile(null);
         setActionError(mapActionError('FILE_TOO_LARGE'));
         setIsSecretInputInvalid(false);

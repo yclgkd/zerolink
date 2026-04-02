@@ -857,6 +857,52 @@ describe('ManagePage – deliver actions', () => {
     filePolicySpy.mockRestore();
   });
 
+  it('does not pre-reject larger files before file policy finishes loading', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const deferred = createDeferred<Awaited<ReturnType<typeof apiClient.filePolicy>>>();
+    const filePolicySpy = vi
+      .spyOn(apiClient, 'filePolicy')
+      .mockImplementation(async () => deferred.promise);
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+
+    expect(screen.getByTestId('manage-file-size-hint').textContent).toContain('Checking');
+
+    const file = new File(['allowed-after-policy'], 'large.bin', {
+      type: 'application/octet-stream',
+    });
+    Object.defineProperty(file, 'size', {
+      configurable: true,
+      value: 8_000_000,
+    });
+
+    fireEvent.change(screen.getByTestId('manage-file-input'), {
+      target: { files: [file] },
+    });
+
+    expect(screen.getByTestId('manage-file-selected')).toBeTruthy();
+    expect(screen.queryByTestId('manage-action-error')).toBeNull();
+
+    deferred.resolve({
+      ok: true,
+      status: 200,
+      data: await filePolicyResponse({
+        maxFileBytes: 10_485_760,
+      }).json(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-file-size-hint').textContent).toContain('10.0 MiB');
+    });
+    filePolicySpy.mockRestore();
+  });
+
   it('rejects files that exceed the configured max size before delivery starts', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
@@ -875,6 +921,9 @@ describe('ManagePage – deliver actions', () => {
       }).json(),
     });
     fireEvent.click(screen.getByTestId('manage-mode-file'));
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-file-size-hint').textContent).toContain('5.0 MiB');
+    });
 
     const file = new File(['too-large'], 'too-large.bin', {
       type: 'application/octet-stream',

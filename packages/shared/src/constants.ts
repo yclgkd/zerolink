@@ -61,8 +61,9 @@ export const MAX_PLAINTEXT_BYTES = 2_097_152 as const; // 2 × 1024 × 1024
 /**
  * Download-only file sharing policy defaults.
  *
- * Small files stay inline; larger files switch to independently encrypted
- * multipart chunks while keeping the same encrypted payload envelope format.
+ * New file deliveries always store encrypted bytes in object storage and commit
+ * only typed `fileRef` metadata. The multipart threshold remains part of the
+ * shared contract for deployment policy/config compatibility and legacy limits.
  */
 export const FILE_SHARE = {
   ENVELOPE_FIXED_BYTES: 8,

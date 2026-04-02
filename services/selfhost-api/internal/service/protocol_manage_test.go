@@ -526,7 +526,7 @@ func TestProtocolServiceRejectsInlineFileCiphertext(t *testing.T) {
 		IntentHash:       intentHash,
 		Intent:           intent,
 	})
-	requireProtocolError(t, err, "CIPHER_BUNDLE_INVALID", 400)
+	requireProtocolError(t, err, "BAD_REQUEST", 400)
 }
 
 func TestProtocolServiceLockBeginRateLimitsNewChallengeIssuanceWhileAllowingActiveReuse(t *testing.T) {
