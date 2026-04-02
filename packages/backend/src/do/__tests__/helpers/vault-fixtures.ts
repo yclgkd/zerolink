@@ -20,11 +20,10 @@ import {
   SECURITY_PROFILE,
 } from '@zerolink/shared';
 import { expect } from 'vitest';
-
+import { createMockR2Bucket } from '../../../__tests__/helpers/r2-fixtures.ts';
 import { createCommitToken } from '../../../commitTokens.ts';
 import {
   CHANNEL_RECORD_KEY,
-  type CommitDeliveryParams,
   type CommitLockParams,
   NONCE_INDEX_KEY_PREFIX,
   type SecretVaultEnv,
@@ -237,7 +236,7 @@ export function createCommitLockParams(): CommitLockParams {
   };
 }
 
-export function createCommitDeliveryParams(): CommitDeliveryParams {
+export function createCommitDeliveryParams() {
   return {
     cipherBundle: createCipherBundle(),
     deliveredAt: asUnixMs(1_730_000_300_000),
@@ -492,6 +491,7 @@ export const env: SecretVaultEnv = {
   COMMIT_TOKEN_SECRET: 'commit-token-secret',
   RP_ID,
   RP_ORIGIN,
+  FILE_BUCKET: createMockR2Bucket(),
 };
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { CHANNEL_STATE, type ChannelRecord, WS_CLOSE_CHANNEL_GONE } from '@zerolink/shared';
 import { asUnixMs } from '../crypto/bytes.ts';
+import { deleteMultipartChunks } from '../file-storage.ts';
 import { type NonceAlarmState, reconcileNonceAlarmState } from './SecretVaultNonces.ts';
 import {
   CHANNEL_RECORD_KEY,
@@ -110,15 +111,17 @@ export async function finalizeTerminalRecord(
       : record.state === CHANNEL_STATE.EXPIRED || expiresAt === null || expiresAt <= now
         ? 'expired'
         : 'deleted';
-  await finalizeTerminalState(vc, record.uuid, reason, asUnixMs(now));
+  await finalizeTerminalState(vc, record.uuid, reason, asUnixMs(now), record.fileRef);
 }
 
 export async function finalizeTerminalState(
   vc: VaultContext,
   uuid: string,
   reason: StoredTerminalTombstone['reason'],
-  finalizedAt = asUnixMs(Date.now())
+  finalizedAt = asUnixMs(Date.now()),
+  fileRef?: ChannelRecord['fileRef']
 ): Promise<void> {
+  await deleteMultipartChunks(vc.env.FILE_BUCKET, fileRef);
   await purgeChannelStorage(vc);
   await vc.ctx.storage.put(TERMINAL_TOMBSTONE_KEY, {
     uuid,

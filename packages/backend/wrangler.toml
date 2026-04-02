@@ -15,6 +15,7 @@ not_found_handling = "single-page-application"
 
 [vars]
 APP_ENV = "production"
+FILE_MULTIPART_SUPPORTED = "true"
 
 [observability]
 enabled = true
@@ -26,6 +27,10 @@ invocation_logs = false
 [[durable_objects.bindings]]
 name = "SECRET_VAULT"
 class_name = "SecretVaultV2"
+
+[[r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "zerolink-files"
 
 [[migrations]]
 tag = "v1"
@@ -59,6 +64,7 @@ not_found_handling = "single-page-application"
 
 [env.staging.vars]
 APP_ENV = "staging"
+FILE_MULTIPART_SUPPORTED = "true"
 
 [env.staging.observability]
 enabled = true
@@ -70,6 +76,10 @@ invocation_logs = true
 [[env.staging.durable_objects.bindings]]
 name = "SECRET_VAULT"
 class_name = "SecretVaultV2"
+
+[[env.staging.r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "zerolink-files-staging"
 
 [[env.staging.migrations]]
 tag = "v1"

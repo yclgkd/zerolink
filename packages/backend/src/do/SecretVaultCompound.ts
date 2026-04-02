@@ -36,6 +36,7 @@ import {
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { verifyAssertion } from '../crypto/webauthn.ts';
 import { resolveFilePolicy, resolveMaxFileCiphertextBytes } from '../file-policy.ts';
+import { assertMultipartChunksExist } from '../file-storage.ts';
 import {
   buildCommitCookieSignal,
   shouldClearCommitCookie,
@@ -81,9 +82,14 @@ async function validateCipherBundle(
   intent: UpdateIntent,
   lockedReceiverPubFpr: HexString
 ): Promise<void> {
+  if (!intent.cipherBundle) {
+    throw new StateTransitionError('CIPHER_BUNDLE_INVALID', 'cipherBundle is required');
+  }
+
+  const cipherBundle = intent.cipherBundle;
   let ciphertextBytes: Uint8Array;
   try {
-    ciphertextBytes = decodeBase64Url(intent.cipherBundle.ciphertext);
+    ciphertextBytes = decodeBase64Url(cipherBundle.ciphertext);
   } catch {
     throw new StateTransitionError(
       'CIPHER_BUNDLE_INVALID',
@@ -92,7 +98,7 @@ async function validateCipherBundle(
   }
 
   const computedHash = await sha256Hex([ciphertextBytes]);
-  if (!constantTimeEqual(computedHash, intent.cipherBundle.ciphertextHash)) {
+  if (!constantTimeEqual(computedHash, cipherBundle.ciphertextHash)) {
     throw new StateTransitionError(
       'CIPHER_BUNDLE_INVALID',
       'cipherBundle.ciphertextHash does not match ciphertext'
@@ -106,7 +112,7 @@ async function validateCipherBundle(
       receiverPubFpr: lockedReceiverPubFpr,
     })
   );
-  if (!constantTimeEqual(intent.cipherBundle.aad, expectedAad)) {
+  if (!constantTimeEqual(cipherBundle.aad, expectedAad)) {
     throw new StateTransitionError(
       'CIPHER_BUNDLE_INVALID',
       'cipherBundle.aad does not match the expected binding'
@@ -116,7 +122,7 @@ async function validateCipherBundle(
   if (intent.payloadKind === 'file') {
     const maxCiphertextBytes = resolveMaxFileCiphertextBytes(
       resolveFilePolicy(vc.env).maxFileBytes,
-      intent.cipherBundle.padBlock
+      cipherBundle.padBlock
     );
     if (ciphertextBytes.byteLength > maxCiphertextBytes) {
       throw new StateTransitionError(
@@ -124,6 +130,35 @@ async function validateCipherBundle(
         'cipherBundle.ciphertext exceeds the configured inline file limit'
       );
     }
+  }
+}
+
+async function validateMultipartFileRef(vc: VaultContext, intent: UpdateIntent): Promise<void> {
+  if (!vc.env.FILE_BUCKET) {
+    throw new StateTransitionError('CIPHER_BUNDLE_INVALID', 'multipart file storage unavailable');
+  }
+
+  if (!intent.fileRef) {
+    throw new StateTransitionError(
+      'CIPHER_BUNDLE_INVALID',
+      'fileRef is required for multipart updates'
+    );
+  }
+
+  if (intent.fileRef.storageBackend !== 'r2') {
+    throw new StateTransitionError(
+      'CIPHER_BUNDLE_INVALID',
+      'multipart updates require the r2 backend'
+    );
+  }
+
+  try {
+    await assertMultipartChunksExist(vc.env.FILE_BUCKET, intent.fileRef);
+  } catch (error) {
+    throw new StateTransitionError(
+      'CIPHER_BUNDLE_INVALID',
+      error instanceof Error ? error.message : 'multipart fileRef validation failed'
+    );
   }
 }
 
@@ -383,7 +418,11 @@ export async function commitCompoundInternal(
         );
       }
 
-      await validateCipherBundle(vc, intent, record.receiver.pubFpr);
+      if (intent.fileRef) {
+        await validateMultipartFileRef(vc, intent);
+      } else {
+        await validateCipherBundle(vc, intent, record.receiver.pubFpr);
+      }
     }
 
     enforceRateLimit(vc, 'compound_commit', now, tokenHash);
@@ -461,7 +500,7 @@ export async function commitCompoundInternal(
 
     if (intent.op === 'delete') {
       new SecretVaultStateMachine(record).commitDelete();
-      await finalizeTerminalState(vc, record.uuid, 'deleted', asUnixMs(now));
+      await finalizeTerminalState(vc, record.uuid, 'deleted', asUnixMs(now), record.fileRef);
       // Broadcast channel_closed to all connected clients
       broadcastToWebSockets(vc.ctx, { type: 'channel_closed', reason: 'deleted' });
       closeAllWebSockets(vc.ctx, 'deleted');
@@ -479,7 +518,8 @@ export async function commitCompoundInternal(
       intent.expireAt !== null ? intent.expireAt : asUnixMs(record.createdAt + record.ttl);
 
     const nextRecord = new SecretVaultStateMachine(record).commitDelivery({
-      cipherBundle: intent.cipherBundle,
+      ...(intent.cipherBundle ? { cipherBundle: intent.cipherBundle } : {}),
+      ...(intent.fileRef ? { fileRef: intent.fileRef } : {}),
       ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
       deliveredAt: intent.timestamp,
       expiresAt: deliveryExpiresAt,

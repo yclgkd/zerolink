@@ -41,6 +41,7 @@ export class SecretVaultStateMachine {
 
   commitDelivery({
     cipherBundle,
+    fileRef,
     updateDeliveryProof,
     deliveredAt,
     expiresAt,
@@ -65,15 +66,32 @@ export class SecretVaultStateMachine {
       );
     }
 
-    return {
+    const nextRecord: ChannelRecord = {
       ...this.record,
       state: CHANNEL_STATE.DELIVERED,
-      cipherBundle,
-      ...(updateDeliveryProof ? { updateDeliveryProof } : {}),
       deliveredAt,
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       version: this.record.version + 1,
     };
+
+    delete nextRecord.cipherBundle;
+    delete nextRecord.fileRef;
+
+    if (cipherBundle) {
+      nextRecord.cipherBundle = cipherBundle;
+    }
+
+    if (fileRef) {
+      nextRecord.fileRef = fileRef;
+    }
+
+    if (updateDeliveryProof) {
+      nextRecord.updateDeliveryProof = updateDeliveryProof;
+    } else {
+      delete nextRecord.updateDeliveryProof;
+    }
+
+    return nextRecord;
   }
 
   commitDelete(): ChannelRecord {

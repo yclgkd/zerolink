@@ -2,6 +2,7 @@ import type {
   Base64Url,
   CipherBundle,
   HexString,
+  MultipartFileRef,
   StoredCredential,
   UnixMs,
 } from '@zerolink/shared';
@@ -14,6 +15,7 @@ import {
 } from '@zerolink/shared';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { createMockR2Bucket } from '../../__tests__/helpers/r2-fixtures.ts';
 import { createMockAssertion } from '../../__tests__/helpers/webauthn-fixtures.ts';
 import { resolveMaxFileCiphertextBytes } from '../../file-policy.ts';
 import {
@@ -350,8 +352,12 @@ describe('SecretVault compound/delete flow', () => {
       asBase64Url('nonce_payload_01'),
       lockParams.receiverPubFpr
     );
+    const cipherBundle = intent.cipherBundle;
+    if (!cipherBundle) {
+      throw new Error('cipherBundle fixture is missing');
+    }
     const updatedRecord = new SecretVaultStateMachine(deliveredRecord).commitDelivery({
-      cipherBundle: intent.cipherBundle,
+      cipherBundle,
       deliveredAt: intent.timestamp,
     });
     const { state } = createMockState(updatedRecord);
@@ -366,6 +372,7 @@ describe('SecretVault compound/delete flow', () => {
     );
     const payload = (await response.json()) as {
       ok: true;
+      payloadTransport: 'inline';
       cipherBundle: CipherBundle;
       receiverPubFpr: HexString;
       cipherVersion: number;
@@ -375,7 +382,8 @@ describe('SecretVault compound/delete flow', () => {
     expect(response.status).toBe(200);
     expect(payload).toEqual({
       ok: true,
-      cipherBundle: intent.cipherBundle,
+      payloadTransport: 'inline',
+      cipherBundle,
       receiverPubFpr: lockParams.receiverPubFpr,
       cipherVersion: intent.version,
       deliveredAt: intent.timestamp,
@@ -395,6 +403,10 @@ describe('SecretVault compound/delete flow', () => {
       asBase64Url('nonce_delivery_auth_01'),
       lockParams.receiverPubFpr
     );
+    const cipherBundle = intent.cipherBundle;
+    if (!cipherBundle) {
+      throw new Error('cipherBundle fixture is missing');
+    }
     const assertionFixture = await createMockAssertion({
       credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
       rpId: RP_ID,
@@ -412,7 +424,7 @@ describe('SecretVault compound/delete flow', () => {
         publicKey: assertionFixture.publicKeyCose,
       },
     }).commitDelivery({
-      cipherBundle: intent.cipherBundle,
+      cipherBundle,
       deliveredAt: intent.timestamp,
       updateDeliveryProof: {
         adminMode: 'webauthn',
@@ -441,6 +453,7 @@ describe('SecretVault compound/delete flow', () => {
     );
     const payload = (await response.json()) as {
       ok: true;
+      payloadTransport: 'inline';
       cipherBundle: CipherBundle;
       receiverPubFpr: HexString;
       cipherVersion: number;
@@ -451,7 +464,8 @@ describe('SecretVault compound/delete flow', () => {
     expect(response.status).toBe(200);
     expect(payload).toEqual({
       ok: true,
-      cipherBundle: intent.cipherBundle,
+      payloadTransport: 'inline',
+      cipherBundle,
       receiverPubFpr: lockParams.receiverPubFpr,
       cipherVersion: intent.version,
       deliveredAt: intent.timestamp,
@@ -474,6 +488,117 @@ describe('SecretVault compound/delete flow', () => {
         },
       },
     });
+  });
+
+  it('returns multipart decrypt payloads and cleans up R2 objects on delete', async () => {
+    const now = 1_730_001_180_000;
+    const fileBucket = createMockR2Bucket();
+    const localEnv = { ...env, FILE_BUCKET: fileBucket };
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+
+    const storageKey0 = 'files/abcdefghijklmnopqrstu/0000.bin';
+    const storageKey1 = 'files/abcdefghijklmnopqrstu/0001.bin';
+    await fileBucket.put(storageKey0, 'cipher-0');
+    await fileBucket.put(storageKey1, 'cipher-1');
+
+    const fileRef: MultipartFileRef = {
+      storageBackend: 'r2',
+      chunkSizeBytes: 8,
+      chunkCount: 2,
+      totalPlaintextBytes: 8,
+      totalCiphertextBytes: 16,
+      baseIv: asBase64Url('base_iv'),
+      encContentKey: asBase64Url('enc_key'),
+      chunks: [
+        {
+          index: 0,
+          storageKey: storageKey0,
+          ciphertextBytes: 8,
+          ciphertextHash: asHex('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+        },
+        {
+          index: 1,
+          storageKey: storageKey1,
+          ciphertextBytes: 8,
+          ciphertextHash: asHex('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
+        },
+      ],
+    };
+
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now),
+      asBase64Url('nonce_payload_multipart'),
+      lockParams.receiverPubFpr
+    );
+    delete intent.cipherBundle;
+    intent.payloadKind = 'file';
+    intent.fileRef = fileRef;
+
+    const intentHash = await computeIntentHash(toRecord(intent));
+    const assertionFixture = await createMockAssertion({
+      credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: await deriveUpdateProofChallengeB64u({
+        uuid: lockedRecord.uuid,
+        intentHash,
+      }),
+      signCount: 13,
+    });
+
+    const { state } = createMockState({
+      ...lockedRecord,
+      adminCredential: {
+        ...(lockedRecord.adminCredential as StoredCredential),
+        publicKey: assertionFixture.publicKeyCose,
+      },
+    });
+    const vault = new SecretVault(state, localEnv);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+
+    await vault.commitCompound(
+      {
+        uuid: lockedRecord.uuid,
+        assertion: assertionFixture.assertion,
+        intentHash,
+        intent,
+      },
+      now + 1_000
+    );
+
+    const updated = await vault.getRecord();
+    expect(updated.state).toBe(CHANNEL_STATE.DELIVERED);
+    expect(updated.fileRef).toEqual(fileRef);
+    expect(updated.cipherBundle).toBeUndefined();
+
+    const response = await vault.fetch(
+      new Request('https://zerolink.test/get_decrypt_payload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    );
+    const payload = (await response.json()) as {
+      ok: true;
+      payloadTransport: 'multipart';
+      fileRef: typeof fileRef;
+      receiverPubFpr: HexString;
+      cipherVersion: number;
+      deliveredAt: UnixMs;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.payloadTransport).toBe('multipart');
+    expect(payload.fileRef).toEqual(fileRef);
+
+    await vault.commitDelete();
+    await expect(fileBucket.head(storageKey0)).resolves.toBeNull();
+    await expect(fileBucket.head(storageKey1)).resolves.toBeNull();
   });
 
   it('commits delete intent and physically purges channel storage', async () => {

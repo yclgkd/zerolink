@@ -39,7 +39,7 @@ describe('backend worker routing — public/read routes', () => {
         multipartThresholdBytes: 1_048_576,
         chunkSizeBytes: 262_144,
         maxChunks: 4,
-        multipartSupported: false,
+        multipartSupported: true,
       },
     });
     expect(calls).toHaveLength(0);

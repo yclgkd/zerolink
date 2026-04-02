@@ -4,6 +4,7 @@ import type {
   CipherBundle,
   HexString,
   ManageIntent,
+  MultipartFileRef,
   RSAPublicKeyJWK,
   StoredUpdateDeliveryProof,
   UnixMs,
@@ -20,6 +21,7 @@ export interface SecretVaultEnv {
   COMMIT_TOKEN_SECRET: string;
   RP_ID: string;
   RP_ORIGIN: string;
+  FILE_BUCKET?: R2Bucket;
   FILE_MAX_BYTES?: string;
   FILE_MULTIPART_THRESHOLD_BYTES?: string;
   FILE_CHUNK_SIZE_BYTES?: string;
@@ -34,7 +36,8 @@ export interface CommitLockParams {
 }
 
 export interface CommitDeliveryParams {
-  cipherBundle: CipherBundle;
+  cipherBundle?: CipherBundle;
+  fileRef?: MultipartFileRef;
   updateDeliveryProof?: StoredUpdateDeliveryProof;
   deliveredAt: UnixMs;
   expiresAt?: UnixMs;
