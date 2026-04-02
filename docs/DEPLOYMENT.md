@@ -244,7 +244,7 @@ For the default Worker config, `/api/file_policy` should report `"multipartSuppo
 
 | Secret Name | Description |
 |-------------|-------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token (requires Worker permissions) |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token with deploy access to Workers routes and the target R2 buckets |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
 | `MANIFEST_SIGNING_KEY` | Ed25519 private key in PEM text form for manifest signing |
 | `RELEASE_PLEASE_TOKEN` | GitHub PAT or GitHub App token, used to create Release PRs, tags, and GitHub Releases, and to ensure subsequent workflows are triggered correctly; if missing, the release-please workflow will fail at the pre-check step with a configuration hint |
@@ -253,8 +253,15 @@ For the default Worker config, `/api/file_policy` should report `"multipartSuppo
 
 1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com)
 2. Go to **My Profile > API Tokens > Create Token**
-3. Select the **Edit Cloudflare Workers** template
+3. Create a token that can deploy the Worker and access the target R2 bucket bindings
 4. Copy the Token and save it to GitHub Secrets
+
+For GitHub Actions deploys, ZeroLink expects a token equivalent to these permissions:
+- Account: `Workers Scripts (edit)` and `Workers R2 Storage (edit)`
+- Zone: `Workers Routes (edit)` for the deployment zone
+- User token note: Cloudflare's Workers Builds docs also include `Account Settings (read)`, `User Details (read)`, and `Memberships (read)` on the automatically generated user token
+
+If you use an account-owned token instead of a user token, grant the equivalent account and zone permissions above.
 
 ---
 
@@ -335,7 +342,9 @@ The project includes a standalone deployment workflow `.github/workflows/deploy.
 - Automatic staging deployment on `push` to `main` when workflow trigger conditions are met
 - Automatic production deployment on `v*` tag push when workflow trigger conditions are met
 
-Workflow execution order: `install > build frontend > generate manifest > sign manifest > verify manifest > wrangler deploy`
+Workflow execution order: `install > preflight cloudflare > build frontend > generate manifest > sign manifest > verify manifest > wrangler deploy`
+
+Before the frontend build starts, the workflow runs `pnpm deploy:preflight`. This verifies the current token is active, checks that it effectively grants `Workers Scripts Write`, `Workers Routes Write`, and `Workers R2 Storage Write` for the configured account/zone, and then confirms the required environment-specific R2 bucket exists.
 
 A separate `.github/workflows/release-please.yml` workflow is responsible for generating or updating Release PRs on `main`. This workflow first pre-checks `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action. The current upstream action still declares `runs: node20`, so GitHub may show a Node 20 deprecation warning; ZeroLink does not work around this warning by installing npm packages at runtime, and will update the pin once the upstream action upgrades. After merging a Release PR, Release Please will:
 - Update `version.txt` in the root directory

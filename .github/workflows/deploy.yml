@@ -54,6 +54,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Preflight Cloudflare deploy prerequisites
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ZEROLINK_DEPLOY_ENV: ${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }}
+        run: pnpm deploy:preflight
+
       - name: Resolve release version
         shell: bash
         run: |

@@ -247,7 +247,7 @@ curl -s https://<your-origin>/api/file_policy
 
 | Secret 名 | 说明 |
 |-----------|------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（需有 Worker 权限） |
+| `CLOUDFLARE_API_TOKEN` | 具备 Worker 路由和目标 R2 bucket 部署权限的 Cloudflare API Token |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
 | `MANIFEST_SIGNING_KEY` | PEM 文本格式的 Ed25519 私钥，用于 manifest 签名 |
 | `RELEASE_PLEASE_TOKEN` | GitHub PAT 或 GitHub App token，用于创建 Release PR、tag 和 GitHub Release，并确保后续 workflow 能被正常触发；若缺失，release-please workflow 会在预检查步骤里直接报错并给出配置提示 |
@@ -256,8 +256,15 @@ curl -s https://<your-origin>/api/file_policy
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
 2. 进入 **My Profile → API Tokens → Create Token**
-3. 选择 **Edit Cloudflare Workers** 模板
+3. 创建一个同时能部署 Worker 且能访问目标 R2 bucket 的 token
 4. 复制 Token 并保存到 GitHub Secrets
+
+对于 GitHub Actions 自动部署，ZeroLink 期望的权限至少等价于以下集合：
+- Account：`Workers Scripts (edit)` 和 `Workers R2 Storage (edit)`
+- Zone：部署目标 zone 的 `Workers Routes (edit)`
+- User token 补充：Cloudflare Workers Builds 文档里，自动生成的 user token 还会带上 `Account Settings (read)`、`User Details (read)` 和 `Memberships (read)`
+
+如果你使用的是 account-owned token，而不是 user token，请确保授予与上述相同的 account / zone 权限。
 
 ---
 
@@ -334,7 +341,9 @@ routes = [
 - 命中 workflow 触发条件的 `push` 到 `main` 时自动部署 staging
 - 命中 workflow 触发条件的 `v*` tag 推送时自动部署 production
 
-工作流执行顺序：`install → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
+工作流执行顺序：`install → preflight cloudflare → build frontend → generate manifest → sign manifest → verify manifest → wrangler deploy`
+
+前端构建开始前，workflow 会先运行 `pnpm deploy:preflight`。它会先验证当前 token 处于 active 状态，再校验该 token 是否对当前 account / zone 实际拥有 `Workers Scripts Write`、`Workers Routes Write` 和 `Workers R2 Storage Write`，最后确认当前环境要求的 R2 bucket 已存在。
 
 另有独立的 `.github/workflows/release-please.yml` 负责在 `main` 上生成或更新 Release PR。该 workflow 会先预检查 `RELEASE_PLEASE_TOKEN`，然后继续执行 commit-pinned 官方 `release-please` action。当前上游 action 仍声明 `runs: node20`，因此 GitHub 可能显示 Node 20 deprecation warning；ZeroLink 暂不通过运行时安装 npm 包去规避这个告警，待上游升级后再更新 pin。合并 Release PR 后，Release Please 会：
 - 更新根目录 `version.txt`
