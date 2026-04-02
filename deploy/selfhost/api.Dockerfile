@@ -1,4 +1,4 @@
-FROM golang:1.24.0 AS build
+FROM golang:1.25 AS build
 
 WORKDIR /app
 COPY services/selfhost-api ./services/selfhost-api
