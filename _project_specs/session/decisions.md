@@ -13,6 +13,15 @@ This is append-only. Never delete entries.
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-02] Tag releases package the verified frontend build into published self-host web images
+
+**Decision**: Keep the release-prep frontend build + manifest generate/sign/verify sequence in `.github/workflows/deploy.yml`, then publish self-host API and web images in parallel while packaging the already-built `packages/frontend/dist` into `zerolink-web` instead of rebuilding it inside the release Docker step.
+**Context**: The tag deploy workflow spent almost all of its time in two serial Docker Buildx steps. The web image duplicated frontend work by running `pnpm install` and `pnpm --filter @zerolink/frontend build` inside `deploy/selfhost/frontend.Dockerfile` even though CI had already produced the exact `dist` used for release manifest verification.
+**Options Considered**: Keep serial image builds and duplicate the frontend build in Docker; package prebuilt `dist` in the release web image but make local source builds manual; package prebuilt `dist` in CI while preserving local source-build behavior through a dedicated local Dockerfile.
+**Choice**: Split tag releases into a shared release-prep job plus parallel API/web image jobs, upload/download the verified frontend `dist` between jobs, make `deploy/selfhost/frontend.Dockerfile` runtime-only with a minimal release-context artifact, and keep local compose source builds on `deploy/selfhost/frontend.build.Dockerfile` via `deploy/selfhost/docker-compose.build.yml`.
+**Reasoning**: This removes duplicate frontend compilation from release CI, shortens wall-clock time by letting API/web image publication overlap, and preserves the current local source-build escape hatch for developers.
+**Trade-offs**: Published self-host web images now include the same signed `Verified Release` bootstrap gate as the verified CI build, while local compose source builds continue to use the unsigned default build path unless the signed release flow is reproduced manually. The local web source-build path now also carries a dedicated Dockerfile-specific allowlist context so it no longer depends on the repo-root ignore rules staying strict.
+
 ## [2026-04-02] Self-host releases default to GHCR images with source-build fallback
 
 **Decision**: Publish versioned `ghcr.io/yclgkd/zerolink-api` and `ghcr.io/yclgkd/zerolink-web` multi-arch images from the tag-driven release workflow, switch `deploy/selfhost/docker-compose.yml` to those published images by default, and keep `deploy/selfhost/docker-compose.build.yml` as the opt-in source-build override.

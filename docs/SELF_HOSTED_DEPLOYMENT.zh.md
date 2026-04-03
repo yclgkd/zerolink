@@ -56,7 +56,9 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
 
 `docker-compose.build.yml` 会把 `migrate`、`api` 和 `web` 恢复为本地 `build:` 路径，
-而默认的镜像分发方式仍保持给普通运维用户使用。
+而默认的镜像分发方式仍保持给普通运维用户使用。本地 `web` override 会通过
+`deploy/selfhost/frontend.build.Dockerfile` 继续从源码重建前端，而发布到 GHCR 的镜像
+则会通过最小化的 self-host web build context 打包 CI 里已经生成好的前端 `dist`。
 
 访问：
 
@@ -101,7 +103,8 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 
 ## 运行说明
 
-- 这个打包使用默认前端 build，不启用签名后的 `Verified Release` 启动校验。
+- production tag 发布时，`zerolink-web` 会直接打包同一份已通过 manifest generate/sign/verify 的 CI 前端 `dist`，因此默认包含签名 `Verified Release` 启动门禁。
+- 本地源码 build override 仍使用 `deploy/selfhost/frontend.build.Dockerfile` 走默认前端构建路径；除非你显式复现签名 release build 流程，否则不会启用该门禁。
 - production tag 发布时，GHCR 镜像会附带 `linux/amd64` + `linux/arm64` 多架构 manifest，以及 Buildx 生成的 provenance / SBOM attestation，便于把拉取到的镜像追溯回具体 release commit 和 GitHub Actions run。
 - realtime hub 是进程内实现；如果要跑多个 API 副本，需要共享 pub/sub。
 - PostgreSQL 数据存放在 `postgres-data` volume 中。
