@@ -32,7 +32,7 @@ UPDATE WHEN:
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints; now also runs the hourly orphan-chunk cleanup hook |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
 | `deploy/selfhost/docker-compose.yml` | Default self-host Compose entrypoint — pulls published GHCR `api`/`web` images while running PostgreSQL and MinIO locally |
-| `deploy/selfhost/docker-compose.build.yml` | Opt-in self-host Compose overlay — restores local source builds for `migrate`, `api`, and `web` without changing the default operator path |
+| `deploy/selfhost/docker-compose.build.yml` | Opt-in self-host Compose overlay — restores local source builds for `migrate`/`api` and points `web` at `frontend.build.Dockerfile` so local builds still compile frontend source |
 | `services/selfhost-api/cmd/selfhost-api/main.go` | Self-hosted Go API entrypoint — loads config, opens PostgreSQL, boots the in-memory realtime hub, and serves health, protocol routes, and `/api/ws/:uuid` |
 | `services/selfhost-api/cmd/selfhost-migrate/main.go` | Self-hosted Go migration entrypoint — runs embedded SQL migrations against PostgreSQL |
 
@@ -89,13 +89,14 @@ UPDATE WHEN:
 | `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — now serves `/api/file_policy` and applies a config-driven JSON body limit for file-capable protocol requests |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
 | `deploy/selfhost/docker-compose.yml` | Self-hosted stack bundle — defaults to published GHCR `api`/`web` images while still starting PostgreSQL, migration job, MinIO, and the Caddy-served frontend with `.env` values |
-| `deploy/selfhost/docker-compose.build.yml` | Self-hosted source-build overlay — reintroduces local Docker `build:` definitions for operators who want to compile from the checked-out repo |
+| `deploy/selfhost/docker-compose.build.yml` | Self-hosted source-build overlay — reintroduces local Docker `build:` definitions for operators who want to compile from the checked-out repo, with `api`/`migrate` using the service-only context and `web` using `frontend.build.Dockerfile` |
 | `deploy/selfhost/Caddyfile` | Self-hosted reverse-proxy and SPA fallback config — `/api/*`, `/healthz`, and `/readyz` must route before static fallback |
-| `deploy/selfhost/api.Dockerfile` | Multi-stage image build for `selfhost-api` and `selfhost-migrate` |
-| `deploy/selfhost/frontend.Dockerfile` | Frontend build + Caddy runtime image for the self-hosted local stack |
+| `deploy/selfhost/api.Dockerfile` | Multi-stage image build for `selfhost-api` and `selfhost-migrate`; release and compose builds now run against the service-only context |
+| `deploy/selfhost/frontend.Dockerfile` | Runtime-only Caddy image for published self-host web releases; consumes a minimal release-context artifact containing `Caddyfile` + CI-built frontend `dist` |
+| `deploy/selfhost/frontend.build.Dockerfile` | Local self-host source-build Dockerfile; rebuilds the frontend from the checked-out repo for `docker-compose.build.yml`, with a Dockerfile-specific allowlist context |
 | `services/selfhost-api/.env.example` | Self-hosted Go service env template — bind address, RP ID/origin, pool sizing, and PostgreSQL DSN |
 | `services/selfhost-api/go.mod` | Nested Go module for the self-hosted backend track |
-| `.github/workflows/deploy.yml` | Post-merge CI/CD: resolve `ZEROLINK_VERSION`, frontend build, manifest generate/sign/verify, publish GHCR self-host images on `v*` tags, then deploy the Worker; staging adds a post-deploy smoke test |
+| `.github/workflows/deploy.yml` | Post-merge CI/CD: release-prep builds/signs/verifies the frontend once, then tag releases publish GHCR self-host API/web images in parallel before the Worker deploy; staging reuses the same prebuilt frontend dist for deploy + smoke tests |
 | `version.txt` | Root release state tracked by Release Please's `simple` strategy; seed value is the last manual release (`0.2.0`) |
 
 ## File Size Rule

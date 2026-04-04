@@ -56,7 +56,10 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
 
 `docker-compose.build.yml` restores the original local `build:` definitions for `migrate`, `api`,
-and `web`, while keeping the default image-based stack unchanged for ordinary operators.
+and `web`, while keeping the default image-based stack unchanged for ordinary operators. The local
+`web` override still rebuilds the frontend from source via `deploy/selfhost/frontend.build.Dockerfile`,
+while published GHCR release images package the frontend `dist` produced earlier in CI via a
+minimal self-host web build context.
 
 Then open:
 
@@ -102,7 +105,8 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 
 ## Operational Notes
 
-- This package serves the default frontend build. It does not enable the signed `Verified Release` bootstrap gate.
+- Production tag releases package the same CI-built frontend `dist` that passed manifest generate/sign/verify, so published `zerolink-web` images now include the signed `Verified Release` bootstrap gate by default.
+- The local source-build override still uses the default frontend build path from `deploy/selfhost/frontend.build.Dockerfile`; it does not enable the signed bootstrap gate unless you explicitly reproduce the signed release build flow.
 - Production tag releases publish the GHCR images with multi-arch `linux/amd64` + `linux/arm64` manifests and Buildx provenance/SBOM attestations, so operators can trace a pulled image back to the release commit and GitHub Actions run.
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.

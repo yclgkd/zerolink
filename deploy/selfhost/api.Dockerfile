@@ -1,8 +1,7 @@
 FROM golang:1.25 AS build
 
 WORKDIR /app
-COPY services/selfhost-api ./services/selfhost-api
-WORKDIR /app/services/selfhost-api
+COPY . .
 
 RUN /usr/local/go/bin/go mod download
 RUN CGO_ENABLED=0 /usr/local/go/bin/go build -o /out/selfhost-api ./cmd/selfhost-api

@@ -27,14 +27,15 @@ on:
       - "version.txt"
 
 jobs:
-  deploy:
-    name: Deploy (${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }})
+  release-prep:
+    name: Release prep (${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }})
     runs-on: ubuntu-latest
     environment: ${{ startsWith(github.ref, 'refs/tags/') && 'production' || 'staging' }}
     permissions:
       contents: read
-      packages: write
       id-token: write
+    outputs:
+      release-version: ${{ steps.resolve-version.outputs.release-version }}
 
     steps:
       - name: Checkout
@@ -64,6 +65,7 @@ jobs:
         run: pnpm deploy:preflight
 
       - name: Resolve release version
+        id: resolve-version
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
@@ -73,6 +75,7 @@ jobs:
             VERSION="0.0.0-dev+${SHORT_SHA}"
           fi
 
+          echo "release-version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "ZEROLINK_VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "Resolved release version: ${VERSION}"
 
@@ -92,8 +95,49 @@ jobs:
       - name: Verify manifest
         run: pnpm manifest:verify
 
-      - name: Login to GitHub Container Registry
+      - name: Prepare self-host web build context
         if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p deploy/selfhost/release-context/frontend-dist
+          cp deploy/selfhost/Caddyfile deploy/selfhost/release-context/Caddyfile
+          cp deploy/selfhost/frontend.Dockerfile deploy/selfhost/release-context/frontend.Dockerfile
+          cp -R packages/frontend/dist/. deploy/selfhost/release-context/frontend-dist/
+
+      - name: Upload self-host web build context
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: selfhost-web-context-${{ github.sha }}
+          path: deploy/selfhost/release-context
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Pack frontend dist
+        run: tar -czf frontend-dist.tar.gz -C packages/frontend dist
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: frontend-dist.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  build-selfhost-api-image:
+    name: Build self-host API image
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: release-prep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           registry: ghcr.io
@@ -101,18 +145,17 @@ jobs:
           password: ${{ github.token }}
 
       - name: Set up QEMU
-        if: startsWith(github.ref, 'refs/tags/')
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        if: startsWith(github.ref, 'refs/tags/')
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Build and push self-host API image
-        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ZEROLINK_VERSION: ${{ needs.release-prep.outputs.release-version }}
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
-          context: .
+          context: services/selfhost-api
           file: deploy/selfhost/api.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
@@ -130,12 +173,43 @@ jobs:
           provenance: mode=max
           sbom: true
 
+  build-selfhost-web-image:
+    name: Build self-host web image
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: release-prep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Download self-host web build context
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: selfhost-web-context-${{ github.sha }}
+          path: deploy/selfhost/release-context
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
       - name: Build and push self-host web image
-        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ZEROLINK_VERSION: ${{ needs.release-prep.outputs.release-version }}
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
-          context: .
-          file: deploy/selfhost/frontend.Dockerfile
+          context: deploy/selfhost/release-context
+          file: deploy/selfhost/release-context/frontend.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
@@ -152,16 +226,93 @@ jobs:
           provenance: mode=max
           sbom: true
 
+  deploy-production:
+    name: Deploy (production)
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - release-prep
+      - build-selfhost-api-image
+      - build-selfhost-web-image
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: .
+
+      - name: Restore frontend dist
+        run: tar -xzf frontend-dist.tar.gz -C packages/frontend && rm frontend-dist.tar.gz
+
       - name: Deploy (production)
-        if: startsWith(github.ref, 'refs/tags/')
         working-directory: packages/backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
 
+  deploy-staging:
+    name: Deploy (staging)
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    needs: release-prep
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: .
+
+      - name: Restore frontend dist
+        run: tar -xzf frontend-dist.tar.gz -C packages/frontend && rm frontend-dist.tar.gz
+
       - name: Deploy (staging)
-        if: "!startsWith(github.ref, 'refs/tags/')"
         working-directory: packages/backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -169,12 +320,10 @@ jobs:
         run: npx wrangler deploy --env staging
 
       - name: Install Playwright browsers
-        if: "!startsWith(github.ref, 'refs/tags/')"
         working-directory: packages/frontend
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Smoke test staging
-        if: "!startsWith(github.ref, 'refs/tags/')"
         env:
           STAGING_URL: https://staging.zerolink.dev
         run: pnpm --filter @zerolink/frontend test:e2e:smoke
