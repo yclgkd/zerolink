@@ -252,9 +252,9 @@ Quick Share 是 v3.0 中替代"兼容模式（Compatibility Mode）"的正式用
 通用要求：
 
 - 所有响应：`Cache-Control: no-store`
-- `/api/public/:uuid` 返回公开状态快照，而不是仅 `exists`
 - 所有敏感写操作走 DO 串行
-- 错误响应恒定形状 `{ok:false, code}`
+- 错误响应恒定形状 `{ok: false, code: string}`
+- `adminMode` 取值：`"webauthn"` | `"password"` | `"softkey"`（`softkey` 是 `password` 的 legacy alias，行为等价）
 
 ### 10.1 GET /api/public/:uuid
 
@@ -262,18 +262,17 @@ Response：
 ```json
 {
   "ok": true,
-  "state": "waiting|locked|delivered",
-  "adminMode": "webauthn|password",
+  "state": "waiting|locked|delivered|deleted|expired",
+  "adminMode": "webauthn|password|softkey",
   "securityProfile": "quick|secure",
   "receiverPubFpr": "hex..."
 }
 ```
 
-说明：
-
 - `receiverPubFpr` 仅在接收方已上锁后返回
-- 频道被物理删除或过期后，公共读取返回 `404 NOT_FOUND`
-### 10.2 创建（Quick Share / Secure Share）
+- 频道被物理删除或过期后返回 `404 NOT_FOUND`
+
+### 10.2 创建
 
 #### POST /api/create_begin/:uuid
 
@@ -290,110 +289,291 @@ Response：
 ```json
 {
   "ok": true,
-  "creationOptions": { "...": "..." }
+  "creationOptions": { "...": "WebAuthn PublicKeyCredentialCreationOptions" }
 }
 ```
 
-服务端行为：
-
-- 创建 `waiting` 频道记录并持久化 `securityProfile`
-- 为 Secure Share 签发 WebAuthn 注册 challenge（封装在 `creationOptions` 中）
-- Quick Share 仍走同一个 `create_begin`/`create_finish` 协议，但前端不会使用返回的 WebAuthn `creationOptions`
-- `lock_secret` 由前端本地生成并拼接到分享链接 fragment；服务端只在 `create_finish` 后持久化 `lockKeyB64u`
+- 创建 `waiting` 频道并持久化 `securityProfile`
+- Quick Share 前端不使用返回的 `creationOptions`
+- `lock_secret` 由前端本地生成，服务端只持久化派生的 `lockKeyB64u`
 
 #### POST /api/create_finish/:uuid
 
-WebAuthn 管理模式：
+WebAuthn 模式（`adminMode: "webauthn"`）：
 ```json
 {
   "adminMode": "webauthn",
   "uuid": "string(21)",
-  "attestation": { "...": "..." },
-  "lockKeyB64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
+  "attestation": { "...": "WebAuthn AttestationJSON" },
+  "lockKeyB64u": "base64url(SHA256('GL-lockkey'||uuid||lock_secret))",
   "timestamp": 1730000000000
 }
 ```
 
-Quick Share password 模式：
+Quick Share 模式（`adminMode: "password"`）：
 ```json
 {
   "adminMode": "password",
   "uuid": "string(21)",
-  "softkeyPubJwk": { "...": "..." },
-  "lockKeyB64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
+  "softkeyPubJwk": { "...": "ECDSA P-256 公钥 JWK" },
+  "lockKeyB64u": "base64url(SHA256('GL-lockkey'||uuid||lock_secret))",
   "timestamp": 1730000000000
 }
 ```
-
-说明：
-
-- 服务端保存管理凭据、`securityProfile` 和 `lockKeyB64u`
-- `lockKeyB64u` 用于后续验证 `lock_proof`，服务端从不持久化 `lock_secret`
-
-### 10.3 上锁（拆成 lock_begin / lock_commit）
-
-#### POST /api/lock_begin/:uuid
-
-目的：避免 lock_proof 被重放，且让 DO 控制一次性消费。
 
 Response：
 ```json
 {
   "ok": true,
-  "uuid": "string",
-  "lock_challenge_id": "base64url",
-  "lock_challenge": "base64url(32)",
-  "expires_at": 1730000000000
+  "shareUrl": "https://...",
+  "manageUrl": "https://..."
 }
 ```
 
-DO 存 challenge（TTL 60s，一次性）。
+### 10.3 上锁
+
+#### POST /api/lock_begin/:uuid
+
+Response：
+```json
+{
+  "ok": true,
+  "lockChallenge": {
+    "id": "base64url",
+    "challenge": "base64url(32 bytes)",
+    "expiresAt": 1730000000000
+  }
+}
+```
+
+challenge TTL 60s，一次性消费。
 
 #### POST /api/lock_commit/:uuid
 
-Request（接收方携带 receiver_pub + lock_proof）：
-
+Request：
 ```json
 {
   "uuid": "string(21)",
-  "lock_challenge_id": "base64url",
-  "lock_proof": "hex(sha256(...))",
-  "receiver_pub_jwk": { "...": "..." },
-  "receiver_pub_fpr": "hex...",
-  "locked_at": 1730000000000
+  "lockChallengeId": "base64url",
+  "lockProof": "hex(SHA256('GL-lock'||uuid||challengeId||challenge||lock_key))",
+  "receiverPubJwk": { "...": "RSA-OAEP-256 公钥 JWK" },
+  "receiverPubFpr": "hex(SHA256(SPKI(receiver_pub)))",
+  "lockedAt": 1730000000000
 }
 ```
 
-其中：
+DO 校验 challenge 未过期未消费、lock_proof 正确，写入 receiver_pub、fpr、status=Locked。
 
-- lock_proof = SHA256("GL-lock" || uuid || lock_challenge_id || lock_challenge || lock_key)
-- lock_key 由前端从 lock_secret 派生（不上传 lock_secret）
+### 10.4 管理操作（投递 / 更新 / 删除）
 
-DO 校验：
+所有管理操作（投递、更新内容、删除）共用两阶段流程：先 `compound_begin` 获取 challenge，再提交 `compound_commit` 或 `delete_commit`。
 
-- lock_challenge 未过期未消费
-- lock_key 与 lock_proof 对应正确（DO 用存的 lock_key 验证）
+#### POST /api/manage/compound_begin/:uuid
 
-最终：写入 receiver_pub、fpr、status=Locked
+Request：
+```json
+{ "uuid": "string(21)" }
+```
 
-### 10.4 投递（compound_begin/commit，v3.0 保持一次确认）
+Response：
+```json
+{
+  "ok": true,
+  "challenge": {
+    "id": "base64url",
+    "seed": "base64url",
+    "expiresAt": 1730000000000
+  },
+  "allowCredentials": [ "...可选，WebAuthn allow list..." ],
+  "receiverPubFpr": "hex...",
+  "receiverPubJwk": { "...": "RSA-OAEP-256 公钥 JWK" },
+  "currentVersion": 0,
+  "securityProfile": "quick|secure",
+  "adminMode": "webauthn|password|softkey"
+}
+```
 
-与 v2.4 相同，但 update payload 增加：
+#### POST /api/manage/compound_commit/:uuid
 
-- pad_block（默认 4096）
+WebAuthn 模式：
+```json
+{
+  "uuid": "string(21)",
+  "assertion": { "...": "WebAuthn AssertionJSON" },
+  "intentHash": "hex(SHA256(canonical(intent)))",
+  "intent": {
+    "op": "update",
+    "uuid": "string(21)",
+    "version": 1,
+    "timestamp": 1730000000000,
+    "nonce": "base64url(24 bytes)",
+    "receiverPubFpr": "hex...",
+    "payloadKind": "text|file",
+    "cipherBundle": { "...": "见下方" },
+    "expireAt": 1730000000000
+  }
+}
+```
 
-> 注意：`plaintext_len` 不是 API 层字段。它仅存在于加密后的 padding header 内部（`padded_plaintext` 的前 4 字节；参见附录 E），不作为请求的顶层字段传输。
+Quick Share 模式（额外字段 `adminMode` + `softkeySignature`，不含 `assertion`）：
+```json
+{
+  "adminMode": "password|softkey",
+  "uuid": "string(21)",
+  "softkeySignature": "hex(ECDSA P-256 签名)",
+  "intentHash": "hex...",
+  "intent": { "...": "同上" }
+}
+```
 
-### 10.5 删除（compound_begin + delete_commit）
+`cipherBundle` 结构（inline 文本载荷）：
+```json
+{
+  "ciphertext": "base64url",
+  "iv": "base64url(12 bytes)",
+  "aad": "base64url",
+  "encContentKey": "base64url",
+  "ciphertextHash": "hex(SHA256(ciphertext))",
+  "padBlock": 4096
+}
+```
 
-删除复用 `compound_begin` 获取 challenge，再调用 `delete_commit` 完成管理授权。没有单独的 `delete_begin` 端点。
+大文件用 `fileRef`（见 10.6）替代 `cipherBundle`，`payloadKind` 为 `"file"`。
 
-### 10.6 Quick Share Password API
+#### POST /api/delete_commit/:uuid
 
-新增字段：
+删除复用 `compound_begin` 的 challenge，intent.op 为 `"delete"`：
+```json
+{
+  "uuid": "string(21)",
+  "assertion": { "...": "WebAuthn AssertionJSON" },
+  "intentHash": "hex...",
+  "intent": {
+    "op": "delete",
+    "uuid": "string(21)",
+    "version": 1,
+    "timestamp": 1730000000000,
+    "nonce": "base64url(24 bytes)"
+  }
+}
+```
 
-- adminMode="webauthn"|"password"
-- password 模式下 update/delete 需要 sig（ECDSA 签名）
+Quick Share 模式同样用 `softkeySignature` 替代 `assertion`。
+
+### 10.5 解密获取
+
+#### GET /api/decrypt_fetch/:uuid
+
+接收方上锁成功并输入口令后调用，获取密文包。
+
+Response：
+```json
+{
+  "ok": true,
+  "cipherBundle": { "...": "inline 载荷，与 10.4 相同结构" },
+  "fileRef": { "...": "大文件时替代 cipherBundle" },
+  "receiverPubFpr": "hex...",
+  "cipherVersion": 1,
+  "deliveryAuth": { "...": "投递者身份证明，可选" },
+  "deliveredAt": 1730000000000
+}
+```
+
+`cipherBundle` 和 `fileRef` 互斥，必有且仅有一个。
+
+### 10.6 文件 API（multipart 大文件）
+
+#### GET /api/file_policy
+
+返回当前部署的文件上传策略，前端在选择文件后调用以确认是否支持上传及大小限制。
+
+Response：
+```json
+{
+  "ok": true,
+  "policy": {
+    "maxFileBytes": 104857600,
+    "multipartThresholdBytes": 5242880,
+    "chunkSizeBytes": 5242880,
+    "maxChunks": 20,
+    "multipartSupported": true
+  }
+}
+```
+
+#### POST /api/file/initiate
+
+Request：
+```json
+{
+  "channelUuid": "string(21)",
+  "chunkCount": 3,
+  "totalCiphertextBytes": 15728640
+}
+```
+
+Response：
+```json
+{
+  "ok": true,
+  "uploadId": "base64url",
+  "chunks": [
+    { "index": 0, "uploadUrl": "https://r2-presigned-url..." },
+    { "index": 1, "uploadUrl": "https://..." },
+    { "index": 2, "uploadUrl": "https://..." }
+  ]
+}
+```
+
+前端用各 `uploadUrl` 直接 PUT 加密 chunk 到对象存储。
+
+#### POST /api/file/complete
+
+Request：
+```json
+{
+  "uploadId": "base64url",
+  "baseIv": "base64url(12 bytes)",
+  "encContentKey": "base64url",
+  "chunkSizeBytes": 5242880,
+  "totalPlaintextBytes": 15000000,
+  "totalCiphertextBytes": 15728640,
+  "chunks": [
+    { "index": 0, "etag": "abc123", "ciphertextBytes": 5242896, "ciphertextHash": "hex..." },
+    { "index": 1, "etag": "def456", "ciphertextBytes": 5242896, "ciphertextHash": "hex..." },
+    { "index": 2, "etag": "ghi789", "ciphertextBytes": 5242848, "ciphertextHash": "hex..." }
+  ]
+}
+```
+
+Response：
+```json
+{
+  "ok": true,
+  "fileRef": { "...": "MultipartFileRef，将作为 intent 的 fileRef 字段提交" }
+}
+```
+
+#### GET /api/file/fetch/:uuid
+
+接收方解密时调用，获取各分片的预签名下载 URL。
+
+Response：
+```json
+{
+  "ok": true,
+  "chunks": [
+    { "index": 0, "downloadUrl": "https://r2-presigned-url..." },
+    { "index": 1, "downloadUrl": "https://..." }
+  ]
+}
+```
+
+### 10.7 WebSocket
+
+#### GET /api/ws/:uuid（Upgrade: websocket）
+
+频道实时状态订阅。连接成功后服务端推送状态变更事件（如接收方上锁、发送方投递），前端用于无需轮询地感知频道变化。
 
 ---
 
