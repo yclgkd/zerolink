@@ -728,6 +728,23 @@ sequenceDiagram
   D-->>W: ok
   W-->>S: ok
   end
+
+  rect rgb(240,240,240)
+  Note over R,D: Decrypt (receiver reads delivered secret)
+  R->>W: GET /api/public/{uuid}
+  W->>D: forward
+  D-->>W: state=delivered
+  W-->>R: state=delivered
+  R->>W: GET /api/decrypt_fetch/{uuid}
+  W->>D: forward
+  D-->>W: cipherBundle + receiverPubFpr + cipherVersion + deliveryAuth
+  W-->>R: cipher payload
+  R->>R: load wrappedPrivateKey from IndexedDB
+  R->>R: Argon2id(passphrase) → unwrap receiver_priv
+  R->>R: RSA-OAEP unwrap AES content key
+  R->>R: AES-GCM decrypt + remove padding → plaintext
+  R->>R: verify deliveryAuth proof (if anchored channel)
+  end
 ```
 
 ---
