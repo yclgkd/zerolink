@@ -209,7 +209,7 @@ jobs:
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: deploy/selfhost/release-context
-          file: frontend.Dockerfile
+          file: deploy/selfhost/release-context/frontend.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

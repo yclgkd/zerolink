@@ -12,7 +12,7 @@ out/
 .turbo/
 packages/frontend/dist/
 packages/frontend/dist-verification/
-deploy/selfhost/release-context/frontend-dist/
+deploy/selfhost/release-context/
 
 # Testing
 coverage/

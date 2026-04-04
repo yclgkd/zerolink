@@ -1,3 +1,5 @@
+# Self-contained local source-build stack.
+# Infrastructure services (db, minio) mirror docker-compose.yml — keep in sync.
 name: zerolink-selfhost
 
 services:
