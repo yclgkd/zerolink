@@ -250,9 +250,9 @@ Quick Share is the official user entry point in v3.0, replacing "Compatibility M
 General requirements:
 
 - All responses: `Cache-Control: no-store`
-- `/api/public/:uuid` returns a public state snapshot, not just `exists`
 - All sensitive write operations go through DO serialization
-- Error responses have a constant shape: `{ok:false, code}`
+- Error responses have a constant shape: `{ok: false, code: string}`
+- `adminMode` values: `"webauthn"` | `"password"` | `"softkey"` (`softkey` is a legacy alias for `password`, behaves identically)
 
 ### 10.1 GET /api/public/:uuid
 
@@ -260,18 +260,17 @@ Response:
 ```json
 {
   "ok": true,
-  "state": "waiting|locked|delivered",
-  "adminMode": "webauthn|password",
+  "state": "waiting|locked|delivered|deleted|expired",
+  "adminMode": "webauthn|password|softkey",
   "securityProfile": "quick|secure",
   "receiverPubFpr": "hex..."
 }
 ```
 
-Notes:
-
 - `receiverPubFpr` is only returned after the receiver has locked
 - After a channel is physically deleted or expired, public reads return `404 NOT_FOUND`
-### 10.2 Create (Quick Share / Secure Share)
+
+### 10.2 Create
 
 #### POST /api/create_begin/:uuid
 
@@ -288,110 +287,291 @@ Response:
 ```json
 {
   "ok": true,
-  "creationOptions": { "...": "..." }
+  "creationOptions": { "...": "WebAuthn PublicKeyCredentialCreationOptions" }
 }
 ```
 
-Server behavior:
-
-- Creates a `waiting` channel record and persists the `securityProfile`
-- Issues a WebAuthn registration challenge for Secure Share (encapsulated in `creationOptions`)
-- Quick Share still uses the same `create_begin`/`create_finish` protocol, but the frontend does not use the returned WebAuthn `creationOptions`
-- `lock_secret` is generated locally by the frontend and appended to the share link fragment; the server only persists `lockKeyB64u` after `create_finish`
+- Creates a `waiting` channel and persists `securityProfile`
+- Quick Share frontend does not use the returned `creationOptions`
+- `lock_secret` is generated locally by the frontend; the server only persists the derived `lockKeyB64u`
 
 #### POST /api/create_finish/:uuid
 
-WebAuthn admin mode:
+WebAuthn mode (`adminMode: "webauthn"`):
 ```json
 {
   "adminMode": "webauthn",
   "uuid": "string(21)",
-  "attestation": { "...": "..." },
-  "lockKeyB64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
+  "attestation": { "...": "WebAuthn AttestationJSON" },
+  "lockKeyB64u": "base64url(SHA256('GL-lockkey'||uuid||lock_secret))",
   "timestamp": 1730000000000
 }
 ```
 
-Quick Share password mode:
+Quick Share mode (`adminMode: "password"`):
 ```json
 {
   "adminMode": "password",
   "uuid": "string(21)",
-  "softkeyPubJwk": { "...": "..." },
-  "lockKeyB64u": "base64url(sha256('GL-lockkey'||uuid||lock_secret))",
+  "softkeyPubJwk": { "...": "ECDSA P-256 public key JWK" },
+  "lockKeyB64u": "base64url(SHA256('GL-lockkey'||uuid||lock_secret))",
   "timestamp": 1730000000000
 }
 ```
-
-Notes:
-
-- The server saves admin credentials, `securityProfile`, and `lockKeyB64u`
-- `lockKeyB64u` is used to verify `lock_proof` subsequently; the server never persists `lock_secret`
-
-### 10.3 Locking (Split into lock_begin / lock_commit)
-
-#### POST /api/lock_begin/:uuid
-
-Purpose: Prevent lock_proof replay and let the DO control single-use consumption.
 
 Response:
 ```json
 {
   "ok": true,
-  "uuid": "string",
-  "lock_challenge_id": "base64url",
-  "lock_challenge": "base64url(32)",
-  "expires_at": 1730000000000
+  "shareUrl": "https://...",
+  "manageUrl": "https://..."
 }
 ```
 
-The DO stores the challenge (TTL 60s, single-use).
+### 10.3 Locking
+
+#### POST /api/lock_begin/:uuid
+
+Response:
+```json
+{
+  "ok": true,
+  "lockChallenge": {
+    "id": "base64url",
+    "challenge": "base64url(32 bytes)",
+    "expiresAt": 1730000000000
+  }
+}
+```
+
+Challenge TTL 60s, single-use.
 
 #### POST /api/lock_commit/:uuid
 
-Request (receiver carries receiver_pub + lock_proof):
-
+Request:
 ```json
 {
   "uuid": "string(21)",
-  "lock_challenge_id": "base64url",
-  "lock_proof": "hex(sha256(...))",
-  "receiver_pub_jwk": { "...": "..." },
-  "receiver_pub_fpr": "hex...",
-  "locked_at": 1730000000000
+  "lockChallengeId": "base64url",
+  "lockProof": "hex(SHA256('GL-lock'||uuid||challengeId||challenge||lock_key))",
+  "receiverPubJwk": { "...": "RSA-OAEP-256 public key JWK" },
+  "receiverPubFpr": "hex(SHA256(SPKI(receiver_pub)))",
+  "lockedAt": 1730000000000
 }
 ```
 
-Where:
+DO verifies the challenge has not expired or been consumed and that lock_proof is correct, then writes receiver_pub, fpr, status=Locked.
 
-- lock_proof = SHA256("GL-lock" || uuid || lock_challenge_id || lock_challenge || lock_key)
-- lock_key is derived by the frontend from lock_secret (lock_secret is not uploaded)
+### 10.4 Management Operations (Deliver / Update / Delete)
 
-DO verification:
+All management operations share a two-phase flow: `compound_begin` to obtain a challenge, then `compound_commit` or `delete_commit` to submit.
 
-- lock_challenge has not expired and has not been consumed
-- lock_key and lock_proof correspond correctly (DO verifies using the stored lock_key)
+#### POST /api/manage/compound_begin/:uuid
 
-Final result: writes receiver_pub, fpr, status=Locked
+Request:
+```json
+{ "uuid": "string(21)" }
+```
 
-### 10.4 Delivery (compound_begin/commit, v3.0 Retains Single Confirmation)
+Response:
+```json
+{
+  "ok": true,
+  "challenge": {
+    "id": "base64url",
+    "seed": "base64url",
+    "expiresAt": 1730000000000
+  },
+  "allowCredentials": [ "...optional, WebAuthn allow list..." ],
+  "receiverPubFpr": "hex...",
+  "receiverPubJwk": { "...": "RSA-OAEP-256 public key JWK" },
+  "currentVersion": 0,
+  "securityProfile": "quick|secure",
+  "adminMode": "webauthn|password|softkey"
+}
+```
 
-Same as v2.4, but the update payload adds:
+#### POST /api/manage/compound_commit/:uuid
 
-- pad_block (default 4096)
+WebAuthn mode:
+```json
+{
+  "uuid": "string(21)",
+  "assertion": { "...": "WebAuthn AssertionJSON" },
+  "intentHash": "hex(SHA256(canonical(intent)))",
+  "intent": {
+    "op": "update",
+    "uuid": "string(21)",
+    "version": 1,
+    "timestamp": 1730000000000,
+    "nonce": "base64url(24 bytes)",
+    "receiverPubFpr": "hex...",
+    "payloadKind": "text|file",
+    "cipherBundle": { "...": "see below" },
+    "expireAt": 1730000000000
+  }
+}
+```
 
-> Note: `plaintext_len` is not an API-level field. It exists only inside the encrypted padding header (the first 4 bytes of `padded_plaintext`; see Appendix E). It is never transmitted as a top-level request field.
+Quick Share mode (adds `adminMode` + `softkeySignature`, no `assertion`):
+```json
+{
+  "adminMode": "password|softkey",
+  "uuid": "string(21)",
+  "softkeySignature": "hex(ECDSA P-256 signature)",
+  "intentHash": "hex...",
+  "intent": { "...": "same as above" }
+}
+```
 
-### 10.5 Delete (compound_begin + delete_commit)
+`cipherBundle` structure (inline text payload):
+```json
+{
+  "ciphertext": "base64url",
+  "iv": "base64url(12 bytes)",
+  "aad": "base64url",
+  "encContentKey": "base64url",
+  "ciphertextHash": "hex(SHA256(ciphertext))",
+  "padBlock": 4096
+}
+```
 
-Delete reuses `compound_begin` for challenge issuance, then calls `delete_commit` with admin authorization. There is no separate `delete_begin` endpoint.
+Large files use `fileRef` (see § 10.6) instead of `cipherBundle`, with `payloadKind: "file"`.
 
-### 10.6 Quick Share Password API
+#### POST /api/delete_commit/:uuid
 
-New fields:
+Delete reuses the `compound_begin` challenge, with `intent.op` set to `"delete"`:
+```json
+{
+  "uuid": "string(21)",
+  "assertion": { "...": "WebAuthn AssertionJSON" },
+  "intentHash": "hex...",
+  "intent": {
+    "op": "delete",
+    "uuid": "string(21)",
+    "version": 1,
+    "timestamp": 1730000000000,
+    "nonce": "base64url(24 bytes)"
+  }
+}
+```
 
-- adminMode="webauthn"|"password"
-- Under password mode, update/delete requires sig (ECDSA signature)
+Quick Share mode substitutes `softkeySignature` for `assertion`.
+
+### 10.5 Decrypt Fetch
+
+#### GET /api/decrypt_fetch/:uuid
+
+Called by the receiver after locking and entering their passphrase to retrieve the cipher payload.
+
+Response:
+```json
+{
+  "ok": true,
+  "cipherBundle": { "...": "inline payload, same structure as § 10.4" },
+  "fileRef": { "...": "replaces cipherBundle for large files" },
+  "receiverPubFpr": "hex...",
+  "cipherVersion": 1,
+  "deliveryAuth": { "...": "delivery proof, optional" },
+  "deliveredAt": 1730000000000
+}
+```
+
+`cipherBundle` and `fileRef` are mutually exclusive; exactly one must be present.
+
+### 10.6 File API (Multipart Large Files)
+
+#### GET /api/file_policy
+
+Returns the current deployment's file upload policy. Called by the frontend after a file is selected to confirm upload support and size limits.
+
+Response:
+```json
+{
+  "ok": true,
+  "policy": {
+    "maxFileBytes": 104857600,
+    "multipartThresholdBytes": 5242880,
+    "chunkSizeBytes": 5242880,
+    "maxChunks": 20,
+    "multipartSupported": true
+  }
+}
+```
+
+#### POST /api/file/initiate
+
+Request:
+```json
+{
+  "channelUuid": "string(21)",
+  "chunkCount": 3,
+  "totalCiphertextBytes": 15728640
+}
+```
+
+Response:
+```json
+{
+  "ok": true,
+  "uploadId": "base64url",
+  "chunks": [
+    { "index": 0, "uploadUrl": "https://r2-presigned-url..." },
+    { "index": 1, "uploadUrl": "https://..." },
+    { "index": 2, "uploadUrl": "https://..." }
+  ]
+}
+```
+
+The frontend PUTs each encrypted chunk directly to object storage using the provided `uploadUrl`.
+
+#### POST /api/file/complete
+
+Request:
+```json
+{
+  "uploadId": "base64url",
+  "baseIv": "base64url(12 bytes)",
+  "encContentKey": "base64url",
+  "chunkSizeBytes": 5242880,
+  "totalPlaintextBytes": 15000000,
+  "totalCiphertextBytes": 15728640,
+  "chunks": [
+    { "index": 0, "etag": "abc123", "ciphertextBytes": 5242896, "ciphertextHash": "hex..." },
+    { "index": 1, "etag": "def456", "ciphertextBytes": 5242896, "ciphertextHash": "hex..." },
+    { "index": 2, "etag": "ghi789", "ciphertextBytes": 5242848, "ciphertextHash": "hex..." }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "ok": true,
+  "fileRef": { "...": "MultipartFileRef, submitted as the intent's fileRef field" }
+}
+```
+
+#### GET /api/file/fetch/:uuid
+
+Called by the receiver during decryption to obtain pre-signed download URLs for each chunk.
+
+Response:
+```json
+{
+  "ok": true,
+  "chunks": [
+    { "index": 0, "downloadUrl": "https://r2-presigned-url..." },
+    { "index": 1, "downloadUrl": "https://..." }
+  ]
+}
+```
+
+### 10.7 WebSocket
+
+#### GET /api/ws/:uuid (Upgrade: websocket)
+
+Real-time channel state subscription. After connecting, the server pushes state change events (e.g. receiver locked, sender delivered). The frontend uses this to detect channel changes without polling.
 
 ---
 
@@ -545,6 +725,23 @@ sequenceDiagram
   D->>D: delete record
   D-->>W: ok
   W-->>S: ok
+  end
+
+  rect rgb(240,240,240)
+  Note over R,D: Decrypt (receiver reads delivered secret)
+  R->>W: GET /api/public/{uuid}
+  W->>D: forward
+  D-->>W: state=delivered
+  W-->>R: state=delivered
+  R->>W: GET /api/decrypt_fetch/{uuid}
+  W->>D: forward
+  D-->>W: cipherBundle + receiverPubFpr + cipherVersion + deliveryAuth
+  W-->>R: cipher payload
+  R->>R: load wrappedPrivateKey from IndexedDB
+  R->>R: Argon2id(passphrase) → unwrap receiver_priv
+  R->>R: RSA-OAEP unwrap AES content key
+  R->>R: AES-GCM decrypt + remove padding → plaintext
+  R->>R: verify deliveryAuth proof (if anchored channel)
   end
 ```
 
