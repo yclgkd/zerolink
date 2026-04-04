@@ -35,7 +35,7 @@ v3.0 product goals:
 ### 2.2 Explicit Boundaries (Must Be Documented)
 
 - Client compromised by a malicious extension/trojan: may still abuse a single operation within the user confirmation window; cannot silently export the admin private key for long-term control
-- The Web scenario cannot fundamentally solve the ultimate trust problem of "malicious server delivering JS": v2.5 provides **self-hosting/offline packages/verifiable release chain** as optional "ceiling solutions"
+- The Web scenario cannot fundamentally solve the ultimate trust problem of "malicious server delivering JS": v2.5 provides **self-hosting/verifiable release chain** as optional "ceiling solutions"
 
 ---
 
@@ -68,7 +68,7 @@ Two tiers available at creation:
 
 - Official Cloudflare version remains the default
 - Docker Compose one-click self-hosting (current package: Caddy + Go API + PostgreSQL + MinIO, with protocol-equivalent routes for the shipped frontend contract)
-- Release chain: Signed Manifest + reproducible builds + optional offline static packages (users can open locally/deploy on their own domain)
+- Release chain: Signed Manifest + reproducible builds
 
 ---
 
@@ -168,8 +168,7 @@ The UX layer still recommends:
 v2.5 provides three layers of response:
 
 1. **Verifiable release chain (Signed Manifest + reproducible builds)**: Increases the probability that "tampering can be detected"
-2. **Offline package/local opening** (planned, not yet implemented): Users can optionally download an offline static package from the release page (reducing online delivery risk)
-3. **Self-hosting** (current): Docker Compose package provides a protocol-equivalent implementation, completely handing the trust root to the user
+2. **Self-hosting** (current): Docker Compose package provides a protocol-equivalent implementation, completely handing the trust root to the user
 
 ---
 
@@ -417,14 +416,9 @@ New fields:
 - Sign the manifest with the project's **offline signing private key (Ed25519)**, publishing manifest.sig
 - The app displays the manifest hash at runtime (advanced users can verify)
 
-> Note: This cannot prevent an attacker from directly tampering with index.html to disable verification, but it makes "offline download package + verification tool" viable.
+> Note: This cannot prevent an attacker from directly tampering with index.html to disable verification, but it makes "download + verification tool" viable.
 
-### 12.2 Offline Package (Paranoid Mode) (Planned, Not Yet Implemented)
-
-- Provide a separately downloadable offline.zip (static files)
-- Users can open locally or self-host on their domain (even file://, but WebAuthn and certain APIs may be restricted; domain hosting is recommended)
-
-### 12.3 Self-Hosting (Planned, Not Yet Implemented)
+### 12.2 Self-Hosting (Planned, Not Yet Implemented)
 
 - Provide Docker Compose:
     - Frontend static files
@@ -885,23 +879,3 @@ Public endpoint /api/public/:uuid:
 - Short fingerprint: first 6 bytes + last 6 bytes (hex)
 - Full hex displayed collapsed (user must explicitly expand)
 
----
-
-## Key Implementation Notes
-
-### Two Critical Points the Frontend Must Coordinate (Otherwise v2.5 Semantics Break)
-
-1. **create_finish must send lock_key_b64u**
-    - Because the server cannot and should not obtain lock_secret
-    - Correct flow: frontend obtains lock_secret -> locally computes lock_key -> create_finish sends lock_key_b64u to the backend for storage
-    - This allows the backend to verify lock_proof without ever being able to recover lock_secret
-
-2. **lock_commit only transmits lock_proof, not lock_secret**
-    - lock_secret exists only in the fragment and is used solely for local derivation of lock_key
-    - lock_proof = sha256("GL-lock" || uuid || cid || chal || lock_key)
-    - The server verifies using the stored lock_key
-
-### Two Most Likely "Implementation Drift" Points (Acceptance Criteria)
-
-1. **lock_key/lock_proof**: The server must be able to verify, and lock_secret must not be uploaded or stored
-2. **padding**: Must be completed before encryption, and after decryption, the plaintext must be strictly truncated by orig_len

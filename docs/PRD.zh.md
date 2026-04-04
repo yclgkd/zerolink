@@ -37,7 +37,7 @@ v3.0 的产品目标：
 ### 2.2 明确边界（必须写清）
 
 - 客户端被恶意扩展/木马控制：仍可能在用户确认窗口内滥用一次操作；无法静默导出管理私钥长期控制
-- Web 场景无法彻底解决"恶意服务器下发 JS"这一终极信任问题：v2.5 提供 **自托管/离线包/可验证发布链**作为可选"上限方案"
+- Web 场景无法彻底解决"恶意服务器下发 JS"这一终极信任问题：v2.5 提供 **自托管/可验证发布链**作为可选"上限方案"
 
 ---
 
@@ -170,8 +170,7 @@ v3.0 的产品目标：
 v2.5 给出三层应对：
 
 1. **可验证发布链（Signed Manifest + 可复现构建）**：提升"被篡改可被发现"的概率
-2. **离线包/本地打开**（计划中，尚未实现）：用户可选择从发布页下载离线静态包（减少在线下发风险）
-3. **自托管**（当前）：Docker Compose 打包已提供协议等价实现，彻底把信任根交给用户
+2. **自托管**（当前）：Docker Compose 打包已提供协议等价实现，彻底把信任根交给用户
 
 ---
 
@@ -419,14 +418,9 @@ DO 校验：
 - 用项目的 **离线签名私钥（Ed25519）** 对 manifest 签名，发布 manifest.sig
 - App 在运行时展示 manifest hash（高级用户可核对）
 
-> 注意：这无法阻止攻击者直接篡改 index.html 关闭校验，但能让"离线下载包 + 校验工具"变得可行。
+> 注意：这无法阻止攻击者直接篡改 index.html 关闭校验，但能让"下载 + 校验工具"变得可行。
 
-### 12.2 离线包（Paranoid Mode）（计划中，尚未实现）
-
-- 提供单独下载的 offline.zip（静态文件）
-- 用户可本地打开或本域自托管（甚至 file://，但 WebAuthn 与某些 API 可能受限，建议本域托管）
-
-### 12.3 自托管（Self-Hosting）（计划中，尚未实现）
+### 12.2 自托管（Self-Hosting）（计划中，尚未实现）
 
 - 提供 Docker Compose：
     - 前端静态文件
@@ -887,23 +881,3 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 - 短指纹：前 6 bytes + 后 6 bytes（hex）
 - 完整 hex 折叠显示（用户主动展开）
 
----
-
-## 关键实现注意事项
-
-### 前端必须配合的两个关键点（否则 v2.5 语义会破）
-
-1. **create_finish 必须回传 lock_key_b64u**
-    - 因为 server 不能也不应该拿到 lock_secret
-    - 正确流程：前端拿到 lock_secret → 本地算 lock_key → create_finish 把 lock_key_b64u 传给后端存起来
-    - 这样后端能验证 lock_proof，但永远还原不了 lock_secret
-
-2. **lock_commit 只传 lock_proof，不传 lock_secret**
-    - lock_secret 只存在 fragment，只用于本地派生 lock_key
-    - lock_proof = sha256("GL-lock" || uuid || cid || chal || lock_key)
-    - 服务器用存储的 lock_key 验证
-
-### 最容易"实现跑偏"的两点（验收口径）
-
-1. **lock_key/lock_proof**：server 必须能验证，且 lock_secret 不得上传/入库
-2. **padding**：必须在加密前完成，且解密后严格按 orig_len 截取

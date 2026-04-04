@@ -13,15 +13,15 @@
 
 ```
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
-│   Sender     │         │   Server     │         │  Receiver    │
-│  (Admin)     │         │(Zero-knowledge)│       │(Sole decryptor)│
+│    Sender    │         │    Server    │         │   Receiver   │
+│   (Admin)    │         │ (Zero-know.) │         │(Sole decrypt)│
 ├──────────────┤         ├──────────────┤         ├──────────────┤
-│ WebAuthn Key │────────▶│  Ciphertext  │◀────────│  RSA-OAEP    │
-│(non-exportable)│ Manage │ (no plaintext)│ Decrypt │ Private key  │
+│ WebAuthn Key │────────▶│  Ciphertext  │◀────────│   RSA-OAEP   │
+│(non-export.) │  Manage │(no plaintext)│ Decrypt │ Private key  │
 │              │         │              │         │   (local)    │
-│ Can update/  │         │  DO atomicity│         │  (Argon2id)  │
-│ delete but   │         │  Prevents    │         │ One-way pwd  │
-│ cannot decrypt│        │  concurrent  │         │  derivation  │
+│ Can update/  │         │ DO atomicity │         │  (Argon2id)  │
+│ delete but   │         │   Prevents   │         │ One-way pwd  │
+│ can't decrypt│         │  concurrent  │         │  derivation  │
 │              │         │  overwrites  │         │              │
 └──────────────┘         └──────────────┘         └──────────────┘
 ```
@@ -165,7 +165,7 @@ WebAuthn/ECDSA challenge must === expected_challenge
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Sender Perspective                        │
+│                    Sender Perspective                       │
 ├─────────────────────────────────────────────────────────────┤
 │  1. Choose Quick Share or Secure Share                      │
 │     - Quick: Local ECDSA admin key + Argon2id wrapping      │
@@ -174,10 +174,10 @@ WebAuthn/ECDSA challenge must === expected_challenge
 │  2. Obtain lock_secret (only for share link fragment)       │
 │  3. Wait for Receiver to lock                               │
 │  4. After obtaining receiver_pub:                           │
-│     - Hybrid encrypt content (AES-GCM + RSA-OAEP)          │
-│     - Small payloads stay inline; large files upload       │
-│       encrypted chunks first and then commit a fileRef     │
-│     - Pad to 4KB / 8KB blocks                              │
+│     - Hybrid encrypt content (AES-GCM + RSA-OAEP)           │
+│     - Small payloads stay inline; large files upload        │
+│       encrypted chunks first and then commit a fileRef      │
+│     - Pad to 4KB / 8KB blocks                               │
 │     - Quick: Local ECDSA signature / Secure: WebAuthn       │
 │       signature                                             │
 │     - Deliver ciphertext to Server                          │
@@ -186,7 +186,7 @@ WebAuthn/ECDSA challenge must === expected_challenge
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                   Receiver Perspective                       │
+│                   Receiver Perspective                      │
 ├─────────────────────────────────────────────────────────────┤
 │  1. Obtain lock_secret from share link fragment             │
 │  2. Enter password → Generate RSA keypair                   │
@@ -202,7 +202,7 @@ WebAuthn/ECDSA challenge must === expected_challenge
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                    Server Perspective                        │
+│                    Server Perspective                       │
 ├─────────────────────────────────────────────────────────────┤
 │  - Stores:                                                  │
 │    * admin_webauthn or admin_pub (sender admin credential)  │
@@ -286,10 +286,6 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 - Each release generates manifest.json (file hashes + version + commit)
 - Ed25519 offline signing → manifest.sig
 - Users can verify frontend integrity
-
-### Offline Package (Planned, not yet implemented)
-- Provide offline.zip (static files)
-- Can be opened locally or self-hosted
 
 ### Self-Hosting (Current)
 - Docker Compose package with Caddy + Go API + PostgreSQL + MinIO

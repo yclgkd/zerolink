@@ -16,13 +16,13 @@
 ```
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
 │   Sender     │         │   Server     │         │  Receiver    │
-│  (管理者)     │         │  (零知识)     │         │  (唯一解密)   │
+│  (管理者)    │         │  (零知识)    │         │  (唯一解密)  │
 ├──────────────┤         ├──────────────┤         ├──────────────┤
 │ WebAuthn Key │────────▶│  Ciphertext  │◀────────│  RSA-OAEP    │
-│ (不可导出)    │  管理    │  (无明文)     │  解密    │  私钥本地     │
+│ (不可导出)   │  管理   │  (无明文)    │  解密   │  私钥本地    │
 │              │         │              │         │  (Argon2id)  │
-│ 可更新/销毁   │         │  DO 原子性    │         │  单向密码派生  │
-│ 但不能解密    │         │  防并发覆盖   │         │              │
+│ 可更新/销毁  │         │  DO 原子性   │         │ 单向密码派生 │
+│ 但不能解密   │         │  防并发覆盖  │         │              │
 └──────────────┘         └──────────────┘         └──────────────┘
 ```
 
@@ -165,57 +165,57 @@ WebAuthn/ECDSA challenge 必须 === expected_challenge
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Sender 视角                               │
+│                    Sender 视角                              │
 ├─────────────────────────────────────────────────────────────┤
 │  1. 选择 Quick Share 或 Secure Share                        │
 │     - Quick: 本地 ECDSA 管理密钥 + Argon2id 包裹            │
 │     - Secure: WebAuthn 管理私钥（系统/硬件，不可导出）      │
 │  2. 获取 lock_secret（仅用于分享链接 fragment）             │
-│  3. 等待 Receiver 上锁                                       │
-│  4. 获得 receiver_pub 后：                                   │
+│  3. 等待 Receiver 上锁                                      │
+│  4. 获得 receiver_pub 后：                                  │
 │     - 混合加密内容（AES-GCM + RSA-OAEP）                    │
 │     - 小载荷保持 inline；大文件先上传加密 chunk，再提交     │
 │       fileRef                                               │
 │     - Padding 到 4KB / 8KB 块                               │
 │     - Quick: 本地 ECDSA 签名 / Secure: WebAuthn 签名        │
-│     - 投递密文到 Server                                      │
-│  5. 可随时更新/删除（按所选模式授权）                        │
+│     - 投递密文到 Server                                     │
+│  5. 可随时更新/删除（按所选模式授权）                       │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                   Receiver 视角                              │
+│                   Receiver 视角                             │
 ├─────────────────────────────────────────────────────────────┤
-│  1. 从分享链接 fragment 获得 lock_secret                     │
+│  1. 从分享链接 fragment 获得 lock_secret                    │
 │  2. 输入密码 → 生成 RSA keypair                             │
 │  3. 私钥用 Argon2id(密码) 包裹存本地                        │
-│  4. 计算 lock_proof 上锁                                     │
-│  5. 展示 Safety Code（Emoji/Color）供核对                  │
-│  6. Sender 投递后：                                          │
-│     - 输入密码 → 解包私钥                                    │
-│     - RSA-OAEP 解封 AES key                                  │
-│     - AES-GCM 解密并去除 padding                             │
-│     - 展示明文                                               │
+│  4. 计算 lock_proof 上锁                                    │
+│  5. 展示 Safety Code（Emoji/Color）供核对                   │
+│  6. Sender 投递后：                                         │
+│     - 输入密码 → 解包私钥                                   │
+│     - RSA-OAEP 解封 AES key                                 │
+│     - AES-GCM 解密并去除 padding                            │
+│     - 展示明文                                              │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                    Server 视角                               │
+│                    Server 视角                              │
 ├─────────────────────────────────────────────────────────────┤
-│  - 存储：                                                    │
+│  - 存储：                                                   │
 │    * admin_webauthn 或 admin_pub（发送方管理凭据）          │
 │    * lock_key（用于验证 lock_proof，不可逆回 lock_secret）  │
 │    * receiver_pub（接收方公钥，仅上锁后存在）               │
 │    * cipher_bundle（小型 inline 载荷）或 fileRef 元数据     │
 │    * R2 / MinIO 中的加密 multipart 文件分片                 │
 │    * version, nonce, challenge（防重放/并发）               │
-│  - 能力：                                                    │
-│    * 验证 WebAuthn 签名                                      │
-│    * 验证 lock_proof                                         │
-│    * 原子性更新（DO）                                        │
-│    * 时间窗口检查（±120s）                                   │
-│  - 不能：                                                    │
-│    * 解密内容（无 receiver_priv）                            │
-│    * 伪造发送方操作（无 admin_priv）                         │
-│    * 知道 lock_secret（只存 lock_key）                       │
+│  - 能力：                                                   │
+│    * 验证 WebAuthn 签名                                     │
+│    * 验证 lock_proof                                        │
+│    * 原子性更新（DO）                                       │
+│    * 时间窗口检查（±120s）                                  │
+│  - 不能：                                                   │
+│    * 解密内容（无 receiver_priv）                           │
+│    * 伪造发送方操作（无 admin_priv）                        │
+│    * 知道 lock_secret（只存 lock_key）                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -279,10 +279,6 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 - 每次发布生成 manifest.json（文件 hash + 版本 + commit）
 - Ed25519 离线签名 → manifest.sig
 - 用户可验证前端完整性
-
-### 离线包（计划中，尚未实现）
-- 提供 offline.zip（静态文件）
-- 可本地打开或自托管
 
 ### 自托管（当前方案）
 - Docker Compose 打包，包含 Caddy + Go API + PostgreSQL + MinIO

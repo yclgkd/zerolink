@@ -42,23 +42,22 @@ npm install -g wrangler
 ## Architecture Overview
 
 ```
-User Browser                Cloudflare Edge
-───────────            ──────────────────────────────────────
-Frontend SPA    ──→    Worker (zerolink-api)
-  + API requests        │  ├─ run_worker_first = true
-                        │  ├─ Injects security response headers
-                        │  ├─ /api/* → Business logic + multipart coordination
-                        │  └─ Other paths → Workers Assets (static files)
-                        │
-                        │
-                   Durable Object
-                   (SecretVault)
-                   [State machine
-                    / SQLite]
-                        │
-                        ▼
-                  R2 FILE_BUCKET
-                (encrypted file chunks)
+User Browser               Cloudflare Edge
+────────────               ──────────────────────────────────
+Frontend SPA    ──→        Worker (zerolink-api)
+  + API requests            │  ├─ run_worker_first = true
+                            │  ├─ Injects security response headers
+                            │  ├─ /api/* → Business logic + multipart coordination
+                            │  └─ Other paths → Workers Assets (static files)
+                            │
+                            │
+                       Durable Object
+                       (SecretVault)
+                       [State machine / SQLite]
+                            │
+                            ▼
+                      R2 FILE_BUCKET
+                    (encrypted file chunks)
 ```
 
 - **Cloudflare Worker**: Handles all requests (API + static files) and injects security response headers

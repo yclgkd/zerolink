@@ -2,107 +2,86 @@
 
 > **语言**: [English](./VERIFY.md) | 中文
 
-# Verified Release & Build Integrity Verification
+# 已验证发布与构建完整性验证
 
-ZeroLink publishes a **signed build manifest** with every release, and official signed frontend
-builds now use that manifest during bootstrap before the React app loads. This lets the browser
-detect tampering in the published runtime assets before the user can interact with sensitive UI.
+ZeroLink 在每次发布时都会发布一份**签名构建清单**，官方签名前端构建会在 React 应用加载前的启动阶段使用该清单。这使得浏览器能在用户与敏感界面交互之前，检测已发布运行时资产是否被篡改。
 
-## What is verified
+## 验证内容
 
-- **Ed25519 signature** — `manifest.sig` is a cryptographic signature over `manifest.json` using the ZeroLink signing key.
-- **Signed entry binding** — `manifest.json` records the expected bootstrap entry bundle path in `entryAssetPath`, and the browser refuses to trust a release if the currently executing entry asset does not match it.
-- **Runtime file hashes** — `manifest.json` lists SHA-256 hashes for the stable runtime build outputs under `dist/assets/`, such as hashed JS, CSS, fonts, and other immutable asset files.
-- **Manifest hash** — `manifest-hash.txt` contains the SHA-256 of `manifest.json` itself; this is displayed in the app's **Verified Release** card as a public fingerprint, not as the trust anchor.
+- **Ed25519 签名** — `manifest.sig` 是使用 ZeroLink 签名密钥对 `manifest.json` 进行的密码学签名。
+- **已签名入口绑定** — `manifest.json` 在 `entryAssetPath` 中记录了预期的启动入口 bundle 路径，若当前执行的入口资产与之不匹配，浏览器将拒绝信任该发布版本。
+- **运行时文件哈希** — `manifest.json` 列出了 `dist/assets/` 下稳定运行时构建产物的 SHA-256 哈希，包括带哈希文件名的 JS、CSS、字体及其他不可变资产文件。
+- **Manifest 哈希** — `manifest-hash.txt` 包含 `manifest.json` 自身的 SHA-256；它在应用的 **Verified Release** 卡片中作为公开指纹展示，而非信任锚点。
 
-Pages control files such as `_headers` and `_redirects` are intentionally excluded from the signed
-runtime manifest because they are deployment metadata, not browser-fetched release assets. Root
-documents such as `index.html`, `robots.txt`, icons, and other non-asset files are also excluded.
-The SPA entry document `index.html` in particular is left unsigned because edge platforms can
-inject request-specific HTML into the bootstrap shell, which makes byte-for-byte signing of that
-document unstable even when the underlying deployment is healthy.
+`_headers`、`_redirects` 等 Pages 控制文件被有意排除在签名运行时清单之外，因为它们是部署元数据，而非浏览器获取的发布资产。`index.html`、`robots.txt`、图标等根文档及其他非资产文件同样被排除。SPA 入口文档 `index.html` 尤其不签名，因为边缘平台可能向启动 shell 注入请求相关的 HTML，即使底层部署正常，也会导致该文档的逐字节签名不稳定。
 
-## What the browser does during bootstrap
+## 浏览器启动时的行为
 
-When a deployment is built with `VITE_RELEASE_VERIFICATION_REQUIRED=true`, ZeroLink starts with a
-small bootstrap entry instead of loading the React app immediately. That bootstrap entry:
+当部署使用 `VITE_RELEASE_VERIFICATION_REQUIRED=true` 构建时，ZeroLink 会先运行一个小型启动入口，而非立即加载 React 应用。该启动入口会：
 
-1. Fetches `manifest.json` and `manifest.sig`
-2. Verifies the Ed25519 signature using the embedded public key
-3. Confirms the currently executing bootstrap entry bundle matches `manifest.entryAssetPath`
-4. Re-hashes the signed same-origin runtime assets
-5. Loads the React app only if every check passes
+1. 获取 `manifest.json` 和 `manifest.sig`
+2. 使用内嵌公钥验证 Ed25519 签名
+3. 确认当前执行的启动入口 bundle 与 `manifest.entryAssetPath` 匹配
+4. 对已签名的同源运行时资产重新计算哈希
+5. 仅在所有检查通过后才加载 React 应用
 
-If verification fails or cannot be completed, ZeroLink shows a blocking verification screen and
-does not load the normal app UI. If the entry bundle does not match the signed manifest, ZeroLink
-will attempt one controlled page reload before failing closed, which helps recover from stale entry
-HTML or stale entry-bundle caches without looping forever.
+若验证失败或无法完成，ZeroLink 会显示阻塞验证界面，不加载正常应用 UI。若入口 bundle 与签名清单不匹配，ZeroLink 会在关闭前尝试一次受控页面重载，以从陈旧的入口 HTML 或入口 bundle 缓存中恢复，同时避免无限循环。
 
-Unsigned environments such as a plain `pnpm build`, `vite preview`, or a manual static upload
-without signed release artifacts remain runnable, but they are treated as unverified boots and do
-not show the `Verified Release` card.
+普通 `pnpm build`、`vite preview` 或未附带签名发布产物的手动静态上传等未签名环境仍可运行，但会被视为未验证启动，不显示 `Verified Release` 卡片。
 
-## Artifacts per release
+## 每次发布的产物
 
-| File | Description |
-|------|-------------|
-| `dist/manifest.json` | Signed build manifest with `entryAssetPath` plus file hashes |
-| `dist/manifest-hash.txt` | SHA-256 of `manifest.json` |
-| `dist/manifest.sig` | Ed25519 signature over `manifest.json` |
-| `keys/manifest-signing.pub` | Public key for verification (committed to this repo) |
+| 文件 | 说明 |
+|------|------|
+| `dist/manifest.json` | 包含 `entryAssetPath` 及文件哈希的签名构建清单 |
+| `dist/manifest-hash.txt` | `manifest.json` 的 SHA-256 |
+| `dist/manifest.sig` | 对 `manifest.json` 的 Ed25519 签名 |
+| `keys/manifest-signing.pub` | 用于验证的公钥（已提交至本仓库） |
 
-The release workflow builds the frontend with `VITE_RELEASE_VERIFICATION_REQUIRED=true`,
-generates the signed manifest, and deploys via `wrangler deploy` (Cloudflare Workers).
+发布工作流使用 `VITE_RELEASE_VERIFICATION_REQUIRED=true` 构建前端，生成签名清单，并通过 `wrangler deploy`（Cloudflare Workers）部署。
 
-## Browser trust surface
+## 浏览器信任界面
 
-When bootstrap verification succeeds, the shell renders a `Verified Release` card with:
+启动验证成功后，shell 会渲染一张 `Verified Release` 卡片，显示：
 
-- App version
-- Build date
-- Commit
-- Manifest hash
-- Verified file count
-- Publisher key fingerprint
+- 应用版本
+- 构建日期
+- 提交哈希
+- Manifest 哈希
+- 已验证文件数量
+- 发布者密钥指纹
 
-The Worker serves SPA entry requests with `Cache-Control: no-store` so the HTML/bootstrap
-shell is never reused across deployments, while hashed `/assets/*` files remain immutable. The
-signed manifest is intentionally limited to `dist/assets/*` runtime build outputs; the HTML
-document itself is not hashed, but the bootstrap entry asset it launches must still match the
-signed manifest.
+Worker 对 SPA 入口请求返回 `Cache-Control: no-store`，确保 HTML/启动 shell 不会跨部署复用，而带哈希的 `/assets/*` 文件则保持不可变。签名清单有意限定为 `dist/assets/*` 运行时构建产物；HTML 文档本身不参与哈希，但它启动的启动入口资产仍须与签名清单匹配。
 
-For GitHub Actions deployments, the manifest `version` field is injected from CI via
-`ZEROLINK_VERSION`: production releases use the pushed `v*` tag without the leading `v`, while
-staging builds use `0.0.0-dev+<short_sha>`. Local/manual builds fall back to
-`packages/frontend/package.json` when that environment variable is unset.
+对于 GitHub Actions 部署，清单的 `version` 字段通过 `ZEROLINK_VERSION` 由 CI 注入：正式发布使用推送的 `v*` 标签（去掉前缀 `v`），staging 构建使用 `0.0.0-dev+<short_sha>`。本地/手动构建在该环境变量未设置时回退到 `packages/frontend/package.json`。
 
-## Quick verification (automated)
+## 快速验证（自动化）
 
-After downloading a release build into `packages/frontend/dist/`:
+将发布构建下载到 `packages/frontend/dist/` 后：
 
 ```bash
 pnpm manifest:verify
 ```
 
-This will:
-1. Read `manifest.json`, `manifest.sig`, and `keys/manifest-signing.pub`
-2. Verify the Ed25519 signature
-3. Confirm `index.html` boots the same entry asset recorded in `manifest.entryAssetPath`
-4. Re-hash every signed runtime file and compare against `manifest.json`
-5. Print a pass/fail result for each file
+该命令将：
+1. 读取 `manifest.json`、`manifest.sig` 和 `keys/manifest-signing.pub`
+2. 验证 Ed25519 签名
+3. 确认 `index.html` 启动的入口资产与 `manifest.entryAssetPath` 中记录的一致
+4. 对每个已签名运行时文件重新计算哈希并与 `manifest.json` 比对
+5. 打印每个文件的通过/失败结果
 
-## Manual verification
+## 手动验证
 
-### 1. Verify the Ed25519 signature
+### 1. 验证 Ed25519 签名
 
 ```bash
-# Decode the base64url signature to binary (adds required = padding)
+# 将 base64url 签名解码为二进制（补充所需的 = 填充）
 SIG=$(cat packages/frontend/dist/manifest.sig | tr -d '\n' | \
   tr -- '-_' '+/' | \
   awk '{ l=length($0); pad=(4-l%4)%4; printf "%s%.*s\n", $0, pad, "====" }' | \
   base64 --decode)
 
-# Verify using openssl
+# 使用 openssl 验证
 openssl pkeyutl \
   -verify \
   -pubin \
@@ -111,40 +90,39 @@ openssl pkeyutl \
   -in packages/frontend/dist/manifest.json
 ```
 
-### 2. Verify a specific file hash
+### 2. 验证特定文件哈希
 
 ```bash
-# Check a signed runtime asset
-# Note: Vite outputs content-hashed filenames such as index-Abc123.js
+# 检查某个已签名运行时资产
+# 注意：Vite 输出带内容哈希的文件名，如 index-Abc123.js
 sha256sum packages/frontend/dist/assets/index-*.js
-# Compare with the value in manifest.json (use the actual hashed filename):
+# 与 manifest.json 中的值比对（使用实际的带哈希文件名）：
 jq '.files | to_entries[] | select(.key | startswith("assets/index-"))' \
   packages/frontend/dist/manifest.json
 ```
 
-### 3. Verify the manifest hash
+### 3. 验证 Manifest 哈希
 
 ```bash
 sha256sum packages/frontend/dist/manifest.json
 cat packages/frontend/dist/manifest-hash.txt
-# Both should match
+# 两者应一致
 ```
 
-## Public key fingerprint
+## 公钥指纹
 
-To confirm you are using the correct public key, compute its fingerprint:
+要确认使用的是正确的公钥，计算其指纹：
 
 ```bash
 openssl pkey -in keys/manifest-signing.pub -pubin -outform DER | sha256sum
 ```
 
-Compare the output against the fingerprint shown in the app's `Verified Release` card or the
-fingerprint listed in `keys/manifest-signing.pub`.
+将输出结果与应用 `Verified Release` 卡片中显示的指纹或 `keys/manifest-signing.pub` 中列出的指纹进行比对。
 
-## Key rotation
+## 密钥轮换
 
-If the signing key is rotated, a new public key will be committed to `keys/manifest-signing.pub` and announced in the release notes. Old signatures remain valid for old releases.
+若签名密钥发生轮换，新公钥将提交至 `keys/manifest-signing.pub`，并在发布说明中公告。旧签名对旧版本仍然有效。
 
-## Reporting issues
+## 报告问题
 
-If verification fails for a published release, please open a security issue at <https://github.com/yclgkd/ZeroLink/security>.
+若已发布版本的验证失败，请在 <https://github.com/yclgkd/ZeroLink/security> 提交安全问题。
