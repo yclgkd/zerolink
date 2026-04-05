@@ -147,4 +147,4 @@ pnpm dev
 
 ## License
 
-（待补充）
+本项目基于 GNU Affero General Public License v3.0 (AGPL-3.0) 协议开源。详情请参阅 [LICENSE](./LICENSE) 文件。
