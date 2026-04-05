@@ -80,14 +80,44 @@ Then open:
 
 If you change the exposed port or hostname, update `SELFHOST_API_RP_ORIGIN` before relying on WebAuthn flows.
 
-If you want legacy inline-only behavior instead, set:
+## Storage Configuration
 
-- `SELFHOST_API_FILE_STORAGE_BACKEND=inline`
-- `SELFHOST_API_FILE_MULTIPART_SUPPORTED=false`
-- `SELFHOST_API_FILE_MAX_BYTES` and `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` to values at or below `2080760`
+By default, the `docker-compose.yml` file runs a local **MinIO** container (`minio:9000`) and stores uploaded file chunks in the Docker volume `minio-data`.
 
-The packaged Compose stack still starts MinIO by default; removing it requires customizing the
-Compose file.
+### 1. Default Local MinIO
+If you stick with the default local setup:
+- **Default Credentials**: The bundled `.env.example` uses `minioadmin:minioadmin`. **Change these before exposing the service**.
+- **Data Location**: Encrypted file parts reside in the `minio-data` volume on the host. Back up this volume along with `postgres-data` to preserve your state.
+- **Admin Console**: The MinIO management console is exposed on port `9001` (`http://localhost:9001`) for debugging and bucket inspection.
+
+### 2. External S3-Compatible Cloud Storage
+You can bypass the local MinIO container and connect the ZeroLink API directly to any S3-compatible object storage (e.g., AWS S3, Cloudflare R2, Aliyun OSS, Tencent COS) without code changes.
+
+Update the following variables in your `.env` file:
+```env
+SELFHOST_API_MINIO_ENDPOINT=s3.us-east-1.amazonaws.com  # Do NOT include https:// prefix
+SELFHOST_API_MINIO_ACCESS_KEY=your_access_key
+SELFHOST_API_MINIO_SECRET_KEY=your_secret_key
+SELFHOST_API_MINIO_BUCKET=zerolink-files
+SELFHOST_API_MINIO_USE_SSL=true  # Set to true for public cloud providers
+SELFHOST_API_MINIO_REGION=us-east-1  # Set to 'auto' for Cloudflare R2
+```
+*Note: If you use external storage, you can remove the `minio` service from your `docker-compose.yml` to save local resources. You must also remove the `minio` entry under `api.depends_on` and the `minio-data` volume definition, otherwise `docker compose up` will fail.*
+
+### 3. Extreme Lightweight "Inline" Mode
+If you do not want to run an object storage server at all (e.g., on a Raspberry Pi) and only need to share small files, you can disable multipart storage entirely.
+
+Set these variables in your `.env` to enable legacy inline-only behavior:
+```env
+SELFHOST_API_FILE_STORAGE_BACKEND=inline
+SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # Defaults to false for inline; explicit here in case your .env inherits true from .env.example
+SELFHOST_API_FILE_MAX_BYTES=2080760
+SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
+```
+When in `inline` mode:
+- The system bypasses MinIO.
+- Encrypted file data is stored as a JSON payload directly in the **PostgreSQL database** (JSONB column).
+- **File size is strictly limited** to roughly `2 MiB`.
 
 ## Smoke Test
 

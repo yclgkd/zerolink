@@ -79,13 +79,44 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 
 如果你修改了端口或主机名，先同步更新 `SELFHOST_API_RP_ORIGIN`，再测试 WebAuthn。
 
-如果你要退回 legacy inline-only 行为，需要同时设置：
+## 存储配置
 
-- `SELFHOST_API_FILE_STORAGE_BACKEND=inline`
-- `SELFHOST_API_FILE_MULTIPART_SUPPORTED=false`
-- `SELFHOST_API_FILE_MAX_BYTES` 和 `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` 都不超过 `2080760`
+默认情况下，`docker-compose.yml` 文件会运行一个本地的 **MinIO** 容器 (`minio:9000`)，并将上传的文件分片持久化存储在宿主机的 `minio-data` Docker volume 中。
 
-当前打包的 Compose 仍会默认启动 MinIO；如果你想彻底移除它，需要自行裁剪 Compose 文件。
+### 1. 默认本地 MinIO
+如果你继续使用默认的本地配置，请注意：
+- **默认凭证**：随附的 `.env.example` 默认账号密码是 `minioadmin:minioadmin`。**在将服务暴露到公网前务必修改此密码**。
+- **数据位置**：你加密后的文件分片存储在宿主机的 `minio-data` volume 中。如果需要备份或迁移，请将它与 `postgres-data` 一同打包。
+- **管理控制台**：MinIO 提供了一个可视化的管理后台，暴露在 `9001` 端口 (`http://localhost:9001`)，方便排查问题或查看存储桶。
+
+### 2. 接入外部 S3 兼容云存储
+你可以完全抛弃本地的 MinIO 容器，让 ZeroLink API 直接连向任何 S3 兼容的公有云对象存储（如阿里云 OSS、腾讯云 COS、AWS S3、Cloudflare R2），无需任何代码修改。
+
+只需在 `.env` 文件中更新以下变量：
+```env
+SELFHOST_API_MINIO_ENDPOINT=oss-cn-hangzhou.aliyuncs.com  # 注意不要带 https:// 前缀
+SELFHOST_API_MINIO_ACCESS_KEY=你的_access_key
+SELFHOST_API_MINIO_SECRET_KEY=你的_secret_key
+SELFHOST_API_MINIO_BUCKET=zerolink-files
+SELFHOST_API_MINIO_USE_SSL=true  # 连接公有云厂商必须设置为 true
+SELFHOST_API_MINIO_REGION=cn-hangzhou  # 如果是 Cloudflare R2 请设为 auto
+```
+*提示：如果你配置了外部存储，你可以在 `docker-compose.yml` 中删除 `minio` 服务定义以节省本地资源。同时需要删除 `api.depends_on` 中的 `minio` 条目以及 `volumes` 中的 `minio-data` 定义，否则 `docker compose up` 会报错。*
+
+### 3. 极简 "Inline" 模式
+如果你只是想在个人的树莓派或极低配置 NAS 上跑着玩，完全不想启动任何对象存储服务，并且只用于分享极小的文件，可以彻底关闭 multipart 机制。
+
+在 `.env` 中设置以下变量以退回旧版的极简模式：
+```env
+SELFHOST_API_FILE_STORAGE_BACKEND=inline
+SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # backend=inline 时默认即为 false；若你的 .env 从 .env.example 复制而来则需显式覆盖
+SELFHOST_API_FILE_MAX_BYTES=2080760
+SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
+```
+在 `inline` 模式下：
+- 系统不依赖 MinIO。
+- 加密后的文件数据以 JSON 载荷形式直接保存在 **PostgreSQL 数据库**（JSONB 列）中。
+- **文件体积受到严格限制**，最大不能超过约 `2 MiB`。
 
 ## Smoke Test
 
