@@ -101,7 +101,7 @@ SELFHOST_API_MINIO_BUCKET=zerolink-files
 SELFHOST_API_MINIO_USE_SSL=true  # 连接公有云厂商必须设置为 true
 SELFHOST_API_MINIO_REGION=cn-hangzhou  # 如果是 Cloudflare R2 请设为 auto
 ```
-*提示：如果你配置了外部存储，你可以在 `docker-compose.yml` 中安全地删除 `minio` 服务及对应的 volume 定义，以节省本地机器资源。*
+*提示：如果你配置了外部存储，你可以在 `docker-compose.yml` 中删除 `minio` 服务定义以节省本地资源。同时需要删除 `api.depends_on` 中的 `minio` 条目以及 `volumes` 中的 `minio-data` 定义，否则 `docker compose up` 会报错。*
 
 ### 3. 极简 "Inline" 模式
 如果你只是想在个人的树莓派或极低配置 NAS 上跑着玩，完全不想启动任何对象存储服务，并且只用于分享极小的文件，可以彻底关闭 multipart 机制。

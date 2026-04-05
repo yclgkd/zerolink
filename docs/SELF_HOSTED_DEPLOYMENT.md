@@ -102,7 +102,7 @@ SELFHOST_API_MINIO_BUCKET=zerolink-files
 SELFHOST_API_MINIO_USE_SSL=true  # Set to true for public cloud providers
 SELFHOST_API_MINIO_REGION=us-east-1  # Set to 'auto' for Cloudflare R2
 ```
-*Note: If you use external storage, you can safely remove the `minio` service and its associated volumes from your `docker-compose.yml` to save local resources.*
+*Note: If you use external storage, you can remove the `minio` service from your `docker-compose.yml` to save local resources. You must also remove the `minio` entry under `api.depends_on` and the `minio-data` volume definition, otherwise `docker compose up` will fail.*
 
 ### 3. Extreme Lightweight "Inline" Mode
 If you do not want to run an object storage server at all (e.g., on a Raspberry Pi) and only need to share small files, you can disable multipart storage entirely.
