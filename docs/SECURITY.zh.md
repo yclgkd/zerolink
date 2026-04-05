@@ -500,7 +500,7 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - 接收方私钥用 Argon2id 包裹
 - padding 随机安全（crypto.getRandomValues）
 - AAD 绑定 uuid/version/fpr
-- multipart 文件分片使用按 chunk 派生的 IV/AAD（`baseIv XOR index`、`uuid || “chunk” || index`），防止存储侧重排
+- multipart 文件分片使用按 chunk 派生的 IV/AAD（`baseIv XOR index`、`uuid || "chunk" || index`），防止存储侧重排
 - anchored channel 本地 pin `sender_auth_fpr`
 - anchored channel 本地复验 `deliveryAuth` proof
 - 本地持久化 `lastAcceptedDelivery(version,ciphertextHash)` 防回滚
@@ -511,10 +511,10 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - Signed Manifest 与运行时哈希校验
 
 ### UX
-- 分享链接提示”必须完整复制（包括 # 后）”
+- 分享链接提示“必须完整复制（包括 # 后）”
 - Safety Code 带外核对引导（不制造焦虑）
-- 接收方防呆动画（”密码只在你这里”）
-- Quick Share 与 Secure Share 的差异说明准确，不把 Quick Share 写成”兼容模式”
+- 接收方防呆动画（“密码只在你这里”）
+- Quick Share 与 Secure Share 的差异说明准确，不把 Quick Share 写成“兼容模式”
 - WebAuthn 失败给明确降级引导
 - 密码强度提示（但不强迫）
 

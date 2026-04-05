@@ -600,7 +600,7 @@ Response：
 
 > 注意：这无法阻止攻击者直接篡改 index.html 关闭校验，但能让"下载 + 校验工具"变得可行。
 
-### 12.2 自托管（Self-Hosting）（计划中，尚未实现）
+### 12.2 自托管（Self-Hosting）（当前）
 
 - 提供 Docker Compose：
     - 前端静态文件

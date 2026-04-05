@@ -598,7 +598,7 @@ Real-time channel state subscription. After connecting, the server pushes state 
 
 > Note: This cannot prevent an attacker from directly tampering with index.html to disable verification, but it makes "download + verification tool" viable.
 
-### 12.2 Self-Hosting (Planned, Not Yet Implemented)
+### 12.2 Self-Hosting (Current)
 
 - Provide Docker Compose:
     - Frontend static files
