@@ -110,13 +110,13 @@ If you do not want to run an object storage server at all (e.g., on a Raspberry 
 Set these variables in your `.env` to enable legacy inline-only behavior:
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
-SELFHOST_API_FILE_MULTIPART_SUPPORTED=false
+SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # Defaults to false for inline; explicit here in case your .env inherits true from .env.example
 SELFHOST_API_FILE_MAX_BYTES=2080760
 SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
 When in `inline` mode:
 - The system bypasses MinIO.
-- Encrypted file data is stored directly in the **PostgreSQL database**.
+- Encrypted file data is stored as a JSON payload directly in the **PostgreSQL database** (JSONB column).
 - **File size is strictly limited** to roughly `2 MiB`.
 
 ## Smoke Test

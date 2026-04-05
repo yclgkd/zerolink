@@ -109,13 +109,13 @@ SELFHOST_API_MINIO_REGION=cn-hangzhou  # 如果是 Cloudflare R2 请设为 auto
 在 `.env` 中设置以下变量以退回旧版的极简模式：
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
-SELFHOST_API_FILE_MULTIPART_SUPPORTED=false
+SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # backend=inline 时默认即为 false；若你的 .env 从 .env.example 复制而来则需显式覆盖
 SELFHOST_API_FILE_MAX_BYTES=2080760
 SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
 在 `inline` 模式下：
 - 系统不依赖 MinIO。
-- 加密后的文件数据将被转换为 Base64，直接保存在 **PostgreSQL 数据库**中。
+- 加密后的文件数据以 JSON 载荷形式直接保存在 **PostgreSQL 数据库**（JSONB 列）中。
 - **文件体积受到严格限制**，最大不能超过约 `2 MiB`。
 
 ## Smoke Test
