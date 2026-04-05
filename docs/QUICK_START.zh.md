@@ -40,4 +40,4 @@ pnpm build         # 构建所有包
 
 ## 部署
 
-见 [DEPLOYMENT.md](./DEPLOYMENT.zh.md)。
+见 [DEPLOYMENT.zh.md](./DEPLOYMENT.zh.md)。

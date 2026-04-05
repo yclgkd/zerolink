@@ -70,7 +70,7 @@ v3.0 的产品目标：
 
 - 官方 Cloudflare 版保持默认
 - 提供 Docker Compose 一键自托管（当前打包为 Caddy + Go API + PostgreSQL + MinIO，对已发布前端契约提供协议等价实现）
-- 发布链：签名 Manifest + 可复现构建 + 可选离线静态包（用户可在本地打开/本域部署）
+- 发布链：签名 Manifest + 可复现构建
 
 ---
 

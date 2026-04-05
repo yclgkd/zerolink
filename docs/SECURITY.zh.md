@@ -561,5 +561,5 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - **Argon2 RFC**：https://datatracker.ietf.org/doc/html/rfc9106
 - **OWASP Password Storage**：https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 - **URL Fragment 语义**：https://datatracker.ietf.org/doc/html/rfc3986#section-3.5
-- **完整 PRD**：[PRD.md](./PRD.zh.md)
-- **架构概览**：[ARCHITECTURE.md](./ARCHITECTURE.zh.md)
+- **完整 PRD**：[PRD.zh.md](./PRD.zh.md)
+- **架构概览**：[ARCHITECTURE.zh.md](./ARCHITECTURE.zh.md)
