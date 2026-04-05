@@ -5,6 +5,8 @@
 > Zero-knowledge secure delivery: no accounts, end-to-end encrypted, sender-managed but never decryptable by the server.
 > Share passwords, API tokens, recovery codes, private messages, or any sensitive content — securely.
 
+**🌟 Live Demo**: [zerolink.dev](https://zerolink.dev)
+
 ## Overview
 
 ZeroLink is a security-first secret sharing tool with the following features:
@@ -143,4 +145,4 @@ pnpm dev
 
 ## License
 
-(TBD)
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](./LICENSE) for details.

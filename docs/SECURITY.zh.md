@@ -22,7 +22,7 @@
 
 #### 边界：
 - ⚠️ 恶意浏览器扩展/木马：可能滥用一次操作，但无法导出管理私钥
-- ⚠️ 恶意服务器下发 JS：Web 架构固有风险，提供自托管/离线包缓解
+- ⚠️ 恶意服务器下发 JS：Web 架构固有风险，提供自托管缓解
 
 ---
 
@@ -130,7 +130,7 @@ WebAuthn/ECDSA assertion 的 challenge 必须 === expected_challenge
 
 **边界**：
 - 服务器下发恶意 JS：Web 架构固有风险
-- 缓解：自托管 + 离线包 + Signed Manifest（针对签名发布路径）
+- 缓解：自托管 + Signed Manifest（针对签名发布路径）
 
 ---
 
@@ -256,7 +256,6 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 
 **缓解**：
 - 🔒 自托管（完全控制服务器）
-- 🔒 离线包 + 可验证发布链
 - 🔒 Signed Manifest（检测篡改）
 
 **边界**：
@@ -368,7 +367,6 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 - ⚠️ Web 架构固有风险，无法彻底解决
 - 🔒 CSP + Signed Manifest（提高篡改成本并检测篡改）
 - 🔒 可复现构建 + Signed Manifest（可检测）
-- 🔒 离线包（减少在线下发）
 - 🔒 自托管（完全控制）
 
 **攻击流程**：
@@ -381,9 +379,8 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 
 **缓解分层**：
 1. **默认部署**（Cloudflare）：信任服务商
-2. **离线包**：下载后本地运行（减少信任表面）
-3. **自托管**：完全自主控制
-4. **Signed Manifest**：用户可验证（需技术能力）
+2. **自托管**：完全自主控制
+3. **Signed Manifest**：用户可验证（需技术能力）
 
 **边界**：
 - 非技术用户难以验证前端完整性
@@ -405,6 +402,22 @@ padded_plaintext = [orig_len(4 bytes, big-endian)] + [orig_data] + [random_paddi
 - **密钥长度**：2048 bits（接收方）
 - **Hash**：SHA-256
 - **用途**：封装 AES key
+
+> **设计决策 — 为什么保留 RSA-2048 而不迁移到 ECDH P-256？**
+>
+> RSA-2048 提供约 112 bits 经典安全强度，ECDH P-256 提供约 128 bits。两者都远超当前
+> 暴力破解能力，且在足够大的量子计算机面前同样会被 Shor 算法攻破。迁移到 P-256 需要
+> 改动约 50 个文件（密码原语、协议格式、Schema、后端存储及全部测试），对密文包传输
+> 格式产生破坏性变更（`encContentKey` → `ephemeralPublicKey`），并需要为已有通道设计
+> 向后兼容策略 —— 而换来的仅是经典安全性的边际提升，无法应对真正的量子威胁。
+>
+> 当前系统真正的最弱环节是接收方口令（已通过 Argon2id + 12 字符最低长度 + 7 天最大
+> TTL 缓解），而非 RSA 模数大小。
+>
+> **计划的迁移路径**：等待 WebCrypto 原生支持 ML-KEM（FIPS 203），届时直接迁移到
+> 混合 KEM（ECDH P-256 + ML-KEM），通过单次协议版本升级完成 —— 避免先迁移到纯
+> P-256 然后再次废弃的中间步骤。NIST 建议 2030 年后逐步淘汰 RSA-2048，这一时间线与
+> 浏览器支持后量子原语的预期节奏一致。
 
 ### KDF（密钥派生）
 - **算法**：Argon2id（默认）
@@ -464,65 +477,58 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 
 ---
 
-## 安全检查清单（Implementation）
+## 安全不变量（Implementation）
 
 ### 服务端
-- [ ] 所有响应 `Cache-Control: no-store`
-- [ ] lock_secret 永不入日志/存储
-- [ ] lock_key 单向派生（不可逆）
-- [ ] challenge 一次性消费（TTL + 标记）
-- [ ] nonce 去重（TTL 10min）
-- [ ] version 单调递增
-- [ ] timestamp 窗口检查（±120s）
-- [ ] WebAuthn 字节级验证（origin/challenge/signature）
-- [ ] intent_hash 严格匹配
-- [ ] 错误响应恒定形状 `{ok: false}`
-- [ ] DO 串行化所有写操作
+- 所有响应 `Cache-Control: no-store`
+- lock_secret 永不入日志/存储
+- lock_key 单向派生（不可逆）
+- challenge 一次性消费（TTL + 标记）
+- nonce 去重（TTL 10min）
+- version 单调递增
+- timestamp 窗口检查（±120s）
+- WebAuthn 字节级验证（origin/challenge/signature）
+- intent_hash 严格匹配
+- 错误响应恒定形状 `{ok: false}`
+- DO 串行化所有写操作
 
 ### 客户端
-- [ ] lock_secret 只在 fragment（不发送到服务器）
-- [ ] 新分享链接 fragment 额外携带 `af=sender_auth_fpr`
-- [ ] lock_key 本地计算后回传（create_finish）
-- [ ] lock_proof 包含 challenge（防重放）
-- [ ] 接收方私钥用 Argon2id 包裹
-- [ ] padding 随机安全（crypto.getRandomValues）
-- [ ] AAD 绑定 uuid/version/fpr
-- [ ] multipart 文件分片使用按 chunk 派生的 IV/AAD（`baseIv XOR index`、`uuid || "chunk" || index`），防止存储侧重排
-- [ ] anchored channel 本地 pin `sender_auth_fpr`
-- [ ] anchored channel 本地复验 `deliveryAuth` proof
-- [ ] 本地持久化 `lastAcceptedDelivery(version,ciphertextHash)` 防回滚
-- [ ] Safety Code 从 receiver_pub_fpr 确定性生成
-- [ ] WebAuthn challenge 绑定 intent_hash
-- [ ] 敏感数据清零（用后即焚）
-- [ ] CSP 严格策略
-- [ ] Signed Manifest 与运行时哈希校验
+- lock_secret 只在 fragment（不发送到服务器）
+- 新分享链接 fragment 额外携带 `af=sender_auth_fpr`
+- lock_key 本地计算后回传（create_finish）
+- lock_proof 包含 challenge（防重放）
+- 接收方私钥用 Argon2id 包裹
+- padding 随机安全（crypto.getRandomValues）
+- AAD 绑定 uuid/version/fpr
+- multipart 文件分片使用按 chunk 派生的 IV/AAD（`baseIv XOR index`、`uuid || "chunk" || index`），防止存储侧重排
+- anchored channel 本地 pin `sender_auth_fpr`
+- anchored channel 本地复验 `deliveryAuth` proof
+- 本地持久化 `lastAcceptedDelivery(version,ciphertextHash)` 防回滚
+- Safety Code 从 receiver_pub_fpr 确定性生成
+- WebAuthn challenge 绑定 intent_hash
+- 敏感数据清零（用后即焚）
+- CSP 严格策略
+- Signed Manifest 与运行时哈希校验
 
 ### UX
-- [ ] 分享链接提示"必须完整复制（包括 # 后）"
-- [ ] Safety Code 带外核对引导（不制造焦虑）
-- [ ] 接收方防呆动画（"密码只在你这里"）
-- [ ] Quick Share 与 Secure Share 的差异说明准确，不把 Quick Share 写成“兼容模式”
-- [ ] WebAuthn 失败给明确降级引导
-- [ ] 密码强度提示（但不强迫）
+- 分享链接提示“必须完整复制（包括 # 后）”
+- Safety Code 带外核对引导（不制造焦虑）
+- 接收方防呆动画（“密码只在你这里”）
+- Quick Share 与 Secure Share 的差异说明准确，不把 Quick Share 写成“兼容模式”
+- WebAuthn 失败给明确降级引导
+- 密码强度提示（但不强迫）
 
 ---
 
-## 已知限制与未来改进
+## 已知限制
 
-### 已知限制
+### 限制
 1. **元数据泄露**：UUID、时间戳、密文长度桶
 2. **用户行为依赖**：Safety Code 核对非强制
 3. **恶意下发 JS**：Web 架构固有问题（缓解：自托管）
 4. **弱密码风险**：无法强制用户使用强密码
 5. **模式差异**：Quick Share 更依赖密码与本地终端安全；Secure Share 更依赖 WebAuthn 生态
 6. **新鲜性边界**：anchored A+B 只能防本设备回滚和未锚定 sender proof 的伪造，仍不能单独证明“服务器没有藏起更新”；那需要未来的 witness / transparency 方案
-
-### 未来改进
-- 🔮 **多接收方**：群组加密（每人一个 enc_content_key）
-- 🔮 **可撤销链接**：发送方销毁后接收方无法解密
-- 🔮 **Forward Secrecy**：定期轮换 AES key（更新时重新加密）
-- 🔮 **硬件 Attestation**：强制验证硬件密钥属性
-- 🔮 **去中心化**：IPFS + 智能合约（彻底去除服务器信任）
 
 ---
 
@@ -555,5 +561,5 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 - **Argon2 RFC**：https://datatracker.ietf.org/doc/html/rfc9106
 - **OWASP Password Storage**：https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 - **URL Fragment 语义**：https://datatracker.ietf.org/doc/html/rfc3986#section-3.5
-- **完整 PRD**：[PRD.md](./PRD.zh.md)
-- **架构概览**：[ARCHITECTURE.md](./ARCHITECTURE.zh.md)
+- **完整 PRD**：[PRD.zh.md](./PRD.zh.md)
+- **架构概览**：[ARCHITECTURE.zh.md](./ARCHITECTURE.zh.md)

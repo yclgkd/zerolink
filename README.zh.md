@@ -7,6 +7,8 @@
 > 零知识安全传递工具：无账号、端到端加密、发送方管理但服务器无法解密。
 > 可安全传递密码、API 令牌、恢复码、私密消息或任何敏感内容，无需创建账号。
 
+**🌟 在线演示 (Live Demo)**：[zerolink.dev](https://zerolink.dev)
+
 ## 概述
 
 ZeroLink 是一款安全优先的秘密分享工具，具有以下特点：
@@ -145,4 +147,4 @@ pnpm dev
 
 ## License
 
-（待补充）
+本项目基于 GNU Affero General Public License v3.0 (AGPL-3.0) 协议开源。详情请参阅 [LICENSE](./LICENSE) 文件。

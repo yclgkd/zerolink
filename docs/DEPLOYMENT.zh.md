@@ -47,22 +47,22 @@ npm install -g wrangler
 ## 架构概览 / Architecture Overview
 
 ```
-用户浏览器                Cloudflare 边缘
-───────────            ──────────────────────────────────────
-Frontend SPA    ──→    Worker (zerolink-api)
-  + API 请求             │  ├─ run_worker_first = true
-                         │  ├─ 注入安全响应头
-                         │  ├─ /api/* → 业务逻辑 + multipart 协调
-                         │  └─ 其余路径 → Workers Assets (静态文件)
-                         │
-                         │
-                    Durable Object
-                    (SecretVault)
-                    [状态机/SQLite]
-                         │
-                         ▼
-                   R2 FILE_BUCKET
-                  （加密文件分片）
+用户浏览器                 Cloudflare 边缘
+──────────                 ──────────────────────────────────
+Frontend SPA    ──→        Worker (zerolink-api)
+  + API 请求                         │  ├─ run_worker_first = true
+                                     │  ├─ 注入安全响应头
+                                     │  ├─ /api/* → 业务逻辑 + multipart 协调
+                                     │  └─ 其余路径 → Workers Assets (静态文件)
+                                     │
+                                     │
+                              Durable Object
+                               (SecretVault)
+                              [状态机/SQLite]
+                                     │
+                                     ▼
+                              R2 FILE_BUCKET
+                             （加密文件分片）
 ```
 
 - **Cloudflare Worker**：统一处理所有请求（API + 静态文件），注入安全响应头

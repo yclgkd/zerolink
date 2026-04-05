@@ -20,7 +20,7 @@
 
 #### Boundaries:
 - ⚠️ Malicious browser extensions/trojans: may abuse a single operation, but cannot export admin private keys
-- ⚠️ Malicious JS served by the server: inherent risk of web architecture; mitigated by self-hosting/offline bundles
+- ⚠️ Malicious JS served by the server: inherent risk of web architecture; mitigated by self-hosting
 
 ---
 
@@ -128,7 +128,7 @@ The WebAuthn/ECDSA assertion's challenge must === expected_challenge
 
 **Boundaries**:
 - Malicious JS served by the server: inherent risk of web architecture
-- Mitigation: self-hosting + offline bundles + Signed Manifest (for the signed release path)
+- Mitigation: self-hosting + Signed Manifest (for the signed release path)
 
 ---
 
@@ -254,7 +254,6 @@ default PAD_BLOCK = 4096 bytes
 
 **Mitigations**:
 - 🔒 Self-hosting (full server control)
-- 🔒 Offline bundles + verifiable release chain
 - 🔒 Signed Manifest (detect tampering)
 
 **Boundaries**:
@@ -366,7 +365,6 @@ Strong password (12-char mixed):
 - ⚠️ Inherent risk of web architecture; cannot be fully solved
 - 🔒 CSP + Signed Manifest (raise tampering cost and detect tampering)
 - 🔒 Reproducible builds + Signed Manifest (detectable)
-- 🔒 Offline bundles (reduce online delivery)
 - 🔒 Self-hosting (full control)
 
 **Attack Flow**:
@@ -379,9 +377,8 @@ Attacker controls the server
 
 **Layered Mitigations**:
 1. **Default deployment** (Cloudflare): trust the hosting provider
-2. **Offline bundles**: download and run locally (reduce trust surface)
-3. **Self-hosting**: full autonomous control
-4. **Signed Manifest**: user can verify (requires technical ability)
+2. **Self-hosting**: full autonomous control
+3. **Signed Manifest**: user can verify (requires technical ability)
 
 **Boundaries**:
 - Non-technical users have difficulty verifying frontend integrity
@@ -403,6 +400,25 @@ Attacker controls the server
 - **Key length**: 2048 bits (receiver)
 - **Hash**: SHA-256
 - **Purpose**: encapsulate AES key
+
+> **Design Decision — Why RSA-2048, not ECDH P-256?**
+>
+> RSA-2048 provides ~112 bits of classical security, while ECDH P-256 provides ~128 bits.
+> Both are far beyond current brute-force capability, and both are equally broken by
+> Shor's algorithm on a sufficiently large quantum computer. Migrating to P-256 would
+> require ~50 file changes (crypto primitives, protocol format, schemas, backend storage,
+> and all tests), a breaking change to the cipher bundle wire format (`encContentKey` →
+> `ephemeralPublicKey`), and a backward-compatibility strategy for existing channels —
+> all for a marginal classical security gain that does not address the real quantum threat.
+>
+> The actual weakest link in the current system is the receiver passphrase (mitigated by
+> Argon2id + 12-character minimum + 7-day max TTL), not the RSA modulus size.
+>
+> **Planned migration path**: wait for WebCrypto to natively support ML-KEM (FIPS 203),
+> then migrate directly to a hybrid KEM (ECDH P-256 + ML-KEM) in a single protocol
+> version bump — avoiding an intermediate P-256-only migration that would become obsolete.
+> NIST recommends phasing out RSA-2048 after 2030; this timeline aligns with expected
+> browser support for post-quantum primitives.
 
 ### KDF (Key Derivation)
 - **Algorithm**: Argon2id (default)
@@ -463,65 +479,58 @@ const WEBAUTHN_TIMEOUT_MS = 60000;   // 60s
 
 ---
 
-## Security Checklist (Implementation)
+## Security Invariants (Implementation)
 
 ### Server-Side
-- [ ] All responses include `Cache-Control: no-store`
-- [ ] lock_secret never enters logs/storage
-- [ ] lock_key is one-way derived (irreversible)
-- [ ] challenge is consumed once (TTL + marking)
-- [ ] nonce deduplication (TTL 10min)
-- [ ] version is monotonically increasing
-- [ ] timestamp window check (±120s)
-- [ ] WebAuthn byte-level verification (origin/challenge/signature)
-- [ ] intent_hash strict matching
-- [ ] Error responses have constant shape `{ok: false}`
-- [ ] DO serializes all write operations
+- All responses include `Cache-Control: no-store`
+- lock_secret never enters logs/storage
+- lock_key is one-way derived (irreversible)
+- challenge is consumed once (TTL + marking)
+- nonce deduplication (TTL 10min)
+- version is monotonically increasing
+- timestamp window check (±120s)
+- WebAuthn byte-level verification (origin/challenge/signature)
+- intent_hash strict matching
+- Error responses have constant shape `{ok: false}`
+- DO serializes all write operations
 
 ### Client-Side
-- [ ] lock_secret only in fragment (not sent to server)
-- [ ] New share link fragment additionally carries `af=sender_auth_fpr`
-- [ ] lock_key computed locally then sent back (create_finish)
-- [ ] lock_proof includes challenge (anti-replay)
-- [ ] Receiver private key wrapped with Argon2id
-- [ ] Padding randomness is secure (crypto.getRandomValues)
-- [ ] AAD binds uuid/version/fpr
-- [ ] Multipart file chunks derive per-chunk IV/AAD (`baseIv XOR index`, `uuid || "chunk" || index`) to prevent storage-side reordering
-- [ ] Anchored channel locally pins `sender_auth_fpr`
-- [ ] Anchored channel locally re-verifies `deliveryAuth` proof
-- [ ] Locally persists `lastAcceptedDelivery(version,ciphertextHash)` to prevent rollback
-- [ ] Safety Code deterministically generated from receiver_pub_fpr
-- [ ] WebAuthn challenge binds to intent_hash
-- [ ] Sensitive data zeroed out (burned after use)
-- [ ] Strict CSP policy
-- [ ] Signed Manifest and runtime hash verification
+- lock_secret only in fragment (not sent to server)
+- New share link fragment additionally carries `af=sender_auth_fpr`
+- lock_key computed locally then sent back (create_finish)
+- lock_proof includes challenge (anti-replay)
+- Receiver private key wrapped with Argon2id
+- Padding randomness is secure (crypto.getRandomValues)
+- AAD binds uuid/version/fpr
+- Multipart file chunks derive per-chunk IV/AAD (`baseIv XOR index`, `uuid || "chunk" || index`) to prevent storage-side reordering
+- Anchored channel locally pins `sender_auth_fpr`
+- Anchored channel locally re-verifies `deliveryAuth` proof
+- Locally persists `lastAcceptedDelivery(version,ciphertextHash)` to prevent rollback
+- Safety Code deterministically generated from receiver_pub_fpr
+- WebAuthn challenge binds to intent_hash
+- Sensitive data zeroed out (burned after use)
+- Strict CSP policy
+- Signed Manifest and runtime hash verification
 
 ### UX
-- [ ] Share link prompt: "must copy in full (including after #)"
-- [ ] Safety Code out-of-band verification guidance (without creating anxiety)
-- [ ] Receiver onboarding animation ("the password stays only with you")
-- [ ] Difference between Quick Share and Secure Share is accurately described; Quick Share is not labeled as a "compatibility mode"
-- [ ] WebAuthn failure provides clear fallback guidance
-- [ ] Password strength hints (without forcing)
+- Share link prompt: "must copy in full (including after #)"
+- Safety Code out-of-band verification guidance (without creating anxiety)
+- Receiver onboarding animation ("the password stays only with you")
+- Difference between Quick Share and Secure Share is accurately described; Quick Share is not labeled as a "compatibility mode"
+- WebAuthn failure provides clear fallback guidance
+- Password strength hints (without forcing)
 
 ---
 
-## Known Limitations and Future Improvements
+## Known Limitations
 
-### Known Limitations
+### Limitations
 1. **Metadata leakage**: UUID, timestamps, ciphertext length buckets
 2. **User behavior dependency**: Safety Code verification is not enforced
 3. **Malicious JS delivery**: inherent problem of web architecture (mitigation: self-hosting)
 4. **Weak password risk**: cannot force users to use strong passwords
 5. **Profile differences**: Quick Share relies more on password and local endpoint security; Secure Share relies more on the WebAuthn ecosystem
 6. **Freshness boundary**: anchored A+B can only prevent on-device rollback and forgery of unanchored sender proofs; it alone cannot prove "the server is not withholding updates" — that requires future witness / transparency schemes
-
-### Future Improvements
-- 🔮 **Multiple receivers**: group encryption (one enc_content_key per person)
-- 🔮 **Revocable links**: receiver cannot decrypt after sender destroys
-- 🔮 **Forward Secrecy**: periodic AES key rotation (re-encrypt on update)
-- 🔮 **Hardware Attestation**: enforce hardware key attribute verification
-- 🔮 **Decentralization**: IPFS + smart contracts (completely remove server trust)
 
 ---
 
