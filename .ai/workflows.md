@@ -54,11 +54,3 @@
 ## Decision Log
 - Record changes to repo-wide workflow, architecture, security posture, or developer conventions.
 
-## Skills Directories
-- `.ai/` holds shared guidance.
-- `.agents/skills/` is the agent-neutral shared skills layer.
-- `.agents/skills/` must not require vendor-specific CLIs, slash commands, or a single tool-specific entrypoint.
-- `.claude/skills/` remains Claude-local and may contain Claude-specific operational instructions.
-- `.agents/skills/` and `.claude/skills/` may intentionally drift.
-- When shared and local skills diverge, shared workflow rules still belong in `.ai/`.
-- Keep shared workflow rules in `.ai/`, not in shared or tool-local skill directories.

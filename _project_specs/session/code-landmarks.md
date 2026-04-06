@@ -13,13 +13,13 @@ UPDATE WHEN:
 | `CLAUDE.md` | Claude router for shared repo guidance |
 | `AGENTS.md` | Generic agent router and workflow summary |
 | `GEMINI.md` | Gemini CLI router |
-| `.ai/README.md` | Shared guidance index |
 | `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
 | `.github/workflows/deploy.yml` | Staging/production release workflow — deploys Cloudflare assets and, on `v*` tags, publishes GHCR self-host images with Buildx provenance/SBOM attestations |
 | `docs/SELF_HOSTED_CONTRACT.md` | Self-hosted backend contract freeze: exact-match protocol surfaces, route matrix, error semantics, and open ambiguities |
 | `docs/SELF_HOSTED_CONTRACT.zh.md` | Chinese mirror of the self-hosted backend contract freeze |
 | `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
-| `_project_specs/session/decisions.md` | Newest-first workflow and architecture decision log |
+| `_project_specs/session/decisions.md` | Newest-first workflow and architecture decision log (2026-03-12+) |
+| `_project_specs/session/archive/decisions-2026-02-to-03-11.md` | Archived decision entries (2026-02-24 to 2026-03-11) |
 | `_project_specs/session/code-landmarks.md` | Quick navigation map for key entrypoints and gotchas |
 
 ## Entry Points

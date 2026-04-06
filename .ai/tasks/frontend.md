@@ -3,7 +3,6 @@
 ## Primary Paths
 - `packages/frontend/`
 - `packages/shared/`
-- `docs/TASK_BREAKDOWN.md`
 
 ## Design Source
 - Use the Figma Make file for component, layout, and visual reference.
