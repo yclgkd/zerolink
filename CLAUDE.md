@@ -1,36 +1,44 @@
 # Claude Instructions
 
-## Skills
-Load these Claude-local mandatory skills before implementation work:
-- `.claude/skills/base/SKILL.md`
-- `.claude/skills/security/SKILL.md`
-- `.claude/skills/typescript/SKILL.md`
-- `.claude/skills/react-web/SKILL.md`
-- `.claude/skills/playwright-testing/SKILL.md`
-- `.claude/skills/session-management/SKILL.md`
-- `.claude/skills/code-review/SKILL.md`
-- `.claude/skills/commit-hygiene/SKILL.md`
-
-Shared repo guidance still lives in `.ai/`, while `.claude/skills/` remains the Claude-local mandatory skill layer and may keep Claude-specific automation.
+## Always Read
+- `.ai/project-context.md` — what ZeroLink is and its security posture
+- `.ai/coding-standards.md` — scope, typing, file size, security constraints
 
 ## Rules
-- Create a new branch for every change.
-- Open a PR for every change.
 - Never push implementation changes directly to `main`.
-- Use `<type>/<short-name>` for branch names.
-- `type` must be one of: `feat`, `fix`, `security`, `perf`, `refactor`, `test`, `docs`, `style`, `chore`, `ci`, `revert`.
-- Do not include task IDs in branch names.
-- Do not use legacy or tool-branded prefixes such as `task/`, `codex/`, `ai/`, `agent/`, `tmp/`, or `misc/`.
 - Do not mention tool authorship or AI generation in code, commits, PRs, or PR comments.
-- Keep diffs small and scoped.
 - Update `_project_specs/` with every AI-authored change.
+- For branch naming, PR workflow, and commit conventions, follow `.ai/workflows.md`.
 
-## Read First
-- `.ai/workflows.md`
-- `.ai/project-context.md`
-- `.ai/coding-standards.md`
+## Skills — Load by Task Type
+
+**Implementation work** (writing or modifying code):
+- `.claude/skills/base/SKILL.md`
+- `.claude/skills/typescript/SKILL.md`
 - `.ai/architecture.md`
-- `.ai/commands.md`
+
+**Frontend tasks** (React components, pages, styles):
+- `.claude/skills/react-web/SKILL.md`
+
+**E2E testing**:
+- `.claude/skills/playwright-testing/SKILL.md`
+
+**Security-sensitive changes** (auth, crypto, secrets, input handling):
+- `.claude/skills/security/SKILL.md`
+
+**Code review** (`/code-review` or `/review-fix`):
+- `.claude/skills/code-review/SKILL.md`
+
+**Committing / creating PRs**:
+- `.claude/skills/commit-hygiene/SKILL.md`
+- `.ai/workflows.md`
+
+**Long sessions or context limits**:
+- `.claude/skills/session-management/SKILL.md`
+
+## Reference — Load When Needed
+- `.ai/commands.md` — project commands (`pnpm dev`, `pnpm test`, etc.)
+- `.ai/workflows.md` — full branch/PR/release workflow
 
 ## Task Routing
 - Frontend: `.ai/tasks/frontend.md`
@@ -39,5 +47,5 @@ Shared repo guidance still lives in `.ai/`, while `.claude/skills/` remains the 
 
 ## Claude Local
 - Shared repo guidance lives in `.ai/`.
-- `.claude/skills/` and `.claude/settings.local.json` are the Claude-local mandatory skill layer and compatibility assets.
+- `.claude/skills/` and `.claude/settings.local.json` are the Claude-local mandatory skill layer.
 - `.agents/skills/` is the general, agent-neutral compatibility layer.
