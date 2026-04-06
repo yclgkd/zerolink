@@ -13,6 +13,7 @@ ZeroLink is a zero-knowledge secret sharing tool for passwords, API keys, tokens
 - `packages/shared`: types, schemas, crypto helpers, shared constants.
 - `packages/frontend`: React app and browser-side protocol orchestration.
 - `packages/backend`: Cloudflare Worker, Durable Object state machine (SQLite backend).
+- `services/selfhost-api`: Go self-hosted backend (PostgreSQL, native WebAuthn, single-node WebSocket).
 
 ## Security Posture
 - Never log, store, or transmit plaintext secrets or private keys.
