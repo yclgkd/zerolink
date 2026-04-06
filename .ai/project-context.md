@@ -13,10 +13,7 @@ ZeroLink is a zero-knowledge secret sharing tool for passwords, API keys, tokens
 - `packages/shared`: types, schemas, crypto helpers, shared constants.
 - `packages/frontend`: React app and browser-side protocol orchestration.
 - `packages/backend`: Cloudflare Worker, Durable Object state machine (SQLite backend).
-
-## Design Source
-- Figma Make file: `https://www.figma.com/make/TrGpBuZS0cvhJaT9ecHrsd/UI-Design-for-ZeroLink`
-- Use the Figma Make file as the source of truth for design assets and generated component references.
+- `services/selfhost-api`: Go self-hosted backend (PostgreSQL, native WebAuthn, single-node WebSocket).
 
 ## Security Posture
 - Never log, store, or transmit plaintext secrets or private keys.

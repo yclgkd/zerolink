@@ -39,3 +39,13 @@ pnpm --filter @zerolink/backend deploy
 pnpm --filter @zerolink/shared test
 pnpm --filter @zerolink/shared typecheck
 ```
+
+## Self-Hosted API (Go)
+```bash
+cd services/selfhost-api
+make run              # start API server
+make migrate          # run DB migrations
+make test             # go test ./...
+make test-race        # go test -race ./...
+make sqlc-generate    # regenerate sqlc queries
+```

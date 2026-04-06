@@ -3,11 +3,6 @@
 ## Primary Paths
 - `packages/frontend/`
 - `packages/shared/`
-- `docs/TASK_BREAKDOWN.md`
-
-## Design Source
-- Use the Figma Make file for component, layout, and visual reference.
-- Preserve the existing product security model when translating UI flows.
 
 ## Guardrails
 - Keep secret handling browser-side.

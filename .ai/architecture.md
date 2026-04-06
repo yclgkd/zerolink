@@ -10,10 +10,16 @@
 - Stack: React, Vite, React Router, Zustand, Zod.
 - Keep secret material browser-side and short-lived.
 
-## Backend
+## Backend (Hosted)
 - Package: `packages/backend/`
 - Stack: Cloudflare Worker, Durable Objects (SQLite backend).
 - Durable Objects enforce ordered state transitions and terminal-state guarantees.
+
+## Backend (Self-Hosted)
+- Service: `services/selfhost-api/`
+- Stack: Go, PostgreSQL, native WebAuthn (`go-webauthn`), in-memory single-node WebSocket fan-out.
+- Per-channel advisory-lock transactions (`WithChannelTx`) reproduce Durable Object ordering guarantees.
+- Entrypoints: `cmd/selfhost-api` (API server), `cmd/selfhost-migrate` (DB migrations).
 
 ## Shared Contracts
 - Package: `packages/shared/`
