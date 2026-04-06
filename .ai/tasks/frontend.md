@@ -4,10 +4,6 @@
 - `packages/frontend/`
 - `packages/shared/`
 
-## Design Source
-- Use the Figma Make file for component, layout, and visual reference.
-- Preserve the existing product security model when translating UI flows.
-
 ## Guardrails
 - Keep secret handling browser-side.
 - Do not persist plaintext secrets beyond the required local encryption step.
