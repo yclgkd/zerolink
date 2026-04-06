@@ -6,18 +6,17 @@
 
 ## Rules
 - Never push implementation changes directly to `main`.
-- Do not mention tool authorship or AI generation in code, commits, PRs, or PR comments.
-- Update `_project_specs/` with every AI-authored change.
+- Update `_project_specs/` when making important architectural or workflow decisions.
 - For branch naming, PR workflow, and commit conventions, follow `.ai/workflows.md`.
 
 ## Skills — Load by Task Type
 
 **Implementation work** (writing or modifying code):
 - `.claude/skills/base/SKILL.md`
-- `.claude/skills/typescript/SKILL.md`
 - `.ai/architecture.md`
 
 **Frontend tasks** (React components, pages, styles):
+- `.claude/skills/typescript/SKILL.md`
 - `.claude/skills/react-web/SKILL.md`
 
 **E2E testing**:
@@ -48,4 +47,3 @@
 ## Claude Local
 - Shared repo guidance lives in `.ai/`.
 - `.claude/skills/` and `.claude/settings.local.json` are the Claude-local mandatory skill layer.
-- `.agents/skills/` is the general, agent-neutral compatibility layer.
