@@ -13,8 +13,7 @@ UPDATE WHEN:
 | `CLAUDE.md` | Claude router for shared repo guidance |
 | `AGENTS.md` | Generic agent router and workflow summary |
 | `GEMINI.md` | Gemini CLI router |
-| `.ai/workflows.md` | Canonical workflow, branch naming, and wording rules |
-| `.github/workflows/deploy.yml` | Staging/production release workflow — deploys Cloudflare assets and, on `v*` tags, publishes GHCR self-host images with Buildx provenance/SBOM attestations |
+| `.ai/workflows.md` | Canonical workflow and branch naming rules |
 | `docs/SELF_HOSTED_CONTRACT.md` | Self-hosted backend contract freeze: exact-match protocol surfaces, route matrix, error semantics, and open ambiguities |
 | `docs/SELF_HOSTED_CONTRACT.zh.md` | Chinese mirror of the self-hosted backend contract freeze |
 | `.agents/skills/` | Agent-neutral reusable skills compatibility layer |
@@ -147,24 +146,23 @@ UPDATE WHEN:
 | Location | Issue | Notes |
 |----------|-------|-------|
 | URL fragments | Never sent to server | Key material lives in `window.location.hash` |
-| Durable Objects | Single-location consistency | All channel data stored in DO SQLite; no external KV dependency |
-| `@noble/hashes` | Not WebCrypto | Runs synchronously; may block UI on heavy params |
-| `packages/frontend/src/__tests__/helpers/orchestrator-fixtures.ts` | `createOrchestrator()` defaults to fast KDF params in tests | Opt out with `{ useFastKdf: false }` when a frontend smoke test must exercise production-strength Argon2id defaults |
+| Durable Objects | Single-location consistency | DO SQLite; no external KV |
+| `@noble/hashes` | Not WebCrypto | Synchronous; may block UI on heavy params |
+| `orchestrator-fixtures.ts` | `createOrchestrator()` defaults to fast KDF | Opt out with `{ useFastKdf: false }` for prod-strength tests |
 | Biome | No ESLint plugins | Some rules need manual enforcement |
-| `packages/frontend/src/crypto/webauthn.ts` | `useLiteralKeys` Biome errors | Cannot auto-fix; TypeScript `noPropertyAccessFromIndexSignature` requires bracket notation in this file — do not touch |
-| `packages/frontend/src/release/verification.ts` | Verified Release covers only `dist/assets/*` | Root documents (`index.html`, `robots.txt`) are excluded from the signed manifest because Cloudflare can mutate edge responses; the executing bootstrap entry must still match `manifest.entryAssetPath` |
-| `packages/frontend/src/release/tiered-verification.ts` | Cached release trust still revalidates `manifest.json` + `manifest.sig` | `manifest-hash.txt` is an unsigned helper and may only be used as a freshness hint before deciding whether to run full verification |
-| `packages/shared/src/payload.ts` + `packages/frontend/src/features/share/share-logic.ts` | File delivery is intentionally download-only in phase 1 | Do not add preview rendering on the receiver page without a new security review; decrypted files must stay out of the DOM and only download on explicit click. Keep filename sanitization character-based instead of using control-character regex ranges so Biome stays green across the shared package, but preserve the legacy behavior that collapses consecutive invalid filename characters into a single underscore. |
-| `packages/frontend/src/pages/manage/use-manage-page-state.ts` + `packages/frontend/src/pages/manage/manage-components.tsx` | The sender file picker now rejects oversize files immediately | Keep the displayed size hint aligned with `policy.maxFileBytes` and clear the native file input when a file is rejected, or the user cannot re-select the same file after an over-limit attempt. |
-| `packages/frontend/src/crypto/orchestrator-deliver.ts` | Text and file delivery now have intentionally different storage semantics | Text shares still encrypt directly into an inline `cipherBundle`, but every new file share must upload encrypted bytes to object storage first and commit only a `fileRef` |
-| `packages/frontend/src/crypto/orchestrator-decrypt.ts` + `packages/shared/src/payload.ts` | `payloadKind` stays optional for transport compatibility, but file decode is strict | New deliveries sign and persist `payloadKind`, and receiver-side download handling only activates when `payloadKind === "file"`. Undeclared payloads stay on the raw-text path so file-policy enforcement cannot be bypassed by omitting the type bit during proof generation. |
-| `packages/shared/src/multipart.ts` + `packages/frontend/src/crypto/orchestrator-multipart.ts` | Multipart file delivery binds chunk order cryptographically | Each chunk derives its own AES-GCM IV from `baseIv XOR chunkIndex`, and AAD includes `channelUuid + "chunk" + index`, so storage backends cannot reorder encrypted chunks without breaking receiver-side verification. |
-| `packages/backend/src/file-cleanup.ts` + `packages/backend/src/do/SecretVaultStorage.ts` | Hosted R2 cleanup now has two layers | Channel delete/expiry still removes the current multipart payload immediately, while the hourly Worker sweep only reclaims stale chunks that are no longer referenced by active channel state. |
-| `services/selfhost-api/internal/config/config.go` + `deploy/selfhost/.env.example` | Self-hosted file delivery now requires object storage whenever files are enabled | `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` remains a legacy compatibility field capped by the inline ceiling, but new `payloadKind=file` writes no longer use inline storage, so disabling multipart/object storage disables file delivery altogether. |
-| `packages/backend/src/do/SecretVault.ts` | `/ws` upgrades require an active channel record and top-level redaction | Missing or terminal channels must fail the WebSocket upgrade so dead links do not keep idle Durable Object sockets alive, and unexpected `fetch()`-level `/ws` failures must still flow through `mapError()` with handler `ws_subscribe` |
-| `packages/backend/src/do/SecretVaultHttp.ts` | Production observability intentionally omits raw exception text | `mapError()` keeps staging stacks/messages for debugging, but production emits only a structured error name + handler + fingerprint payload; `stack_fingerprint` is based on a normalized handler + error-name + frame signature, not raw stack text or bundle offsets; use `APP_ENV` from `packages/backend/wrangler.toml`, not hostnames, to reason about log detail |
-| `packages/backend/src/security-headers.ts` | `Cache-Control: no-store` on SPA entry paths is intentional | Changing to `no-cache` causes stale HTML replay across signed deployments and breaks the Verified Release gate — see decisions.md [2026-03-10] |
-| `packages/frontend/e2e/support/mock-api.ts` | Stateful mock E2E helper intentionally disables `window.WebSocket` before navigation | Mocked suites should exercise HTTP route mocks and the explicit polling fallback path without generating Vite proxy noise; real WebSocket transport coverage belongs in `realtime-smoke.spec.ts` |
-| `deploy/selfhost/Caddyfile` | Handler order is a correctness boundary | Keep `/api/*`, `/healthz`, and `/readyz` inside the proxy route before `try_files` / `file_server`, or the SPA fallback will swallow API traffic and make the local stack look healthy while realtime and health checks are broken |
-| `deploy/selfhost/docker-compose.yml` + `deploy/selfhost/.env.example` | Published-image self-hosting defaults to `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` and `ZEROLINK_IMAGE_TAG=latest` | Set `ZEROLINK_IMAGE_TAG` to a release tag for deterministic pulls, override `ZEROLINK_IMAGE_REPOSITORY` when consuming images from a fork or org mirror, or layer `docker-compose.build.yml` when you need to rebuild from the checked-out source instead of trusting GHCR artifacts |
-| `services/selfhost-api/internal/realtime/hub.go` | Self-hosted websocket fan-out is intentionally process-local | The frontend sync client still works because it already falls back to HTTP polling, but only connections attached to the same API process receive live pushes until a future shared pubsub layer exists |
+| `crypto/webauthn.ts` | `useLiteralKeys` Biome errors | `noPropertyAccessFromIndexSignature` requires bracket notation — do not touch |
+| `release/verification.ts` | Manifest covers only `dist/assets/*` | Root docs excluded (Cloudflare can mutate); bootstrap entry must match `entryAssetPath` |
+| `release/tiered-verification.ts` | Cached trust revalidates signed bytes | `manifest-hash.txt` is unsigned, freshness hint only |
+| `payload.ts` + `share-logic.ts` | File delivery is download-only (phase 1) | No preview rendering without security review; files stay out of DOM |
+| `orchestrator-deliver.ts` | Text = inline `cipherBundle`, file = object storage `fileRef` | Intentionally different storage semantics |
+| `orchestrator-decrypt.ts` + `payload.ts` | `payloadKind` optional for compat, strict for file decode | Undeclared payloads stay on raw-text path |
+| `multipart.ts` | Chunk order bound cryptographically | IV = `baseIv XOR chunkIndex`, AAD includes chunk index |
+| `file-cleanup.ts` + `SecretVaultStorage.ts` | R2 cleanup has two layers | Channel delete removes immediately; hourly sweep reclaims stale orphans |
+| `config.go` + `.env.example` | Self-hosted files require object storage | Disabling MinIO/S3 disables file delivery entirely |
+| `SecretVault.ts` | `/ws` upgrade requires active channel | Dead links must not keep idle DO sockets alive |
+| `SecretVaultHttp.ts` | Prod logs omit raw exception text | Use `APP_ENV` not hostnames to reason about log detail |
+| `security-headers.ts` | `no-store` on SPA entry is intentional | `no-cache` breaks Verified Release gate |
+| `mock-api.ts` | Disables `window.WebSocket` before nav | Real WS coverage in `realtime-smoke.spec.ts` only |
+| `Caddyfile` | Handler order is correctness boundary | `/api/*` must route before `try_files` / `file_server` |
+| `docker-compose.yml` | Defaults to `ZEROLINK_IMAGE_TAG=latest` | Pin to release tag for deterministic pulls |
+| `realtime/hub.go` | WebSocket fan-out is process-local | Single-node only; falls back to HTTP polling |
