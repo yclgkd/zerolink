@@ -93,10 +93,10 @@ export async function bootstrapApp(options: BootstrapAppOptions): Promise<void> 
   if (verificationResult.status === 'verified') {
     clearEntryRecoveryAttempt();
     applyVerifiedReleaseSnapshot(verificationResult);
+    await options.loadApp();
     if (usingDefaultGate) {
       clearBootstrapBodyStyles();
     }
-    await options.loadApp();
     return;
   }
 
