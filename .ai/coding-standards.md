@@ -19,9 +19,8 @@
 - Add or update protocol schemas in `packages/shared/src/schemas.ts`.
 - Keep package boundaries intact: frontend and backend import shared contracts instead of redefining them.
 
-## Comments and Wording
+## Comments
 - Add comments only when they explain non-obvious behavior.
-- Do not add tool authorship or AI-generation notes to source code or comments.
 
 ## File Size
 
@@ -32,4 +31,4 @@
 - **Enforcement:** Any PR adding code that pushes a file over 800 lines should be flagged in code review.
 
 ## Project State
-- Update `_project_specs/` whenever AI-authored work changes repo behavior, workflow, or status.
+- Update `_project_specs/` when making important architectural or workflow decisions.

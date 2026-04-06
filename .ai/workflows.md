@@ -26,10 +26,6 @@
 - If a security change must trigger a release, use `fix(security): ...` or `feat(security): ...`.
 - Plain `security:` remains allowed for non-releasable security work, but do not assume it will cut a release.
 
-## AI Output Wording
-- Use neutral, project-focused wording only.
-- Do not mention Codex, Claude, Gemini, AI generation, or tool authorship in source code, comments, commit messages, PR titles, PR bodies, or PR comments.
-
 ## AI Change Flow
 1. Read `.ai/workflows.md`, `.ai/project-context.md`, `.ai/coding-standards.md`, and the relevant task doc.
 2. Check whether the current branch already maps to an open PR and whether the task is a review or follow-up fix for that PR.
