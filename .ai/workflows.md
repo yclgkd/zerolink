@@ -32,21 +32,16 @@
 3. If it is a follow-up on an open PR, continue on the current branch. Otherwise create a new branch from `main`.
 4. Make the smallest correct change.
 5. Run relevant validation.
-6. Update `_project_specs/`.
+6. If the change introduces important architectural or workflow decisions, update `_project_specs/`:
+   - Append to `_project_specs/session/decisions.md` for workflow, architecture, security posture, or convention changes.
+   - Update `_project_specs/session/code-landmarks.md` when adding new entrypoints or shared workflow files.
+   - Do not keep transient task/status logs in `_project_specs/`; use branch history, PR context, and the current diff for volatile progress.
 7. Commit with a Conventional Commit message.
 8. Push the branch.
 9. Open a PR with summary, validation, risk, and rollback if the work is not already attached to an open PR.
-
-## _project_specs Updates
-- Append important workflow or architecture changes to `_project_specs/session/decisions.md`.
-- Add landmarks when new entrypoints or shared workflow files are introduced.
-- Do not keep transient task/status logs in `_project_specs/`; use branch history, PR context, and the current diff for volatile progress.
 
 ## Validation
 - Run targeted checks for the touched area.
 - Run `git diff --check` before commit.
 - Keep the diff reviewable and scoped.
-
-## Decision Log
-- Record changes to repo-wide workflow, architecture, security posture, or developer conventions.
 
