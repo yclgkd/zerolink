@@ -8,9 +8,7 @@ ZeroLink is a security-focused secret sharing tool. We take vulnerability report
 
 ### How to Report
 
-Email: **security@PLACEHOLDER.example**
-
-> Replace `PLACEHOLDER.example` with the actual contact address before publishing.
+Email: **security@zerolink.dev**
 
 Please include:
 
