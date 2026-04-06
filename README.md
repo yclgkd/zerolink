@@ -143,6 +143,16 @@ pnpm install
 pnpm dev
 ```
 
+## Contributing
+
+We welcome contributions! Please read our [Contributing Guide](./CONTRIBUTING.md) before submitting a pull request.
+
+## Security
+
+ZeroLink is a security-focused project. If you discover a vulnerability, **please do not open a public issue**. See our [Security Policy](./SECURITY.md) for responsible disclosure instructions.
+
+For the technical security model and threat analysis, see [Security Model](./docs/SECURITY.md).
+
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](./LICENSE) for details.
