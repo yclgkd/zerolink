@@ -145,6 +145,16 @@ pnpm install
 pnpm dev
 ```
 
+## 参与贡献
+
+欢迎贡献！提交 Pull Request 前请先阅读[贡献指南](./CONTRIBUTING.md)。
+
+## 安全
+
+ZeroLink 是一个安全优先的项目。如果您发现安全漏洞，**请不要提交公开 Issue**。请参阅[安全策略](./SECURITY.md)了解负责任的披露流程。
+
+技术安全模型与威胁分析请参见[安全模型](./docs/SECURITY.zh.md)。
+
 ## License
 
 本项目基于 GNU Affero General Public License v3.0 (AGPL-3.0) 协议开源。详情请参阅 [LICENSE](./LICENSE) 文件。
