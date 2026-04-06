@@ -8,7 +8,7 @@ on:
       - "v*"        # → production
     paths-ignore:
       - "docs/**"
-      - "*.md"
+      - "**/*.md"
       - "_project_specs/**"
       - ".ai/**"
       - ".agents/**"
@@ -24,6 +24,8 @@ on:
       - "vitest.config.ts"
       - ".gitignore"
       - ".env.example"
+      - ".gitattributes"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
       - "version.txt"
 
 jobs:

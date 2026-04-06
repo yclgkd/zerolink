@@ -1,2 +1,19 @@
+# AI training crawlers - blocked
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: Google-Extended
+User-agent: CCBot
+User-agent: anthropic-ai
+User-agent: Claude-Web
+User-agent: Bytespider
+User-agent: PerplexityBot
+User-agent: Applebot-Extended
+User-agent: cohere-ai
+User-agent: Diffbot
+User-agent: FacebookBot
+User-agent: omgili
+Disallow: /
+
+# Everyone else (search engines, etc.) - welcome
 User-agent: *
 Allow: /
