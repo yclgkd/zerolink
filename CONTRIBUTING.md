@@ -90,7 +90,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 <optional body>
 ```
 
-- Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
+- Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`, `security`
 - Keep the subject line under 72 characters
 - Use imperative mood ("add feature" not "added feature")
 
