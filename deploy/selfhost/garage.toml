@@ -1,0 +1,17 @@
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+# "garage" is the Docker Compose service name. Change this if running outside Compose.
+rpc_public_addr = "garage:3901"
+# rpc_secret is overridden by GARAGE_RPC_SECRET env var.
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+[admin]
+api_bind_addr = "[::]:3903"
+# admin_token is overridden by GARAGE_ADMIN_TOKEN env var.

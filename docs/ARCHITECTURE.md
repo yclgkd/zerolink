@@ -39,7 +39,7 @@
 
 #### Backend
 - **Cloudflare runtime**: Workers + Durable Objects + R2
-- **Self-hosted runtime**: Go API + PostgreSQL + MinIO
+- **Self-hosted runtime**: Go API + PostgreSQL + S3-compatible storage (Garage or external)
 - **State management**: Durable Objects (serialization, atomicity)
 - **Persistence**: DO storage / SQLite or PostgreSQL rows for channel metadata, plus object storage for multipart file chunks
 - **Realtime**: DO WebSocket fan-out on Cloudflare; process-local WebSocket hub with HTTP polling fallback in self-hosted mode
@@ -212,7 +212,7 @@ WebAuthn/ECDSA challenge must === expected_challenge
 │      locking)                                               │
 │    * cipher_bundle (small inline payloads) or fileRef       │
 │      metadata (large file deliveries)                       │
-│    * encrypted multipart chunks in R2 / MinIO               │
+│    * encrypted multipart chunks in R2 / S3-compatible storage               │
 │    * version, nonce, challenge (anti-replay/concurrency)    │
 │  - Can:                                                     │
 │    * Verify WebAuthn signatures                             │
@@ -288,7 +288,7 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 - Users can verify frontend integrity
 
 ### Self-Hosting (Current)
-- Docker Compose package with Caddy + Go API + PostgreSQL + MinIO
+- Docker Compose package with Caddy + Go API + PostgreSQL + Garage (optional S3-compatible storage)
 - Protocol-equivalent implementation for the current frontend contract, including `/api/file_policy` and multipart `fileRef` delivery
 - Full autonomous control over keys, storage, and runtime
 

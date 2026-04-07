@@ -67,7 +67,7 @@ Two tiers available at creation:
 ### 3.5 New: Self-Hosting / Verifiable Releases
 
 - Official Cloudflare version remains the default
-- Docker Compose one-click self-hosting (current package: Caddy + Go API + PostgreSQL + MinIO, with protocol-equivalent routes for the shipped frontend contract)
+- Docker Compose one-click self-hosting (current package: Caddy + Go API + PostgreSQL + Garage, with protocol-equivalent routes for the shipped frontend contract)
 - Release chain: Signed Manifest + reproducible builds
 
 ---

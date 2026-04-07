@@ -39,7 +39,7 @@
 
 #### 后端
 - **Cloudflare 运行时**：Workers + Durable Objects + R2
-- **自部署运行时**：Go API + PostgreSQL + MinIO
+- **自部署运行时**：Go API + PostgreSQL + S3 兼容存储（Garage 或外部）
 - **状态管理**：Durable Objects（串行化、原子性）
 - **持久化**：channel 元数据落在 DO / SQLite 或 PostgreSQL；multipart 文件分片落在对象存储
 - **实时同步**：Cloudflare 侧由 DO WebSocket 广播；self-host 侧由进程内 WebSocket hub + HTTP polling fallback 提供
@@ -205,7 +205,7 @@ WebAuthn/ECDSA challenge 必须 === expected_challenge
 │    * lock_key（用于验证 lock_proof，不可逆回 lock_secret）  │
 │    * receiver_pub（接收方公钥，仅上锁后存在）               │
 │    * cipher_bundle（小型 inline 载荷）或 fileRef 元数据     │
-│    * R2 / MinIO 中的加密 multipart 文件分片                 │
+│    * R2 / S3 兼容存储中的加密 multipart 文件分片                 │
 │    * version, nonce, challenge（防重放/并发）               │
 │  - 能力：                                                   │
 │    * 验证 WebAuthn 签名                                     │
@@ -281,7 +281,7 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 - 用户可验证前端完整性
 
 ### 自托管（当前方案）
-- Docker Compose 打包，包含 Caddy + Go API + PostgreSQL + MinIO
+- Docker Compose 打包，包含 Caddy + Go API + PostgreSQL + Garage（可选 S3 兼容存储）
 - 对当前前端协议提供等价实现，包括 `/api/file_policy` 和 multipart `fileRef` 交付
 - 完全自主控制密钥、存储和运行时
 

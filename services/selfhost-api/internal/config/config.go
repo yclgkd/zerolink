@@ -44,10 +44,10 @@ type FileConfig struct {
 	MaxChunks               int64
 	MultipartSupported      bool
 	StorageBackend          string
-	MinIO                   MinIOConfig
+	S3                      S3Config
 }
 
-type MinIOConfig struct {
+type S3Config struct {
 	Endpoint  string
 	AccessKey string
 	SecretKey string
@@ -197,16 +197,16 @@ func loadDatabaseConfig(lookup func(string) (string, bool), url string) (Databas
 func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 	storageBackend := strings.ToLower(strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_FILE_STORAGE_BACKEND", "inline")))
 	switch storageBackend {
-	case "inline", "minio":
+	case "inline", "s3":
 	default:
-		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_STORAGE_BACKEND must be inline or minio")
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_STORAGE_BACKEND must be inline or s3")
 	}
 
 	defaultMaxBytes := defaultInlineFileMaxBytes
 	defaultChunkSizeBytes := defaultInlineChunkSizeBytes
 	defaultMaxChunks := defaultInlineMaxChunks
 	defaultMultipartSupported := false
-	if storageBackend == "minio" {
+	if storageBackend == "s3" {
 		defaultMaxBytes = defaultMultipartFileMaxBytes
 		defaultChunkSizeBytes = defaultMultipartChunkSizeBytes
 		defaultMaxChunks = defaultMultipartMaxChunks
@@ -272,7 +272,7 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 		return FileConfig{}, err
 	}
 	if storageBackend == "inline" && multipartSupported {
-		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_MULTIPART_SUPPORTED requires SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+		return FileConfig{}, fmt.Errorf("SELFHOST_API_FILE_MULTIPART_SUPPORTED requires SELFHOST_API_FILE_STORAGE_BACKEND=s3")
 	}
 	if !multipartSupported && maxBytes > maxInlineFileBytes {
 		return FileConfig{}, fmt.Errorf(
@@ -286,7 +286,7 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 		)
 	}
 
-	minIOCfg, err := loadMinIOConfig(lookup, storageBackend)
+	s3Cfg, err := loadS3Config(lookup, storageBackend)
 	if err != nil {
 		return FileConfig{}, err
 	}
@@ -298,39 +298,39 @@ func loadFileConfig(lookup func(string) (string, bool)) (FileConfig, error) {
 		MaxChunks:               maxChunks,
 		MultipartSupported:      multipartSupported,
 		StorageBackend:          storageBackend,
-		MinIO:                   minIOCfg,
+		S3:                      s3Cfg,
 	}, nil
 }
 
-func loadMinIOConfig(lookup func(string) (string, bool), storageBackend string) (MinIOConfig, error) {
-	if storageBackend != "minio" {
-		return MinIOConfig{}, nil
+func loadS3Config(lookup func(string) (string, bool), storageBackend string) (S3Config, error) {
+	if storageBackend != "s3" {
+		return S3Config{}, nil
 	}
 
-	endpoint := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_ENDPOINT", ""))
-	accessKey := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_ACCESS_KEY", ""))
-	secretKey := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_SECRET_KEY", ""))
-	bucket := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_BUCKET", "zerolink-files"))
-	useSSL, err := parseBoolEnv(lookup, "SELFHOST_API_MINIO_USE_SSL", false)
+	endpoint := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_ENDPOINT", ""))
+	accessKey := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_ACCESS_KEY", ""))
+	secretKey := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_SECRET_KEY", ""))
+	bucket := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_BUCKET", "zerolink-files"))
+	useSSL, err := parseBoolEnv(lookup, "SELFHOST_API_S3_USE_SSL", false)
 	if err != nil {
-		return MinIOConfig{}, err
+		return S3Config{}, err
 	}
-	region := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_MINIO_REGION", ""))
+	region := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_REGION", ""))
 
 	if endpoint == "" {
-		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_ENDPOINT is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+		return S3Config{}, fmt.Errorf("SELFHOST_API_S3_ENDPOINT is required when SELFHOST_API_FILE_STORAGE_BACKEND=s3")
 	}
 	if accessKey == "" {
-		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_ACCESS_KEY is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+		return S3Config{}, fmt.Errorf("SELFHOST_API_S3_ACCESS_KEY is required when SELFHOST_API_FILE_STORAGE_BACKEND=s3")
 	}
 	if secretKey == "" {
-		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_SECRET_KEY is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+		return S3Config{}, fmt.Errorf("SELFHOST_API_S3_SECRET_KEY is required when SELFHOST_API_FILE_STORAGE_BACKEND=s3")
 	}
 	if bucket == "" {
-		return MinIOConfig{}, fmt.Errorf("SELFHOST_API_MINIO_BUCKET is required when SELFHOST_API_FILE_STORAGE_BACKEND=minio")
+		return S3Config{}, fmt.Errorf("SELFHOST_API_S3_BUCKET is required when SELFHOST_API_FILE_STORAGE_BACKEND=s3")
 	}
 
-	return MinIOConfig{
+	return S3Config{
 		Endpoint:  endpoint,
 		AccessKey: accessKey,
 		SecretKey: secretKey,

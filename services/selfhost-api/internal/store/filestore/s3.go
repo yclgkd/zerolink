@@ -28,7 +28,7 @@ type FileStorageBackend string
 
 const (
 	FileStorageBackendR2    FileStorageBackend = "r2"
-	FileStorageBackendMinIO FileStorageBackend = "minio"
+	FileStorageBackendS3 FileStorageBackend = "s3"
 )
 
 type Config struct {
@@ -115,18 +115,18 @@ type Store struct {
 	bucketMu    sync.Mutex
 }
 
-func NewMinIO(ctx context.Context, cfg Config) (*Store, error) {
+func NewS3(ctx context.Context, cfg Config) (*Store, error) {
 	if cfg.Endpoint == "" {
-		return nil, errors.New("minio endpoint is required")
+		return nil, errors.New("s3 endpoint is required")
 	}
 	if cfg.AccessKey == "" {
-		return nil, errors.New("minio access key is required")
+		return nil, errors.New("s3 access key is required")
 	}
 	if cfg.SecretKey == "" {
-		return nil, errors.New("minio secret key is required")
+		return nil, errors.New("s3 secret key is required")
 	}
 	if cfg.Bucket == "" {
-		return nil, errors.New("minio bucket is required")
+		return nil, errors.New("s3 bucket is required")
 	}
 
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
@@ -135,7 +135,7 @@ func NewMinIO(ctx context.Context, cfg Config) (*Store, error) {
 		Region: cfg.Region,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create minio client: %w", err)
+		return nil, fmt.Errorf("create s3 client: %w", err)
 	}
 
 	store := &Store{
@@ -245,7 +245,7 @@ func (s *Store) CompleteUpload(ctx context.Context, req FileUploadCompleteReques
 	}
 
 	ref := MultipartFileRef{
-		StorageBackend:       FileStorageBackendMinIO,
+		StorageBackend:       FileStorageBackendS3,
 		ChunkSizeBytes:       req.ChunkSizeBytes,
 		ChunkCount:           len(chunks),
 		TotalPlaintextBytes:  req.TotalPlaintextBytes,
@@ -299,7 +299,7 @@ func (s *Store) DeleteUpload(ctx context.Context, fileRef MultipartFileRef) erro
 }
 
 func (ref MultipartFileRef) Validate() error {
-	if ref.StorageBackend != FileStorageBackendMinIO && ref.StorageBackend != FileStorageBackendR2 {
+	if ref.StorageBackend != FileStorageBackendS3 && ref.StorageBackend != FileStorageBackendR2 {
 		return fmt.Errorf("unsupported storage backend %q", ref.StorageBackend)
 	}
 	if ref.ChunkSizeBytes <= 0 {
@@ -427,14 +427,14 @@ func (s *Store) ensureBucket(ctx context.Context) error {
 
 	exists, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
-		return fmt.Errorf("check minio bucket %s: %w", s.bucket, err)
+		return fmt.Errorf("check s3 bucket %s: %w", s.bucket, err)
 	}
 	if exists {
 		s.bucketReady.Store(true)
 		return nil
 	}
 	if err := s.client.MakeBucket(ctx, s.bucket, minio.MakeBucketOptions{Region: s.region}); err != nil {
-		return fmt.Errorf("create minio bucket %s: %w", s.bucket, err)
+		return fmt.Errorf("create s3 bucket %s: %w", s.bucket, err)
 	}
 	s.bucketReady.Store(true)
 	return nil

@@ -73,13 +73,13 @@ Output encoding varies per function:
 | `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Active-channel public snapshot only; once a channel is tombstoned or lazily purged, canonical external behavior is `404 NOT_FOUND` rather than a `200` terminal snapshot |
 | `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery; the response includes exactly one of `cipherBundle` or `fileRef`, and `cipherVersion` is the delivered payload version (`record.version - 1` in the current DO implementation), not the raw channel record version |
 | `/api/file_policy` | `GET` | none | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | Returns deployment file ceilings, inline threshold, chunk sizing, and multipart capability; frontend uses this to choose inline vs multipart delivery |
-| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | Self-host returns MinIO presigned PUT targets per chunk; the Go API coordinates metadata only and does not proxy chunk bytes |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | Self-host returns S3 presigned PUT targets per chunk; the Go API coordinates metadata only and does not proxy chunk bytes |
 | `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | Validates uploaded chunk metadata and returns the typed `fileRef` later embedded in `compound_commit` |
 | `/api/file/fetch/:uuid` | `GET` | none | `FileFetchResponseSchema` | `apiClient.fileFetch()` | For delivered multipart payloads, returns one presigned GET URL per chunk; inline payloads continue through `decrypt_fetch` only |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |
 
 The self-hosted API does **not** expose a stable `/api/file/chunk/...` route. Upload and download
-chunk bytes go directly to the MinIO presigned URLs returned by `/api/file/initiate` and
+chunk bytes go directly to the S3 presigned URLs returned by `/api/file/initiate` and
 `/api/file/fetch/:uuid`.
 
 ### Multipart Delivery Overlay
@@ -97,7 +97,7 @@ chunk bytes go directly to the MinIO presigned URLs returned by `/api/file/initi
 | `BAD_REQUEST` | `426` | Worker WS upgrade gate | `/api/ws/:uuid` hit without `Upgrade: websocket` |
 | `METHOD_NOT_ALLOWED` | `405` | Worker router | Wrong HTTP verb; `Allow` header is set |
 | `NOT_FOUND` | `404` | Worker router or DO | Unknown API route, missing channel, finalized terminal state, or `/api/file/fetch/:uuid` when no multipart file payload is available |
-| `BAD_REQUEST` | `400` | File coordination routes / MinIO metadata validation | Invalid file-policy input, malformed multipart metadata, missing chunks, or MinIO presign/stat validation failure |
+| `BAD_REQUEST` | `400` | File coordination routes / S3 metadata validation | Invalid file-policy input, malformed multipart metadata, missing chunks, or S3 presign/stat validation failure |
 | `NOT_IMPLEMENTED` | `501` | Worker router | Placeholder route matched but no implementation exists |
 | `INTERNAL_ERROR` | `500` | Worker or DO | Unexpected exception or invalid upstream response |
 | `RATE_LIMITED` | `429` | DO | Application-layer throttling; `Retry-After` may be present |

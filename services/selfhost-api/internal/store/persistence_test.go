@@ -317,13 +317,13 @@ func TestFinalizeTerminalStateBestEffortMultipartCleanup(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
 
-	cleaner := &failingMultipartCleaner{err: errors.New("minio unavailable")}
+	cleaner := &failingMultipartCleaner{err: errors.New("s3 unavailable")}
 	db.SetMultipartCleaner(cleaner)
 
 	ctx := context.Background()
 	now := time.Now().UTC()
 	fileRefJSON, err := json.Marshal(filestore.MultipartFileRef{
-		StorageBackend:       filestore.FileStorageBackendMinIO,
+		StorageBackend:       filestore.FileStorageBackendS3,
 		ChunkSizeBytes:       8,
 		ChunkCount:           1,
 		TotalPlaintextBytes:  4,

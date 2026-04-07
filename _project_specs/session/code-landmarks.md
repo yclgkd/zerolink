@@ -30,7 +30,7 @@ UPDATE WHEN:
 | `packages/backend/src/index.staging.ts` | Staging-only Worker entry — mirrors production exports while keeping staging on its own Worker and namespace |
 | `packages/backend/src/worker.ts` | Shared Worker fetch/router implementation used by both production and staging entrypoints; now also runs the hourly orphan-chunk cleanup hook |
 | `packages/shared/src/index.ts` | Shared package exports (types, schemas, constants, crypto) |
-| `deploy/selfhost/docker-compose.yml` | Default self-host Compose entrypoint — pulls published GHCR `api`/`web` images while running PostgreSQL and MinIO locally |
+| `deploy/selfhost/docker-compose.yml` | Default self-host Compose entrypoint — pulls published GHCR `api`/`web` images while running PostgreSQL locally; Garage S3 storage is optional via `--profile storage` |
 | `deploy/selfhost/docker-compose.build.yml` | Opt-in self-host Compose overlay — restores local source builds for `migrate`/`api` and points `web` at `frontend.build.Dockerfile` so local builds still compile frontend source |
 | `services/selfhost-api/cmd/selfhost-api/main.go` | Self-hosted Go API entrypoint — loads config, opens PostgreSQL, boots the in-memory realtime hub, and serves health, protocol routes, and `/api/ws/:uuid` |
 | `services/selfhost-api/cmd/selfhost-migrate/main.go` | Self-hosted Go migration entrypoint — runs embedded SQL migrations against PostgreSQL |
@@ -68,7 +68,7 @@ UPDATE WHEN:
 | `services/selfhost-api/internal/service/protocol_create_finish.go` | Self-hosted WebAuthn/softkey create-finalize flow — loads the stored create challenge and persists finalized admin credentials inside one channel transaction, so verifier/save failures roll back cleanly instead of stranding waiting links |
 | `services/selfhost-api/internal/service/protocol_manage.go` | Self-hosted manage-flow transaction layer — owns lock/compound entrypoints, shared delivery application, and realtime publish triggers |
 | `services/selfhost-api/internal/service/protocol_manage_helpers.go` | Self-hosted manage payload helper layer — owns manage input validation, canonical intent hashing, delivery-proof serialization, fingerprint/signature helpers, and delivery precondition checks |
-| `services/selfhost-api/internal/store/filestore/minio.go` | Self-hosted multipart object-store adapter — validates multipart request metadata, issues MinIO presigned upload/download URLs, and turns completed uploads into persisted `fileRef` records |
+| `services/selfhost-api/internal/store/filestore/s3.go` | Self-hosted multipart object-store adapter — validates multipart request metadata, issues S3 presigned upload/download URLs, and turns completed uploads into persisted `fileRef` records |
 | `services/selfhost-api/internal/httpapi/websocket.go` | Self-hosted WebSocket route — upgrades `/api/ws/:uuid`, validates subscribe payloads, sends the initial snapshot, and preserves the shared close-code/message contract |
 | `services/selfhost-api/internal/realtime/hub.go` | Self-hosted single-node realtime hub — tracks subscribed websocket clients, fan-outs `state_changed` / `channel_closed`, replies to pings, and auto-closes expired channels |
 | `services/selfhost-api/internal/webauthn/attestation.go` | Go-native WebAuthn attestation verifier for self-hosted create flows — validates RP ID/origin/challenge, parses attested credential data, supports `fmt:none` and packed self-attestation, and returns `StoredCredential` fields for persistence |
@@ -87,7 +87,7 @@ UPDATE WHEN:
 | `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — owns file policy env vars (`SELFHOST_API_FILE_*`) and still caps the legacy inline threshold for compatibility even though new file writes require object storage |
 | `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — now serves `/api/file_policy` and applies a config-driven JSON body limit for file-capable protocol requests |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
-| `deploy/selfhost/docker-compose.yml` | Self-hosted stack bundle — defaults to published GHCR `api`/`web` images while still starting PostgreSQL, migration job, MinIO, and the Caddy-served frontend with `.env` values |
+| `deploy/selfhost/docker-compose.yml` | Self-hosted stack bundle — defaults to published GHCR `api`/`web` images while starting PostgreSQL and migration job; Garage S3 storage is optional via `--profile storage` |
 | `deploy/selfhost/docker-compose.build.yml` | Self-hosted source-build overlay — reintroduces local Docker `build:` definitions for operators who want to compile from the checked-out repo, with `api`/`migrate` using the service-only context and `web` using `frontend.build.Dockerfile` |
 | `deploy/selfhost/Caddyfile` | Self-hosted reverse-proxy and SPA fallback config — `/api/*`, `/healthz`, and `/readyz` must route before static fallback |
 | `deploy/selfhost/api.Dockerfile` | Multi-stage image build for `selfhost-api` and `selfhost-migrate`; release and compose builds now run against the service-only context |
@@ -158,7 +158,7 @@ UPDATE WHEN:
 | `orchestrator-decrypt.ts` + `payload.ts` | `payloadKind` optional for compat, strict for file decode | Undeclared payloads stay on raw-text path |
 | `multipart.ts` | Chunk order bound cryptographically | IV = `baseIv XOR chunkIndex`, AAD includes chunk index |
 | `file-cleanup.ts` + `SecretVaultStorage.ts` | R2 cleanup has two layers | Channel delete removes immediately; hourly sweep reclaims stale orphans |
-| `config.go` + `.env.example` | Self-hosted files require object storage | Disabling MinIO/S3 disables file delivery entirely |
+| `config.go` + `.env.example` | Self-hosted files require S3 object storage | Disabling S3 disables file delivery entirely |
 | `SecretVault.ts` | `/ws` upgrade requires active channel | Dead links must not keep idle DO sockets alive |
 | `SecretVaultHttp.ts` | Prod logs omit raw exception text | Use `APP_ENV` not hostnames to reason about log detail |
 | `security-headers.ts` | `no-store` on SPA entry is intentional | `no-cache` breaks Verified Release gate |

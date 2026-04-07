@@ -156,7 +156,7 @@ func (s stubFileStore) Initiate(ctx context.Context, uploadID string, chunkCount
 
 func (s stubFileStore) PresignedUpload(ctx context.Context, uploadID string, index int, ttl time.Duration) (string, error) {
 	if s.presignedUpload == nil {
-		return "https://minio.example/upload", nil
+		return "https://s3.example/upload", nil
 	}
 	return s.presignedUpload(ctx, uploadID, index, ttl)
 }
@@ -170,7 +170,7 @@ func (s stubFileStore) CompleteUpload(ctx context.Context, req filestore.FileUpl
 
 func (s stubFileStore) PresignedDownload(ctx context.Context, fileRef filestore.MultipartFileRef, index int, ttl time.Duration) (string, error) {
 	if s.presignedDownload == nil {
-		return "https://minio.example/download", nil
+		return "https://s3.example/download", nil
 	}
 	return s.presignedDownload(ctx, fileRef, index, ttl)
 }
@@ -558,7 +558,7 @@ func TestFileInitiateRouteAcceptsNanoIDUUIDAndReturnsTargets(t *testing.T) {
 		Realtime:      realtimeHub,
 		FileStore: stubFileStore{
 			presignedUpload: func(_ context.Context, uploadID string, index int, _ time.Duration) (string, error) {
-				return "https://minio.example/upload/" + uploadID + "/" + strconv.Itoa(index), nil
+				return "https://s3.example/upload/" + uploadID + "/" + strconv.Itoa(index), nil
 			},
 		},
 		FilePolicy: FilePolicy{

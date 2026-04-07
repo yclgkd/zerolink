@@ -13,6 +13,14 @@ This is append-only. Never delete entries; archive old batches to archive/ when 
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-07] Replace archived MinIO server with Garage and generalize storage naming to S3
+
+**Decision**: Replace the MinIO server container with Garage in self-hosted Docker Compose, rename all internal "minio" identifiers to "s3", and make object storage optional via Docker Compose profiles.
+**Context**: The MinIO server repository (`minio/minio`) was archived on GitHub (last push 2026-02-12). The `minio-go/v7` Go client SDK remains actively maintained and is a generic S3-compatible client. Self-hosted deployments need an actively maintained object storage option, while users who bring their own S3-compatible provider should not be forced to run a local container.
+**Options Considered**: (A) Store all files in PostgreSQL — simpler deployment but poor fit for 512 MB files, no presigned URLs; (B) Replace MinIO with an actively maintained S3-compatible store and make it optional — minimal code changes, keeps presigned URL architecture; (C) Keep using the archived MinIO image — no work but accumulating security risk.
+**Choice**: Option B with Garage (`dxflrs/garage:v2.2.0`). Garage is lightweight (single binary, Rust, ~30 MB RAM), designed for small-scale self-hosting, and supports S3 V4 presigned URLs. The `minio-go/v7` SDK stays as the S3 client. Garage runs under `profiles: [storage]` so it only starts when explicitly requested. Three deployment modes: `inline` (no object storage), `s3` + built-in Garage, `s3` + external provider (AWS S3, R2, etc.).
+**Trade-offs**: Breaking change for env vars (`SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`) and wire format (`"minio"` → `"s3"` in `storageBackend`). Acceptable pre-1.0. SQL migration updates existing JSONB rows. Garage first-run bootstrap requires an init container for layout/key/bucket setup.
+
 ## [2026-04-02] Tag releases package the verified frontend build into published self-host web images
 
 **Decision**: Keep the release-prep frontend build + manifest generate/sign/verify sequence in `.github/workflows/deploy.yml`, then publish self-host API and web images in parallel while packaging the already-built `packages/frontend/dist` into `zerolink-web` instead of rebuilding it inside the release Docker step.
@@ -98,6 +106,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: The frontend keeps one orchestrator path, the DO still enforces delivery semantics, and the storage backend can change without widening the user-facing crypto contract. This also keeps terminal deletion / expiry logic responsible for cleaning up stored chunk objects regardless of the deployment.
 **Trade-offs**: Multipart now introduces a second payload transport to maintain, and shared code must preserve strict exactly-one semantics between `cipherBundle` and `fileRef`. The Cloudflare Worker path still depends on R2 object lifecycle cleanup, while the self-hosted path depends on MinIO bucket lifecycle and sweep behavior.
 **Follow-up (2026-04-02, docs sync)**: Deployment, architecture, contract, PRD, and security docs now explicitly describe the shipped multipart behavior instead of treating large-file transport and self-hosted object storage as future work. Cloudflare docs now call out the required R2 buckets, and self-hosted docs now document the `inline|minio` storage split and the inline threshold guardrail.
+**Follow-up (2026-04-07, MinIO→Garage)**: MinIO server archived; self-hosted storage backend renamed from `"minio"` to `"s3"`, container replaced by Garage, env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`. `minio-go/v7` SDK retained as generic S3 client.
 
 ## [2026-04-02] Large file delivery uses typed multipart `fileRef` metadata over storage-specific backends
 

@@ -218,7 +218,7 @@ func validateMultipartFileRef(fileRef filestore.MultipartFileRef) error {
 	if err := fileRef.Validate(); err != nil {
 		return err
 	}
-	if fileRef.StorageBackend != filestore.FileStorageBackendMinIO {
+	if fileRef.StorageBackend != filestore.FileStorageBackendS3 {
 		return fmt.Errorf("unsupported storage backend %q", fileRef.StorageBackend)
 	}
 	return nil

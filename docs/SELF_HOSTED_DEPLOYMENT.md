@@ -9,7 +9,7 @@ This guide runs the published ZeroLink self-hosted stack from GitHub Container R
 - `web`: Caddy serving the built frontend and reverse-proxying `/api/*`
 - `api`: Go self-hosted API
 - `db`: PostgreSQL
-- `minio`: S3-compatible object store for encrypted multipart file chunks
+- `garage` *(optional, via `--profile storage`)*: S3-compatible object store for encrypted multipart file chunks
 - `migrate`: one-shot migration job
 
 ## Realtime Behavior
@@ -27,14 +27,17 @@ export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
 curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/garage.toml"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/garage-init.sh"
 curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
 sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
-docker compose up -d
+docker compose --profile storage up -d
 ```
 
-The bundled `.env.example` defaults to `SELFHOST_API_FILE_STORAGE_BACKEND=minio`, which enables
-multipart file delivery up to `512 MiB` with `4 MiB` encrypted chunks.
+The bundled `.env.example` defaults to `SELFHOST_API_FILE_STORAGE_BACKEND=s3`, which enables
+multipart file delivery up to `512 MiB` with `4 MiB` encrypted chunks via the bundled Garage
+container (started by the `storage` profile).
 
 The default Compose file pulls these public images:
 
@@ -65,7 +68,6 @@ Then open:
 
 - App: `http://localhost:8080`
 - Readiness: `http://localhost:8080/readyz`
-- MinIO Console: `http://localhost:9001`
 
 ## Environment Notes
 
@@ -74,35 +76,44 @@ Then open:
 - `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` selects which GHCR namespace `migrate`, `api`, and `web` pull from
 - `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
-- `SELFHOST_API_FILE_STORAGE_BACKEND=minio` enables multipart delivery through presigned MinIO PUT/GET URLs
+- `SELFHOST_API_FILE_STORAGE_BACKEND=s3` enables multipart delivery through S3 presigned PUT/GET URLs
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` keeps the inline cutoff below the legacy inline envelope limit
-- `SELFHOST_API_MINIO_*` already points at the bundled `minio` service and default `zerolink-files` bucket
+- `SELFHOST_API_S3_*` configures the S3-compatible storage connection; when using the bundled Garage container, these already point at `garage:3900` and the default `zerolink-files` bucket
 
 If you change the exposed port or hostname, update `SELFHOST_API_RP_ORIGIN` before relying on WebAuthn flows.
 
 ## Storage Configuration
 
-By default, the `docker-compose.yml` file runs a local **MinIO** container (`minio:9000`) and stores uploaded file chunks in the Docker volume `minio-data`.
+The self-hosted stack supports three storage modes:
 
-### 1. Default Local MinIO
-If you stick with the default local setup:
-- **Default Credentials**: The bundled `.env.example` uses `minioadmin:minioadmin`. **Change these before exposing the service**.
-- **Data Location**: Encrypted file parts reside in the `minio-data` volume on the host. Back up this volume along with `postgres-data` to preserve your state.
-- **Admin Console**: The MinIO management console is exposed on port `9001` (`http://localhost:9001`) for debugging and bucket inspection.
+- **`s3` + built-in Garage** (default): the bundled `.env.example` uses this mode with `docker compose --profile storage up -d`.
+- **`s3` + external provider**: configure `SELFHOST_API_S3_*` to point at AWS S3, Cloudflare R2, Aliyun OSS, etc. Run `docker compose up -d` without the `storage` profile.
+- **`inline`**: small files only (up to ~2 MiB), no object storage needed.
+
+### 1. Default Local Garage
+The quickstart command above starts Garage automatically. If you are already running with the default setup:
+
+```bash
+docker compose --profile storage up -d
+```
+
+- **Credentials**: See `.env.example` for the Garage access key and secret key. **Change these before exposing the service**.
+- **Data Location**: Encrypted file parts reside in the `garage-data` volume on the host. Back up this volume along with `postgres-data` to preserve your state.
+- Garage is optional. If you use an external S3 provider, just run `docker compose up -d` without the `storage` profile.
 
 ### 2. External S3-Compatible Cloud Storage
-You can bypass the local MinIO container and connect the ZeroLink API directly to any S3-compatible object storage (e.g., AWS S3, Cloudflare R2, Aliyun OSS, Tencent COS) without code changes.
+You can skip the Garage container entirely and connect the ZeroLink API directly to any S3-compatible object storage (e.g., AWS S3, Cloudflare R2, Aliyun OSS, Tencent COS) without code changes.
 
-Update the following variables in your `.env` file:
+Set `SELFHOST_API_FILE_STORAGE_BACKEND=s3` and update the following variables in your `.env` file:
 ```env
-SELFHOST_API_MINIO_ENDPOINT=s3.us-east-1.amazonaws.com  # Do NOT include https:// prefix
-SELFHOST_API_MINIO_ACCESS_KEY=your_access_key
-SELFHOST_API_MINIO_SECRET_KEY=your_secret_key
-SELFHOST_API_MINIO_BUCKET=zerolink-files
-SELFHOST_API_MINIO_USE_SSL=true  # Set to true for public cloud providers
-SELFHOST_API_MINIO_REGION=us-east-1  # Set to 'auto' for Cloudflare R2
+SELFHOST_API_S3_ENDPOINT=s3.us-east-1.amazonaws.com
+SELFHOST_API_S3_ACCESS_KEY=your_access_key
+SELFHOST_API_S3_SECRET_KEY=your_secret_key
+SELFHOST_API_S3_BUCKET=zerolink-files
+SELFHOST_API_S3_USE_SSL=true
+SELFHOST_API_S3_REGION=us-east-1
 ```
-*Note: If you use external storage, you can remove the `minio` service from your `docker-compose.yml` to save local resources. You must also remove the `minio` entry under `api.depends_on` and the `minio-data` volume definition, otherwise `docker compose up` will fail.*
+*Note: When using external storage, simply run `docker compose up -d` without `--profile storage`. The Garage container will not start, saving local resources.*
 
 ### 3. Extreme Lightweight "Inline" Mode
 If you do not want to run an object storage server at all (e.g., on a Raspberry Pi) and only need to share small files, you can disable multipart storage entirely.
@@ -115,7 +126,7 @@ SELFHOST_API_FILE_MAX_BYTES=2080760
 SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
 When in `inline` mode:
-- The system bypasses MinIO.
+- No object storage is needed.
 - Encrypted file data is stored as a JSON payload directly in the **PostgreSQL database** (JSONB column).
 - **File size is strictly limited** to roughly `2 MiB`.
 
@@ -123,13 +134,13 @@ When in `inline` mode:
 
 1. Start the stack with `docker compose up -d`.
 2. Confirm `curl http://localhost:8080/readyz` returns `200`.
-3. Confirm `curl http://localhost:8080/api/file_policy` reports `multipartSupported: true` when running the default MinIO-backed stack.
+3. Confirm `curl http://localhost:8080/api/file_policy` reports `multipartSupported: true` when running with `SELFHOST_API_FILE_STORAGE_BACKEND=s3`.
 4. Open `http://localhost:8080` in one browser window and create a Quick Share channel.
 5. Open the generated share link in a second window or incognito session and complete lock.
 6. Confirm the sender manage page auto-updates to `locked` without a manual refresh.
 7. Deliver a secret from the manage page.
 8. Confirm the receiver share page auto-updates to `delivered` and shows the decrypt panel.
-9. Optional: deliver a file larger than `2 MiB` and confirm the receiver can still decrypt/download it; this exercises the MinIO multipart path instead of inline `cipherBundle` delivery.
+9. Optional: deliver a file larger than `2 MiB` and confirm the receiver can still decrypt/download it; this exercises the S3 multipart path instead of inline `cipherBundle` delivery.
 
 If WebSocket delivery is interrupted, the frontend will fall back to `/api/public/:uuid` polling automatically.
 
@@ -140,8 +151,8 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 - Production tag releases publish the GHCR images with multi-arch `linux/amd64` + `linux/arm64` manifests and Buildx provenance/SBOM attestations, so operators can trace a pulled image back to the release commit and GitHub Actions run.
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.
-- Compose stores MinIO object data in the `minio-data` volume.
-- Small files at or below `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` stay on the inline `cipherBundle` path; larger files use `/api/file/initiate`, direct MinIO presigned PUT/GET URLs, `/api/file/complete`, and `fileRef` metadata.
+- When using the `storage` profile, Compose stores Garage object data in the `garage-data` volume.
+- Small files at or below `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` stay on the inline `cipherBundle` path; larger files use `/api/file/initiate`, direct S3 presigned PUT/GET URLs, `/api/file/complete`, and `fileRef` metadata.
 - The API server does not set a global HTTP write timeout so that WebSocket connections are not killed mid-session. Per-write deadlines are enforced inside the realtime hub. If you add a Caddy `timeouts` block, do not set `write_timeout` — it will terminate long-lived WebSocket sessions through the reverse proxy.
 
 ## Stop The Stack

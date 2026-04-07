@@ -69,7 +69,7 @@ v3.0 的产品目标：
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
 - 官方 Cloudflare 版保持默认
-- 提供 Docker Compose 一键自托管（当前打包为 Caddy + Go API + PostgreSQL + MinIO，对已发布前端契约提供协议等价实现）
+- 提供 Docker Compose 一键自托管（当前打包为 Caddy + Go API + PostgreSQL + Garage，对已发布前端契约提供协议等价实现）
 - 发布链：签名 Manifest + 可复现构建
 
 ---

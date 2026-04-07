@@ -1,5 +1,5 @@
 # Self-contained local source-build stack.
-# Infrastructure services (db, minio) mirror docker-compose.yml — keep in sync.
+# Infrastructure services (db, garage) mirror docker-compose.yml — keep in sync.
 name: zerolink-selfhost
 
 services:
@@ -19,33 +19,39 @@ services:
       timeout: 5s
       retries: 20
 
-  minio:
-    image: minio/minio:latest
+  garage:
+    image: dxflrs/garage:v2.2.0
+    profiles: [storage]
     restart: unless-stopped
     env_file:
       - path: .env
         required: true
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    command:
-      - server
-      - /data
-      - --console-address
-      - ":9001"
     volumes:
-      - minio-data:/data
+      - garage-data:/var/lib/garage
+      - ./garage.toml:/etc/garage.toml:ro
     expose:
-      - "9000"
-    ports:
-      - "9001:9001"
+      - "3900"
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -sf http://127.0.0.1:9000/minio/health/ready || exit 1
+        - wget -qO /dev/null http://127.0.0.1:3903/health || exit 1
       interval: 5s
       timeout: 5s
       retries: 20
+
+  garage-init:
+    image: alpine:3.21
+    profiles: [storage]
+    env_file:
+      - path: .env
+        required: true
+    depends_on:
+      garage:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./garage-init.sh:/init.sh:ro
+    restart: "no"
 
   migrate:
     build:
@@ -72,8 +78,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      minio:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     expose:
@@ -99,4 +103,4 @@ services:
 
 volumes:
   postgres-data:
-  minio-data:
+  garage-data:

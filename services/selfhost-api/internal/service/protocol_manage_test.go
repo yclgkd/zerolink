@@ -269,7 +269,7 @@ func TestProtocolServiceMultipartFileRefHappyPath(t *testing.T) {
 	}
 
 	fileRef := filestore.MultipartFileRef{
-		StorageBackend:       filestore.FileStorageBackendMinIO,
+		StorageBackend:       filestore.FileStorageBackendS3,
 		ChunkSizeBytes:       262_144,
 		ChunkCount:           1,
 		TotalPlaintextBytes:  64,
@@ -335,8 +335,8 @@ func TestProtocolServiceMultipartFileRefHappyPath(t *testing.T) {
 	if decryptFetch.CipherBundle != nil {
 		t.Fatal("decryptFetch.CipherBundle != nil, want multipart payload only")
 	}
-	if decryptFetch.FileRef.StorageBackend != filestore.FileStorageBackendMinIO {
-		t.Fatalf("decryptFetch.FileRef.StorageBackend = %q, want minio", decryptFetch.FileRef.StorageBackend)
+	if decryptFetch.FileRef.StorageBackend != filestore.FileStorageBackendS3 {
+		t.Fatalf("decryptFetch.FileRef.StorageBackend = %q, want s3", decryptFetch.FileRef.StorageBackend)
 	}
 	if decryptFetch.FileRef.Chunks[0].StorageKey != fileRef.Chunks[0].StorageKey {
 		t.Fatalf("decryptFetch.FileRef.Chunks[0].StorageKey = %q, want %q", decryptFetch.FileRef.Chunks[0].StorageKey, fileRef.Chunks[0].StorageKey)
