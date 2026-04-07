@@ -15,10 +15,10 @@ KEY_NAME="zerolink"
 api() { curl -sf -H "${AUTH}" -H "Content-Type: application/json" "$@"; }
 
 wait_ready() {
-  echo "Waiting for Garage..."
+  echo "Waiting for Garage admin API..."
   ATTEMPTS=0
   MAX_ATTEMPTS=60
-  until curl -sf "${ADMIN_URL}/health" > /dev/null 2>&1; do
+  until api "${ADMIN_URL}/v2/GetClusterStatus" > /dev/null 2>&1; do
     ATTEMPTS=$((ATTEMPTS + 1))
     if [ "${ATTEMPTS}" -ge "${MAX_ATTEMPTS}" ]; then
       echo "ERROR: Garage did not become ready within ${MAX_ATTEMPTS}s."
@@ -42,8 +42,8 @@ ensure_layout() {
   NODE_ID=$(api "${ADMIN_URL}/v2/GetClusterStatus" | jq -r '.nodes[0].id')
   echo "Assigning layout for node ${NODE_ID}..."
 
-  api -X POST "${ADMIN_URL}/v2/UpdateClusterLayout" \
-    -d "[{\"id\":\"${NODE_ID}\",\"zone\":\"dc1\",\"capacity\":1073741824}]" > /dev/null
+  BODY=$(printf '{"roles":[{"id":"%s","zone":"dc1","capacity":1073741824,"tags":[]}]}' "${NODE_ID}")
+  api -X POST "${ADMIN_URL}/v2/UpdateClusterLayout" -d "${BODY}" > /dev/null
 
   VERSION=$(api "${ADMIN_URL}/v2/GetClusterLayout" | jq '.version + 1')
   api -X POST "${ADMIN_URL}/v2/ApplyClusterLayout" \

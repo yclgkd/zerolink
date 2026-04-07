@@ -9,7 +9,7 @@ rpc_public_addr = "garage:3901"
 # rpc_secret is overridden by GARAGE_RPC_SECRET env var.
 
 [s3_api]
-s3_region = "garage"
+s3_region = "us-east-1"
 api_bind_addr = "[::]:3900"
 
 [admin]

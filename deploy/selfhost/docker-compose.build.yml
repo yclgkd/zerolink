@@ -33,8 +33,10 @@ services:
       - "3900"
     healthcheck:
       test:
-        - CMD-SHELL
-        - wget -qO /dev/null http://127.0.0.1:3903/health || exit 1
+        - CMD
+        - /garage
+        - stats
+        - -a
       interval: 5s
       timeout: 5s
       retries: 20
