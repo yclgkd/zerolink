@@ -32,7 +32,6 @@ wait_ready() {
 # ── layout ───────────────────────────────────────────────────────
 ensure_layout() {
   LAYOUT=$(api "${ADMIN_URL}/v2/GetClusterLayout")
-  STAGED=$(echo "${LAYOUT}" | jq '.stagedRoleChanges | length')
   NODE_COUNT=$(echo "${LAYOUT}" | jq '.roles | length')
 
   if [ "${NODE_COUNT}" -gt 0 ]; then

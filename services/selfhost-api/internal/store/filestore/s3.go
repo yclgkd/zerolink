@@ -27,7 +27,7 @@ const (
 type FileStorageBackend string
 
 const (
-	FileStorageBackendR2    FileStorageBackend = "r2"
+	FileStorageBackendR2 FileStorageBackend = "r2"
 	FileStorageBackendS3 FileStorageBackend = "s3"
 )
 
