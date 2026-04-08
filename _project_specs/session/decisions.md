@@ -13,6 +13,15 @@ This is append-only. Never delete entries; archive old batches to archive/ when 
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-08] Pre-release builds no longer decrypt legacy inline file payloads as files
+
+**Decision**: Remove receiver-side compatibility that upgraded inline `cipherBundle` plaintext into downloadable file payloads. Inline decrypt is now text-only; downloadable file decrypt requires `fileRef` multipart transport.
+**Context**: ZeroLink has not launched yet, so there is no released-product requirement to preserve old inline file deliveries. Keeping the compatibility path only widened receiver decrypt semantics and left tests/docs implying support for a transport the product no longer writes.
+**Options Considered**: Keep the legacy inline-file decrypt path indefinitely; keep it only for undeclared payloads; remove it completely before launch while preserving multipart file support.
+**Choice**: Treat all inline decrypt payloads as text, reject any signed delivery metadata that claims `payloadKind: "file"` while still delivering inline, and keep file payload decoding only on the `fileRef` multipart path.
+**Reasoning**: This collapses file handling to one transport invariant: new and readable file deliveries both require `fileRef`. The receiver no longer heuristically upgrades inline ciphertext into file downloads, which simplifies the protocol boundary and reduces compatibility-only surface area before launch.
+**Trade-offs**: Any local fixtures or seeded channels that still carry historical inline file envelopes now surface as raw text instead of downloadable files, or fail integrity checks if they simultaneously claim `payloadKind: "file"`. That break is acceptable because no released product data depends on the removed path.
+
 ## [2026-04-02] Tag releases package the verified frontend build into published self-host web images
 
 **Decision**: Keep the release-prep frontend build + manifest generate/sign/verify sequence in `.github/workflows/deploy.yml`, then publish self-host API and web images in parallel while packaging the already-built `packages/frontend/dist` into `zerolink-web` instead of rebuilding it inside the release Docker step.
@@ -39,6 +48,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Standardize new file writes on object storage across hosted and self-hosted runtimes, reject `payloadKind=file` intents that still carry `cipherBundle`, and leave receiver decrypt logic backward-compatible with historical inline file payloads.
 **Reasoning**: Files now have one write path, one cleanup model, and one server-side validation rule, while text delivery remains inline and legacy delivered records continue to decrypt without migration.
 **Trade-offs**: Deployments without multipart/object-storage support can no longer deliver files at all, so the frontend must surface that capability gap explicitly instead of silently falling back to inline file storage.
+**Follow-up (2026-04-08)**: Because the product had not launched and no released data depended on the old path, the receiver-side compatibility for historical inline file payloads was removed. Inline decrypt is now text-only; file decrypt requires `fileRef`.
 
 ## [2026-04-02] Hourly Worker sweep now reclaims stale orphan R2 upload chunks
 
@@ -668,4 +678,3 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Disable autofill across all passphrase prompts
 **Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
 **Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
-

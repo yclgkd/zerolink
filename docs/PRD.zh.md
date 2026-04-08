@@ -438,7 +438,7 @@ Quick Share 模式（额外字段 `adminMode` + `softkeySignature`，不含 `ass
 }
 ```
 
-大文件用 `fileRef`（见 10.6）替代 `cipherBundle`，`payloadKind` 为 `"file"`。
+文件交付用 `fileRef`（见 10.6）替代 `cipherBundle`，`payloadKind` 为 `"file"`。
 
 #### POST /api/delete_commit/:uuid
 
@@ -471,7 +471,7 @@ Response：
 {
   "ok": true,
   "cipherBundle": { "...": "inline 载荷，与 10.4 相同结构" },
-  "fileRef": { "...": "大文件时替代 cipherBundle" },
+  "fileRef": { "...": "multipart 文件载荷元数据" },
   "receiverPubFpr": "hex...",
   "cipherVersion": 1,
   "deliveryAuth": { "...": "投递者身份证明，可选" },
@@ -481,7 +481,7 @@ Response：
 
 `cipherBundle` 和 `fileRef` 互斥，必有且仅有一个。
 
-### 10.6 文件 API（multipart 大文件）
+### 10.6 文件 API（multipart 文件交付）
 
 #### GET /api/file_policy
 
@@ -941,7 +941,7 @@ Response：
 
 - PAD_BLOCK 默认 4096，可在 update payload 中带 pad_block（用于审计一致性；不建议公开展示）
 - pad_rand 必须为加密安全随机数
-- 若 orig_len 仍在 inline 上限内，则继续走 legacy inline 路径；否则在部署声明支持时切到 multipart 文件模式，不支持时按 MAX_PLAINTEXT_BYTES 拒绝
+- 这个 padding 格式仍用于 inline 密文生成。文本仍在 `MAX_PLAINTEXT_BYTES` 约束下走 inline `cipherBundle`；文件交付不再回退到 legacy inline 存储，而是要求 multipart 对象存储和 `fileRef` 元数据。
 
 ### E3. 解码规则（接收方）
 
@@ -1077,4 +1077,3 @@ Quick Share 在 v3.0 中是正式用户入口（不再是降级模式）。
 
 - 短指纹：前 6 bytes + 后 6 bytes（hex）
 - 完整 hex 折叠显示（用户主动展开）
-

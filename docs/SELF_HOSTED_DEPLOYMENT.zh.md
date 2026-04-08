@@ -74,7 +74,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 - `ZEROLINK_IMAGE_TAG=latest` 控制 `migrate`、`api`、`web` 默认拉取的发布镜像 tag
 - 默认 `SELFHOST_API_DATABASE_URL` 已指向 Compose 里的 `db` 服务
 - `SELFHOST_API_FILE_STORAGE_BACKEND=minio` 会通过 MinIO 预签名 PUT/GET URL 启用 multipart 文件传输
-- `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 把 inline 分界线限制在旧的 inline envelope 上限之内
+- `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 仍需受历史 inline envelope 上限约束，因为这个字段还保留在共享 file-policy 合约里
 - `SELFHOST_API_MINIO_*` 已默认指向打包内的 `minio` 服务和 `zerolink-files` bucket
 
 如果你修改了端口或主机名，先同步更新 `SELFHOST_API_RP_ORIGIN`，再测试 WebAuthn。
@@ -103,20 +103,21 @@ SELFHOST_API_MINIO_REGION=cn-hangzhou  # 如果是 Cloudflare R2 请设为 auto
 ```
 *提示：如果你配置了外部存储，你可以在 `docker-compose.yml` 中删除 `minio` 服务定义以节省本地资源。同时需要删除 `api.depends_on` 中的 `minio` 条目以及 `volumes` 中的 `minio-data` 定义，否则 `docker compose up` 会报错。*
 
-### 3. 极简 "Inline" 模式
-如果你只是想在个人的树莓派或极低配置 NAS 上跑着玩，完全不想启动任何对象存储服务，并且只用于分享极小的文件，可以彻底关闭 multipart 机制。
+### 3. 无对象存储模式（禁用文件上传）
+如果你完全不想启动对象存储服务，可以把 API 切到 `inline` storage backend。这个模式**不会**恢复旧版 inline 文件存储；它的实际效果是禁用文件上传，同时保留文本分享。
 
-在 `.env` 中设置以下变量以退回旧版的极简模式：
+在 `.env` 中设置以下变量：
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
 SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # backend=inline 时默认即为 false；若你的 .env 从 .env.example 复制而来则需显式覆盖
 SELFHOST_API_FILE_MAX_BYTES=2080760
 SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
-在 `inline` 模式下：
+在 `SELFHOST_API_FILE_STORAGE_BACKEND=inline` 下：
 - 系统不依赖 MinIO。
-- 加密后的文件数据以 JSON 载荷形式直接保存在 **PostgreSQL 数据库**（JSONB 列）中。
-- **文件体积受到严格限制**，最大不能超过约 `2 MiB`。
+- 前端对文件投递会返回 `FILE_STORAGE_UNAVAILABLE`。
+- 文本投递仍走正常的 inline `cipherBundle` 路径。
+- `SELFHOST_API_FILE_MAX_BYTES` 和 `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` 仍必须受历史 inline envelope 上限约束，因为它们还保留在共享 file-policy / config 合约里。
 
 ## Smoke Test
 
@@ -128,7 +129,7 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 6. 确认 sender 的 manage 页面无需手动刷新就切到 `locked`。
 7. 在 manage 页面 deliver 一个 secret。
 8. 确认 receiver 的 share 页面自动切到 `delivered`，并显示 decrypt panel。
-9. 可选：投递一个大于 `2 MiB` 的文件，并确认接收端仍能解密/下载；这会走 MinIO multipart 路径，而不是 inline `cipherBundle`。
+9. 可选：投递一个大于 `2 MiB` 的文件，并确认接收端仍能解密/下载；这会走 MinIO multipart `fileRef` 路径。
 
 如果 WebSocket 传输不可用，前端会自动退回 `/api/public/:uuid` 轮询。
 
@@ -140,7 +141,7 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 - realtime hub 是进程内实现；如果要跑多个 API 副本，需要共享 pub/sub。
 - PostgreSQL 数据存放在 `postgres-data` volume 中。
 - MinIO 对象数据存放在 `minio-data` volume 中。
-- 小文件（不超过 `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES`）继续走 inline `cipherBundle`；更大的文件走 `/api/file/initiate`、MinIO 直传/直下、`/api/file/complete` 和 `fileRef` 元数据。
+- 当前所有文件交付都走 `/api/file/initiate`、MinIO 直传/直下、`/api/file/complete` 和 `fileRef` 元数据。`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` 仍是策略/配置兼容字段，不再把小文件切回 inline 文件路径。
 - API 服务没有设置全局 HTTP write timeout，以避免 WebSocket 长连接被断开；per-write 超时由 realtime hub 内部保证。如果你在 Caddy 配置中添加 `timeouts` 块，**不要**设置 `write_timeout`，否则反向代理会中断 WebSocket 会话。
 
 ## 停止

@@ -75,7 +75,7 @@ Then open:
 - `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
 - `SELFHOST_API_FILE_STORAGE_BACKEND=minio` enables multipart delivery through presigned MinIO PUT/GET URLs
-- `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` keeps the inline cutoff below the legacy inline envelope limit
+- `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` remains capped by the historical inline envelope limit because the field is still part of the shared file-policy contract
 - `SELFHOST_API_MINIO_*` already points at the bundled `minio` service and default `zerolink-files` bucket
 
 If you change the exposed port or hostname, update `SELFHOST_API_RP_ORIGIN` before relying on WebAuthn flows.
@@ -104,20 +104,21 @@ SELFHOST_API_MINIO_REGION=us-east-1  # Set to 'auto' for Cloudflare R2
 ```
 *Note: If you use external storage, you can remove the `minio` service from your `docker-compose.yml` to save local resources. You must also remove the `minio` entry under `api.depends_on` and the `minio-data` volume definition, otherwise `docker compose up` will fail.*
 
-### 3. Extreme Lightweight "Inline" Mode
-If you do not want to run an object storage server at all (e.g., on a Raspberry Pi) and only need to share small files, you can disable multipart storage entirely.
+### 3. No-Object-Storage Mode (Files Disabled)
+If you do not want to run an object storage server at all (for example, on a Raspberry Pi), you can switch the API to `inline` storage backend mode. This does **not** re-enable legacy inline file storage; it disables file uploads while keeping text shares available.
 
-Set these variables in your `.env` to enable legacy inline-only behavior:
+Set these variables in your `.env`:
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
 SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # Defaults to false for inline; explicit here in case your .env inherits true from .env.example
 SELFHOST_API_FILE_MAX_BYTES=2080760
 SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
-When in `inline` mode:
+When `SELFHOST_API_FILE_STORAGE_BACKEND=inline`:
 - The system bypasses MinIO.
-- Encrypted file data is stored as a JSON payload directly in the **PostgreSQL database** (JSONB column).
-- **File size is strictly limited** to roughly `2 MiB`.
+- The frontend reports `FILE_STORAGE_UNAVAILABLE` for file delivery attempts.
+- Text delivery still works through the normal inline `cipherBundle` path.
+- `SELFHOST_API_FILE_MAX_BYTES` and `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` must still stay within the historical inline envelope limit because those fields remain part of the shared file-policy/config contract.
 
 ## Smoke Test
 
@@ -129,7 +130,7 @@ When in `inline` mode:
 6. Confirm the sender manage page auto-updates to `locked` without a manual refresh.
 7. Deliver a secret from the manage page.
 8. Confirm the receiver share page auto-updates to `delivered` and shows the decrypt panel.
-9. Optional: deliver a file larger than `2 MiB` and confirm the receiver can still decrypt/download it; this exercises the MinIO multipart path instead of inline `cipherBundle` delivery.
+9. Optional: deliver a file larger than `2 MiB` and confirm the receiver can still decrypt/download it; this exercises the MinIO multipart `fileRef` path.
 
 If WebSocket delivery is interrupted, the frontend will fall back to `/api/public/:uuid` polling automatically.
 
@@ -141,7 +142,7 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.
 - Compose stores MinIO object data in the `minio-data` volume.
-- Small files at or below `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` stay on the inline `cipherBundle` path; larger files use `/api/file/initiate`, direct MinIO presigned PUT/GET URLs, `/api/file/complete`, and `fileRef` metadata.
+- Current file deliveries always use `/api/file/initiate`, direct MinIO presigned PUT/GET URLs, `/api/file/complete`, and `fileRef` metadata. `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` remains a policy/config compatibility field; it no longer switches small files onto an inline file path.
 - The API server does not set a global HTTP write timeout so that WebSocket connections are not killed mid-session. Per-write deadlines are enforced inside the realtime hub. If you add a Caddy `timeouts` block, do not set `write_timeout` — it will terminate long-lived WebSocket sessions through the reverse proxy.
 
 ## Stop The Stack

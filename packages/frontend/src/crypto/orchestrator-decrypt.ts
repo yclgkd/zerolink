@@ -130,38 +130,38 @@ async function resolveCipherVersionForDecrypt(
   return payload.cipherVersion;
 }
 
+function decodeInlineDeliveredPayload(plaintextBytes: Uint8Array): DecryptedSharePayload {
+  return {
+    kind: 'text',
+    text: textDecoder.decode(plaintextBytes),
+  };
+}
+
+function decodeMultipartDeliveredPayload(plaintextBytes: Uint8Array): DecryptedSharePayload {
+  const decryptedPayload = decodeSharePayload(plaintextBytes);
+  if (decryptedPayload.kind !== 'file') {
+    throw new Error('INTEGRITY_MISMATCH');
+  }
+  return decryptedPayload;
+}
+
 function decodeDeliveredPayload(
   plaintextBytes: Uint8Array,
   declaredKind: 'text' | 'file' | undefined,
-  hasDeliveryAuth: boolean
+  isMultipart: boolean
 ): DecryptedSharePayload {
-  if (declaredKind === 'text') {
-    return {
-      kind: 'text',
-      text: textDecoder.decode(plaintextBytes),
-    };
+  if (isMultipart) {
+    if (declaredKind === 'text') {
+      throw new Error('INTEGRITY_MISMATCH');
+    }
+    return decodeMultipartDeliveredPayload(plaintextBytes);
   }
 
-  if (declaredKind === undefined && hasDeliveryAuth) {
-    return {
-      kind: 'text',
-      text: textDecoder.decode(plaintextBytes),
-    };
-  }
-
-  const decryptedPayload = decodeSharePayload(plaintextBytes);
-  if (declaredKind === 'file' && decryptedPayload.kind !== 'file') {
+  if (declaredKind === 'file') {
     throw new Error('INTEGRITY_MISMATCH');
   }
 
-  if (declaredKind === undefined && decryptedPayload.kind !== 'file') {
-    return {
-      kind: 'text',
-      text: textDecoder.decode(plaintextBytes),
-    };
-  }
-
-  return decryptedPayload;
+  return decodeInlineDeliveredPayload(plaintextBytes);
 }
 
 function assertMonotonicDeliveryState(
@@ -364,7 +364,7 @@ export async function executeDecryptDelivered(
     const decryptedPayload = decodeDeliveredPayload(
       plaintextBytes,
       payload.deliveryAuth?.meta.payloadKind,
-      payload.deliveryAuth !== undefined
+      payload.fileRef !== undefined
     );
     wipeBytes(plaintextBytes);
     try {

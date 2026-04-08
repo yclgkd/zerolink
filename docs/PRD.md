@@ -436,7 +436,7 @@ Quick Share mode (adds `adminMode` + `softkeySignature`, no `assertion`):
 }
 ```
 
-Large files use `fileRef` (see § 10.6) instead of `cipherBundle`, with `payloadKind: "file"`.
+File deliveries use `fileRef` (see § 10.6) instead of `cipherBundle`, with `payloadKind: "file"`.
 
 #### POST /api/delete_commit/:uuid
 
@@ -469,7 +469,7 @@ Response:
 {
   "ok": true,
   "cipherBundle": { "...": "inline payload, same structure as § 10.4" },
-  "fileRef": { "...": "replaces cipherBundle for large files" },
+  "fileRef": { "...": "multipart file payload metadata" },
   "receiverPubFpr": "hex...",
   "cipherVersion": 1,
   "deliveryAuth": { "...": "delivery proof, optional" },
@@ -479,7 +479,7 @@ Response:
 
 `cipherBundle` and `fileRef` are mutually exclusive; exactly one must be present.
 
-### 10.6 File API (Multipart Large Files)
+### 10.6 File API (Multipart File Delivery)
 
 #### GET /api/file_policy
 
@@ -939,7 +939,7 @@ Error semantics (coarse-grained):
 
 - PAD_BLOCK defaults to 4096; can be included in the update payload as pad_block (for audit consistency; not recommended for public display)
 - pad_rand must be cryptographically secure random numbers
-- If orig_len stays within the inline ceiling, keep the legacy inline path; otherwise switch to multipart file mode when the deployment advertises support, or reject the payload per MAX_PLAINTEXT_BYTES
+- This padding format still governs inline ciphertext generation. Text stays on the inline `cipherBundle` path subject to `MAX_PLAINTEXT_BYTES`; file delivery no longer falls back to legacy inline storage and instead requires multipart object storage plus `fileRef` metadata.
 
 ### E3. Decoding Rules (Receiver)
 
@@ -1075,4 +1075,3 @@ Public endpoint /api/public/:uuid:
 
 - Short fingerprint: first 6 bytes + last 6 bytes (hex)
 - Full hex displayed collapsed (user must explicitly expand)
-
