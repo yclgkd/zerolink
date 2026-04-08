@@ -34,6 +34,44 @@
       },
       "canonical": "{\"cipherBundle\":{\"aad\":\"aad-value\",\"ciphertext\":\"ct-value\",\"ciphertextHash\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"encContentKey\":\"eck-value\",\"iv\":\"iv-value-12b\",\"padBlock\":4096},\"expireAt\":null,\"nonce\":\"nonce-value-base64url\",\"op\":\"update\",\"receiverPubFpr\":\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\"timestamp\":1730000300000,\"uuid\":\"abcdefghijklmnopqrstu\",\"version\":0}",
       "sha256Hex": "10f52a86cf77b1b890463d4307c8171162bf03a32a2af7cb3339f75a2b49abe7"
+    },
+    {
+      "name": "update-intent-multipart-file",
+      "input": {
+        "op": "update",
+        "uuid": "abcdefghijklmnopqrstu",
+        "version": 1,
+        "timestamp": 1730000500000,
+        "nonce": "multipart-nonce-b64url",
+        "receiverPubFpr": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "payloadKind": "file",
+        "fileRef": {
+          "storageBackend": "s3",
+          "chunkSizeBytes": 262144,
+          "chunkCount": 2,
+          "totalPlaintextBytes": 524288,
+          "totalCiphertextBytes": 524416,
+          "baseIv": "YmFzZS1pdg",
+          "encContentKey": "ZW5jLWtleQ",
+          "chunks": [
+            {
+              "index": 0,
+              "storageKey": "files/upload-1/0000.bin",
+              "ciphertextBytes": 262208,
+              "ciphertextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "index": 1,
+              "storageKey": "files/upload-1/0001.bin",
+              "ciphertextBytes": 262208,
+              "ciphertextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "expireAt": null
+      },
+      "canonical": "{\"expireAt\":null,\"fileRef\":{\"baseIv\":\"YmFzZS1pdg\",\"chunkCount\":2,\"chunkSizeBytes\":262144,\"chunks\":[{\"ciphertextBytes\":262208,\"ciphertextHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"index\":0,\"storageKey\":\"files/upload-1/0000.bin\"},{\"ciphertextBytes\":262208,\"ciphertextHash\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"index\":1,\"storageKey\":\"files/upload-1/0001.bin\"}],\"encContentKey\":\"ZW5jLWtleQ\",\"storageBackend\":\"s3\",\"totalCiphertextBytes\":524416,\"totalPlaintextBytes\":524288},\"nonce\":\"multipart-nonce-b64url\",\"op\":\"update\",\"payloadKind\":\"file\",\"receiverPubFpr\":\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\"timestamp\":1730000500000,\"uuid\":\"abcdefghijklmnopqrstu\",\"version\":1}",
+      "sha256Hex": "0faa594ed170de2ead860d2e57c734dffb32d1f03417d75f03de7021d00d22c8"
     }
   ],
   "aad": [

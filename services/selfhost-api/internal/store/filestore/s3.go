@@ -304,7 +304,7 @@ func (s *Store) UsePresignedURLs() bool {
 	return s.presignClient != nil
 }
 
-func (s *Store) GetChunk(ctx context.Context, _ string, key string) (io.ReadCloser, error) {
+func (s *Store) GetChunk(ctx context.Context, key string) (io.ReadCloser, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("get chunk: %w", err)

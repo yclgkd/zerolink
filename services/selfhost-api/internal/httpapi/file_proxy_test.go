@@ -202,7 +202,7 @@ func TestFileDownloadProxyRouteRejectsDirectStorageKey(t *testing.T) {
 
 	newProxyTestRouter(
 		stubFileStore{
-			getChunk: func(context.Context, string, string) (io.ReadCloser, error) {
+			getChunk: func(context.Context, string) (io.ReadCloser, error) {
 				t.Fatal("getChunk should not be called for a direct storage key")
 				return nil, nil
 			},
@@ -251,6 +251,60 @@ func TestFileFetchRouteReturnsRelativeProxyDownloadTarget(t *testing.T) {
 	}
 }
 
+func TestFileDownloadProxyRouteConsumesIssuedTarget(t *testing.T) {
+	t.Parallel()
+
+	router := newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			getChunk: func(_ context.Context, key string) (io.ReadCloser, error) {
+				if key != "files/upload-1/0000.bin" {
+					t.Fatalf("key = %q, want files/upload-1/0000.bin", key)
+				}
+				return io.NopCloser(strings.NewReader("chunk-data")), nil
+			},
+		},
+		stubProtocol{
+			decryptFetch: func(_ context.Context, _ string) (service.DecryptFetchOutput, error) {
+				fileRef := newProxyFileRef()
+				return service.DecryptFetchOutput{OK: true, FileRef: &fileRef}, nil
+			},
+		},
+	)
+
+	fetchReq := httptest.NewRequest(http.MethodGet, "/api/file/fetch/aaaaaaaaaaaaaaaaaaaaa", nil)
+	fetchRes := httptest.NewRecorder()
+	router.ServeHTTP(fetchRes, fetchReq)
+	if fetchRes.Code != http.StatusOK {
+		t.Fatalf("fetch status = %d, want 200: %s", fetchRes.Code, fetchRes.Body.String())
+	}
+
+	var payload filestore.FileFetchResponse
+	if err := json.Unmarshal(fetchRes.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode fetch response: %v", err)
+	}
+
+	downloadPath := "/api/" + payload.Chunks[0].DownloadURL
+	firstReq := httptest.NewRequest(http.MethodGet, downloadPath, nil)
+	firstRes := httptest.NewRecorder()
+	router.ServeHTTP(firstRes, firstReq)
+
+	if firstRes.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want 200: %s", firstRes.Code, firstRes.Body.String())
+	}
+	if firstRes.Body.String() != "chunk-data" {
+		t.Fatalf("first body = %q, want chunk-data", firstRes.Body.String())
+	}
+
+	secondReq := httptest.NewRequest(http.MethodGet, downloadPath, nil)
+	secondRes := httptest.NewRecorder()
+	router.ServeHTTP(secondRes, secondReq)
+
+	if secondRes.Code != http.StatusNotFound {
+		t.Fatalf("second status = %d, want 404", secondRes.Code)
+	}
+}
+
 type errOnFirstReadCloser struct {
 	triggered bool
 }
@@ -273,7 +327,7 @@ func TestFileDownloadProxyRouteReturnsStorageErrorWhenFirstReadFails(t *testing.
 	router := newProxyTestRouter(
 		stubFileStore{
 			usePresignedURLs: func() bool { return false },
-			getChunk: func(context.Context, string, string) (io.ReadCloser, error) {
+			getChunk: func(context.Context, string) (io.ReadCloser, error) {
 				return &errOnFirstReadCloser{}, nil
 			},
 		},

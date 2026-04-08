@@ -212,7 +212,8 @@ WebAuthn/ECDSA challenge must === expected_challenge
 │      locking)                                               │
 │    * cipher_bundle (inline text payloads) or fileRef        │
 │      metadata (file deliveries)                             │
-│    * encrypted multipart chunks in R2 / S3-compatible storage               │
+│    * encrypted multipart chunks in                           │
+│      R2 / S3-compatible storage                              │
 │    * version, nonce, challenge (anti-replay/concurrency)    │
 │  - Can:                                                     │
 │    * Verify WebAuthn signatures                             │

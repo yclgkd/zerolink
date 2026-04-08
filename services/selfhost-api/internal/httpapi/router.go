@@ -35,7 +35,7 @@ type FileStore interface {
 	PresignedUpload(context.Context, string, int, time.Duration) (string, error)
 	CompleteUpload(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
 	PresignedDownload(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
-	GetChunk(ctx context.Context, bucket, key string) (io.ReadCloser, error)
+	GetChunk(ctx context.Context, key string) (io.ReadCloser, error)
 	DeleteUpload(context.Context, filestore.MultipartFileRef) error
 	UsePresignedURLs() bool
 }
@@ -408,12 +408,12 @@ func fileDownloadProxyHandler(
 			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
 			return
 		}
-		target, ok := proxyTargets.DownloadTarget(r.PathValue("token"))
+		target, ok := proxyTargets.ConsumeDownloadTarget(r.PathValue("token"))
 		if !ok {
 			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "download target not found")
 			return
 		}
-		rc, err := fileStore.GetChunk(r.Context(), "", target.storageKey)
+		rc, err := fileStore.GetChunk(r.Context(), target.storageKey)
 		if err != nil {
 			writeError(logger, w, http.StatusBadGateway, "STORAGE_ERROR", err.Error())
 			return

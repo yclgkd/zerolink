@@ -426,6 +426,50 @@ func TestProtocolServiceDeleteCommitFinalizesDeletedTombstone(t *testing.T) {
 	}
 }
 
+func TestManageIntentComputeHashMatchesMultipartFileFixture(t *testing.T) {
+	intent := ManageIntent{
+		Op:             "update",
+		UUID:           "abcdefghijklmnopqrstu",
+		Version:        1,
+		Timestamp:      1730000500000,
+		Nonce:          "multipart-nonce-b64url",
+		ReceiverPubFpr: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+		PayloadKind:    "file",
+		FileRef: &filestore.MultipartFileRef{
+			StorageBackend:       filestore.FileStorageBackendS3,
+			ChunkSizeBytes:       262144,
+			ChunkCount:           2,
+			TotalPlaintextBytes:  524288,
+			TotalCiphertextBytes: 524416,
+			BaseIV:               "YmFzZS1pdg",
+			EncContentKey:        "ZW5jLWtleQ",
+			Chunks: []filestore.MultipartFileRefChunk{
+				{
+					Index:           0,
+					StorageKey:      "files/upload-1/0000.bin",
+					CiphertextBytes: 262208,
+					CiphertextHash:  strings.Repeat("a", 64),
+				},
+				{
+					Index:           1,
+					StorageKey:      "files/upload-1/0001.bin",
+					CiphertextBytes: 262208,
+					CiphertextHash:  strings.Repeat("b", 64),
+				},
+			},
+		},
+		ExpireAt: json.RawMessage("null"),
+	}
+
+	hash, err := intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("intent.ComputeHash() error = %v", err)
+	}
+	if hash != "0faa594ed170de2ead860d2e57c734dffb32d1f03417d75f03de7021d00d22c8" {
+		t.Fatalf("intent.ComputeHash() = %q, want fixture hash", hash)
+	}
+}
+
 func TestProtocolServiceRejectsInlineFileCiphertext(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)

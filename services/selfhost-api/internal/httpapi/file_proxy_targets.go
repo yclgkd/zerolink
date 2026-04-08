@@ -63,11 +63,14 @@ func (a *proxyTargetAuthorizer) UploadTarget(token string) (proxyUploadTarget, b
 	return target, ok
 }
 
-func (a *proxyTargetAuthorizer) DownloadTarget(token string) (proxyDownloadTarget, bool) {
+func (a *proxyTargetAuthorizer) ConsumeDownloadTarget(token string) (proxyDownloadTarget, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.pruneExpiredLocked(a.now())
 	target, ok := a.downloads[token]
+	if ok {
+		delete(a.downloads, token)
+	}
 	return target, ok
 }
 

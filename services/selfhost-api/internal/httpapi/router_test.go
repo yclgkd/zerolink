@@ -41,7 +41,7 @@ type stubFileStore struct {
 	putChunk          func(context.Context, string, int, io.Reader, int64) (string, error)
 	presignedUpload   func(context.Context, string, int, time.Duration) (string, error)
 	completeUpload    func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
-	getChunk          func(context.Context, string, string) (io.ReadCloser, error)
+	getChunk          func(context.Context, string) (io.ReadCloser, error)
 	presignedDownload func(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
 	usePresignedURLs  func() bool
 	deleteUpload      func(context.Context, filestore.MultipartFileRef) error
@@ -185,9 +185,9 @@ func (s stubFileStore) PutChunk(ctx context.Context, uploadID string, index int,
 	return "etag-stub", nil
 }
 
-func (s stubFileStore) GetChunk(ctx context.Context, bucket string, key string) (io.ReadCloser, error) {
+func (s stubFileStore) GetChunk(ctx context.Context, key string) (io.ReadCloser, error) {
 	if s.getChunk != nil {
-		return s.getChunk(ctx, bucket, key)
+		return s.getChunk(ctx, key)
 	}
 	return io.NopCloser(strings.NewReader("chunk-data")), nil
 }

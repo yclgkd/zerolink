@@ -89,6 +89,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Trade-offs**: Self-host multipart initiation now depends on the protocol service as well as the file store, and manual clients probing `/api/file/initiate` will see earlier `400/404` rejections instead of opportunistically receiving presigned URLs.
 **Follow-up (2026-04-07, MinIO→Garage)**: MinIO references superseded; container replaced by Garage, healthcheck uses `/garage stats -a`. UUID validator package renamed from minio filestore to generic s3 filestore.
 **Follow-up (2026-04-08, API proxy)**: When `S3_PUBLIC_ENDPOINT` is unset, the Go API now proxies chunk bytes via short-lived opaque `/api/file/chunk/{token}` and `/api/file/download/{token}` targets instead of returning presigned URLs. The browser receives relative `file/...` URLs so custom API base paths still work, and direct storage keys are not exposed through the proxy path.
+**Follow-up (2026-04-08, single-use downloads)**: Opaque `/api/file/download/{token}` targets are now consumed on first GET instead of remaining replayable for their full TTL. Frontends that need to retry must re-run `/api/file/fetch/:uuid` to obtain fresh download targets.
 
 ## [2026-04-02] Multipart review fixes favor best-effort cleanup and signed direct chunk downloads
 
@@ -110,6 +111,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Follow-up (2026-04-02, docs sync)**: Deployment, architecture, contract, PRD, and security docs now explicitly describe the shipped multipart behavior instead of treating large-file transport and self-hosted object storage as future work. Cloudflare docs now call out the required R2 buckets, and self-hosted docs now document the `inline|minio` storage split and the inline threshold guardrail.
 **Follow-up (2026-04-07, MinIO→Garage)**: MinIO server archived; self-hosted storage backend renamed from `"minio"` to `"s3"`, container replaced by Garage, env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`. `minio-go/v7` SDK retained as generic S3 client.
 **Follow-up (2026-04-08, API proxy)**: "Go API does not stream chunk bytes" is no longer universally true. When `S3_PUBLIC_ENDPOINT` is unset the API proxies chunk uploads/downloads; presigned URLs are only used when the browser can reach S3 directly.
+**Follow-up (2026-04-08, single-use downloads)**: Self-hosted proxy download targets are single-use opaque capabilities rather than reusable-for-TTL URLs. This tightens replay semantics without changing the typed `fileRef` contract because the client can re-fetch fresh targets through `/api/file/fetch/:uuid`.
 
 ## [2026-04-02] Large file delivery uses typed multipart `fileRef` metadata over storage-specific backends
 

@@ -85,7 +85,7 @@ UPDATE WHEN:
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — owns file policy env vars (`SELFHOST_API_FILE_*`) and still caps the legacy inline threshold for compatibility even though new file writes require object storage |
-| `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — serves `/api/file_policy`, applies a config-driven JSON body limit, and issues short-lived proxy targets for `/api/file/chunk/{token}` (PUT) and `/api/file/download/{token}` (GET) when `S3_PUBLIC_ENDPOINT` is unset |
+| `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — serves `/api/file_policy`, applies a config-driven JSON body limit, and issues short-lived proxy targets for `/api/file/chunk/{token}` (PUT) and single-use `/api/file/download/{token}` (GET) when `S3_PUBLIC_ENDPOINT` is unset |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
 | `deploy/selfhost/docker-compose.yml` | Self-hosted stack bundle — defaults to published GHCR `api`/`web` images while starting PostgreSQL and migration job; Garage S3 storage is optional via `--profile storage` |
 | `deploy/selfhost/docker-compose.build.yml` | Self-hosted source-build overlay — reintroduces local Docker `build:` definitions for operators who want to compile from the checked-out repo, with `api`/`migrate` using the service-only context and `web` using `frontend.build.Dockerfile` |
@@ -166,3 +166,4 @@ UPDATE WHEN:
 | `Caddyfile` | Handler order is correctness boundary | `/api/*` must route before `try_files` / `file_server` |
 | `docker-compose.yml` | Defaults to `ZEROLINK_IMAGE_TAG=latest` | Pin to release tag for deterministic pulls |
 | `realtime/hub.go` | WebSocket fan-out is process-local | Single-node only; falls back to HTTP polling |
+| `router.go` + `orchestrator-multipart.ts` | Self-host proxy download targets are single-use | Retry by calling `/api/file/fetch/:uuid` again; don't assume the same `file/download/<token>` URL can be replayed |

@@ -56,7 +56,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			SecretKey:      cfg.File.S3.SecretKey,
 			Bucket:         cfg.File.S3.Bucket,
 			UseSSL:         cfg.File.S3.UseSSL,
-			Region:    cfg.File.S3.Region,
+			Region:         cfg.File.S3.Region,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("init file storage: %w", err)

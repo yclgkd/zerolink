@@ -12,7 +12,7 @@ BUCKET="${SELFHOST_API_S3_BUCKET:-zerolink-files}"
 KEY_NAME="zerolink"
 
 # ── helpers ──────────────────────────────────────────────────────
-api() { curl -sf -H "${AUTH}" -H "Content-Type: application/json" "$@"; }
+api() { curl -sf --connect-timeout 3 --max-time 10 -H "${AUTH}" -H "Content-Type: application/json" "$@"; }
 
 wait_ready() {
   echo "Waiting for Garage admin API..."
