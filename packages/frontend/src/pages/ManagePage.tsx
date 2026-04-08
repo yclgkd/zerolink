@@ -33,7 +33,7 @@ export function ManagePage(): ReactElement {
   const showPasswordSection =
     !isTerminalState &&
     usesPasswordManagedChannel &&
-    (showDeliveryComposer || state.showDestroyConfirm);
+    (showDeliveryComposer || state.destroyStage !== 'idle');
   const [cachedShareLink, setCachedShareLink] = useState<string | null>(() =>
     readCreatedShareLink(uuid)
   );
@@ -66,6 +66,7 @@ export function ManagePage(): ReactElement {
 
   const actionPanel = (
     <ActionPanel
+      canDestroy={state.canRequestDestroy}
       canManageActions={state.canManageActions}
       canDeliver={state.canDeliver}
       onCancelDestroy={state.handleCancelDestroy}

@@ -72,7 +72,7 @@ describe('useDeliverStore', () => {
 
     expect(state.uuid).toBeNull();
     expect(state.channelState).toBe(CHANNEL_STATE.WAITING);
-    expect(state.showDestroyConfirm).toBe(false);
+    expect(state.destroyStage).toBe('idle');
     expect(state.copied).toBe(false);
     expect(state.challenge).toBeNull();
     expect(state.currentVersion).toBeNull();
@@ -91,29 +91,29 @@ describe('useDeliverStore', () => {
     });
   });
 
-  it('handles status transitions and keeps destroy confirm panel in sync', () => {
+  it('handles status transitions and resets destroy flow stage', () => {
     const state = useDeliverStore.getState();
 
     state.setDeliverUuid(VALID_UUID);
-    state.setShowDestroyConfirm(true);
+    state.setDestroyStage('confirm');
     state.setChannelState(CHANNEL_STATE.LOCKED);
 
     let nextState = useDeliverStore.getState();
     expect(nextState.uuid).toBe(VALID_UUID);
     expect(nextState.channelState).toBe(CHANNEL_STATE.LOCKED);
-    expect(nextState.showDestroyConfirm).toBe(false);
+    expect(nextState.destroyStage).toBe('idle');
 
-    state.setShowDestroyConfirm(true);
+    state.setDestroyStage('confirm');
     state.markDelivered();
     nextState = useDeliverStore.getState();
     expect(nextState.channelState).toBe(CHANNEL_STATE.DELIVERED);
-    expect(nextState.showDestroyConfirm).toBe(false);
+    expect(nextState.destroyStage).toBe('idle');
 
-    state.setShowDestroyConfirm(true);
+    state.setDestroyStage('confirm');
     state.markDeleted();
     nextState = useDeliverStore.getState();
     expect(nextState.channelState).toBe(CHANNEL_STATE.DELETED);
-    expect(nextState.showDestroyConfirm).toBe(false);
+    expect(nextState.destroyStage).toBe('idle');
   });
 
   it('preserves a known receiver fingerprint when compound_begin starts loading', () => {
@@ -231,7 +231,7 @@ describe('useDeliverStore', () => {
     const state = useDeliverStore.getState();
     state.setDeliverUuid(VALID_UUID);
     state.setChannelState(CHANNEL_STATE.LOCKED);
-    state.setShowDestroyConfirm(true);
+    state.setDestroyStage('confirm');
     state.setCopied(true);
     state.completeCompoundBegin(buildCompoundBeginResponse());
     state.completeCompoundCommit(buildCompoundCommitResponse());
@@ -241,7 +241,7 @@ describe('useDeliverStore', () => {
     const nextState = useDeliverStore.getState();
     expect(nextState.uuid).toBe(NEXT_UUID);
     expect(nextState.channelState).toBe(CHANNEL_STATE.WAITING);
-    expect(nextState.showDestroyConfirm).toBe(false);
+    expect(nextState.destroyStage).toBe('idle');
     expect(nextState.copied).toBe(false);
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();
@@ -266,7 +266,7 @@ describe('useDeliverStore', () => {
 
     state.setDeliverUuid(VALID_UUID);
     state.setChannelState(CHANNEL_STATE.LOCKED);
-    state.setShowDestroyConfirm(true);
+    state.setDestroyStage('confirm');
     state.setCopied(true);
     state.completeCompoundBegin(beginPayload);
     state.startCompoundCommit();
@@ -276,7 +276,7 @@ describe('useDeliverStore', () => {
     const nextState = useDeliverStore.getState();
     expect(nextState.uuid).toBe(VALID_UUID);
     expect(nextState.channelState).toBe(CHANNEL_STATE.LOCKED);
-    expect(nextState.showDestroyConfirm).toBe(true);
+    expect(nextState.destroyStage).toBe('confirm');
     expect(nextState.copied).toBe(true);
     expect(nextState.challenge).toEqual(beginPayload.challenge);
     expect(nextState.currentVersion).toBe(beginPayload.currentVersion);
@@ -291,7 +291,7 @@ describe('useDeliverStore', () => {
     const state = useDeliverStore.getState();
     state.setDeliverUuid(VALID_UUID);
     state.setChannelState(CHANNEL_STATE.LOCKED);
-    state.setShowDestroyConfirm(true);
+    state.setDestroyStage('confirm');
     state.setCopied(true);
     state.completeCompoundBegin(buildCompoundBeginResponse());
     state.completeCompoundCommit(buildCompoundCommitResponse());
@@ -301,7 +301,7 @@ describe('useDeliverStore', () => {
     const nextState = useDeliverStore.getState();
     expect(nextState.uuid).toBeNull();
     expect(nextState.channelState).toBe(CHANNEL_STATE.WAITING);
-    expect(nextState.showDestroyConfirm).toBe(false);
+    expect(nextState.destroyStage).toBe('idle');
     expect(nextState.copied).toBe(false);
     expect(nextState.challenge).toBeNull();
     expect(nextState.currentVersion).toBeNull();

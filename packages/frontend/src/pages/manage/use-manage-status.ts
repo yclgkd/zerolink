@@ -32,7 +32,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
           (parsedError.success && parsedError.data.code === 'NOT_FOUND')
         ) {
           if (canceled || !mountedRef.current) return;
-          store.setShowDestroyConfirm(false);
+          store.setDestroyStage('idle');
           store.setAdminMode(null);
           store.setSecurityProfile(null);
           store.setReceiverPubFpr(null);
@@ -49,7 +49,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
 
         if (canceled || !mountedRef.current) return;
         if (isTerminalPublicState(parsedPayload.data.state)) {
-          store.setShowDestroyConfirm(false);
+          store.setDestroyStage('idle');
           store.setAdminMode(null);
           store.setSecurityProfile(null);
           store.setReceiverPubFpr(null);
@@ -63,7 +63,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
         setPublicStatusError(null);
         setIsUnavailable(false);
         setStatusConfirmed(true);
-        store.setShowDestroyConfirm(false);
+        store.setDestroyStage('idle');
         store.setChannelState(parsedPayload.data.state);
         store.setAdminMode(parsedPayload.data.adminMode);
         store.setSecurityProfile(parsedPayload.data.securityProfile);
@@ -72,7 +72,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
         // biome-ignore lint/suspicious/noConsole: runtime error logging for unexpected public status load failures
         console.error('[usePublicStatusFetcher] loadPublicStatus failed', { uuid, error });
         if (canceled || !mountedRef.current) return;
-        store.setShowDestroyConfirm(false);
+        store.setDestroyStage('idle');
         store.setAdminMode(null);
         store.setSecurityProfile(null);
         store.setReceiverPubFpr(null);
@@ -93,7 +93,7 @@ export function usePublicStatusFetcher(uuid: string | undefined, mountedRef: Ref
     store.setSecurityProfile,
     store.setChannelState,
     store.setReceiverPubFpr,
-    store.setShowDestroyConfirm,
+    store.setDestroyStage,
     mountedRef,
   ]);
 

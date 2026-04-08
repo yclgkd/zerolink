@@ -5,7 +5,9 @@ import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import { useDeliverStore } from '../../stores/deliver-store';
 import {
+  canComposeDelivery,
   getChannelPasswordValidationErrorI18n,
+  hasValidChannelPassword,
   mapActionError,
   requiresChannelPassword,
 } from './manage-utils';
@@ -121,7 +123,7 @@ export function useManageDeliveryLogic(
       return setActionError(mapActionError(result.error.code, result.error.message));
     }
 
-    store.setShowDestroyConfirm(false);
+    store.setDestroyStage('idle');
     setIsSecretInputInvalid(false);
     setActionError(null);
     setSecretInput('');
@@ -158,7 +160,16 @@ export function useManageDestructionLogic(
       store.channelState === CHANNEL_STATE.EXPIRED
     )
       return;
-    store.setShowDestroyConfirm(true);
+    if (!requiresChannelPassword(store.adminMode)) {
+      store.setDestroyStage('confirm');
+      return;
+    }
+    if (!canComposeDelivery(store.channelState) && store.destroyStage === 'idle') {
+      store.setDestroyStage('auth');
+      return;
+    }
+    if (!hasValidChannelPassword(softkeyPassphrase)) return;
+    store.setDestroyStage('confirm');
   };
 
   const handleApplyDestroy = async () => {
@@ -178,6 +189,7 @@ export function useManageDestructionLogic(
         t('manage.softkeyLabel')
       );
       if (passErr) {
+        store.setDestroyStage('auth');
         setIsSecretInputInvalid(false);
         return setActionError(t(passErr.key, passErr.params));
       }
@@ -213,6 +225,9 @@ export function useManageDestructionLogic(
     if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
     if (!result.ok) {
+      if (needsChannelPassword && result.error.code === 'CRYPTO_ERROR') {
+        store.setDestroyStage('auth');
+      }
       setIsSecretInputInvalid(false);
       return setActionError(mapActionError(result.error.code, result.error.message));
     }
