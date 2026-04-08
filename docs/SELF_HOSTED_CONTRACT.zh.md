@@ -73,15 +73,16 @@
 | `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回活跃 channel 的公开状态；一旦 channel 已 tombstone 化或被 lazy purge，规范外部行为是 `404 NOT_FOUND`，而不是 `200` 终态快照 |
 | `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷；响应里会且只会出现 `cipherBundle` 或 `fileRef` 其中之一，`cipherVersion` 表示本次已交付密文的版本（当前 DO 实现里等于 `record.version - 1`），不是原始 channel record 的 `version` |
 | `/api/file_policy` | `GET` | 无 | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | 返回部署侧文件上限、legacy inline 阈值、chunk 参数和 multipart 能力；前端据此判断文件上传是否可用，并配置 chunk 参数 |
-| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | 当 `S3_PUBLIC_ENDPOINT` 已设置时返回 S3 预签名 PUT URL；未设置时返回 `/api/file/chunk/` 代理路径，Go API 代替浏览器流式转发 chunk 字节 |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | 当 `S3_PUBLIC_ENDPOINT` 已设置时返回 S3 预签名 PUT URL；未设置时返回相对路径形式的 `file/chunk/<token>` 代理目标，并附带短时有效的内存授权，Go API 代替浏览器流式转发 chunk 字节 |
 | `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | 校验已上传 chunk 的元数据，并返回后续写入 `compound_commit` 的 `fileRef` |
-| `/api/file/fetch/:uuid` | `GET` | 无 | `FileFetchResponseSchema` | `apiClient.fileFetch()` | 对已交付的 multipart payload 返回每个 chunk 的下载 URL（`S3_PUBLIC_ENDPOINT` 已设置时为预签名 S3 URL，未设置时为 `/api/file/download/` 代理路径）；inline payload 仍只走 `decrypt_fetch` |
+| `/api/file/fetch/:uuid` | `GET` | 无 | `FileFetchResponseSchema` | `apiClient.fileFetch()` | 对已交付的 multipart payload 返回每个 chunk 的下载 URL（`S3_PUBLIC_ENDPOINT` 已设置时为预签名 S3 URL，未设置时为相对路径形式的 `file/download/<token>` 代理目标）；inline payload 仍只走 `decrypt_fetch` |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | 升级后走 `WsClientMessageSchema` | `WsServerMessageSchema` | `ChannelSync.connect()` | 当前未带 `Upgrade: websocket` 会返回 `426` + `{ ok: false, code: "BAD_REQUEST" }` |
 
 当 `SELFHOST_API_S3_PUBLIC_ENDPOINT` 已设置（浏览器能直达外部 S3）时，chunk 字节直接走
 `/api/file/initiate` 和 `/api/file/fetch/:uuid` 返回的 S3 预签名 URL。当未设置（如 Docker
-内置 Garage）时，Go API 暴露 `/api/file/chunk/{uploadId}/{index}`（PUT）和
-`/api/file/download/{key...}`（GET）代理路由，替浏览器流式转发 chunk 字节。
+内置 Garage）时，Go API 会签发短时有效的 opaque proxy target，并通过
+`/api/file/chunk/{token}`（PUT）和 `/api/file/download/{token}`（GET）代理路由替浏览器
+流式转发 chunk 字节；前端拿到的是相对 `file/...` URL，因此不会破坏自定义 API base path。
 
 ### Multipart 传输叠加层
 

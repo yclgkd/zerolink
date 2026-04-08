@@ -88,7 +88,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: These checks close a real protocol-compatibility bug for legitimate channel IDs, restore Worker/self-host parity on multipart gating, and make the packaged deployment wait for an actually usable object store before starting the API.
 **Trade-offs**: Self-host multipart initiation now depends on the protocol service as well as the file store, and manual clients probing `/api/file/initiate` will see earlier `400/404` rejections instead of opportunistically receiving presigned URLs.
 **Follow-up (2026-04-07, MinIO→Garage)**: MinIO references superseded; container replaced by Garage, healthcheck uses `/garage stats -a`. UUID validator package renamed from minio filestore to generic s3 filestore.
-**Follow-up (2026-04-08, API proxy)**: When `S3_PUBLIC_ENDPOINT` is unset, the Go API now proxies chunk bytes via `/api/file/chunk/` and `/api/file/download/` instead of returning presigned URLs. Presigned URLs are still used when the browser can reach S3 directly.
+**Follow-up (2026-04-08, API proxy)**: When `S3_PUBLIC_ENDPOINT` is unset, the Go API now proxies chunk bytes via short-lived opaque `/api/file/chunk/{token}` and `/api/file/download/{token}` targets instead of returning presigned URLs. The browser receives relative `file/...` URLs so custom API base paths still work, and direct storage keys are not exposed through the proxy path.
 
 ## [2026-04-02] Multipart review fixes favor best-effort cleanup and signed direct chunk downloads
 
@@ -120,7 +120,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: This keeps the sender/receiver cryptographic flow identical across deployments, preserves zero-knowledge storage semantics because the server only sees encrypted chunks plus typed metadata, and avoids frontend branching on deployment type. It also lets inline text and small-file compatibility stay intact while large-file support scales independently.
 **Trade-offs**: The protocol now has two payload transports (`inline` and `multipart`), so decrypt/delivery code must preserve exactly-one semantics between `cipherBundle` and `fileRef`. Self-hosted config must also keep `multipartThresholdBytes` at or below the inline ciphertext ceiling even when `maxFileBytes` is much larger, because only oversized files should switch onto the multipart path.
 **Follow-up (2026-04-07, MinIO→Garage)**: MinIO container replaced by Garage; env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`.
-**Follow-up (2026-04-08, API proxy)**: Self-hosted Go API now supports dual-mode chunk transport: presigned S3 URLs when `S3_PUBLIC_ENDPOINT` is set, API-proxied `/api/file/chunk/` and `/api/file/download/` routes when unset. "Go never streams chunk bytes" no longer holds in the proxy case.
+**Follow-up (2026-04-08, API proxy)**: Self-hosted Go API now supports dual-mode chunk transport: presigned S3 URLs when `S3_PUBLIC_ENDPOINT` is set, and short-lived opaque proxy targets under `/api/file/chunk/{token}` / `/api/file/download/{token}` when unset. "Go never streams chunk bytes" no longer holds in the proxy case.
 
 ## [2026-04-01] Receiver-side file decoding requires declared `payloadKind: "file"`
 

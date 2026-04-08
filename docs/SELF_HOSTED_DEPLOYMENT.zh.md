@@ -54,7 +54,7 @@ docker compose --profile storage up -d
 git clone https://github.com/yclgkd/ZeroLink.git
 cd ZeroLink/deploy/selfhost
 cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+docker compose --profile storage -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
 
 `docker-compose.build.yml` 会把 `migrate`、`api` 和 `web` 恢复为本地 `build:` 路径，
@@ -130,7 +130,7 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 
 ## Smoke Test
 
-1. 用 `docker compose up -d` 启动。
+1. 如果直接使用内置的 `.env.example`，请用 `docker compose --profile storage up -d` 启动；只有切到外部 S3 或 `inline` 模式后，才使用 `docker compose up -d`。
 2. 确认 `curl http://localhost:8080/readyz` 返回 `200`。
 3. 确认 `curl http://localhost:8080/api/file_policy` 在 `SELFHOST_API_FILE_STORAGE_BACKEND=s3` 时返回 `multipartSupported: true`。
 4. 在一个窗口打开 `http://localhost:8080`，创建一个 Quick Share channel。

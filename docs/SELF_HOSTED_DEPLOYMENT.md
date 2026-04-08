@@ -55,7 +55,7 @@ If you want to build the images from the current source checkout instead of pull
 git clone https://github.com/yclgkd/ZeroLink.git
 cd ZeroLink/deploy/selfhost
 cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+docker compose --profile storage -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
 
 `docker-compose.build.yml` restores the original local `build:` definitions for `migrate`, `api`,
@@ -132,7 +132,7 @@ When in `inline` mode:
 
 ## Smoke Test
 
-1. Start the stack with `docker compose up -d`.
+1. Start the stack with `docker compose --profile storage up -d` when using the bundled `.env.example`, or `docker compose up -d` only after switching `.env` to external S3 or `inline`.
 2. Confirm `curl http://localhost:8080/readyz` returns `200`.
 3. Confirm `curl http://localhost:8080/api/file_policy` reports `multipartSupported: true` when running with `SELFHOST_API_FILE_STORAGE_BACKEND=s3`.
 4. Open `http://localhost:8080` in one browser window and create a Quick Share channel.
