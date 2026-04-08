@@ -436,6 +436,7 @@ export function DeliveredStep({
   passphrase,
   decryptPending,
   decryptError,
+  decryptHelperText,
   isDecryptPassphraseInvalid,
   plaintext,
   file,
@@ -455,6 +456,7 @@ export function DeliveredStep({
   passphrase: string;
   decryptPending: boolean;
   decryptError: string | null;
+  decryptHelperText: string | undefined;
   isDecryptPassphraseInvalid: boolean;
   plaintext: string | null;
   file: DecryptedFilePayload | null;
@@ -510,10 +512,12 @@ export function DeliveredStep({
                 decryptError && isDecryptPassphraseInvalid ? 'share-decrypt-error' : undefined
               }
               ariaInvalid={isDecryptPassphraseInvalid ? true : undefined}
+              helperText={decryptHelperText}
               inputId="share-decrypt-passphrase"
               label={t('share.decryptLabel')}
               onChange={onPassphraseChange}
               placeholder={t('share.decryptPlaceholder')}
+              showStrength={false}
               value={passphrase}
             />
 

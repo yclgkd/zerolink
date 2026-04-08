@@ -15,7 +15,17 @@ import {
   StatusContent,
   UuidDisplay,
 } from './manage/manage-components';
-import { canComposeDelivery, isTerminalManageState } from './manage/manage-utils';
+import {
+  canComposeDelivery,
+  getChannelPasswordHelperI18n,
+  isTerminalManageState,
+} from './manage/manage-utils';
+
+function getSoftkeyHelperText(passphrase: string, t: ReturnType<typeof useTranslation>['t']) {
+  const helper = getChannelPasswordHelperI18n(passphrase, t('manage.softkeyLabel'));
+  return helper ? t(helper.key, helper.params) : undefined;
+}
+
 import { useManagePageState } from './manage/use-manage-page-state';
 
 /**
@@ -34,6 +44,7 @@ export function ManagePage(): ReactElement {
     !isTerminalState &&
     usesPasswordManagedChannel &&
     (showDeliveryComposer || state.destroyStage !== 'idle');
+  const softkeyHelperText = getSoftkeyHelperText(state.softkeyPassphrase, t);
   const [cachedShareLink, setCachedShareLink] = useState<string | null>(() =>
     readCreatedShareLink(uuid)
   );
@@ -74,6 +85,7 @@ export function ManagePage(): ReactElement {
       onDeliver={state.handleDeliver}
       onOpenDestroyConfirm={state.handleDestroyConfirm}
       pending={state.isActionPending}
+      pendingAction={state.pendingAction}
       showDeliverAction={showDeliveryComposer}
       showDestroyConfirm={state.showDestroyConfirm}
       status={state.status}
@@ -149,6 +161,7 @@ export function ManagePage(): ReactElement {
                   {t('manage.softkeyPassphraseHint')}
                 </p>
                 <PassphraseInput
+                  helperText={softkeyHelperText}
                   inputId="manage-softkey-passphrase"
                   label={t('manage.softkeyLabel')}
                   onChange={state.handleSoftkeyPassphraseChange}

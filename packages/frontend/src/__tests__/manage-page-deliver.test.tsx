@@ -326,7 +326,7 @@ describe('ManagePage – deliver actions', () => {
     expect(await screen.findByTestId('manage-state-delivered')).toBeTruthy();
   });
 
-  it('shows the channel password error when password-managed delivery omits a password', async () => {
+  it('keeps password-managed delivery disabled and shows helper text when the password is missing', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({
@@ -337,25 +337,19 @@ describe('ManagePage – deliver actions', () => {
       })
     );
 
-    deliverSecretMock.mockResolvedValueOnce({
-      ok: false,
-      error: { ok: false, code: 'PASSPHRASE_REQUIRED', stage: 'deliver.softkey-passphrase' },
-    });
-
     renderManagePage();
 
     await screen.findByTestId('manage-state-locked');
     fireEvent.change(screen.getByTestId('manage-secret-input'), {
       target: { value: 'top secret payload' },
     });
-    fireEvent.click(screen.getByTestId('manage-deliver-button'));
-
-    expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
-      'Channel password is required'
-    );
+    expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Enter a channel password with at least 12 characters')).toBeTruthy();
+    expect(screen.queryByTestId('manage-action-error')).toBeNull();
+    expect(deliverSecretMock).not.toHaveBeenCalled();
   });
 
-  it('blocks password-managed delivery locally when the channel password is shorter than 12 characters', async () => {
+  it('keeps password-managed delivery disabled and shows helper text when the password is shorter than 12 characters', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({
@@ -375,11 +369,9 @@ describe('ManagePage – deliver actions', () => {
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'short' },
     });
-    fireEvent.click(screen.getByTestId('manage-deliver-button'));
-
-    expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
-      'Channel password must be at least 12 characters'
-    );
+    expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Enter a channel password with at least 12 characters')).toBeTruthy();
+    expect(screen.queryByTestId('manage-action-error')).toBeNull();
     expect(deliverSecretMock).not.toHaveBeenCalled();
   });
 

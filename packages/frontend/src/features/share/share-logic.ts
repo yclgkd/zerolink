@@ -27,6 +27,11 @@ import { useDecryptStore } from '../../stores/decrypt-store';
 import { useLockStore } from '../../stores/lock-store';
 import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
+import {
+  getDecryptPassphraseHelperText,
+  isDecryptPassphraseErrorCode,
+  mapDecryptError,
+} from './share-decrypt-helpers';
 
 export function mapLockError(code: string, message?: string): string {
   switch (code) {
@@ -52,37 +57,8 @@ export function mapLockError(code: string, message?: string): string {
   }
 }
 
-export function mapDecryptError(code: string, message?: string): string {
-  switch (code) {
-    case 'NOT_FOUND':
-      return 'This channel is no longer available.';
-    case 'PASSPHRASE_REQUIRED':
-      return message ?? 'Passphrase is required to decrypt.';
-    case 'CHANNEL_NOT_DELIVERED':
-      return 'Channel is not delivered yet. Ask sender to deliver first.';
-    case 'KEY_STORAGE_ERROR':
-      return 'Local key material is unavailable on this device.';
-    case 'INTEGRITY_MISMATCH':
-      return 'Ciphertext integrity verification failed.';
-    case 'CRYPTO_ERROR':
-      return 'Unable to decrypt with the provided passphrase.';
-    case 'NETWORK_ERROR':
-    case 'BAD_REQUEST':
-    case 'INVALID_REQUEST':
-      return 'Decrypt request failed due to network or request validation.';
-    case 'INTERNAL_ERROR':
-      return 'An unexpected error occurred. Please try again.';
-    default:
-      return 'Decrypt failed. Please try again.';
-  }
-}
-
 export function isLockPassphraseErrorCode(code: string): boolean {
   return code === 'PASSPHRASE_REQUIRED';
-}
-
-export function isDecryptPassphraseErrorCode(code: string): boolean {
-  return code === 'PASSPHRASE_REQUIRED' || code === 'CRYPTO_ERROR';
 }
 
 function isTerminalPublicState(state: ChannelState): boolean {
@@ -690,6 +666,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     Boolean(store.uuid) &&
     hasValidPassphrase(passphrase) &&
     !isDecryptSubmitting;
+  const decryptHelperText = getDecryptPassphraseHelperText(passphrase, t);
 
   const canBurn =
     Boolean(enabled) && Boolean(store.plaintext || store.file) && !isDecryptSubmitting;
@@ -797,6 +774,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     decryptError,
     isDecryptPassphraseInvalid,
     decryptPending: isDecryptSubmitting,
+    decryptHelperText,
     canDecrypt,
     canBurn,
     deliveredAt,

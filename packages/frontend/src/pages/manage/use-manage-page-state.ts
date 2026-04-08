@@ -33,6 +33,7 @@ export function useManagePageState(uuid?: string) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSecretInputInvalid, setIsSecretInputInvalid] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'deliver' | 'delete' | null>(null);
 
   const getWrappedPrivateKey = useCallback(() => {
     const currentHash =
@@ -124,6 +125,7 @@ export function useManagePageState(uuid?: string) {
   useEffect(() => {
     actionScopeRef.current += 1;
     setIsActionPending(false);
+    setPendingAction(null);
     setDeliveryMode('text');
     setSecretInput('');
     setSelectedFile(null);
@@ -166,10 +168,12 @@ export function useManagePageState(uuid?: string) {
     store.channelState !== CHANNEL_STATE.EXPIRED &&
     profile !== null &&
     Boolean(store.uuid);
+  const needsChannelPassword = requiresChannelPassword(store.adminMode);
+  const deliverPasswordValid = !needsChannelPassword || hasValidChannelPassword(softkeyPassphrase);
   const canDeliver =
     canManageActions &&
-    (deliveryMode === 'text' ? secretInput.trim().length > 0 : selectedFile !== null);
-  const needsChannelPassword = requiresChannelPassword(store.adminMode);
+    (deliveryMode === 'text' ? secretInput.trim().length > 0 : selectedFile !== null) &&
+    deliverPasswordValid;
   const destroyPasswordValid = hasValidChannelPassword(softkeyPassphrase);
   const canStartDeleteAuth =
     canManageActions &&
@@ -184,6 +188,7 @@ export function useManagePageState(uuid?: string) {
     actionScopeRef,
     isActionPending,
     setIsActionPending,
+    setPendingAction,
     setActionError,
     setIsSecretInputInvalid,
     secretInput,
@@ -201,6 +206,7 @@ export function useManagePageState(uuid?: string) {
     actionScopeRef,
     isActionPending,
     setIsActionPending,
+    setPendingAction,
     setActionError,
     setIsSecretInputInvalid,
     setSecretInput,
@@ -228,6 +234,7 @@ export function useManagePageState(uuid?: string) {
     publicStatusError,
     statusConfirmed,
     isActionPending,
+    pendingAction,
     canManageActions,
     canDeliver,
     canRequestDestroy,

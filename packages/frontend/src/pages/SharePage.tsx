@@ -170,6 +170,7 @@ export function SharePage(): ReactElement {
             canDecryptLocally={receiverSafetyCode.canDecryptLocally}
             cipherVersion={decryptLogic.cipherVersion}
             decryptError={decryptLogic.decryptError}
+            decryptHelperText={decryptLogic.decryptHelperText}
             decryptPending={decryptLogic.decryptPending}
             deliveredAt={decryptLogic.deliveredAt}
             file={decryptLogic.store.file}
