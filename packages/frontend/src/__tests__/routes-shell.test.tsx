@@ -111,6 +111,18 @@ describe('App shell routes rendering', () => {
     expect(screen.getByTestId('page-create')).toBeTruthy();
   });
 
+  it('renders a footer repository link in the app shell', async () => {
+    renderFrom('/');
+
+    await screen.findByTestId('app-shell');
+
+    const repositoryLink = screen.getByTestId('app-shell-repo-link');
+    expect(repositoryLink.getAttribute('href')).toBe('https://github.com/yclgkd/ZeroLink');
+    expect(repositoryLink.getAttribute('target')).toBe('_blank');
+    expect(repositoryLink.getAttribute('rel')).toContain('noreferrer');
+    expect(repositoryLink.textContent).toContain('Source Code');
+  });
+
   it('does not render demo nav links for share/manage', async () => {
     renderFrom('/');
 

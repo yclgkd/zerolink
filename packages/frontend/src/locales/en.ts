@@ -3,6 +3,7 @@ const en = {
     tagline: 'Zero-Knowledge Secure Delivery',
     trustModelLink: 'Trust Model',
     backToCreate: 'Back to Create',
+    sourceCode: 'Source Code',
     inAppBrowserWarning:
       'For best security, open ZeroLink in a standalone browser (Safari, Chrome, Firefox) — not inside Telegram, Instagram, or other in-app browsers.',
   },

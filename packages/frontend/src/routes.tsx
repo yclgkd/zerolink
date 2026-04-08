@@ -6,6 +6,7 @@ import type { RouteObject } from 'react-router-dom';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
+import { AppShellFooter } from './components/layout';
 import { LanguageSwitcher } from './components/layout/language-switcher';
 import { ManifestInfo } from './components/manifest-info';
 import { Button } from './components/ui/button';
@@ -164,6 +165,7 @@ function AppShellLayout(): ReactElement {
         <ManifestInfo />
         <Outlet />
       </section>
+      <AppShellFooter />
     </main>
   );
 }

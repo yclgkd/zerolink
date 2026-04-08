@@ -1,3 +1,4 @@
+export { AppShellFooter } from './app-shell-footer';
 export { LanguageSwitcher } from './language-switcher';
 export {
   PageCard,
