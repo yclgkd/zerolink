@@ -49,6 +49,10 @@ export function getChannelPasswordValidationErrorI18n(
   return result === null ? null : getPassphraseValidationI18n(result, label);
 }
 
+export function hasValidChannelPassword(passphrase: string): boolean {
+  return validatePassphrase(passphrase) === null;
+}
+
 export function isTerminalPublicState(state: ChannelState): boolean {
   return state === CHANNEL_STATE.DELETED || state === CHANNEL_STATE.EXPIRED;
 }

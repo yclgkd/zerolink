@@ -7,7 +7,13 @@ import { deserializeWrappedKeyCompact } from '../../crypto/wrapped-key-codec';
 import { useDeliverStore } from '../../stores/deliver-store';
 import type { ChannelClosedReason, ChannelStateUpdate } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
-import { canComposeDelivery, isTerminalManageState, mapActionError } from './manage-utils';
+import {
+  canComposeDelivery,
+  hasValidChannelPassword,
+  isTerminalManageState,
+  mapActionError,
+  requiresChannelPassword,
+} from './manage-utils';
 import { useManageDeliveryLogic, useManageDestructionLogic } from './use-manage-actions';
 import { usePublicStatusFetcher } from './use-manage-status';
 
@@ -65,10 +71,13 @@ export function useManagePageState(uuid?: string) {
     onStateChange: useCallback(
       (update: ChannelStateUpdate) => {
         if (!mountedRef.current) return;
+        const latestState = useDeliverStore.getState().channelState;
         setIsUnavailable(false);
         setPublicStatusError(null);
         setStatusConfirmed(true);
-        store.setChannelState(update.state);
+        if (latestState !== update.state) {
+          store.setChannelState(update.state);
+        }
         store.setAdminMode(update.adminMode);
         store.setSecurityProfile(update.securityProfile);
         store.setReceiverPubFpr(update.receiverPubFpr ?? null);
@@ -88,7 +97,7 @@ export function useManagePageState(uuid?: string) {
         if (!mountedRef.current) return;
         const latestState = useDeliverStore.getState().channelState;
         setPublicStatusError(null);
-        store.setShowDestroyConfirm(false);
+        store.setDestroyStage('idle');
         if (latestState === CHANNEL_STATE.DELETED) {
           setIsUnavailable(false);
           return;
@@ -104,7 +113,7 @@ export function useManagePageState(uuid?: string) {
         setPublicStatusError,
         setIsUnavailable,
         store.setChannelState,
-        store.setShowDestroyConfirm,
+        store.setDestroyStage,
         store.setAdminMode,
         store.setSecurityProfile,
         store.setReceiverPubFpr,
@@ -129,8 +138,8 @@ export function useManagePageState(uuid?: string) {
     }
     const parsedUuid = UUIDSchema.safeParse(uuid);
     store.setDeliverUuid(parsedUuid.success ? parsedUuid.data : null);
-    store.setShowDestroyConfirm(false);
-  }, [uuid, store.setDeliverUuid, store.setShowDestroyConfirm, setPublicStatusError]);
+    store.setDestroyStage('idle');
+  }, [uuid, store.setDeliverUuid, store.setDestroyStage, setPublicStatusError]);
 
   useEffect(() => {
     return () => store.resetDeliverStore();
@@ -160,6 +169,15 @@ export function useManagePageState(uuid?: string) {
   const canDeliver =
     canManageActions &&
     (deliveryMode === 'text' ? secretInput.trim().length > 0 : selectedFile !== null);
+  const needsChannelPassword = requiresChannelPassword(store.adminMode);
+  const destroyPasswordValid = hasValidChannelPassword(softkeyPassphrase);
+  const canStartDeleteAuth =
+    canManageActions &&
+    needsChannelPassword &&
+    store.destroyStage === 'idle' &&
+    !canComposeDelivery(store.channelState);
+  const canRequestDestroy =
+    canManageActions && (!needsChannelPassword || canStartDeleteAuth || destroyPasswordValid);
 
   const { handleDeliver, isActiveActionContext } = useManageDeliveryLogic(
     mountedRef,
@@ -196,7 +214,8 @@ export function useManagePageState(uuid?: string) {
   return {
     status: store.channelState,
     adminMode: store.adminMode,
-    showDestroyConfirm: store.showDestroyConfirm,
+    destroyStage: store.destroyStage,
+    showDestroyConfirm: store.destroyStage === 'confirm',
     deliveryMode,
     filePolicyMaxBytes,
     secretInput,
@@ -211,6 +230,7 @@ export function useManagePageState(uuid?: string) {
     isActionPending,
     canManageActions,
     canDeliver,
+    canRequestDestroy,
     handleModeChange: (mode: 'text' | 'file') => {
       setDeliveryMode(mode);
       setActionError(null);
@@ -256,13 +276,19 @@ export function useManagePageState(uuid?: string) {
     },
     handleSoftkeyPassphraseChange: (value: string) => {
       setSoftkeyPassphrase(value);
+      if (store.destroyStage === 'confirm') {
+        store.setDestroyStage('auth');
+      }
       if (actionError) {
         setActionError(null);
       }
     },
     handleDeliver,
     handleDestroyConfirm,
-    handleCancelDestroy: () => store.setShowDestroyConfirm(false),
+    handleCancelDestroy: () =>
+      store.setDestroyStage(
+        needsChannelPassword && canComposeDelivery(store.channelState) ? 'auth' : 'idle'
+      ),
     handleApplyDestroy,
   };
 }

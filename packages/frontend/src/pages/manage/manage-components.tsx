@@ -440,6 +440,7 @@ export function ActionPanel({
   showDestroyConfirm,
   pending,
   showDeliverAction,
+  canDestroy,
   canManageActions,
   canDeliver,
   onDeliver,
@@ -452,6 +453,7 @@ export function ActionPanel({
   showDestroyConfirm: boolean;
   pending: boolean;
   showDeliverAction: boolean;
+  canDestroy: boolean;
   canManageActions: boolean;
   canDeliver: boolean;
   onDeliver: () => void;
@@ -492,7 +494,7 @@ export function ActionPanel({
         <Button
           className="w-full sm:w-auto"
           data-testid="manage-destroy-button"
-          disabled={pending || !canManageActions}
+          disabled={pending || !canManageActions || !canDestroy}
           onClick={onOpenDestroyConfirm}
           type="button"
           variant="danger"

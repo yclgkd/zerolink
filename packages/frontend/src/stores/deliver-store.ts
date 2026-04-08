@@ -20,6 +20,8 @@ import {
   createSuccessState,
 } from './request-state';
 
+export type DestroyFlowStage = 'idle' | 'auth' | 'confirm';
+
 /**
  * State properties for the sender-side channel management and delivery flow.
  */
@@ -28,7 +30,7 @@ export interface DeliverStoreState {
   channelState: ChannelState;
   adminMode: AdminMode | null;
   securityProfile: SecurityProfile | null;
-  showDestroyConfirm: boolean;
+  destroyStage: DestroyFlowStage;
   copied: boolean;
   compoundBegin: AsyncRequestState<CompoundBeginResponse>;
   compoundCommit: AsyncRequestState<CompoundCommitResponse>;
@@ -47,7 +49,7 @@ export interface DeliverStoreActions {
   setAdminMode: (mode: AdminMode | null) => void;
   setSecurityProfile: (profile: SecurityProfile | null) => void;
   setReceiverPubFpr: (fpr: HexString | null) => void;
-  setShowDestroyConfirm: (show: boolean) => void;
+  setDestroyStage: (stage: DestroyFlowStage) => void;
   setCopied: (copied: boolean) => void;
   startCompoundBegin: () => void;
   completeCompoundBegin: (payload: CompoundBeginResponse) => void;
@@ -75,7 +77,7 @@ function createInitialState(): DeliverStoreState {
     channelState: CHANNEL_STATE.WAITING,
     adminMode: null,
     securityProfile: null,
-    showDestroyConfirm: false,
+    destroyStage: 'idle',
     copied: false,
     compoundBegin: createIdleRequestState<CompoundBeginResponse>(),
     compoundCommit: createIdleRequestState<CompoundCommitResponse>(),
@@ -103,7 +105,7 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
   setChannelState: (state) =>
     set(() => ({
       channelState: state,
-      showDestroyConfirm: false,
+      destroyStage: 'idle',
     })),
 
   setAdminMode: (mode) => set(() => ({ adminMode: mode })),
@@ -112,7 +114,7 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
 
   setReceiverPubFpr: (fpr) => set(() => ({ receiverPubFpr: fpr })),
 
-  setShowDestroyConfirm: (show) => set(() => ({ showDestroyConfirm: show })),
+  setDestroyStage: (stage) => set(() => ({ destroyStage: stage })),
 
   setCopied: (copied) => set(() => ({ copied })),
 
@@ -163,13 +165,13 @@ export const useDeliverStore = create<DeliverStore>((set, get) => ({
   markDelivered: () =>
     set(() => ({
       channelState: CHANNEL_STATE.DELIVERED,
-      showDestroyConfirm: false,
+      destroyStage: 'idle',
     })),
 
   markDeleted: () =>
     set(() => ({
       channelState: CHANNEL_STATE.DELETED,
-      showDestroyConfirm: false,
+      destroyStage: 'idle',
     })),
 
   resetDeliverStore: () => set(createInitialState()),

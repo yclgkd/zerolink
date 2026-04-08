@@ -291,9 +291,15 @@ describe('ManagePage – delete / destroy confirm', () => {
 
     await screen.findByTestId('manage-state-waiting');
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    expect(screen.getByTestId('manage-softkey-passphrase-section')).toBeTruthy();
+    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
       target: { value: 'Quick#Manage123' },
     });
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    expect(screen.getByTestId('manage-destroy-confirm')).toBeTruthy();
     fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
 
     await waitFor(() => {
@@ -304,7 +310,94 @@ describe('ManagePage – delete / destroy confirm', () => {
     expect(deleteChannelMock.mock.calls[0]?.[0]?.softkeyPassphrase).toBe('Quick#Manage123');
   });
 
-  it('blocks password-managed delete locally when the channel password is shorter than 12 characters', async () => {
+  it('keeps password-managed delete disabled until the waiting-state password is valid', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'short' },
+    });
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+    expect(deleteChannelMock).not.toHaveBeenCalled();
+  });
+
+  it('requires a valid password before locked-state delete can open confirm', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'locked',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    expect(screen.getByTestId('manage-softkey-passphrase-section')).toBeTruthy();
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Quick#Manage123' },
+    });
+
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    expect(screen.getByTestId('manage-destroy-confirm')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    await waitFor(() => {
+      expect(deleteChannelMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('keeps waiting-state delete auth visible after same-state realtime updates', async () => {
+    const fetchSpy = getFetchSpy();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        state: 'waiting',
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      })
+    );
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-waiting');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    expect(screen.getByTestId('manage-softkey-passphrase-section')).toBeTruthy();
+
+    act(() => {
+      getLatestChannelSyncOptions().onStateChange({
+        state: 'waiting',
+        version: 2,
+        adminMode: 'password',
+        securityProfile: SECURITY_PROFILE.QUICK,
+      });
+    });
+
+    expect(screen.getByTestId('manage-state-waiting')).toBeTruthy();
+    expect(screen.getByTestId('manage-softkey-passphrase-section')).toBeTruthy();
+    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+  });
+
+  it('returns waiting-state delete flow to idle after confirm cancel', async () => {
     const fetchSpy = getFetchSpy();
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({
@@ -320,14 +413,16 @@ describe('ManagePage – delete / destroy confirm', () => {
     await screen.findByTestId('manage-state-waiting');
     fireEvent.click(screen.getByTestId('manage-destroy-button'));
     fireEvent.change(screen.getByTestId('passphrase-input-field'), {
-      target: { value: 'short' },
+      target: { value: 'Quick#Manage123' },
     });
-    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    expect(screen.getByTestId('manage-destroy-confirm')).toBeTruthy();
 
-    expect((await screen.findByTestId('manage-action-error')).textContent).toContain(
-      'Channel password must be at least 12 characters'
-    );
-    expect(deleteChannelMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('manage-destroy-cancel'));
+
+    expect(screen.queryByTestId('manage-destroy-confirm')).toBeNull();
+    expect(screen.queryByTestId('manage-softkey-passphrase-section')).toBeNull();
+    expect((screen.getByTestId('manage-destroy-button') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows unavailable state after remounting a locally deleted channel', async () => {
