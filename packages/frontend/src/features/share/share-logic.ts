@@ -15,10 +15,7 @@ import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import {
   getPassphraseValidationErrorI18n,
-  getPassphraseValidationI18n,
   hasValidPassphrase,
-  MIN_PASSPHRASE_LENGTH,
-  validatePassphrase,
 } from '../../crypto/passphrase-policy';
 import {
   extractLockSecretFromHash,
@@ -30,6 +27,11 @@ import { useDecryptStore } from '../../stores/decrypt-store';
 import { useLockStore } from '../../stores/lock-store';
 import type { ChannelClosedReason } from '../../sync/channel-sync.ts';
 import { useChannelSync } from '../../sync/use-channel-sync.ts';
+import {
+  getDecryptPassphraseHelperText,
+  isDecryptPassphraseErrorCode,
+  mapDecryptError,
+} from './share-decrypt-helpers';
 
 export function mapLockError(code: string, message?: string): string {
   switch (code) {
@@ -55,51 +57,8 @@ export function mapLockError(code: string, message?: string): string {
   }
 }
 
-export function mapDecryptError(code: string, message?: string): string {
-  switch (code) {
-    case 'NOT_FOUND':
-      return 'This channel is no longer available.';
-    case 'PASSPHRASE_REQUIRED':
-      return message ?? 'Passphrase is required to decrypt.';
-    case 'CHANNEL_NOT_DELIVERED':
-      return 'Channel is not delivered yet. Ask sender to deliver first.';
-    case 'KEY_STORAGE_ERROR':
-      return 'Local key material is unavailable on this device.';
-    case 'INTEGRITY_MISMATCH':
-      return 'Ciphertext integrity verification failed.';
-    case 'CRYPTO_ERROR':
-      return 'Unable to decrypt with the provided passphrase.';
-    case 'NETWORK_ERROR':
-    case 'BAD_REQUEST':
-    case 'INVALID_REQUEST':
-      return 'Decrypt request failed due to network or request validation.';
-    case 'INTERNAL_ERROR':
-      return 'An unexpected error occurred. Please try again.';
-    default:
-      return 'Decrypt failed. Please try again.';
-  }
-}
-
-function getDecryptPassphraseHelperText(
-  passphrase: string,
-  t: ReturnType<typeof useTranslation>['t']
-): string | undefined {
-  const result = validatePassphrase(passphrase);
-  if (result === null) return undefined;
-  if (result === 'missing' || result === 'too_short') {
-    return t('share.decryptMinLengthHint', { min: MIN_PASSPHRASE_LENGTH });
-  }
-
-  const i18n = getPassphraseValidationI18n(result, t('share.decryptLabel'));
-  return t(i18n.key, i18n.params);
-}
-
 export function isLockPassphraseErrorCode(code: string): boolean {
   return code === 'PASSPHRASE_REQUIRED';
-}
-
-export function isDecryptPassphraseErrorCode(code: string): boolean {
-  return code === 'PASSPHRASE_REQUIRED' || code === 'CRYPTO_ERROR';
 }
 
 function isTerminalPublicState(state: ChannelState): boolean {
