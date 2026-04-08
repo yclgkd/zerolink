@@ -263,7 +263,7 @@ export const FileSharePolicySchema = z
     message: 'chunkSizeBytes * maxChunks must cover maxFileBytes',
   });
 
-export const FileStorageBackendSchema = z.enum(['r2', 'minio']);
+export const FileStorageBackendSchema = z.enum(['r2', 's3']);
 
 export const FileUploadInitiateRequestSchema = z.object({
   channelUuid: UUIDSchema,

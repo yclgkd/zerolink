@@ -48,19 +48,20 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	verifier := webauthn.NewVerifier()
 
 	var fileStore httpapi.FileStore
-	if cfg.File.StorageBackend == "minio" {
-		minioStore, err := filestore.NewMinIO(ctx, filestore.Config{
-			Endpoint:  cfg.File.MinIO.Endpoint,
-			AccessKey: cfg.File.MinIO.AccessKey,
-			SecretKey: cfg.File.MinIO.SecretKey,
-			Bucket:    cfg.File.MinIO.Bucket,
-			UseSSL:    cfg.File.MinIO.UseSSL,
-			Region:    cfg.File.MinIO.Region,
+	if cfg.File.StorageBackend == "s3" {
+		s3Store, err := filestore.NewS3(ctx, filestore.Config{
+			Endpoint:       cfg.File.S3.Endpoint,
+			PublicEndpoint: cfg.File.S3.PublicEndpoint,
+			AccessKey:      cfg.File.S3.AccessKey,
+			SecretKey:      cfg.File.S3.SecretKey,
+			Bucket:         cfg.File.S3.Bucket,
+			UseSSL:         cfg.File.S3.UseSSL,
+			Region:         cfg.File.S3.Region,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("init file storage: %w", err)
 		}
-		fileStore = minioStore
+		fileStore = s3Store
 	}
 	if fileStore != nil {
 		db.SetMultipartCleaner(fileStore)

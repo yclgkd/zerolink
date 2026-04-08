@@ -39,7 +39,7 @@
 
 #### Backend
 - **Cloudflare runtime**: Workers + Durable Objects + R2
-- **Self-hosted runtime**: Go API + PostgreSQL + MinIO
+- **Self-hosted runtime**: Go API + PostgreSQL + S3-compatible storage (Garage or external)
 - **State management**: Durable Objects (serialization, atomicity)
 - **Persistence**: DO storage / SQLite or PostgreSQL rows for channel metadata, plus object storage for multipart file chunks
 - **Realtime**: DO WebSocket fan-out on Cloudflare; process-local WebSocket hub with HTTP polling fallback in self-hosted mode
@@ -76,16 +76,16 @@ Receiver → Visit share link (obtain lock_secret from fragment)
 Sender → Fetch receiver_pub (already locked)
       → Client-side hybrid encryption:
         - Random AES-256 key
-        - Inline payloads: AES-GCM encrypt padded_plaintext into cipher_bundle
-        - Large files: derive baseIv/contentKey, AES-GCM encrypt each chunk independently
+        - Text payloads: AES-GCM encrypt padded_plaintext into inline cipher_bundle
+        - File payloads: derive baseIv/contentKey, AES-GCM encrypt each chunk independently
         - RSA-OAEP wrap AES key
-      → Large files only:
+      → File payloads:
         - /api/file/initiate → upload encrypted chunks → /api/file/complete
         - Receive typed fileRef metadata
       → compound_begin to obtain challenge
       → Secure Share: WebAuthn signature confirmation
       → Quick Share: Local ECDSA signature confirmation
-      → compound_commit to atomically write inline cipher_bundle or multipart fileRef
+      → compound_commit to atomically write inline text cipher_bundle or fileRef
 ```
 
 ### 4. Update/Delete (Management)
@@ -175,7 +175,7 @@ WebAuthn/ECDSA challenge must === expected_challenge
 │  3. Wait for Receiver to lock                               │
 │  4. After obtaining receiver_pub:                           │
 │     - Hybrid encrypt content (AES-GCM + RSA-OAEP)           │
-│     - Small payloads stay inline; large files upload        │
+│     - Text payloads stay inline; file payloads upload       │
 │       encrypted chunks first and then commit a fileRef      │
 │     - Pad to 4KB / 8KB blocks                               │
 │     - Quick: Local ECDSA signature / Secure: WebAuthn       │
@@ -210,9 +210,10 @@ WebAuthn/ECDSA challenge must === expected_challenge
 │      to lock_secret)                                        │
 │    * receiver_pub (receiver public key; exists only after   │
 │      locking)                                               │
-│    * cipher_bundle (small inline payloads) or fileRef       │
-│      metadata (large file deliveries)                       │
-│    * encrypted multipart chunks in R2 / MinIO               │
+│    * cipher_bundle (inline text payloads) or fileRef        │
+│      metadata (file deliveries)                             │
+│    * encrypted multipart chunks in                           │
+│      R2 / S3-compatible storage                              │
 │    * version, nonce, challenge (anti-replay/concurrency)    │
 │  - Can:                                                     │
 │    * Verify WebAuthn signatures                             │
@@ -274,7 +275,7 @@ NONCE_BYTES = 24            // nonce length
 // Padding
 PAD_BLOCK_DEFAULT = 4096    // Default 4KB block
 PAD_BLOCK_MAX = 65536       // Maximum 64KB block
-MAX_PLAINTEXT_BYTES = 2MB   // Inline plaintext ceiling before multipart
+MAX_PLAINTEXT_BYTES = 2MB   // Inline plaintext ceiling for text payloads / legacy compatibility
 
 // WebAuthn
 WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
@@ -288,7 +289,7 @@ WEBAUTHN_ALG = -7           // ES256 (ECDSA P-256)
 - Users can verify frontend integrity
 
 ### Self-Hosting (Current)
-- Docker Compose package with Caddy + Go API + PostgreSQL + MinIO
+- Docker Compose package with Caddy + Go API + PostgreSQL + Garage (optional S3-compatible storage)
 - Protocol-equivalent implementation for the current frontend contract, including `/api/file_policy` and multipart `fileRef` delivery
 - Full autonomous control over keys, storage, and runtime
 

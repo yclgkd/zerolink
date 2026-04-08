@@ -159,7 +159,7 @@ async function prepareMultipartDeliveryFixture(): Promise<{
   let deliveredFileRef: MultipartFileRef | null = null;
   vi.mocked(apiClient.fileUploadComplete).mockImplementation(async (input) => {
     const fileRef = MultipartFileRefSchema.parse({
-      storageBackend: 'minio',
+      storageBackend: 's3',
       chunkSizeBytes: input.chunkSizeBytes,
       chunkCount: input.chunks.length,
       totalPlaintextBytes: input.totalPlaintextBytes,

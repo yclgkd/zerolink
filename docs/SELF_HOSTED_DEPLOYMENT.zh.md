@@ -9,7 +9,7 @@
 - `web`: Caddy，负责静态前端和 `/api/*` 反向代理
 - `api`: Go 自部署 API
 - `db`: PostgreSQL
-- `minio`: S3 兼容对象存储，用于保存加密 multipart 文件分片
+- `garage` *（可选，通过 `--profile storage` 启用）*：S3 兼容对象存储，用于保存加密 multipart 文件分片
 - `migrate`: 一次性迁移任务
 
 ## 实时同步行为
@@ -27,14 +27,16 @@ export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
 curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/garage.toml"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/garage-init.sh"
 curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
 sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
-docker compose up -d
+docker compose --profile storage up -d
 ```
 
-下载得到的 `.env.example` 默认使用 `SELFHOST_API_FILE_STORAGE_BACKEND=minio`，
-会开启 multipart 文件传输，默认总文件上限 `512 MiB`、分片大小 `4 MiB`。
+`.env.example` 默认使用 `SELFHOST_API_FILE_STORAGE_BACKEND=s3`，通过内置的 Garage 容器（由
+`storage` profile 启动）开启 multipart 文件传输，默认总文件上限 `512 MiB`、分片大小 `4 MiB`。
 
 默认 Compose 会拉取以下公开镜像：
 
@@ -52,7 +54,7 @@ docker compose up -d
 git clone https://github.com/yclgkd/ZeroLink.git
 cd ZeroLink/deploy/selfhost
 cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+docker compose --profile storage -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
 
 `docker-compose.build.yml` 会把 `migrate`、`api` 和 `web` 恢复为本地 `build:` 路径，
@@ -64,7 +66,6 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 
 - 应用：`http://localhost:8080`
 - 就绪检查：`http://localhost:8080/readyz`
-- MinIO 控制台：`http://localhost:9001`
 
 ## 环境变量说明
 
@@ -73,38 +74,47 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 - `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` 控制 `migrate`、`api`、`web` 默认从哪个 GHCR namespace 拉取镜像
 - `ZEROLINK_IMAGE_TAG=latest` 控制 `migrate`、`api`、`web` 默认拉取的发布镜像 tag
 - 默认 `SELFHOST_API_DATABASE_URL` 已指向 Compose 里的 `db` 服务
-- `SELFHOST_API_FILE_STORAGE_BACKEND=minio` 会通过 MinIO 预签名 PUT/GET URL 启用 multipart 文件传输
-- `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 仍需受历史 inline envelope 上限约束，因为这个字段还保留在共享 file-policy 合约里
-- `SELFHOST_API_MINIO_*` 已默认指向打包内的 `minio` 服务和 `zerolink-files` bucket
+- `SELFHOST_API_FILE_STORAGE_BACKEND=s3` 启用 multipart 文件传输；当 `SELFHOST_API_S3_PUBLIC_ENDPOINT` 已设置时浏览器通过 S3 预签名 URL 直传，未设置时 API 代理 chunk 字节
+- `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 仍受历史 inline envelope 上限约束，因为这个字段还保留在共享 file-policy 合约里
+- `SELFHOST_API_S3_*` 配置 S3 兼容存储连接；使用内置 Garage 容器时，已默认指向 `garage:3900` 和 `zerolink-files` bucket
 
 如果你修改了端口或主机名，先同步更新 `SELFHOST_API_RP_ORIGIN`，再测试 WebAuthn。
 
 ## 存储配置
 
-默认情况下，`docker-compose.yml` 文件会运行一个本地的 **MinIO** 容器 (`minio:9000`)，并将上传的文件分片持久化存储在宿主机的 `minio-data` Docker volume 中。
+自部署栈支持三种存储模式：
 
-### 1. 默认本地 MinIO
-如果你继续使用默认的本地配置，请注意：
-- **默认凭证**：随附的 `.env.example` 默认账号密码是 `minioadmin:minioadmin`。**在将服务暴露到公网前务必修改此密码**。
-- **数据位置**：你加密后的文件分片存储在宿主机的 `minio-data` volume 中。如果需要备份或迁移，请将它与 `postgres-data` 一同打包。
-- **管理控制台**：MinIO 提供了一个可视化的管理后台，暴露在 `9001` 端口 (`http://localhost:9001`)，方便排查问题或查看存储桶。
+- **`s3` + 内置 Garage**（默认）：`.env.example` 默认使用此模式，配合 `docker compose --profile storage up -d` 启动。
+- **`s3` + 外部提供商**：配置 `SELFHOST_API_S3_*` 指向 AWS S3、Cloudflare R2、阿里云 OSS 等。运行 `docker compose up -d`（不带 `storage` profile）。
+- **`inline`**：纯文本模式，无需对象存储；新的文件上传不可用。
+
+### 1. 默认本地 Garage
+上面的快速开始命令已自动启动 Garage。如果你已经在使用默认配置：
+
+```bash
+docker compose --profile storage up -d
+```
+
+- **凭证**：参见 `.env.example` 中的 Garage access key 和 secret key。**在将服务暴露到公网前务必修改**。
+- **数据位置**：加密后的文件分片存储在宿主机的 `garage-data` volume 中。如需备份或迁移，请将它与 `postgres-data` 一同打包。
+- Garage 是可选的。如果你使用外部 S3 提供商，只需运行 `docker compose up -d`（不带 `storage` profile）。
 
 ### 2. 接入外部 S3 兼容云存储
-你可以完全抛弃本地的 MinIO 容器，让 ZeroLink API 直接连向任何 S3 兼容的公有云对象存储（如阿里云 OSS、腾讯云 COS、AWS S3、Cloudflare R2），无需任何代码修改。
+你可以完全跳过 Garage 容器，让 ZeroLink API 直接连向任何 S3 兼容的公有云对象存储（如阿里云 OSS、腾讯云 COS、AWS S3、Cloudflare R2），无需任何代码修改。
 
-只需在 `.env` 文件中更新以下变量：
+在 `.env` 中设置 `SELFHOST_API_FILE_STORAGE_BACKEND=s3`，然后更新以下变量：
 ```env
-SELFHOST_API_MINIO_ENDPOINT=oss-cn-hangzhou.aliyuncs.com  # 注意不要带 https:// 前缀
-SELFHOST_API_MINIO_ACCESS_KEY=你的_access_key
-SELFHOST_API_MINIO_SECRET_KEY=你的_secret_key
-SELFHOST_API_MINIO_BUCKET=zerolink-files
-SELFHOST_API_MINIO_USE_SSL=true  # 连接公有云厂商必须设置为 true
-SELFHOST_API_MINIO_REGION=cn-hangzhou  # 如果是 Cloudflare R2 请设为 auto
+SELFHOST_API_S3_ENDPOINT=oss-cn-hangzhou.aliyuncs.com
+SELFHOST_API_S3_ACCESS_KEY=你的_access_key
+SELFHOST_API_S3_SECRET_KEY=你的_secret_key
+SELFHOST_API_S3_BUCKET=zerolink-files
+SELFHOST_API_S3_USE_SSL=true
+SELFHOST_API_S3_REGION=cn-hangzhou
 ```
-*提示：如果你配置了外部存储，你可以在 `docker-compose.yml` 中删除 `minio` 服务定义以节省本地资源。同时需要删除 `api.depends_on` 中的 `minio` 条目以及 `volumes` 中的 `minio-data` 定义，否则 `docker compose up` 会报错。*
+*提示：使用外部存储时，直接运行 `docker compose up -d`（不带 `--profile storage`），Garage 容器不会启动，节省本地资源。*
 
-### 3. 无对象存储模式（禁用文件上传）
-如果你完全不想启动对象存储服务，可以把 API 切到 `inline` storage backend。这个模式**不会**恢复旧版 inline 文件存储；它的实际效果是禁用文件上传，同时保留文本分享。
+### 3. 纯文本 `inline` 模式（禁用文件上传）
+如果你完全不想启动对象存储服务，可以把 API 切到 `inline` storage backend。这个模式**不会**恢复旧版 inline 文件存储；它的实际效果是禁用新的文件上传，同时保留文本分享。
 
 在 `.env` 中设置以下变量：
 ```env
@@ -113,23 +123,23 @@ SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # backend=inline 时默认即为 fa
 SELFHOST_API_FILE_MAX_BYTES=2080760
 SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
-在 `SELFHOST_API_FILE_STORAGE_BACKEND=inline` 下：
-- 系统不依赖 MinIO。
-- 前端对文件投递会返回 `FILE_STORAGE_UNAVAILABLE`。
-- 文本投递仍走正常的 inline `cipherBundle` 路径。
+在 `inline` 模式下：
+- 无需任何对象存储。
+- `multipartSupported` 会保持为 `false`，因此新的文件上传会以 `FILE_STORAGE_UNAVAILABLE` 被拒绝。
+- 文本载荷仍继续使用 inline `cipherBundle`，并保存在 PostgreSQL-backed channel state 中。
 - `SELFHOST_API_FILE_MAX_BYTES` 和 `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` 仍必须受历史 inline envelope 上限约束，因为它们还保留在共享 file-policy / config 合约里。
 
 ## Smoke Test
 
-1. 用 `docker compose up -d` 启动。
+1. 如果直接使用内置的 `.env.example`，请用 `docker compose --profile storage up -d` 启动；只有切到外部 S3 或 `inline` 模式后，才使用 `docker compose up -d`。
 2. 确认 `curl http://localhost:8080/readyz` 返回 `200`。
-3. 确认 `curl http://localhost:8080/api/file_policy` 在默认 MinIO 配置下返回 `multipartSupported: true`。
+3. 确认 `curl http://localhost:8080/api/file_policy` 在 `SELFHOST_API_FILE_STORAGE_BACKEND=s3` 时返回 `multipartSupported: true`。
 4. 在一个窗口打开 `http://localhost:8080`，创建一个 Quick Share channel。
 5. 在第二个窗口或隐身窗口打开 share link，完成 lock。
 6. 确认 sender 的 manage 页面无需手动刷新就切到 `locked`。
 7. 在 manage 页面 deliver 一个 secret。
 8. 确认 receiver 的 share 页面自动切到 `delivered`，并显示 decrypt panel。
-9. 可选：投递一个大于 `2 MiB` 的文件，并确认接收端仍能解密/下载；这会走 MinIO multipart `fileRef` 路径。
+9. 可选：投递一个文件，并确认接收端仍能解密/下载；如果文件大于当前配置的 chunk 大小（默认 `4 MiB`），还能顺便覆盖 multi-chunk 上传/下载路径。
 
 如果 WebSocket 传输不可用，前端会自动退回 `/api/public/:uuid` 轮询。
 
@@ -140,8 +150,8 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 - production tag 发布时，GHCR 镜像会附带 `linux/amd64` + `linux/arm64` 多架构 manifest，以及 Buildx 生成的 provenance / SBOM attestation，便于把拉取到的镜像追溯回具体 release commit 和 GitHub Actions run。
 - realtime hub 是进程内实现；如果要跑多个 API 副本，需要共享 pub/sub。
 - PostgreSQL 数据存放在 `postgres-data` volume 中。
-- MinIO 对象数据存放在 `minio-data` volume 中。
-- 当前所有文件交付都走 `/api/file/initiate`、MinIO 直传/直下、`/api/file/complete` 和 `fileRef` 元数据。`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` 仍是策略/配置兼容字段，不再把小文件切回 inline 文件路径。
+- 使用 `storage` profile 时，Garage 对象数据存放在 `garage-data` volume 中。
+- 所有新的 `payloadKind=file` 交付都通过 `/api/file/initiate`、`/api/file/complete` 和 `fileRef` 元数据走对象存储。当 `S3_PUBLIC_ENDPOINT` 已设置时 chunk 字节走 S3 预签名 URL 直传；未设置（如 Docker 内置 Garage）时通过 API 代理。`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` 仍是策略/配置兼容字段，不再把小文件切回 inline 文件路径。只有文本载荷走 inline `cipherBundle`。
 - API 服务没有设置全局 HTTP write timeout，以避免 WebSocket 长连接被断开；per-write 超时由 realtime hub 内部保证。如果你在 Caddy 配置中添加 `timeouts` 块，**不要**设置 `write_timeout`，否则反向代理会中断 WebSocket 会话。
 
 ## 停止

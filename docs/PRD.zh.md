@@ -69,7 +69,7 @@ v3.0 的产品目标：
 ### 3.5 新增：Self-Hosting / Verifiable Releases
 
 - 官方 Cloudflare 版保持默认
-- 提供 Docker Compose 一键自托管（当前打包为 Caddy + Go API + PostgreSQL + MinIO，对已发布前端契约提供协议等价实现）
+- 提供 Docker Compose 一键自托管（当前打包为 Caddy + Go API + PostgreSQL + Garage，对已发布前端契约提供协议等价实现）
 - 发布链：签名 Manifest + 可复现构建
 
 ---
@@ -438,7 +438,7 @@ Quick Share 模式（额外字段 `adminMode` + `softkeySignature`，不含 `ass
 }
 ```
 
-文件交付用 `fileRef`（见 10.6）替代 `cipherBundle`，`payloadKind` 为 `"file"`。
+新的文件载荷使用 `fileRef`（见 10.6）替代 `cipherBundle`，`payloadKind` 为 `"file"`。
 
 #### POST /api/delete_commit/:uuid
 
@@ -471,7 +471,7 @@ Response：
 {
   "ok": true,
   "cipherBundle": { "...": "inline 载荷，与 10.4 相同结构" },
-  "fileRef": { "...": "multipart 文件载荷元数据" },
+  "fileRef": { "...": "用于已交付文件载荷的 multipart 元数据" },
   "receiverPubFpr": "hex...",
   "cipherVersion": 1,
   "deliveryAuth": { "...": "投递者身份证明，可选" },
@@ -481,7 +481,7 @@ Response：
 
 `cipherBundle` 和 `fileRef` 互斥，必有且仅有一个。
 
-### 10.6 文件 API（multipart 文件交付）
+### 10.6 文件 API（对象存储 / multipart）
 
 #### GET /api/file_policy
 
@@ -761,7 +761,7 @@ sequenceDiagram
 - LOCK_KEY_BYTES = 32（server 存储，sha256 输出）
 - PAD_BLOCK_DEFAULT = 4096（可配置 8192）
 - PAD_BLOCK_MAX = 65536（上限）
-- MAX_PLAINTEXT_BYTES = 2MB（inline 明文上限；更大的文件在支持时切 multipart）
+- MAX_PLAINTEXT_BYTES = 2MB（文本载荷与 legacy 兼容用的 inline 明文上限；新的文件上传需要对象存储支持）
 - WebAuthn：默认 alg = -7 (ES256)、UV required（Strict/HardwareOnly）
 
 ---
@@ -941,7 +941,7 @@ Response：
 
 - PAD_BLOCK 默认 4096，可在 update payload 中带 pad_block（用于审计一致性；不建议公开展示）
 - pad_rand 必须为加密安全随机数
-- 这个 padding 格式仍用于 inline 密文生成。文本仍在 `MAX_PLAINTEXT_BYTES` 约束下走 inline `cipherBundle`；文件交付不再回退到 legacy inline 存储，而是要求 multipart 对象存储和 `fileRef` 元数据。
+- 文本载荷继续在 `MAX_PLAINTEXT_BYTES` 约束下走 inline 路径。新的文件载荷不再用这个尺寸阈值决定传输方式：它们必须先上传加密 chunk 并提交 `fileRef`，若部署未声明对象存储能力则直接拒绝
 
 ### E3. 解码规则（接收方）
 

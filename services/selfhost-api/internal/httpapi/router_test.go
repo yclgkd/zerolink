@@ -38,9 +38,12 @@ type stubProtocol struct {
 
 type stubFileStore struct {
 	initiate          func(context.Context, string, int) error
+	putChunk          func(context.Context, string, int, io.Reader, int64) (string, error)
 	presignedUpload   func(context.Context, string, int, time.Duration) (string, error)
 	completeUpload    func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
+	getChunk          func(context.Context, string) (io.ReadCloser, error)
 	presignedDownload func(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
+	usePresignedURLs  func() bool
 	deleteUpload      func(context.Context, filestore.MultipartFileRef) error
 }
 
@@ -156,7 +159,7 @@ func (s stubFileStore) Initiate(ctx context.Context, uploadID string, chunkCount
 
 func (s stubFileStore) PresignedUpload(ctx context.Context, uploadID string, index int, ttl time.Duration) (string, error) {
 	if s.presignedUpload == nil {
-		return "https://minio.example/upload", nil
+		return "https://s3.example/upload", nil
 	}
 	return s.presignedUpload(ctx, uploadID, index, ttl)
 }
@@ -170,9 +173,30 @@ func (s stubFileStore) CompleteUpload(ctx context.Context, req filestore.FileUpl
 
 func (s stubFileStore) PresignedDownload(ctx context.Context, fileRef filestore.MultipartFileRef, index int, ttl time.Duration) (string, error) {
 	if s.presignedDownload == nil {
-		return "https://minio.example/download", nil
+		return "https://s3.example/download", nil
 	}
 	return s.presignedDownload(ctx, fileRef, index, ttl)
+}
+
+func (s stubFileStore) PutChunk(ctx context.Context, uploadID string, index int, body io.Reader, size int64) (string, error) {
+	if s.putChunk != nil {
+		return s.putChunk(ctx, uploadID, index, body, size)
+	}
+	return "etag-stub", nil
+}
+
+func (s stubFileStore) GetChunk(ctx context.Context, key string) (io.ReadCloser, error) {
+	if s.getChunk != nil {
+		return s.getChunk(ctx, key)
+	}
+	return io.NopCloser(strings.NewReader("chunk-data")), nil
+}
+
+func (s stubFileStore) UsePresignedURLs() bool {
+	if s.usePresignedURLs != nil {
+		return s.usePresignedURLs()
+	}
+	return true
 }
 
 func (s stubFileStore) DeleteUpload(ctx context.Context, fileRef filestore.MultipartFileRef) error {
@@ -558,7 +582,7 @@ func TestFileInitiateRouteAcceptsNanoIDUUIDAndReturnsTargets(t *testing.T) {
 		Realtime:      realtimeHub,
 		FileStore: stubFileStore{
 			presignedUpload: func(_ context.Context, uploadID string, index int, _ time.Duration) (string, error) {
-				return "https://minio.example/upload/" + uploadID + "/" + strconv.Itoa(index), nil
+				return "https://s3.example/upload/" + uploadID + "/" + strconv.Itoa(index), nil
 			},
 		},
 		FilePolicy: FilePolicy{

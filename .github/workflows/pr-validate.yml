@@ -157,6 +157,17 @@ jobs:
           go-version-file: services/selfhost-api/go.mod
           cache-dependency-path: services/selfhost-api/go.sum
 
+      - name: Check Go formatting
+        working-directory: services/selfhost-api
+        shell: bash
+        run: |
+          unformatted="$(find . -name '*.go' -print0 | xargs -0 gofmt -l)"
+          if [ -n "$unformatted" ]; then
+            echo "These Go files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Run self-hosted store tests
         working-directory: services/selfhost-api
         env:

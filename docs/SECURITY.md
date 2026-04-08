@@ -470,7 +470,7 @@ const NONCE_BYTES = 24;              // nonce
 // Padding
 const PAD_BLOCK_DEFAULT = 4096;      // 4KB
 const PAD_BLOCK_MAX = 65536;         // 64KB
-const MAX_PLAINTEXT_BYTES = 2097152; // 2MB inline plaintext ceiling before multipart
+const MAX_PLAINTEXT_BYTES = 2097152; // 2MB inline plaintext ceiling for text payloads / legacy compatibility
 
 // WebAuthn
 const WEBAUTHN_ALG = -7;             // ES256
