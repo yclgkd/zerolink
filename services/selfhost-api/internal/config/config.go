@@ -63,16 +63,16 @@ type RPConfig struct {
 }
 
 const (
-	fileEnvelopeFixedBytes             = int64(8)
-	fileHeaderMaxBytes                 = int64(16 * 1024)
-	maxInlineFileBytes                 = int64(2_097_152) - fileEnvelopeFixedBytes - fileHeaderMaxBytes
-	defaultInlineFileMaxBytes          = maxInlineFileBytes
-	defaultInlineChunkSizeBytes        = int64(262_144)
-	defaultInlineMaxChunks             = int64(8)
-	defaultMultipartFileMaxBytes       = int64(512 * 1024 * 1024)
-	defaultMultipartThresholdBytes     = maxInlineFileBytes
-	defaultMultipartChunkSizeBytes     = int64(4 * 1024 * 1024)
-	defaultMultipartMaxChunks          = int64(128)
+	fileEnvelopeFixedBytes         = int64(8)
+	fileHeaderMaxBytes             = int64(16 * 1024)
+	maxInlineFileBytes             = int64(2_097_152) - fileEnvelopeFixedBytes - fileHeaderMaxBytes
+	defaultInlineFileMaxBytes      = maxInlineFileBytes
+	defaultInlineChunkSizeBytes    = int64(262_144)
+	defaultInlineMaxChunks         = int64(8)
+	defaultMultipartFileMaxBytes   = int64(512 * 1024 * 1024)
+	defaultMultipartThresholdBytes = maxInlineFileBytes
+	defaultMultipartChunkSizeBytes = int64(4 * 1024 * 1024)
+	defaultMultipartMaxChunks      = int64(128)
 )
 
 func Load() (Config, error) {

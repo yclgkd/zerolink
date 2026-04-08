@@ -81,7 +81,8 @@ UPDATE WHEN:
 | `biome.json` | Lint/format config |
 | `pnpm-workspace.yaml` | Monorepo workspace definition |
 | `packages/backend/src/security-headers.ts` | Worker-applied cache + security headers (`no-store` for SPA entry, immutable for `/assets/*`) |
-| `.github/workflows/pr-validate.yml` | PR CI gates: root/workspace typecheck, root/workspace unit tests, frontend build on `pull_request` / `merge_group` (E2E suites run in `e2e-full.yml` nightly/manual only — PR #184 free-tier budget) |
+| `.github/workflows/pr-validate.yml` | PR CI gates: root/workspace typecheck, root/workspace unit tests, frontend build, and self-hosted Go validation including `gofmt -l` before `go test` on `pull_request` / `merge_group` (E2E suites run in `e2e-full.yml` nightly/manual only — PR #184 free-tier budget) |
+| `.husky/pre-commit` | Local commit gate — runs `lint-staged` plus workspace typecheck; staged `.go` files are auto-formatted through `gofmt -w` before commit |
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
 | `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — owns file policy env vars (`SELFHOST_API_FILE_*`) and still caps the legacy inline threshold for compatibility even though new file writes require object storage |

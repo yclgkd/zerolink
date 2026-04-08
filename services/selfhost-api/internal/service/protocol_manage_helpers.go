@@ -191,9 +191,9 @@ func (intent ManageIntent) CanonicalValue() map[string]any {
 				"chunkCount":           intent.FileRef.ChunkCount,
 				"totalPlaintextBytes":  intent.FileRef.TotalPlaintextBytes,
 				"totalCiphertextBytes": intent.FileRef.TotalCiphertextBytes,
-				"baseIv":              intent.FileRef.BaseIV,
-				"encContentKey":       intent.FileRef.EncContentKey,
-				"chunks":             chunks,
+				"baseIv":               intent.FileRef.BaseIV,
+				"encContentKey":        intent.FileRef.EncContentKey,
+				"chunks":               chunks,
 			}
 		}
 		return payload

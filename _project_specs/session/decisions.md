@@ -13,6 +13,15 @@ This is append-only. Never delete entries; archive old batches to archive/ when 
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-08] Go formatting is enforced in both pre-commit and PR CI
+
+**Decision**: Enforce `gofmt` in two places: auto-format staged `.go` files through root `lint-staged` during `pre-commit`, and fail the Go PR validation job when `gofmt -l` finds unformatted files.
+**Context**: The repository already ran TypeScript-centric pre-commit checks and Go tests in PR CI, but neither layer caught plain Go formatting drift. Review surfaced a real self-hosted Go formatting issue that compiled and tested cleanly, which meant the only guardrail was manual review.
+**Options Considered**: (A) Leave formatting to reviewer discipline; (B) enforce only in CI; (C) enforce only in local hooks; (D) use local auto-format plus CI verification.
+**Choice**: Option D. Local hooks keep feedback immediate and low-friction for Go edits, while CI remains the non-bypassable enforcement layer.
+**Reasoning**: `gofmt` is deterministic and cheap, so it fits both developer ergonomics and CI reliability. Using `lint-staged` limits local formatting to staged `.go` files, avoiding unnecessary repo-wide work on commits that do not touch Go.
+**Trade-offs**: Contributors editing Go now need a working local Go toolchain for commits that stage `.go` files. PR CI adds a small extra step before `go test`, but the measured cost is negligible compared with the existing Go test job.
+
 ## [2026-04-07] Replace archived MinIO server with Garage and generalize storage naming to S3
 
 **Decision**: Replace the MinIO server container with Garage in self-hosted Docker Compose, rename all internal "minio" identifiers to "s3", and make object storage optional via Docker Compose profiles.
