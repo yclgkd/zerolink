@@ -166,10 +166,12 @@ export function useManagePageState(uuid?: string) {
     store.channelState !== CHANNEL_STATE.EXPIRED &&
     profile !== null &&
     Boolean(store.uuid);
+  const needsChannelPassword = requiresChannelPassword(store.adminMode);
+  const deliverPasswordValid = !needsChannelPassword || hasValidChannelPassword(softkeyPassphrase);
   const canDeliver =
     canManageActions &&
-    (deliveryMode === 'text' ? secretInput.trim().length > 0 : selectedFile !== null);
-  const needsChannelPassword = requiresChannelPassword(store.adminMode);
+    (deliveryMode === 'text' ? secretInput.trim().length > 0 : selectedFile !== null) &&
+    deliverPasswordValid;
   const destroyPasswordValid = hasValidChannelPassword(softkeyPassphrase);
   const canStartDeleteAuth =
     canManageActions &&

@@ -118,6 +118,7 @@ const en = {
       'This channel uses a password-protected management key. Enter the password you set when creating this channel.',
     softkeyLabel: 'Channel password',
     softkeyPlaceholder: 'Enter channel password',
+    softkeyMinLengthHint: 'Enter a channel password with at least {{min}} characters',
     deliverButton: 'Deliver',
     deliveringButton: 'Delivering\u2026',
     deleteChannelButton: 'Delete Channel',

@@ -110,6 +110,7 @@ const zh: Translation = {
     softkeyPassphraseHint: '此频道使用密码保护的管理密钥，请输入创建频道时设置的密码。',
     softkeyLabel: '频道密码',
     softkeyPlaceholder: '输入频道密码',
+    softkeyMinLengthHint: '请输入至少 {{min}} 位频道密码',
     deliverButton: '传递',
     deliveringButton: '传递中\u2026',
     deleteChannelButton: '删除频道',

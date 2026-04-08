@@ -4,6 +4,7 @@ import i18next from 'i18next';
 
 import {
   getPassphraseValidationI18n,
+  MIN_PASSPHRASE_LENGTH,
   type PassphraseValidationI18n,
   validatePassphrase,
 } from '../../crypto/passphrase-policy';
@@ -51,6 +52,23 @@ export function getChannelPasswordValidationErrorI18n(
 
 export function hasValidChannelPassword(passphrase: string): boolean {
   return validatePassphrase(passphrase) === null;
+}
+
+export function getChannelPasswordHelperI18n(
+  passphrase: string,
+  label: string
+): { key: string; params: { min: number } | PassphraseValidationI18n['params'] } | null {
+  const result = validatePassphrase(passphrase);
+  if (result === null) return null;
+  if (result === 'missing' || result === 'too_short') {
+    return {
+      key: 'manage.softkeyMinLengthHint',
+      params: { min: MIN_PASSPHRASE_LENGTH },
+    };
+  }
+
+  const { key, params } = getPassphraseValidationI18n(result, label);
+  return { key, params };
 }
 
 export function isTerminalPublicState(state: ChannelState): boolean {

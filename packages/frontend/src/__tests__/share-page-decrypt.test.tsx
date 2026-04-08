@@ -385,6 +385,23 @@ describe('SharePage – decryptDelivered action', () => {
     expect(decryptButton.disabled).toBe(true);
   });
 
+  it('keeps decrypt button disabled when passphrase is shorter than 12 characters in delivered state', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'short' },
+    });
+
+    const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
+    expect(decryptButton.disabled).toBe(true);
+    expect(decryptDeliveredMock).not.toHaveBeenCalled();
+  });
+
   it('calls decryptDelivered with uuid/passphrase and shows plaintext on success', async () => {
     const fetchSpy = getFetchSpy();
     await saveReceiverEnvelopesForDeliveredTests();
