@@ -65,7 +65,7 @@ type statusResponse struct {
 
 const (
 	accessControlAllowHeaders      = "Content-Type"
-	accessControlAllowMethods      = "GET,POST,OPTIONS"
+	accessControlAllowMethods      = "GET,POST,PUT,OPTIONS"
 	defaultMaxProtocolBodyBytes    = 64 * 1024
 	maxWebSocketClientMessageBytes = defaultMaxProtocolBodyBytes
 )
