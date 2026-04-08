@@ -120,7 +120,7 @@ describe('App shell routes rendering', () => {
     expect(repositoryLink.getAttribute('href')).toBe('https://github.com/yclgkd/ZeroLink');
     expect(repositoryLink.getAttribute('target')).toBe('_blank');
     expect(repositoryLink.getAttribute('rel')).toContain('noreferrer');
-    expect(repositoryLink.textContent).toContain('Source Code');
+    expect(repositoryLink.textContent).toContain('GitHub');
   });
 
   it('does not render demo nav links for share/manage', async () => {
