@@ -361,10 +361,12 @@ export function FileInput({
 
 export function DestroyConfirmPanel({
   pending,
+  isDeleting,
   onCancelDestroy,
   onConfirmDestroy,
 }: {
   pending: boolean;
+  isDeleting: boolean;
   onCancelDestroy: () => void;
   onConfirmDestroy: () => void;
 }) {
@@ -397,7 +399,7 @@ export function DestroyConfirmPanel({
           type="button"
           variant="danger"
         >
-          {pending ? (
+          {isDeleting ? (
             <>
               <Spinner aria-hidden="true" className="size-3.5" />
               {t('manage.destroyDeletingButton')}
@@ -439,6 +441,7 @@ export function ActionPanel({
   unavailable,
   showDestroyConfirm,
   pending,
+  pendingAction,
   showDeliverAction,
   canDestroy,
   canManageActions,
@@ -452,6 +455,7 @@ export function ActionPanel({
   unavailable: boolean;
   showDestroyConfirm: boolean;
   pending: boolean;
+  pendingAction: 'deliver' | 'delete' | null;
   showDeliverAction: boolean;
   canDestroy: boolean;
   canManageActions: boolean;
@@ -462,6 +466,8 @@ export function ActionPanel({
   onConfirmDestroy: () => void;
 }) {
   const { t } = useTranslation();
+  const isDeliverPending = pendingAction === 'deliver';
+  const isDeletePending = pendingAction === 'delete';
 
   if (isTerminalManageState(status, unavailable)) {
     return <TerminalActions />;
@@ -478,7 +484,7 @@ export function ActionPanel({
             onClick={onDeliver}
             type="button"
           >
-            {pending ? (
+            {isDeliverPending ? (
               <>
                 <Spinner aria-hidden="true" className="size-4" />
                 {t('manage.deliveringButton')}
@@ -506,6 +512,7 @@ export function ActionPanel({
 
       {showDestroyConfirm ? (
         <DestroyConfirmPanel
+          isDeleting={isDeletePending}
           onCancelDestroy={onCancelDestroy}
           onConfirmDestroy={onConfirmDestroy}
           pending={pending}

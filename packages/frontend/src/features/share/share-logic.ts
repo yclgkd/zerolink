@@ -15,7 +15,10 @@ import { toast } from 'sonner';
 import { cryptoOrchestrator } from '../../crypto/orchestrator';
 import {
   getPassphraseValidationErrorI18n,
+  getPassphraseValidationI18n,
   hasValidPassphrase,
+  MIN_PASSPHRASE_LENGTH,
+  validatePassphrase,
 } from '../../crypto/passphrase-policy';
 import {
   extractLockSecretFromHash,
@@ -75,6 +78,20 @@ export function mapDecryptError(code: string, message?: string): string {
     default:
       return 'Decrypt failed. Please try again.';
   }
+}
+
+function getDecryptPassphraseHelperText(
+  passphrase: string,
+  t: ReturnType<typeof useTranslation>['t']
+): string | undefined {
+  const result = validatePassphrase(passphrase);
+  if (result === null) return undefined;
+  if (result === 'missing' || result === 'too_short') {
+    return t('share.decryptMinLengthHint', { min: MIN_PASSPHRASE_LENGTH });
+  }
+
+  const i18n = getPassphraseValidationI18n(result, t('share.decryptLabel'));
+  return t(i18n.key, i18n.params);
 }
 
 export function isLockPassphraseErrorCode(code: string): boolean {
@@ -690,6 +707,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     Boolean(store.uuid) &&
     hasValidPassphrase(passphrase) &&
     !isDecryptSubmitting;
+  const decryptHelperText = getDecryptPassphraseHelperText(passphrase, t);
 
   const canBurn =
     Boolean(enabled) && Boolean(store.plaintext || store.file) && !isDecryptSubmitting;
@@ -797,6 +815,7 @@ export function useSharePageDecryptLogic(uuid?: string, enabled?: boolean) {
     decryptError,
     isDecryptPassphraseInvalid,
     decryptPending: isDecryptSubmitting,
+    decryptHelperText,
     canDecrypt,
     canBurn,
     deliveredAt,

@@ -180,6 +180,7 @@ const zh: Translation = {
     updatedBadge: '已更新（v{{version}}）\u00b7 发送方可能修改了内容，当前显示最新版本。',
     decryptLabel: '解密密码短语',
     decryptPlaceholder: '输入密码短语以解密',
+    decryptMinLengthHint: '请输入至少 {{min}} 位密码短语',
     decryptButton: '解密',
     decryptingButton: '解密中\u2026',
     burnButton: '清除本地副本',

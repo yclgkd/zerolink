@@ -383,6 +383,7 @@ describe('SharePage – decryptDelivered action', () => {
     await waitForDeliveredDecryptPanel();
     const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
     expect(decryptButton.disabled).toBe(true);
+    expect(screen.getByText('Enter a passphrase with at least 12 characters')).toBeTruthy();
   });
 
   it('keeps decrypt button disabled when passphrase is shorter than 12 characters in delivered state', async () => {
@@ -399,7 +400,25 @@ describe('SharePage – decryptDelivered action', () => {
 
     const decryptButton = screen.getByTestId('share-decrypt-button') as HTMLButtonElement;
     expect(decryptButton.disabled).toBe(true);
+    expect(screen.getByText('Enter a passphrase with at least 12 characters')).toBeTruthy();
     expect(decryptDeliveredMock).not.toHaveBeenCalled();
+  });
+
+  it('does not show passphrase strength feedback in delivered decrypt state', async () => {
+    const fetchSpy = getFetchSpy();
+    await saveReceiverEnvelopesForDeliveredTests();
+    mockPublicState(fetchSpy, 'delivered');
+
+    renderSharePage('/s/:uuid', `/s/${VALID_UUID}`);
+
+    await waitForDeliveredDecryptPanel();
+    fireEvent.change(screen.getByTestId('passphrase-input-field'), {
+      target: { value: 'Receiver#Pass1234' },
+    });
+
+    expect(screen.queryByTestId('passphrase-strength-segment-1')).toBeNull();
+    expect(screen.queryByTestId('passphrase-strength-segment-2')).toBeNull();
+    expect(screen.queryByTestId('passphrase-strength-segment-3')).toBeNull();
   });
 
   it('calls decryptDelivered with uuid/passphrase and shows plaintext on success', async () => {

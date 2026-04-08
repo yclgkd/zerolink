@@ -85,6 +85,7 @@ export function ManagePage(): ReactElement {
       onDeliver={state.handleDeliver}
       onOpenDestroyConfirm={state.handleDestroyConfirm}
       pending={state.isActionPending}
+      pendingAction={state.pendingAction}
       showDeliverAction={showDeliveryComposer}
       showDestroyConfirm={state.showDestroyConfirm}
       status={state.status}

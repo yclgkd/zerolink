@@ -474,6 +474,35 @@ describe('ManagePage – delete / destroy confirm', () => {
     deferred.resolve({ ok: true, data: {} });
   });
 
+  it('keeps the deliver button label unchanged while a locked-state delete request is pending', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    const deferred = createDeferred<{
+      ok: true;
+      data: Record<string, never>;
+    }>();
+    deleteChannelMock.mockReturnValueOnce(deferred.promise);
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    fireEvent.click(screen.getByTestId('manage-destroy-button'));
+    fireEvent.click(screen.getByTestId('manage-destroy-confirm-apply'));
+
+    await waitFor(() => {
+      expect((screen.getByTestId('manage-deliver-button') as HTMLButtonElement).disabled).toBe(
+        true
+      );
+    });
+
+    expect(screen.getByTestId('manage-deliver-button').textContent).toContain('Deliver');
+    expect(screen.getByTestId('manage-deliver-button').textContent).not.toContain('Delivering');
+    expect(screen.getByTestId('manage-destroy-confirm-apply').textContent).toContain('Deleting');
+
+    deferred.resolve({ ok: true, data: {} });
+  });
+
   it('shows action error on delete failure', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'waiting');

@@ -192,6 +192,7 @@ const en = {
       'Updated (v{{version}}) \u00b7 The sender may have revised this content. The latest version is shown.',
     decryptLabel: 'Decrypt passphrase',
     decryptPlaceholder: 'Enter passphrase to decrypt',
+    decryptMinLengthHint: 'Enter a passphrase with at least {{min}} characters',
     decryptButton: 'Decrypt',
     decryptingButton: 'Decrypting\u2026',
     burnButton: 'Burn Local Copy',

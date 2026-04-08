@@ -17,6 +17,7 @@ export function useManageDeliveryLogic(
   actionScopeRef: RefObject<number>,
   isActionPending: boolean,
   setIsActionPending: (pending: boolean) => void,
+  setPendingAction: (action: 'deliver' | 'delete' | null) => void,
   setActionError: (error: string | null) => void,
   setIsSecretInputInvalid: (invalid: boolean) => void,
   secretInput: string,
@@ -65,6 +66,7 @@ export function useManageDeliveryLogic(
 
     setIsSecretInputInvalid(false);
     setActionError(null);
+    setPendingAction('deliver');
     setIsActionPending(true);
     const actionScope = actionScopeRef.current ?? 0;
     const actionUuid = store.uuid;
@@ -104,6 +106,7 @@ export function useManageDeliveryLogic(
       });
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
+      setPendingAction(null);
       setIsSecretInputInvalid(false);
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
@@ -117,6 +120,7 @@ export function useManageDeliveryLogic(
       return;
     }
     setIsActionPending(false);
+    setPendingAction(null);
     if (!result.ok) {
       setIsSecretInputInvalid(false);
       setSelectedFile(null);
@@ -140,6 +144,7 @@ export function useManageDestructionLogic(
   actionScopeRef: RefObject<number>,
   isActionPending: boolean,
   setIsActionPending: (pending: boolean) => void,
+  setPendingAction: (action: 'deliver' | 'delete' | null) => void,
   setActionError: (error: string | null) => void,
   setIsSecretInputInvalid: (invalid: boolean) => void,
   setSecretInput: (value: string) => void,
@@ -197,6 +202,7 @@ export function useManageDestructionLogic(
 
     setIsSecretInputInvalid(false);
     setActionError(null);
+    setPendingAction('delete');
     setIsActionPending(true);
     const actionScope = actionScopeRef.current ?? 0;
     const actionUuid = store.uuid;
@@ -218,12 +224,14 @@ export function useManageDestructionLogic(
       });
       if (!isActiveActionContext(actionScope, actionUuid)) return;
       setIsActionPending(false);
+      setPendingAction(null);
       setIsSecretInputInvalid(false);
       return setActionError(mapActionError('INTERNAL_ERROR'));
     }
 
     if (!isActiveActionContext(actionScope, actionUuid)) return;
     setIsActionPending(false);
+    setPendingAction(null);
     if (!result.ok) {
       if (needsChannelPassword && result.error.code === 'CRYPTO_ERROR') {
         store.setDestroyStage('auth');
