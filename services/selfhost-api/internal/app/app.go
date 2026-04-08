@@ -50,11 +50,12 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	var fileStore httpapi.FileStore
 	if cfg.File.StorageBackend == "s3" {
 		s3Store, err := filestore.NewS3(ctx, filestore.Config{
-			Endpoint:  cfg.File.S3.Endpoint,
-			AccessKey: cfg.File.S3.AccessKey,
-			SecretKey: cfg.File.S3.SecretKey,
-			Bucket:    cfg.File.S3.Bucket,
-			UseSSL:    cfg.File.S3.UseSSL,
+			Endpoint:       cfg.File.S3.Endpoint,
+			PublicEndpoint: cfg.File.S3.PublicEndpoint,
+			AccessKey:      cfg.File.S3.AccessKey,
+			SecretKey:      cfg.File.S3.SecretKey,
+			Bucket:         cfg.File.S3.Bucket,
+			UseSSL:         cfg.File.S3.UseSSL,
 			Region:    cfg.File.S3.Region,
 		})
 		if err != nil {

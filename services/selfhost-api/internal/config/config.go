@@ -48,12 +48,13 @@ type FileConfig struct {
 }
 
 type S3Config struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	UseSSL    bool
-	Region    string
+	Endpoint       string
+	PublicEndpoint string
+	AccessKey      string
+	SecretKey      string
+	Bucket         string
+	UseSSL         bool
+	Region         string
 }
 
 type RPConfig struct {
@@ -316,6 +317,7 @@ func loadS3Config(lookup func(string) (string, bool), storageBackend string) (S3
 		return S3Config{}, err
 	}
 	region := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_REGION", ""))
+	publicEndpoint := strings.TrimSpace(envOrDefault(lookup, "SELFHOST_API_S3_PUBLIC_ENDPOINT", ""))
 
 	if endpoint == "" {
 		return S3Config{}, fmt.Errorf("SELFHOST_API_S3_ENDPOINT is required when SELFHOST_API_FILE_STORAGE_BACKEND=s3")
@@ -331,12 +333,13 @@ func loadS3Config(lookup func(string) (string, bool), storageBackend string) (S3
 	}
 
 	return S3Config{
-		Endpoint:  endpoint,
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		Bucket:    bucket,
-		UseSSL:    useSSL,
-		Region:    region,
+		Endpoint:       endpoint,
+		PublicEndpoint: publicEndpoint,
+		AccessKey:      accessKey,
+		SecretKey:      secretKey,
+		Bucket:         bucket,
+		UseSSL:         useSSL,
+		Region:         region,
 	}, nil
 }
 

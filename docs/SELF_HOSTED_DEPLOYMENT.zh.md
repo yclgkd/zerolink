@@ -74,7 +74,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 - `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` 控制 `migrate`、`api`、`web` 默认从哪个 GHCR namespace 拉取镜像
 - `ZEROLINK_IMAGE_TAG=latest` 控制 `migrate`、`api`、`web` 默认拉取的发布镜像 tag
 - 默认 `SELFHOST_API_DATABASE_URL` 已指向 Compose 里的 `db` 服务
-- `SELFHOST_API_FILE_STORAGE_BACKEND=s3` 会通过 S3 预签名 PUT/GET URL 启用 multipart 文件传输
+- `SELFHOST_API_FILE_STORAGE_BACKEND=s3` 启用 multipart 文件传输；当 `SELFHOST_API_S3_PUBLIC_ENDPOINT` 已设置时浏览器通过 S3 预签名 URL 直传，未设置时 API 代理 chunk 字节
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 把 inline 分界线限制在旧的 inline envelope 上限之内
 - `SELFHOST_API_S3_*` 配置 S3 兼容存储连接；使用内置 Garage 容器时，已默认指向 `garage:3900` 和 `zerolink-files` bucket
 
@@ -86,7 +86,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 
 - **`s3` + 内置 Garage**（默认）：`.env.example` 默认使用此模式，配合 `docker compose --profile storage up -d` 启动。
 - **`s3` + 外部提供商**：配置 `SELFHOST_API_S3_*` 指向 AWS S3、Cloudflare R2、阿里云 OSS 等。运行 `docker compose up -d`（不带 `storage` profile）。
-- **`inline`**：仅支持小文件（最大约 2 MiB），无需对象存储。
+- **`inline`**：纯文本模式，无需对象存储；新的文件上传不可用。
 
 ### 1. 默认本地 Garage
 上面的快速开始命令已自动启动 Garage。如果你已经在使用默认配置：
@@ -113,10 +113,10 @@ SELFHOST_API_S3_REGION=cn-hangzhou
 ```
 *提示：使用外部存储时，直接运行 `docker compose up -d`（不带 `--profile storage`），Garage 容器不会启动，节省本地资源。*
 
-### 3. 极简 "Inline" 模式
-如果你只是想在个人的树莓派或极低配置 NAS 上跑着玩，完全不想启动任何对象存储服务，并且只用于分享极小的文件，可以彻底关闭 multipart 机制。
+### 3. 极简 "Inline" 模式（纯文本）
+如果你只是想在个人的树莓派或极低配置 NAS 上跑着玩，完全不想启动任何对象存储服务，可以彻底关闭 multipart 机制。这样仍可分享文本，但新的文件上传会被拒绝。
 
-在 `.env` 中设置以下变量以退回旧版的极简模式：
+在 `.env` 中设置以下变量以启用纯文本 inline 模式：
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
 SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # backend=inline 时默认即为 false；若你的 .env 从 .env.example 复制而来则需显式覆盖
@@ -125,8 +125,8 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
 在 `inline` 模式下：
 - 无需任何对象存储。
-- 加密后的文件数据以 JSON 载荷形式直接保存在 **PostgreSQL 数据库**（JSONB 列）中。
-- **文件体积受到严格限制**，最大不能超过约 `2 MiB`。
+- `multipartSupported` 会保持为 `false`，因此新的文件上传会以 `FILE_STORAGE_UNAVAILABLE` 被拒绝。
+- 文本载荷仍继续使用 inline `cipherBundle`，并保存在 PostgreSQL-backed channel state 中。
 
 ## Smoke Test
 
@@ -138,7 +138,7 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 6. 确认 sender 的 manage 页面无需手动刷新就切到 `locked`。
 7. 在 manage 页面 deliver 一个 secret。
 8. 确认 receiver 的 share 页面自动切到 `delivered`，并显示 decrypt panel。
-9. 可选：投递一个大于 `2 MiB` 的文件，并确认接收端仍能解密/下载；这会走 S3 multipart 路径，而不是 inline `cipherBundle`。
+9. 可选：投递一个文件，并确认接收端仍能解密/下载；如果文件大于当前配置的 chunk 大小（默认 `4 MiB`），还能顺便覆盖 multi-chunk 上传/下载路径。
 
 如果 WebSocket 传输不可用，前端会自动退回 `/api/public/:uuid` 轮询。
 
@@ -150,7 +150,7 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 - realtime hub 是进程内实现；如果要跑多个 API 副本，需要共享 pub/sub。
 - PostgreSQL 数据存放在 `postgres-data` volume 中。
 - 使用 `storage` profile 时，Garage 对象数据存放在 `garage-data` volume 中。
-- 小文件（不超过 `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES`）继续走 inline `cipherBundle`；更大的文件走 `/api/file/initiate`、S3 直传/直下、`/api/file/complete` 和 `fileRef` 元数据。
+- 所有新的 `payloadKind=file` 交付都通过 `/api/file/initiate`、`/api/file/complete` 和 `fileRef` 元数据走对象存储。当 `S3_PUBLIC_ENDPOINT` 已设置时 chunk 字节走 S3 预签名 URL 直传；未设置（如 Docker 内置 Garage）时通过 API 代理。只有文本载荷走 inline `cipherBundle`。
 - API 服务没有设置全局 HTTP write timeout，以避免 WebSocket 长连接被断开；per-write 超时由 realtime hub 内部保证。如果你在 Caddy 配置中添加 `timeouts` 块，**不要**设置 `write_timeout`，否则反向代理会中断 WebSocket 会话。
 
 ## 停止

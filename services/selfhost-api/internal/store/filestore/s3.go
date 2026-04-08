@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,12 +33,13 @@ const (
 )
 
 type Config struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	UseSSL    bool
-	Region    string
+	Endpoint       string
+	PublicEndpoint string
+	AccessKey      string
+	SecretKey      string
+	Bucket         string
+	UseSSL         bool
+	Region         string
 }
 
 type FileUploadInitiateRequest struct {
@@ -108,17 +110,16 @@ type FileFetchResponse struct {
 }
 
 type Store struct {
-	client      *minio.Client
-	bucket      string
-	region      string
-	bucketReady atomic.Bool
-	bucketMu    sync.Mutex
+	client         *minio.Client
+	presignClient  *minio.Client
+	bucket         string
+	region         string
+	publicEndpoint string
+	bucketReady    atomic.Bool
+	bucketMu       sync.Mutex
 }
 
 func NewS3(ctx context.Context, cfg Config) (*Store, error) {
-	if cfg.Endpoint == "" {
-		return nil, errors.New("s3 endpoint is required")
-	}
 	if cfg.AccessKey == "" {
 		return nil, errors.New("s3 access key is required")
 	}
@@ -129,19 +130,33 @@ func NewS3(ctx context.Context, cfg Config) (*Store, error) {
 		return nil, errors.New("s3 bucket is required")
 	}
 
-	client, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		Secure: cfg.UseSSL,
-		Region: cfg.Region,
-	})
+	endpoint, useSSL, err := parseS3Endpoint(cfg.Endpoint, cfg.UseSSL)
+	if err != nil {
+		return nil, err
+	}
+	client, err := newMinioClient(endpoint, useSSL, cfg.Region, cfg.AccessKey, cfg.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("create s3 client: %w", err)
 	}
 
+	var presignClient *minio.Client
+	if strings.TrimSpace(cfg.PublicEndpoint) != "" {
+		publicEndpoint, publicUseSSL, err := parseS3Endpoint(cfg.PublicEndpoint, cfg.UseSSL)
+		if err != nil {
+			return nil, fmt.Errorf("parse public s3 endpoint: %w", err)
+		}
+		presignClient, err = newMinioClient(publicEndpoint, publicUseSSL, cfg.Region, cfg.AccessKey, cfg.SecretKey)
+		if err != nil {
+			return nil, fmt.Errorf("create public s3 client: %w", err)
+		}
+	}
+
 	store := &Store{
-		client: client,
-		bucket: cfg.Bucket,
-		region: cfg.Region,
+		client:         client,
+		presignClient:  presignClient,
+		bucket:         cfg.Bucket,
+		region:         cfg.Region,
+		publicEndpoint: cfg.PublicEndpoint,
 	}
 
 	if err := store.ensureBucket(ctx); err != nil {
@@ -197,7 +212,7 @@ func (s *Store) PresignedUpload(ctx context.Context, uploadID string, index int,
 	}
 
 	objectKey := uploadObjectKey(uploadID, index)
-	u, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, ttl)
+	u, err := s.presignTarget().PresignedPutObject(ctx, s.bucket, objectKey, ttl)
 	if err != nil {
 		return "", fmt.Errorf("presign upload chunk %d: %w", index, err)
 	}
@@ -276,11 +291,25 @@ func (s *Store) PresignedDownload(ctx context.Context, fileRef MultipartFileRef,
 		return "", fmt.Errorf("chunk %d not found", index)
 	}
 
-	u, err := s.client.PresignedGetObject(ctx, s.bucket, chunk.StorageKey, ttl, nil)
+	u, err := s.presignTarget().PresignedGetObject(ctx, s.bucket, chunk.StorageKey, ttl, nil)
 	if err != nil {
 		return "", fmt.Errorf("presign download chunk %d: %w", index, err)
 	}
 	return u.String(), nil
+}
+
+// UsePresignedURLs returns true when the browser can reach the S3 endpoint
+// directly (PublicEndpoint is set). When false, the API proxies file chunks.
+func (s *Store) UsePresignedURLs() bool {
+	return s.presignClient != nil
+}
+
+func (s *Store) GetChunk(ctx context.Context, _ string, key string) (io.ReadCloser, error) {
+	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get chunk: %w", err)
+	}
+	return obj, nil
 }
 
 func (s *Store) DeleteUpload(ctx context.Context, fileRef MultipartFileRef) error {
@@ -442,6 +471,63 @@ func (s *Store) ensureBucket(ctx context.Context) error {
 
 func uploadObjectKey(uploadID string, index int) string {
 	return fmt.Sprintf("%s/%s/%04d.bin", chunkObjectPrefix, uploadID, index)
+}
+
+func (s *Store) presignTarget() *minio.Client {
+	if s.presignClient != nil {
+		return s.presignClient
+	}
+	return s.client
+}
+
+func newMinioClient(
+	endpoint string,
+	useSSL bool,
+	region string,
+	accessKey string,
+	secretKey string,
+) (*minio.Client, error) {
+	return minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+		Region: region,
+	})
+}
+
+func parseS3Endpoint(raw string, defaultUseSSL bool) (string, bool, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", false, errors.New("s3 endpoint is required")
+	}
+	if !strings.Contains(value, "://") {
+		if strings.ContainsAny(value, "/?#") {
+			return "", false, fmt.Errorf("invalid s3 endpoint %q", value)
+		}
+		return value, defaultUseSSL, nil
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", false, fmt.Errorf("invalid s3 endpoint %q: %w", value, err)
+	}
+	if parsed.Host == "" {
+		return "", false, fmt.Errorf("s3 endpoint %q must include a host", value)
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", false, fmt.Errorf("s3 endpoint %q must not include user info, query, or fragment", value)
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", false, fmt.Errorf("s3 endpoint %q must not include a path", value)
+	}
+
+	switch parsed.Scheme {
+	case "http":
+		return parsed.Host, false, nil
+	case "https":
+		return parsed.Host, true, nil
+	default:
+		return "", false, fmt.Errorf("s3 endpoint %q must use http or https", value)
+	}
 }
 
 func validateUploadID(uploadID string) error {

@@ -38,9 +38,12 @@ type stubProtocol struct {
 
 type stubFileStore struct {
 	initiate          func(context.Context, string, int) error
+	putChunk          func(context.Context, string, int, io.Reader, int64) (string, error)
 	presignedUpload   func(context.Context, string, int, time.Duration) (string, error)
 	completeUpload    func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
+	getChunk          func(context.Context, string, string) (io.ReadCloser, error)
 	presignedDownload func(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
+	usePresignedURLs  func() bool
 	deleteUpload      func(context.Context, filestore.MultipartFileRef) error
 }
 
@@ -173,6 +176,27 @@ func (s stubFileStore) PresignedDownload(ctx context.Context, fileRef filestore.
 		return "https://s3.example/download", nil
 	}
 	return s.presignedDownload(ctx, fileRef, index, ttl)
+}
+
+func (s stubFileStore) PutChunk(ctx context.Context, uploadID string, index int, body io.Reader, size int64) (string, error) {
+	if s.putChunk != nil {
+		return s.putChunk(ctx, uploadID, index, body, size)
+	}
+	return "etag-stub", nil
+}
+
+func (s stubFileStore) GetChunk(ctx context.Context, bucket string, key string) (io.ReadCloser, error) {
+	if s.getChunk != nil {
+		return s.getChunk(ctx, bucket, key)
+	}
+	return io.NopCloser(strings.NewReader("chunk-data")), nil
+}
+
+func (s stubFileStore) UsePresignedURLs() bool {
+	if s.usePresignedURLs != nil {
+		return s.usePresignedURLs()
+	}
+	return true
 }
 
 func (s stubFileStore) DeleteUpload(ctx context.Context, fileRef filestore.MultipartFileRef) error {
@@ -596,6 +620,119 @@ func TestFileInitiateRouteAcceptsNanoIDUUIDAndReturnsTargets(t *testing.T) {
 	}
 	if len(payload.Chunks) != 2 {
 		t.Fatalf("chunk count = %d, want 2", len(payload.Chunks))
+	}
+}
+
+func TestFileInitiateRouteReturnsProxyTargetsWhenPresignedDisabled(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":64}`),
+	)
+	res := httptest.NewRecorder()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FileStore: stubFileStore{
+			usePresignedURLs: func() bool { return false },
+		},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            536_870_912,
+			MultipartThresholdBytes: 2_080_760,
+			ChunkSizeBytes:          4 * 1024 * 1024,
+			MaxChunks:               128,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+					return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+				},
+			},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", res.Code, res.Body.String())
+	}
+
+	var payload filestore.FileUploadInitiateResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := payload.Chunks[0].UploadURL; !strings.HasPrefix(got, "/api/file/chunk/") {
+		t.Fatalf("first upload url = %q, want proxy route", got)
+	}
+}
+
+type errOnFirstReadCloser struct {
+	triggered bool
+}
+
+func (r *errOnFirstReadCloser) Read(_ []byte) (int, error) {
+	if r.triggered {
+		return 0, io.EOF
+	}
+	r.triggered = true
+	return 0, errors.New("missing object")
+}
+
+func (r *errOnFirstReadCloser) Close() error {
+	return nil
+}
+
+func TestFileDownloadProxyRouteReturnsStorageErrorWhenFirstReadFails(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/file/download/files/test/0000.bin", nil)
+	res := httptest.NewRecorder()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FileStore: stubFileStore{
+			getChunk: func(context.Context, string, string) (io.ReadCloser, error) {
+				return &errOnFirstReadCloser{}, nil
+			},
+		},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            536_870_912,
+			MultipartThresholdBytes: 2_080_760,
+			ChunkSizeBytes:          4 * 1024 * 1024,
+			MaxChunks:               128,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", res.Code)
+	}
+	if !strings.Contains(res.Body.String(), "STORAGE_ERROR") {
+		t.Fatalf("body = %q, want STORAGE_ERROR", res.Body.String())
 	}
 }
 

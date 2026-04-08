@@ -87,6 +87,8 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Introduce a dedicated NanoID-shaped UUID validator in the MinIO filestore package, make the self-host `/api/file/initiate` route enforce `multipartSupported`, `maxChunks`, and channel existence through `PublicStatus`, and restore the Compose healthcheck to `curl .../minio/health/ready`.
 **Reasoning**: These checks close a real protocol-compatibility bug for legitimate channel IDs, restore Worker/self-host parity on multipart gating, and make the packaged deployment wait for an actually usable object store before starting the API.
 **Trade-offs**: Self-host multipart initiation now depends on the protocol service as well as the file store, and manual clients probing `/api/file/initiate` will see earlier `400/404` rejections instead of opportunistically receiving presigned URLs.
+**Follow-up (2026-04-07, MinIO→Garage)**: MinIO references superseded; container replaced by Garage, healthcheck uses `/garage stats -a`. UUID validator package renamed from minio filestore to generic s3 filestore.
+**Follow-up (2026-04-08, API proxy)**: When `S3_PUBLIC_ENDPOINT` is unset, the Go API now proxies chunk bytes via `/api/file/chunk/` and `/api/file/download/` instead of returning presigned URLs. Presigned URLs are still used when the browser can reach S3 directly.
 
 ## [2026-04-02] Multipart review fixes favor best-effort cleanup and signed direct chunk downloads
 
@@ -107,6 +109,7 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Trade-offs**: Multipart now introduces a second payload transport to maintain, and shared code must preserve strict exactly-one semantics between `cipherBundle` and `fileRef`. The Cloudflare Worker path still depends on R2 object lifecycle cleanup, while the self-hosted path depends on MinIO bucket lifecycle and sweep behavior.
 **Follow-up (2026-04-02, docs sync)**: Deployment, architecture, contract, PRD, and security docs now explicitly describe the shipped multipart behavior instead of treating large-file transport and self-hosted object storage as future work. Cloudflare docs now call out the required R2 buckets, and self-hosted docs now document the `inline|minio` storage split and the inline threshold guardrail.
 **Follow-up (2026-04-07, MinIO→Garage)**: MinIO server archived; self-hosted storage backend renamed from `"minio"` to `"s3"`, container replaced by Garage, env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`. `minio-go/v7` SDK retained as generic S3 client.
+**Follow-up (2026-04-08, API proxy)**: "Go API does not stream chunk bytes" is no longer universally true. When `S3_PUBLIC_ENDPOINT` is unset the API proxies chunk uploads/downloads; presigned URLs are only used when the browser can reach S3 directly.
 
 ## [2026-04-02] Large file delivery uses typed multipart `fileRef` metadata over storage-specific backends
 
@@ -116,6 +119,8 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Introduce independently encrypted chunks with per-chunk AAD/index binding, return a signed `fileRef` instead of an inline `cipherBundle` for multipart deliveries, and let the backend decide how chunk URLs are issued. Worker/R2 stays proxy-based because the runtime uses bindings instead of S3-style presigned URLs; self-hosted MinIO uses presigned PUT/GET so Go never streams chunk bytes.
 **Reasoning**: This keeps the sender/receiver cryptographic flow identical across deployments, preserves zero-knowledge storage semantics because the server only sees encrypted chunks plus typed metadata, and avoids frontend branching on deployment type. It also lets inline text and small-file compatibility stay intact while large-file support scales independently.
 **Trade-offs**: The protocol now has two payload transports (`inline` and `multipart`), so decrypt/delivery code must preserve exactly-one semantics between `cipherBundle` and `fileRef`. Self-hosted config must also keep `multipartThresholdBytes` at or below the inline ciphertext ceiling even when `maxFileBytes` is much larger, because only oversized files should switch onto the multipart path.
+**Follow-up (2026-04-07, MinIO→Garage)**: MinIO container replaced by Garage; env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`.
+**Follow-up (2026-04-08, API proxy)**: Self-hosted Go API now supports dual-mode chunk transport: presigned S3 URLs when `S3_PUBLIC_ENDPOINT` is set, API-proxied `/api/file/chunk/` and `/api/file/download/` routes when unset. "Go never streams chunk bytes" no longer holds in the proxy case.
 
 ## [2026-04-01] Receiver-side file decoding requires declared `payloadKind: "file"`
 
@@ -677,4 +682,3 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Disable autofill across all passphrase prompts
 **Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
 **Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
-

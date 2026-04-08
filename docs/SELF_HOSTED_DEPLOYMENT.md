@@ -76,7 +76,7 @@ Then open:
 - `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` selects which GHCR namespace `migrate`, `api`, and `web` pull from
 - `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
-- `SELFHOST_API_FILE_STORAGE_BACKEND=s3` enables multipart delivery through S3 presigned PUT/GET URLs
+- `SELFHOST_API_FILE_STORAGE_BACKEND=s3` enables multipart file delivery; when `SELFHOST_API_S3_PUBLIC_ENDPOINT` is set the browser uploads/downloads directly via S3 presigned URLs, otherwise the API proxies chunk bytes
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` keeps the inline cutoff below the legacy inline envelope limit
 - `SELFHOST_API_S3_*` configures the S3-compatible storage connection; when using the bundled Garage container, these already point at `garage:3900` and the default `zerolink-files` bucket
 
@@ -88,7 +88,7 @@ The self-hosted stack supports three storage modes:
 
 - **`s3` + built-in Garage** (default): the bundled `.env.example` uses this mode with `docker compose --profile storage up -d`.
 - **`s3` + external provider**: configure `SELFHOST_API_S3_*` to point at AWS S3, Cloudflare R2, Aliyun OSS, etc. Run `docker compose up -d` without the `storage` profile.
-- **`inline`**: small files only (up to ~2 MiB), no object storage needed.
+- **`inline`**: text-only mode, no object storage needed; new file uploads are unavailable.
 
 ### 1. Default Local Garage
 The quickstart command above starts Garage automatically. If you are already running with the default setup:
@@ -115,10 +115,10 @@ SELFHOST_API_S3_REGION=us-east-1
 ```
 *Note: When using external storage, simply run `docker compose up -d` without `--profile storage`. The Garage container will not start, saving local resources.*
 
-### 3. Extreme Lightweight "Inline" Mode
-If you do not want to run an object storage server at all (e.g., on a Raspberry Pi) and only need to share small files, you can disable multipart storage entirely.
+### 3. Extreme Lightweight "Inline" Mode (Text-Only)
+If you do not want to run an object storage server at all (e.g., on a Raspberry Pi), you can disable multipart storage entirely. This keeps text shares available but rejects new file uploads.
 
-Set these variables in your `.env` to enable legacy inline-only behavior:
+Set these variables in your `.env` to enable text-only inline behavior:
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
 SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # Defaults to false for inline; explicit here in case your .env inherits true from .env.example
@@ -127,8 +127,8 @@ SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760
 ```
 When in `inline` mode:
 - No object storage is needed.
-- Encrypted file data is stored as a JSON payload directly in the **PostgreSQL database** (JSONB column).
-- **File size is strictly limited** to roughly `2 MiB`.
+- `multipartSupported` stays `false`, so new file uploads are rejected with `FILE_STORAGE_UNAVAILABLE`.
+- Text payloads continue to use inline `cipherBundle` delivery stored in PostgreSQL-backed channel state.
 
 ## Smoke Test
 
@@ -140,7 +140,7 @@ When in `inline` mode:
 6. Confirm the sender manage page auto-updates to `locked` without a manual refresh.
 7. Deliver a secret from the manage page.
 8. Confirm the receiver share page auto-updates to `delivered` and shows the decrypt panel.
-9. Optional: deliver a file larger than `2 MiB` and confirm the receiver can still decrypt/download it; this exercises the S3 multipart path instead of inline `cipherBundle` delivery.
+9. Optional: deliver a file and confirm the receiver can still decrypt/download it; using a file larger than the configured chunk size (default `4 MiB`) exercises multi-chunk upload/download.
 
 If WebSocket delivery is interrupted, the frontend will fall back to `/api/public/:uuid` polling automatically.
 
@@ -152,7 +152,7 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.
 - When using the `storage` profile, Compose stores Garage object data in the `garage-data` volume.
-- Small files at or below `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` stay on the inline `cipherBundle` path; larger files use `/api/file/initiate`, direct S3 presigned PUT/GET URLs, `/api/file/complete`, and `fileRef` metadata.
+- All new `payloadKind=file` deliveries use object storage via `/api/file/initiate`, `/api/file/complete`, and `fileRef` metadata. When `S3_PUBLIC_ENDPOINT` is set, chunk bytes go directly to S3 presigned URLs; when unset (e.g., Docker-internal Garage), chunk bytes are proxied through the API. Only text payloads use inline `cipherBundle`.
 - The API server does not set a global HTTP write timeout so that WebSocket connections are not killed mid-session. Per-write deadlines are enforced inside the realtime hub. If you add a Caddy `timeouts` block, do not set `write_timeout` — it will terminate long-lived WebSocket sessions through the reverse proxy.
 
 ## Stop The Stack

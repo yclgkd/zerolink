@@ -76,6 +76,9 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      garage-init:
+        condition: service_completed_successfully
+        required: false
     expose:
       - "8788"
     healthcheck:

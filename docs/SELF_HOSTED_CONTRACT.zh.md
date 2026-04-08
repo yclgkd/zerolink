@@ -72,18 +72,20 @@
 | `/api/delete_commit/:uuid` | `POST` | 同 commit union，但 `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | compound commit 的 delete-only alias；继承相同的 commit-cookie caller-binding 语义 |
 | `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回活跃 channel 的公开状态；一旦 channel 已 tombstone 化或被 lazy purge，规范外部行为是 `404 NOT_FOUND`，而不是 `200` 终态快照 |
 | `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷；响应里会且只会出现 `cipherBundle` 或 `fileRef` 其中之一，`cipherVersion` 表示本次已交付密文的版本（当前 DO 实现里等于 `record.version - 1`），不是原始 channel record 的 `version` |
-| `/api/file_policy` | `GET` | 无 | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | 返回部署侧文件上限、inline 阈值、chunk 参数和 multipart 能力；前端据此决定走 inline 还是 multipart |
-| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | self-host 返回每个 chunk 的 S3 预签名 PUT URL；Go API 只协调元数据，不代理 chunk 字节 |
+| `/api/file_policy` | `GET` | 无 | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | 返回部署侧文件上限、legacy inline 阈值、chunk 参数和 multipart 能力；前端据此判断文件上传是否可用，并配置 chunk 参数 |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | 当 `S3_PUBLIC_ENDPOINT` 已设置时返回 S3 预签名 PUT URL；未设置时返回 `/api/file/chunk/` 代理路径，Go API 代替浏览器流式转发 chunk 字节 |
 | `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | 校验已上传 chunk 的元数据，并返回后续写入 `compound_commit` 的 `fileRef` |
-| `/api/file/fetch/:uuid` | `GET` | 无 | `FileFetchResponseSchema` | `apiClient.fileFetch()` | 对已交付的 multipart payload 返回每个 chunk 的预签名 GET URL；inline payload 仍只走 `decrypt_fetch` |
+| `/api/file/fetch/:uuid` | `GET` | 无 | `FileFetchResponseSchema` | `apiClient.fileFetch()` | 对已交付的 multipart payload 返回每个 chunk 的下载 URL（`S3_PUBLIC_ENDPOINT` 已设置时为预签名 S3 URL，未设置时为 `/api/file/download/` 代理路径）；inline payload 仍只走 `decrypt_fetch` |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | 升级后走 `WsClientMessageSchema` | `WsServerMessageSchema` | `ChannelSync.connect()` | 当前未带 `Upgrade: websocket` 会返回 `426` + `{ ok: false, code: "BAD_REQUEST" }` |
 
-self-host API **不会** 暴露稳定的 `/api/file/chunk/...` 路由。分片上传和下载都直接走
-`/api/file/initiate` 和 `/api/file/fetch/:uuid` 返回的 S3 预签名 URL。
+当 `SELFHOST_API_S3_PUBLIC_ENDPOINT` 已设置（浏览器能直达外部 S3）时，chunk 字节直接走
+`/api/file/initiate` 和 `/api/file/fetch/:uuid` 返回的 S3 预签名 URL。当未设置（如 Docker
+内置 Garage）时，Go API 暴露 `/api/file/chunk/{uploadId}/{index}`（PUT）和
+`/api/file/download/{key...}`（GET）代理路由，替浏览器流式转发 chunk 字节。
 
 ### Multipart 传输叠加层
 
-- `/api/file_policy` 里的 `multipartThresholdBytes` 就是 inline 分界线；不超过它的文件继续走 legacy `cipherBundle`。
+- 所有新的 `payloadKind: "file"` 交付都走对象存储 `fileRef`；只有文本载荷走 inline `cipherBundle`。`/api/file_policy` 中的 `multipartThresholdBytes` 保留用于 legacy 兼容，不再影响新的文件写入路径。
 - update intent 必须在 `cipherBundle` 与 `fileRef` 之间二选一；multipart 交付还要求 `payloadKind: "file"`。
 - `/api/decrypt_fetch/:uuid` 仍是交付元数据的权威来源，并且只会返回 `cipherBundle` 或 `fileRef` 二者之一。
 - 只有当 `decrypt_fetch` 暴露出 multipart `fileRef` 时，`/api/file/fetch/:uuid` 才有意义。
