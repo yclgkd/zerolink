@@ -5,6 +5,7 @@ const zh: Translation = {
     tagline: '零知识安全传递',
     trustModelLink: '信任模型',
     backToCreate: '返回创建',
+    sourceCode: 'GitHub',
     inAppBrowserWarning:
       '为确保最佳安全性，请在独立浏览器（Safari、Chrome、Firefox）中打开 ZeroLink，而非在 Telegram、Instagram 等应用的内置浏览器中使用。',
   },
