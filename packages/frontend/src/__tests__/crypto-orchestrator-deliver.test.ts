@@ -354,7 +354,7 @@ describe('crypto orchestrator – deliverSecret and deleteChannel', () => {
     const receiverPubJwk = await exportReceiverPublicKeyToJwk(receiverKeyPair.publicKey);
     const receiverPubFpr = await computeReceiverPubFpr(receiverKeyPair.publicKey);
     const fileRef = MultipartFileRefSchema.parse({
-      storageBackend: 'minio',
+      storageBackend: 's3',
       chunkSizeBytes: 262_144,
       chunkCount: 1,
       totalPlaintextBytes: 68,

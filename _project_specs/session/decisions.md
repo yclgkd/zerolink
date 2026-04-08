@@ -13,6 +13,23 @@ This is append-only. Never delete entries; archive old batches to archive/ when 
 Entries are kept newest-first by heading date. When adding a historical backfill, insert it by date instead of appending it to the bottom.
 When later implementation or doc cleanup supersedes a historical claim, annotate the original entry with a dated follow-up instead of silently assuming readers know it is outdated.
 
+## [2026-04-08] Go formatting is enforced in both pre-commit and PR CI
+
+**Decision**: Enforce `gofmt` in two places: auto-format staged `.go` files through root `lint-staged` during `pre-commit`, and fail the Go PR validation job when `gofmt -l` finds unformatted files.
+**Context**: The repository already ran TypeScript-centric pre-commit checks and Go tests in PR CI, but neither layer caught plain Go formatting drift. Review surfaced a real self-hosted Go formatting issue that compiled and tested cleanly, which meant the only guardrail was manual review.
+**Options Considered**: (A) Leave formatting to reviewer discipline; (B) enforce only in CI; (C) enforce only in local hooks; (D) use local auto-format plus CI verification.
+**Choice**: Option D. Local hooks keep feedback immediate and low-friction for Go edits, while CI remains the non-bypassable enforcement layer.
+**Reasoning**: `gofmt` is deterministic and cheap, so it fits both developer ergonomics and CI reliability. Using `lint-staged` limits local formatting to staged `.go` files, avoiding unnecessary repo-wide work on commits that do not touch Go.
+**Trade-offs**: Contributors editing Go now need a working local Go toolchain for commits that stage `.go` files. PR CI adds a small extra step before `go test`, but the measured cost is negligible compared with the existing Go test job.
+
+## [2026-04-07] Replace archived MinIO server with Garage and generalize storage naming to S3
+
+**Decision**: Replace the MinIO server container with Garage in self-hosted Docker Compose, rename all internal "minio" identifiers to "s3", and make object storage optional via Docker Compose profiles.
+**Context**: The MinIO server repository (`minio/minio`) was archived on GitHub (last push 2026-02-12). The `minio-go/v7` Go client SDK remains actively maintained and is a generic S3-compatible client. Self-hosted deployments need an actively maintained object storage option, while users who bring their own S3-compatible provider should not be forced to run a local container.
+**Options Considered**: (A) Store all files in PostgreSQL — simpler deployment but poor fit for 512 MB files, no presigned URLs; (B) Replace MinIO with an actively maintained S3-compatible store and make it optional — minimal code changes, keeps presigned URL architecture; (C) Keep using the archived MinIO image — no work but accumulating security risk.
+**Choice**: Option B with Garage (`dxflrs/garage:v2.2.0`). Garage is lightweight (single binary, Rust, ~30 MB RAM), designed for small-scale self-hosting, and supports S3 V4 presigned URLs. The `minio-go/v7` SDK stays as the S3 client. Garage runs under `profiles: [storage]` so it only starts when explicitly requested. Three deployment modes: `inline` (no object storage), `s3` + built-in Garage, `s3` + external provider (AWS S3, R2, etc.).
+**Trade-offs**: Breaking change for env vars (`SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`) and wire format (`"minio"` → `"s3"` in `storageBackend`). Acceptable pre-1.0. SQL migration updates existing JSONB rows. Garage first-run bootstrap requires an init container for layout/key/bucket setup.
+
 ## [2026-04-02] Tag releases package the verified frontend build into published self-host web images
 
 **Decision**: Keep the release-prep frontend build + manifest generate/sign/verify sequence in `.github/workflows/deploy.yml`, then publish self-host API and web images in parallel while packaging the already-built `packages/frontend/dist` into `zerolink-web` instead of rebuilding it inside the release Docker step.
@@ -79,6 +96,9 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Introduce a dedicated NanoID-shaped UUID validator in the MinIO filestore package, make the self-host `/api/file/initiate` route enforce `multipartSupported`, `maxChunks`, and channel existence through `PublicStatus`, and restore the Compose healthcheck to `curl .../minio/health/ready`.
 **Reasoning**: These checks close a real protocol-compatibility bug for legitimate channel IDs, restore Worker/self-host parity on multipart gating, and make the packaged deployment wait for an actually usable object store before starting the API.
 **Trade-offs**: Self-host multipart initiation now depends on the protocol service as well as the file store, and manual clients probing `/api/file/initiate` will see earlier `400/404` rejections instead of opportunistically receiving presigned URLs.
+**Follow-up (2026-04-07, MinIO→Garage)**: MinIO references superseded; container replaced by Garage, healthcheck uses `/garage stats -a`. UUID validator package renamed from minio filestore to generic s3 filestore.
+**Follow-up (2026-04-08, API proxy)**: When `S3_PUBLIC_ENDPOINT` is unset, the Go API now proxies chunk bytes via short-lived opaque `/api/file/chunk/{token}` and `/api/file/download/{token}` targets instead of returning presigned URLs. The browser receives relative `file/...` URLs so custom API base paths still work, and direct storage keys are not exposed through the proxy path.
+**Follow-up (2026-04-08, single-use downloads)**: Opaque `/api/file/download/{token}` targets are now consumed on first GET instead of remaining replayable for their full TTL. Frontends that need to retry must re-run `/api/file/fetch/:uuid` to obtain fresh download targets.
 
 ## [2026-04-02] Multipart review fixes favor best-effort cleanup and signed direct chunk downloads
 
@@ -98,6 +118,9 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Reasoning**: The frontend keeps one orchestrator path, the DO still enforces delivery semantics, and the storage backend can change without widening the user-facing crypto contract. This also keeps terminal deletion / expiry logic responsible for cleaning up stored chunk objects regardless of the deployment.
 **Trade-offs**: Multipart now introduces a second payload transport to maintain, and shared code must preserve strict exactly-one semantics between `cipherBundle` and `fileRef`. The Cloudflare Worker path still depends on R2 object lifecycle cleanup, while the self-hosted path depends on MinIO bucket lifecycle and sweep behavior.
 **Follow-up (2026-04-02, docs sync)**: Deployment, architecture, contract, PRD, and security docs now explicitly describe the shipped multipart behavior instead of treating large-file transport and self-hosted object storage as future work. Cloudflare docs now call out the required R2 buckets, and self-hosted docs now document the `inline|minio` storage split and the inline threshold guardrail.
+**Follow-up (2026-04-07, MinIO→Garage)**: MinIO server archived; self-hosted storage backend renamed from `"minio"` to `"s3"`, container replaced by Garage, env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`. `minio-go/v7` SDK retained as generic S3 client.
+**Follow-up (2026-04-08, API proxy)**: "Go API does not stream chunk bytes" is no longer universally true. When `S3_PUBLIC_ENDPOINT` is unset the API proxies chunk uploads/downloads; presigned URLs are only used when the browser can reach S3 directly.
+**Follow-up (2026-04-08, single-use downloads)**: Self-hosted proxy download targets are single-use opaque capabilities rather than reusable-for-TTL URLs. This tightens replay semantics without changing the typed `fileRef` contract because the client can re-fetch fresh targets through `/api/file/fetch/:uuid`.
 
 ## [2026-04-02] Large file delivery uses typed multipart `fileRef` metadata over storage-specific backends
 
@@ -107,6 +130,8 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Introduce independently encrypted chunks with per-chunk AAD/index binding, return a signed `fileRef` instead of an inline `cipherBundle` for multipart deliveries, and let the backend decide how chunk URLs are issued. Worker/R2 stays proxy-based because the runtime uses bindings instead of S3-style presigned URLs; self-hosted MinIO uses presigned PUT/GET so Go never streams chunk bytes.
 **Reasoning**: This keeps the sender/receiver cryptographic flow identical across deployments, preserves zero-knowledge storage semantics because the server only sees encrypted chunks plus typed metadata, and avoids frontend branching on deployment type. It also lets inline text and small-file compatibility stay intact while large-file support scales independently.
 **Trade-offs**: The protocol now has two payload transports (`inline` and `multipart`), so decrypt/delivery code must preserve exactly-one semantics between `cipherBundle` and `fileRef`. Self-hosted config must also keep `multipartThresholdBytes` at or below the inline ciphertext ceiling even when `maxFileBytes` is much larger, because only oversized files should switch onto the multipart path.
+**Follow-up (2026-04-07, MinIO→Garage)**: MinIO container replaced by Garage; env vars renamed `SELFHOST_API_MINIO_*` → `SELFHOST_API_S3_*`.
+**Follow-up (2026-04-08, API proxy)**: Self-hosted Go API now supports dual-mode chunk transport: presigned S3 URLs when `S3_PUBLIC_ENDPOINT` is set, and short-lived opaque proxy targets under `/api/file/chunk/{token}` / `/api/file/download/{token}` when unset. "Go never streams chunk bytes" no longer holds in the proxy case.
 
 ## [2026-04-01] Receiver-side file decoding requires declared `payloadKind: "file"`
 
@@ -668,4 +693,3 @@ When later implementation or doc cleanup supersedes a historical claim, annotate
 **Choice**: Disable autofill across all passphrase prompts
 **Reasoning**: ZeroLink passphrases are task-scoped secrets rather than account credentials, so avoiding stale autofill and misleading "set new password" prompts is more important than password-manager generation in these fields. Leaving out vendor-specific ignore hints preserves the user's ability to invoke a password manager intentionally.
 **Trade-offs**: Browsers are less likely to offer generated passwords for Quick Share or receiver lock setup, and some password managers may still choose to assist when the user explicitly invokes them.
-

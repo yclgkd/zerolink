@@ -67,7 +67,7 @@ Two tiers available at creation:
 ### 3.5 New: Self-Hosting / Verifiable Releases
 
 - Official Cloudflare version remains the default
-- Docker Compose one-click self-hosting (current package: Caddy + Go API + PostgreSQL + MinIO, with protocol-equivalent routes for the shipped frontend contract)
+- Docker Compose one-click self-hosting (current package: Caddy + Go API + PostgreSQL + Garage, with protocol-equivalent routes for the shipped frontend contract)
 - Release chain: Signed Manifest + reproducible builds
 
 ---
@@ -436,7 +436,7 @@ Quick Share mode (adds `adminMode` + `softkeySignature`, no `assertion`):
 }
 ```
 
-Large files use `fileRef` (see § 10.6) instead of `cipherBundle`, with `payloadKind: "file"`.
+New file payloads use `fileRef` (see § 10.6) instead of `cipherBundle`, with `payloadKind: "file"`.
 
 #### POST /api/delete_commit/:uuid
 
@@ -469,7 +469,7 @@ Response:
 {
   "ok": true,
   "cipherBundle": { "...": "inline payload, same structure as § 10.4" },
-  "fileRef": { "...": "replaces cipherBundle for large files" },
+  "fileRef": { "...": "replaces cipherBundle for delivered file payloads" },
   "receiverPubFpr": "hex...",
   "cipherVersion": 1,
   "deliveryAuth": { "...": "delivery proof, optional" },
@@ -479,7 +479,7 @@ Response:
 
 `cipherBundle` and `fileRef` are mutually exclusive; exactly one must be present.
 
-### 10.6 File API (Multipart Large Files)
+### 10.6 File API (Object Storage / Multipart)
 
 #### GET /api/file_policy
 
@@ -759,7 +759,7 @@ sequenceDiagram
 - LOCK_KEY_BYTES = 32 (server storage, sha256 output)
 - PAD_BLOCK_DEFAULT = 4096 (configurable to 8192)
 - PAD_BLOCK_MAX = 65536 (upper limit)
-- MAX_PLAINTEXT_BYTES = 2MB (inline plaintext ceiling; larger files switch to multipart when supported)
+- MAX_PLAINTEXT_BYTES = 2MB (inline plaintext ceiling for text payloads and legacy compatibility; new file uploads require object-storage support)
 - WebAuthn: default alg = -7 (ES256), UV required (Strict/HardwareOnly)
 
 ---
@@ -939,7 +939,7 @@ Error semantics (coarse-grained):
 
 - PAD_BLOCK defaults to 4096; can be included in the update payload as pad_block (for audit consistency; not recommended for public display)
 - pad_rand must be cryptographically secure random numbers
-- If orig_len stays within the inline ceiling, keep the legacy inline path; otherwise switch to multipart file mode when the deployment advertises support, or reject the payload per MAX_PLAINTEXT_BYTES
+- Text payloads stay on the inline path. New file payloads do not use this size gate for transport selection: they must upload encrypted chunks and commit a `fileRef`, or be rejected when the deployment does not advertise object-storage support
 
 ### E3. Decoding Rules (Receiver)
 
@@ -1075,4 +1075,3 @@ Public endpoint /api/public/:uuid:
 
 - Short fingerprint: first 6 bytes + last 6 bytes (hex)
 - Full hex displayed collapsed (user must explicitly expand)
-

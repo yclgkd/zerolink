@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -30,10 +31,13 @@ type Dependencies struct {
 
 type FileStore interface {
 	Initiate(context.Context, string, int) error
+	PutChunk(ctx context.Context, uploadID string, index int, body io.Reader, size int64) (string, error)
 	PresignedUpload(context.Context, string, int, time.Duration) (string, error)
 	CompleteUpload(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
 	PresignedDownload(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
+	GetChunk(ctx context.Context, key string) (io.ReadCloser, error)
 	DeleteUpload(context.Context, filestore.MultipartFileRef) error
+	UsePresignedURLs() bool
 }
 
 type FilePolicy struct {
@@ -61,7 +65,7 @@ type statusResponse struct {
 
 const (
 	accessControlAllowHeaders      = "Content-Type"
-	accessControlAllowMethods      = "GET,POST,OPTIONS"
+	accessControlAllowMethods      = "GET,POST,PUT,OPTIONS"
 	defaultMaxProtocolBodyBytes    = 64 * 1024
 	maxWebSocketClientMessageBytes = defaultMaxProtocolBodyBytes
 )
@@ -77,13 +81,16 @@ func NewRouter(deps Dependencies) http.Handler {
 	if maxCompoundCommitBodyBytes <= 0 {
 		maxCompoundCommitBodyBytes = defaultMaxProtocolBodyBytes
 	}
+	proxyTargets := newProxyTargetAuthorizer()
 
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
 	mux.HandleFunc("/api/file_policy", methodOnly(http.MethodGet, logger, filePolicyHandler(deps.FilePolicy, logger)))
-	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, logger, maxCompoundCommitBodyBytes)))
-	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, logger, maxCompoundCommitBodyBytes)))
-	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, logger)))
+	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, proxyTargets, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, proxyTargets, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/chunk/{token}", methodOnly(http.MethodPut, logger, fileChunkProxyHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger)))
+	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, proxyTargets, logger)))
+	mux.HandleFunc("/api/file/download/{token}", methodOnly(http.MethodGet, logger, fileDownloadProxyHandler(deps.FileStore, proxyTargets, logger)))
 
 	for _, route := range protocol.RouteSpecs() {
 		if route.Name == "ws" {
@@ -191,6 +198,7 @@ func fileInitiateHandler(
 	protocolService service.Protocol,
 	fileStore FileStore,
 	filePolicy FilePolicy,
+	proxyTargets *proxyTargetAuthorizer,
 	logger *slog.Logger,
 	maxProtocolBodyBytes int64,
 ) http.HandlerFunc {
@@ -236,11 +244,23 @@ func fileInitiateHandler(
 		}
 
 		chunks := make([]filestore.FileUploadChunkTarget, 0, input.ChunkCount)
+		usePresigned := fileStore.UsePresignedURLs()
 		for index := 0; index < input.ChunkCount; index++ {
-			uploadURL, err := fileStore.PresignedUpload(r.Context(), uploadID, index, 15*time.Minute)
-			if err != nil {
-				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-				return
+			var uploadURL string
+			if usePresigned {
+				u, err := fileStore.PresignedUpload(r.Context(), uploadID, index, 15*time.Minute)
+				if err != nil {
+					writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+					return
+				}
+				uploadURL = u
+			} else {
+				token, err := proxyTargets.IssueUploadTarget(uploadID, index, proxyUploadTargetTTL)
+				if err != nil {
+					writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue upload target")
+					return
+				}
+				uploadURL = buildProxyUploadURL(token)
 			}
 			chunks = append(chunks, filestore.FileUploadChunkTarget{Index: index, UploadURL: uploadURL})
 		}
@@ -253,7 +273,12 @@ func fileInitiateHandler(
 	}
 }
 
-func fileCompleteHandler(fileStore FileStore, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func fileCompleteHandler(
+	fileStore FileStore,
+	proxyTargets *proxyTargetAuthorizer,
+	logger *slog.Logger,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if fileStore == nil {
 			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
@@ -274,6 +299,7 @@ func fileCompleteHandler(fileStore FileStore, logger *slog.Logger, maxProtocolBo
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
+		proxyTargets.RevokeUpload(input.UploadID)
 
 		writeJSON(logger, w, http.StatusOK, filestore.FileUploadCompleteResponse{
 			OK:      true,
@@ -282,7 +308,12 @@ func fileCompleteHandler(fileStore FileStore, logger *slog.Logger, maxProtocolBo
 	}
 }
 
-func fileFetchHandler(protocolService service.Protocol, fileStore FileStore, logger *slog.Logger) http.HandlerFunc {
+func fileFetchHandler(
+	protocolService service.Protocol,
+	fileStore FileStore,
+	proxyTargets *proxyTargetAuthorizer,
+	logger *slog.Logger,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if fileStore == nil {
 			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
@@ -303,12 +334,24 @@ func fileFetchHandler(protocolService service.Protocol, fileStore FileStore, log
 			return
 		}
 
+		usePresigned := fileStore.UsePresignedURLs()
 		chunks := make([]filestore.FileDownloadChunkTarget, 0, len(output.FileRef.Chunks))
 		for _, chunk := range output.FileRef.Chunks {
-			downloadURL, err := fileStore.PresignedDownload(r.Context(), *output.FileRef, chunk.Index, 5*time.Minute)
-			if err != nil {
-				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-				return
+			var downloadURL string
+			if usePresigned {
+				u, err := fileStore.PresignedDownload(r.Context(), *output.FileRef, chunk.Index, 5*time.Minute)
+				if err != nil {
+					writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+					return
+				}
+				downloadURL = u
+			} else {
+				token, err := proxyTargets.IssueDownloadTarget(chunk.StorageKey, proxyDownloadTargetTTL)
+				if err != nil {
+					writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue download target")
+					return
+				}
+				downloadURL = buildProxyDownloadURL(token)
 			}
 			chunks = append(chunks, filestore.FileDownloadChunkTarget{
 				Index:       chunk.Index,
@@ -320,6 +363,71 @@ func fileFetchHandler(protocolService service.Protocol, fileStore FileStore, log
 			OK:     true,
 			Chunks: chunks,
 		})
+	}
+}
+
+func fileChunkProxyHandler(
+	fileStore FileStore,
+	filePolicy FilePolicy,
+	proxyTargets *proxyTargetAuthorizer,
+	logger *slog.Logger,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fileStore == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
+			return
+		}
+		if !filePolicy.MultipartSupported {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "multipart file delivery is disabled")
+			return
+		}
+		target, ok := proxyTargets.UploadTarget(r.PathValue("token"))
+		if !ok {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "upload target not found")
+			return
+		}
+		body := http.MaxBytesReader(w, r.Body, filePolicy.ChunkSizeBytes+1024)
+		defer body.Close()
+		etag, err := fileStore.PutChunk(r.Context(), target.uploadID, target.index, body, r.ContentLength)
+		if err != nil {
+			writeError(logger, w, http.StatusBadGateway, "STORAGE_ERROR", err.Error())
+			return
+		}
+		w.Header().Set("ETag", etag)
+		writeJSON(logger, w, http.StatusOK, map[string]any{"ok": true, "etag": etag})
+	}
+}
+
+func fileDownloadProxyHandler(
+	fileStore FileStore,
+	proxyTargets *proxyTargetAuthorizer,
+	logger *slog.Logger,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if fileStore == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
+			return
+		}
+		target, ok := proxyTargets.ConsumeDownloadTarget(r.PathValue("token"))
+		if !ok {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "download target not found")
+			return
+		}
+		rc, err := fileStore.GetChunk(r.Context(), target.storageKey)
+		if err != nil {
+			writeError(logger, w, http.StatusBadGateway, "STORAGE_ERROR", err.Error())
+			return
+		}
+		defer rc.Close()
+		buffered := bufio.NewReader(rc)
+		if _, err := buffered.Peek(1); err != nil {
+			writeError(logger, w, http.StatusBadGateway, "STORAGE_ERROR", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		if _, err := io.Copy(w, buffered); err != nil {
+			logger.Error("stream download chunk", "error", err)
+		}
 	}
 }
 

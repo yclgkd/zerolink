@@ -176,7 +176,25 @@ func (intent ManageIntent) CanonicalValue() map[string]any {
 			}
 		}
 		if intent.FileRef != nil {
-			payload["fileRef"] = intent.FileRef
+			chunks := make([]map[string]any, len(intent.FileRef.Chunks))
+			for i, c := range intent.FileRef.Chunks {
+				chunks[i] = map[string]any{
+					"index":           c.Index,
+					"storageKey":      c.StorageKey,
+					"ciphertextBytes": c.CiphertextBytes,
+					"ciphertextHash":  c.CiphertextHash,
+				}
+			}
+			payload["fileRef"] = map[string]any{
+				"storageBackend":       string(intent.FileRef.StorageBackend),
+				"chunkSizeBytes":       intent.FileRef.ChunkSizeBytes,
+				"chunkCount":           intent.FileRef.ChunkCount,
+				"totalPlaintextBytes":  intent.FileRef.TotalPlaintextBytes,
+				"totalCiphertextBytes": intent.FileRef.TotalCiphertextBytes,
+				"baseIv":               intent.FileRef.BaseIV,
+				"encContentKey":        intent.FileRef.EncContentKey,
+				"chunks":               chunks,
+			}
 		}
 		return payload
 	default:
@@ -218,7 +236,7 @@ func validateMultipartFileRef(fileRef filestore.MultipartFileRef) error {
 	if err := fileRef.Validate(); err != nil {
 		return err
 	}
-	if fileRef.StorageBackend != filestore.FileStorageBackendMinIO {
+	if fileRef.StorageBackend != filestore.FileStorageBackendS3 {
 		return fmt.Errorf("unsupported storage backend %q", fileRef.StorageBackend)
 	}
 	return nil

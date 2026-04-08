@@ -468,7 +468,7 @@ const NONCE_BYTES = 24;              // nonce
 // Padding
 const PAD_BLOCK_DEFAULT = 4096;      // 4KB
 const PAD_BLOCK_MAX = 65536;         // 64KB
-const MAX_PLAINTEXT_BYTES = 2097152; // 2MB inline 明文上限，超过后切 multipart
+const MAX_PLAINTEXT_BYTES = 2097152; // 2MB 文本载荷 / legacy 兼容用的 inline 明文上限
 
 // WebAuthn
 const WEBAUTHN_ALG = -7;             // ES256

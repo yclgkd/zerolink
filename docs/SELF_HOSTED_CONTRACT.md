@@ -72,19 +72,23 @@ Output encoding varies per function:
 | `/api/delete_commit/:uuid` | `POST` | Same commit unions with `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | Delete-only alias over compound commit path; inherits the same commit-cookie caller-binding semantics |
 | `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Active-channel public snapshot only; once a channel is tombstoned or lazily purged, canonical external behavior is `404 NOT_FOUND` rather than a `200` terminal snapshot |
 | `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery; the response includes exactly one of `cipherBundle` or `fileRef`, and `cipherVersion` is the delivered payload version (`record.version - 1` in the current DO implementation), not the raw channel record version |
-| `/api/file_policy` | `GET` | none | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | Returns deployment file ceilings, inline threshold, chunk sizing, and multipart capability; frontend uses this to choose inline vs multipart delivery |
-| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | Self-host returns MinIO presigned PUT targets per chunk; the Go API coordinates metadata only and does not proxy chunk bytes |
+| `/api/file_policy` | `GET` | none | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | Returns deployment file ceilings, legacy inline threshold, chunk sizing, and multipart capability; frontend uses this to validate file-upload availability and configure chunking |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | When `S3_PUBLIC_ENDPOINT` is set, returns S3 presigned PUT URLs per chunk; when unset, returns relative API-proxied `file/chunk/<token>` targets with short-lived in-memory authorization, and the Go API streams chunk bytes on behalf of the browser |
 | `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | Validates uploaded chunk metadata and returns the typed `fileRef` later embedded in `compound_commit` |
-| `/api/file/fetch/:uuid` | `GET` | none | `FileFetchResponseSchema` | `apiClient.fileFetch()` | For delivered multipart payloads, returns one presigned GET URL per chunk; inline payloads continue through `decrypt_fetch` only |
+| `/api/file/fetch/:uuid` | `GET` | none | `FileFetchResponseSchema` | `apiClient.fileFetch()` | For delivered multipart payloads, returns one download URL per chunk (presigned S3 when `S3_PUBLIC_ENDPOINT` is set, relative API-proxied single-use `file/download/<token>` targets when unset); inline payloads continue through `decrypt_fetch` only |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |
 
-The self-hosted API does **not** expose a stable `/api/file/chunk/...` route. Upload and download
-chunk bytes go directly to the MinIO presigned URLs returned by `/api/file/initiate` and
-`/api/file/fetch/:uuid`.
+When `SELFHOST_API_S3_PUBLIC_ENDPOINT` is set (external S3 reachable by the browser), chunk bytes
+go directly to S3 presigned URLs returned by `/api/file/initiate` and `/api/file/fetch/:uuid`.
+When unset (e.g., Docker-internal Garage), the Go API issues short-lived opaque proxy targets under
+`/api/file/chunk/{token}` (PUT) and `/api/file/download/{token}` (GET). The browser receives those
+targets as relative `file/...` URLs so custom API base paths still work, and direct storage keys are
+not exposed through the proxy path. Download proxy targets are single-use: once a GET consumes the
+token, the client must call `/api/file/fetch/:uuid` again to obtain a fresh target if it needs to retry.
 
 ### Multipart Delivery Overlay
 
-- `/api/file_policy` publishes the inline cutoff as `multipartThresholdBytes`; files at or below that threshold stay on the legacy inline `cipherBundle` path.
+- All new `payloadKind: "file"` deliveries use object storage `fileRef`; only text payloads use inline `cipherBundle`. The `multipartThresholdBytes` in `/api/file_policy` is retained for legacy compatibility but does not gate new file writes.
 - Update intents must carry exactly one of `cipherBundle` or `fileRef`; multipart deliveries also require `payloadKind: "file"`.
 - `/api/decrypt_fetch/:uuid` still remains the source of truth for delivery metadata and returns exactly one of `cipherBundle` or `fileRef`.
 - `/api/file/fetch/:uuid` is only meaningful after `decrypt_fetch` reveals a multipart `fileRef`.
@@ -97,7 +101,7 @@ chunk bytes go directly to the MinIO presigned URLs returned by `/api/file/initi
 | `BAD_REQUEST` | `426` | Worker WS upgrade gate | `/api/ws/:uuid` hit without `Upgrade: websocket` |
 | `METHOD_NOT_ALLOWED` | `405` | Worker router | Wrong HTTP verb; `Allow` header is set |
 | `NOT_FOUND` | `404` | Worker router or DO | Unknown API route, missing channel, finalized terminal state, or `/api/file/fetch/:uuid` when no multipart file payload is available |
-| `BAD_REQUEST` | `400` | File coordination routes / MinIO metadata validation | Invalid file-policy input, malformed multipart metadata, missing chunks, or MinIO presign/stat validation failure |
+| `BAD_REQUEST` | `400` | File coordination routes / S3 metadata validation | Invalid file-policy input, malformed multipart metadata, missing chunks, or S3 presign/stat validation failure |
 | `NOT_IMPLEMENTED` | `501` | Worker router | Placeholder route matched but no implementation exists |
 | `INTERNAL_ERROR` | `500` | Worker or DO | Unexpected exception or invalid upstream response |
 | `RATE_LIMITED` | `429` | DO | Application-layer throttling; `Retry-After` may be present |

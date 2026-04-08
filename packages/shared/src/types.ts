@@ -563,7 +563,7 @@ export interface CompoundBeginResponse {
   adminMode: AdminMode;
 }
 
-export type FileStorageBackend = 'r2' | 'minio';
+export type FileStorageBackend = 'r2' | 's3';
 
 export interface FileUploadInitiateRequest {
   channelUuid: UUID;
