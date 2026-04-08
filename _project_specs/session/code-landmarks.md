@@ -45,7 +45,7 @@ UPDATE WHEN:
 | `packages/backend/src/do/SecretVaultWebSocket.ts` | Durable Object WebSocket accept/broadcast helpers for channel state sync |
 | `packages/frontend/src/crypto/orchestrator.ts` | Frontend crypto orchestration (create / lock / deliver / decrypt) |
 | `packages/frontend/src/crypto/orchestrator-multipart.ts` | Frontend multipart file transport helper — streams `Blob`/byte inputs into chunked AES-GCM encryption, coordinates `/api/file/*` upload/download orchestration, and reassembles decrypted file bytes on receipt |
-| `packages/frontend/src/crypto/orchestrator-decrypt.ts` | Delivered-payload decrypt path — resolves anchored delivery proof versions, preserves backward-compatible raw-text decoding, and only treats payloads as downloadable files when signed delivery metadata declares `payloadKind: "file"` |
+| `packages/frontend/src/crypto/orchestrator-decrypt.ts` | Delivered-payload decrypt path — resolves anchored delivery proof versions, treats inline decrypts as text-only, decodes multipart `fileRef` envelopes into downloadable files, and rejects transport/type mismatches |
 | `packages/shared/src/payload.ts` | Shared encrypted payload envelope for delivered content — wraps text/file payloads, decodes decrypted bytes back into `payload.kind`, and sanitizes download filenames for receiver-side save actions |
 | `packages/shared/src/multipart.ts` | Shared multipart helpers — derives per-chunk IV/AAD bindings, resolves chunk counts/total ciphertext sizing, and keeps frontend/backend chunk math aligned |
 | `packages/backend/src/file-policy.ts` | Worker-side file policy resolver — parses env-configured file limits, validates the inline-only phase-1 ceiling, and serves `/api/file_policy` responses |
@@ -85,7 +85,7 @@ UPDATE WHEN:
 | `.husky/pre-commit` | Local commit gate — runs `lint-staged` plus workspace typecheck; staged `.go` files are auto-formatted through `gofmt -w` before commit |
 | `.github/workflows/release-please.yml` | Automated release workflow — validates `RELEASE_PLEASE_TOKEN`, then runs the commit-pinned official `release-please` action to update root `version.txt` / `CHANGELOG.md`, open Release PRs on `main`, and create `v*` tags + GitHub Releases; current upstream Node 20 warning is tolerated until the pinned action is upgraded |
 | `packages/backend/wrangler.toml` | Cloudflare Workers + Durable Objects config; both envs now bind to `SecretVaultV2`, while historical migration entries preserve the prior namespace cutovers |
-| `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — owns file policy env vars (`SELFHOST_API_FILE_*`) and still caps the legacy inline threshold for compatibility even though new file writes require object storage |
+| `services/selfhost-api/internal/config/config.go` | Self-hosted env loader — owns file policy env vars (`SELFHOST_API_FILE_*`), still caps the legacy inline threshold for compatibility even though new file writes require object storage, and disables file uploads when `SELFHOST_API_FILE_STORAGE_BACKEND=inline` |
 | `services/selfhost-api/internal/httpapi/router.go` | Self-hosted protocol router — serves `/api/file_policy`, applies a config-driven JSON body limit, and issues short-lived proxy targets for `/api/file/chunk/{token}` (PUT) and single-use `/api/file/download/{token}` (GET) when `S3_PUBLIC_ENDPOINT` is unset |
 | `packages/backend/.env.e2e` | Test-only Wrangler env source for local realtime smoke E2E; provides non-secret RP and commit-token values without dashboard secrets |
 | `deploy/selfhost/docker-compose.yml` | Self-hosted stack bundle — defaults to published GHCR `api`/`web` images while starting PostgreSQL and migration job; Garage S3 storage is optional via `--profile storage` |
@@ -126,7 +126,7 @@ UPDATE WHEN:
 | `packages/shared/src/__tests__/selfhost-contract-fixtures.test.ts` | Shared cross-runtime fixture verification for canonical JSON, intent hashes, AAD, delivery-proof challenge, and WS message schemas |
 | `packages/shared/src/__tests__/payload.test.ts` | Shared payload-envelope tests for text/file round-trips, legacy text fallback, and tamper detection on encrypted file metadata |
 | `packages/frontend/src/__tests__/crypto-orchestrator-deliver.test.ts` | Frontend deliver-flow coverage, including fileRef-only delivery for all files and explicit `FILE_STORAGE_UNAVAILABLE` rejection when uploads are disabled |
-| `packages/frontend/src/__tests__/crypto-orchestrator-decrypt-general.test.ts` | Receiver decrypt regression coverage for legacy inline file payloads that predate the fileRef-only write path |
+| `packages/frontend/src/__tests__/crypto-orchestrator-decrypt-general.test.ts` | Receiver decrypt regression coverage for inline-text-only behavior, decrypt store updates, and non-anchored replay-safe state handling |
 | `packages/frontend/src/__tests__/share-page-decrypt.test.tsx` | Receiver delivered-page UI coverage, including plaintext burn and download-only decrypted file UX |
 | `packages/frontend/src/__tests__/manage-page-deliver.test.tsx` | Sender Manage page integration coverage for text/file delivery inputs and action error handling |
 | `packages/backend/src/__tests__/worker-scheduled-file-cleanup.test.ts` | Worker scheduled cleanup regression test — proves stale orphan R2 chunks are deleted while active or fresh chunks survive |
@@ -156,7 +156,7 @@ UPDATE WHEN:
 | `release/tiered-verification.ts` | Cached trust revalidates signed bytes | `manifest-hash.txt` is unsigned, freshness hint only |
 | `payload.ts` + `share-logic.ts` | File delivery is download-only (phase 1) | No preview rendering without security review; files stay out of DOM |
 | `orchestrator-deliver.ts` | Text = inline `cipherBundle`, file = object storage `fileRef` | Intentionally different storage semantics |
-| `orchestrator-decrypt.ts` + `payload.ts` | `payloadKind` optional for compat, strict for file decode | Undeclared payloads stay on raw-text path |
+| `orchestrator-decrypt.ts` + `payload.ts` | Inline decrypt is text-only; file decrypt requires multipart `fileRef` | Inline `cipherBundle` payloads never upgrade into downloadable files |
 | `multipart.ts` | Chunk order bound cryptographically | IV = `baseIv XOR chunkIndex`, AAD includes chunk index |
 | `file-cleanup.ts` + `SecretVaultStorage.ts` | R2 cleanup has two layers | Channel delete removes immediately; hourly sweep reclaims stale orphans |
 | `config.go` + `.env.example` | Self-hosted files require S3 object storage | Disabling S3 disables file delivery entirely |

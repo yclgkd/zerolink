@@ -6,6 +6,7 @@ import {
   AES_GCM,
   CHANNEL_STATE,
   type DecryptFetchResponse,
+  encodeFileSharePayload,
   SECURITY_PROFILE,
 } from '@zerolink/shared';
 import { exportReceiverPublicKeyToJwk, generateReceiverKeyPair } from '@zerolink/shared/crypto/rsa';
@@ -104,11 +105,17 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
     expect(useDecryptStore.getState().file).toBeNull();
   });
 
-  it('decrypts legacy inline file payloads and stores download metadata', async () => {
+  it('treats legacy inline file payloads as raw text instead of downloadable files', async () => {
     const storage = createIndexedDbReceiverKeyStorage({
       dbName: 'test-orchestrator-decrypt-file',
       storeName: 'receiver-keys',
     });
+    const legacyInlineFileEnvelope = encodeFileSharePayload({
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    });
+    const expectedText = new TextDecoder().decode(legacyInlineFileEnvelope);
     const prepared = await seedDeliveredDecryptFixture(
       await buildDeliveredDecryptFixtureBase({
         receiverKeyStorage: storage,
@@ -152,9 +159,12 @@ describe('crypto orchestrator – decryptDelivered (general)', () => {
 
     expect(decryptResult.ok).toBe(true);
     if (!decryptResult.ok) return;
-    expect(decryptResult.data.payload).toEqual(prepared.expectedPayload);
-    expect(useDecryptStore.getState().plaintext).toBeNull();
-    expect(useDecryptStore.getState().file).toEqual(prepared.expectedPayload);
+    expect(decryptResult.data.payload).toEqual({
+      kind: 'text',
+      text: expectedText,
+    });
+    expect(useDecryptStore.getState().plaintext).toBe(expectedText);
+    expect(useDecryptStore.getState().file).toBeNull();
   });
 
   it('does not apply decrypt store updates when uuid changes mid-flow', async () => {

@@ -469,7 +469,7 @@ Response:
 {
   "ok": true,
   "cipherBundle": { "...": "inline payload, same structure as § 10.4" },
-  "fileRef": { "...": "replaces cipherBundle for delivered file payloads" },
+  "fileRef": { "...": "multipart file payload metadata for delivered file payloads" },
   "receiverPubFpr": "hex...",
   "cipherVersion": 1,
   "deliveryAuth": { "...": "delivery proof, optional" },
@@ -939,7 +939,7 @@ Error semantics (coarse-grained):
 
 - PAD_BLOCK defaults to 4096; can be included in the update payload as pad_block (for audit consistency; not recommended for public display)
 - pad_rand must be cryptographically secure random numbers
-- Text payloads stay on the inline path. New file payloads do not use this size gate for transport selection: they must upload encrypted chunks and commit a `fileRef`, or be rejected when the deployment does not advertise object-storage support
+- Text payloads stay on the inline path subject to `MAX_PLAINTEXT_BYTES`. New file payloads do not use this size gate for transport selection: they must upload encrypted chunks and commit a `fileRef`, or be rejected when the deployment does not advertise object-storage support
 
 ### E3. Decoding Rules (Receiver)
 

@@ -471,7 +471,7 @@ Response：
 {
   "ok": true,
   "cipherBundle": { "...": "inline 载荷，与 10.4 相同结构" },
-  "fileRef": { "...": "文件载荷交付时替代 cipherBundle" },
+  "fileRef": { "...": "用于已交付文件载荷的 multipart 元数据" },
   "receiverPubFpr": "hex...",
   "cipherVersion": 1,
   "deliveryAuth": { "...": "投递者身份证明，可选" },
@@ -941,7 +941,7 @@ Response：
 
 - PAD_BLOCK 默认 4096，可在 update payload 中带 pad_block（用于审计一致性；不建议公开展示）
 - pad_rand 必须为加密安全随机数
-- 文本载荷继续走 inline 路径。新的文件载荷不再用这个尺寸阈值决定传输方式：它们必须先上传加密 chunk 并提交 `fileRef`，若部署未声明对象存储能力则直接拒绝
+- 文本载荷继续在 `MAX_PLAINTEXT_BYTES` 约束下走 inline 路径。新的文件载荷不再用这个尺寸阈值决定传输方式：它们必须先上传加密 chunk 并提交 `fileRef`，若部署未声明对象存储能力则直接拒绝
 
 ### E3. 解码规则（接收方）
 

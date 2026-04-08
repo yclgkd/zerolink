@@ -72,7 +72,7 @@
 | `/api/delete_commit/:uuid` | `POST` | 同 commit union，但 `intent.op = delete` | `{ ok: true }` | `apiClient.deleteCommit()` | compound commit 的 delete-only alias；继承相同的 commit-cookie caller-binding 语义 |
 | `/api/public/:uuid` | `GET` | 无 | `PublicStatusResponseSchema` | `apiClient.publicStatus()` 与 polling fallback | 只返回活跃 channel 的公开状态；一旦 channel 已 tombstone 化或被 lazy purge，规范外部行为是 `404 NOT_FOUND`，而不是 `200` 终态快照 |
 | `/api/decrypt_fetch/:uuid` | `GET` | 无 | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | 交付后返回解密载荷；响应里会且只会出现 `cipherBundle` 或 `fileRef` 其中之一，`cipherVersion` 表示本次已交付密文的版本（当前 DO 实现里等于 `record.version - 1`），不是原始 channel record 的 `version` |
-| `/api/file_policy` | `GET` | 无 | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | 返回部署侧文件上限、legacy inline 阈值、chunk 参数和 multipart 能力；前端据此判断文件上传是否可用，并配置 chunk 参数 |
+| `/api/file_policy` | `GET` | 无 | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | 返回部署侧文件上限、legacy inline 兼容边界、chunk 参数和 multipart 能力；前端据此判断文件交付是否可用，并配置上传与分片参数 |
 | `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | 当 `S3_PUBLIC_ENDPOINT` 已设置时返回 S3 预签名 PUT URL；未设置时返回相对路径形式的 `file/chunk/<token>` 代理目标，并附带短时有效的内存授权，Go API 代替浏览器流式转发 chunk 字节 |
 | `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | 校验已上传 chunk 的元数据，并返回后续写入 `compound_commit` 的 `fileRef` |
 | `/api/file/fetch/:uuid` | `GET` | 无 | `FileFetchResponseSchema` | `apiClient.fileFetch()` | 对已交付的 multipart payload 返回每个 chunk 的下载 URL（`S3_PUBLIC_ENDPOINT` 已设置时为预签名 S3 URL，未设置时为相对路径形式、单次消费的 `file/download/<token>` 代理目标）；inline payload 仍只走 `decrypt_fetch` |
@@ -88,7 +88,7 @@
 
 ### Multipart 传输叠加层
 
-- 所有新的 `payloadKind: "file"` 交付都走对象存储 `fileRef`；只有文本载荷走 inline `cipherBundle`。`/api/file_policy` 中的 `multipartThresholdBytes` 保留用于 legacy 兼容，不再影响新的文件写入路径。
+- 所有新的 `payloadKind: "file"` 交付都走对象存储 `fileRef`；只有文本载荷走 inline `cipherBundle`。`/api/file_policy` 中的 `multipartThresholdBytes` 保留为 legacy 兼容/配置边界，不再在 inline 与 multipart 之间切换新的文件写入路径。
 - update intent 必须在 `cipherBundle` 与 `fileRef` 之间二选一；multipart 交付还要求 `payloadKind: "file"`。
 - `/api/decrypt_fetch/:uuid` 仍是交付元数据的权威来源，并且只会返回 `cipherBundle` 或 `fileRef` 二者之一。
 - 只有当 `decrypt_fetch` 暴露出 multipart `fileRef` 时，`/api/file/fetch/:uuid` 才有意义。

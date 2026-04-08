@@ -77,7 +77,7 @@ Then open:
 - `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
 - `SELFHOST_API_FILE_STORAGE_BACKEND=s3` enables multipart file delivery; when `SELFHOST_API_S3_PUBLIC_ENDPOINT` is set the browser uploads/downloads directly via S3 presigned URLs, otherwise the API proxies chunk bytes
-- `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` keeps the inline cutoff below the legacy inline envelope limit
+- `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` remains capped by the historical inline envelope limit because the field is still part of the shared file-policy contract
 - `SELFHOST_API_S3_*` configures the S3-compatible storage connection; when using the bundled Garage container, these already point at `garage:3900` and the default `zerolink-files` bucket
 
 If you change the exposed port or hostname, update `SELFHOST_API_RP_ORIGIN` before relying on WebAuthn flows.
@@ -115,10 +115,10 @@ SELFHOST_API_S3_REGION=us-east-1
 ```
 *Note: When using external storage, simply run `docker compose up -d` without `--profile storage`. The Garage container will not start, saving local resources.*
 
-### 3. Extreme Lightweight "Inline" Mode (Text-Only)
-If you do not want to run an object storage server at all (e.g., on a Raspberry Pi), you can disable multipart storage entirely. This keeps text shares available but rejects new file uploads.
+### 3. Text-Only `inline` Mode (Files Disabled)
+If you do not want to run an object storage server at all (for example, on a Raspberry Pi), you can switch the API to `inline` storage backend mode. This does **not** restore legacy inline file storage; it disables new file uploads while keeping text shares available.
 
-Set these variables in your `.env` to enable text-only inline behavior:
+Set these variables in your `.env`:
 ```env
 SELFHOST_API_FILE_STORAGE_BACKEND=inline
 SELFHOST_API_FILE_MULTIPART_SUPPORTED=false  # Defaults to false for inline; explicit here in case your .env inherits true from .env.example
@@ -129,6 +129,7 @@ When in `inline` mode:
 - No object storage is needed.
 - `multipartSupported` stays `false`, so new file uploads are rejected with `FILE_STORAGE_UNAVAILABLE`.
 - Text payloads continue to use inline `cipherBundle` delivery stored in PostgreSQL-backed channel state.
+- `SELFHOST_API_FILE_MAX_BYTES` and `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` must still stay within the historical inline envelope limit because those fields remain part of the shared file-policy/config contract.
 
 ## Smoke Test
 
@@ -152,7 +153,7 @@ If WebSocket delivery is interrupted, the frontend will fall back to `/api/publi
 - The realtime hub is process-local. Running multiple API replicas behind the same proxy will require a shared pub/sub layer.
 - Compose stores PostgreSQL data in the `postgres-data` volume.
 - When using the `storage` profile, Compose stores Garage object data in the `garage-data` volume.
-- All new `payloadKind=file` deliveries use object storage via `/api/file/initiate`, `/api/file/complete`, and `fileRef` metadata. When `S3_PUBLIC_ENDPOINT` is set, chunk bytes go directly to S3 presigned URLs; when unset (e.g., Docker-internal Garage), chunk bytes are proxied through the API. Only text payloads use inline `cipherBundle`.
+- All new `payloadKind=file` deliveries use object storage via `/api/file/initiate`, `/api/file/complete`, and `fileRef` metadata. When `S3_PUBLIC_ENDPOINT` is set, chunk bytes go directly to S3 presigned URLs; when unset (e.g., Docker-internal Garage), chunk bytes are proxied through the API. `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES` remains a policy/config compatibility field; it no longer switches small files onto an inline file path. Only text payloads use inline `cipherBundle`.
 - The API server does not set a global HTTP write timeout so that WebSocket connections are not killed mid-session. Per-write deadlines are enforced inside the realtime hub. If you add a Caddy `timeouts` block, do not set `write_timeout` — it will terminate long-lived WebSocket sessions through the reverse proxy.
 
 ## Stop The Stack

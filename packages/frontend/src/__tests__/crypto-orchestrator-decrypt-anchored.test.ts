@@ -140,6 +140,61 @@ describe('crypto orchestrator – decryptDelivered (anchored softkey)', () => {
     expect(useDecryptStore.getState().file).toBeNull();
   });
 
+  it('returns INTEGRITY_MISMATCH when anchored payload declares file but still arrives inline', async () => {
+    const disguisedFileEnvelope = encodeFileSharePayload({
+      fileName: 'secret.bin',
+      mediaType: 'application/octet-stream',
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    });
+    const anchoredFileBase = await buildAnchoredSoftkeyDeliveryBase({
+      plaintext: disguisedFileEnvelope,
+    });
+    const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredFileBase });
+
+    vi.mocked(prepared.apiClient.publicStatus).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        state: CHANNEL_STATE.DELIVERED,
+        adminMode: 'password' as const,
+        securityProfile: SECURITY_PROFILE.QUICK,
+      },
+    });
+    vi.mocked(prepared.apiClient.decryptFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        ok: true,
+        cipherBundle: prepared.cipherBundle,
+        receiverPubFpr: prepared.receiverPubFpr,
+        cipherVersion: prepared.deliveryAuth.meta.version,
+        deliveredAt: NOW,
+        deliveryAuth: {
+          ...prepared.deliveryAuth,
+          meta: {
+            ...prepared.deliveryAuth.meta,
+            payloadKind: 'file',
+          },
+        },
+      } satisfies DecryptFetchResponse,
+    });
+
+    const result = await prepared.orchestrator.decryptDelivered({
+      uuid: VALID_UUID,
+      passphrase: 'Strong#Pass1234',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        ok: false,
+        code: 'INTEGRITY_MISMATCH',
+        stage: 'decrypt.verify',
+      },
+    });
+  });
+
   it('returns INTEGRITY_MISMATCH when anchored decrypt payload is missing deliveryAuth', async () => {
     const prepared = await prepareAnchoredSoftkeyDelivery({ base: anchoredBase });
 
