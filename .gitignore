@@ -47,6 +47,25 @@ yarn-error.log*
 .cache/
 .temp/
 
+# Internal AI / agent workflow files
+_project_specs/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.ai/
+.agents/
+.claude/
+.cursor/
+.windsurf/
+.continue/
+.codex/
+.gemini/
+.mcp/
+.roo/
+.copilot/
+copilot-instructions.md
+.aider*
+
 # Cloudflare Workers
 .wrangler/
 .dev.vars
