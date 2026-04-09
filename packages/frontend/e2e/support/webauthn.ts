@@ -21,12 +21,30 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
       idBytes: Uint8Array;
       privateKey: CryptoKey;
       publicKeyCose: Uint8Array;
+      publicKeySpki: Uint8Array;
     }
 
     interface PersistedCredentialState {
       id: string;
       privateKeyPkcs8: string;
       publicKeyCose: string;
+      publicKeySpki?: string;
+    }
+
+    interface SerializedAttestationResponse {
+      clientDataJSON: string;
+      attestationObject: string;
+      authenticatorData: string;
+      publicKey: string;
+      publicKeyAlgorithm: number;
+      transports: string[];
+    }
+
+    interface SerializedAssertionResponse {
+      clientDataJSON: string;
+      authenticatorData: string;
+      signature: string;
+      userHandle: string;
     }
 
     let credentialStatePromise: Promise<CredentialState> | null = null;
@@ -154,6 +172,35 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
       ]);
     }
 
+    async function buildPublicKeyMaterial(publicJwk: { x: string; y: string }): Promise<{
+      publicKeyCose: Uint8Array;
+      publicKeySpki: Uint8Array;
+    }> {
+      const publicKeyCose = encodeCredentialPublicKey(
+        decodeBase64Url(publicJwk.x),
+        decodeBase64Url(publicJwk.y)
+      );
+      const publicKey = await crypto.subtle.importKey(
+        'jwk',
+        {
+          crv: 'P-256',
+          ext: true,
+          key_ops: ['verify'],
+          kty: 'EC',
+          x: publicJwk.x,
+          y: publicJwk.y,
+        },
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        true,
+        ['verify']
+      );
+
+      return {
+        publicKeyCose,
+        publicKeySpki: new Uint8Array(await crypto.subtle.exportKey('spki', publicKey)),
+      };
+    }
+
     async function ensureCredentialState(): Promise<CredentialState> {
       if (credentialStatePromise) {
         return credentialStatePromise;
@@ -168,14 +215,52 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
               'pkcs8',
               toArrayBuffer(decodeBase64Url(persisted.privateKeyPkcs8)),
               { name: 'ECDSA', namedCurve: 'P-256' },
-              false,
+              true,
               ['sign']
             );
+            const idBytes = decodeBase64Url(persisted.id);
+            const publicKeySpki =
+              persisted.publicKeySpki === undefined
+                ? null
+                : decodeBase64Url(persisted.publicKeySpki);
+            const publicKeyCose = decodeBase64Url(persisted.publicKeyCose);
+
+            if (publicKeySpki) {
+              return {
+                id: persisted.id,
+                idBytes,
+                privateKey,
+                publicKeyCose,
+                publicKeySpki,
+              };
+            }
+
+            const privateJwk = (await crypto.subtle.exportKey('jwk', privateKey)) as {
+              x: string;
+              y: string;
+            };
+            const publicKeyMaterial = await buildPublicKeyMaterial(privateJwk);
+
+            try {
+              window.sessionStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                  id: persisted.id,
+                  privateKeyPkcs8: persisted.privateKeyPkcs8,
+                  publicKeyCose: encodeBase64Url(publicKeyMaterial.publicKeyCose),
+                  publicKeySpki: encodeBase64Url(publicKeyMaterial.publicKeySpki),
+                } satisfies PersistedCredentialState)
+              );
+            } catch {
+              // Ignore storage upgrade failures in the emulator.
+            }
+
             return {
               id: persisted.id,
-              idBytes: decodeBase64Url(persisted.id),
+              idBytes,
               privateKey,
-              publicKeyCose: decodeBase64Url(persisted.publicKeyCose),
+              publicKeyCose: publicKeyMaterial.publicKeyCose,
+              publicKeySpki: publicKeyMaterial.publicKeySpki,
             };
           }
         } catch {
@@ -197,10 +282,7 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
         };
         const idBytes = crypto.getRandomValues(new Uint8Array(16));
         const id = encodeBase64Url(idBytes);
-        const publicKeyCose = encodeCredentialPublicKey(
-          decodeBase64Url(publicJwk.x),
-          decodeBase64Url(publicJwk.y)
-        );
+        const publicKeyMaterial = await buildPublicKeyMaterial(publicJwk);
 
         try {
           const privateKeyPkcs8 = new Uint8Array(
@@ -211,7 +293,8 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
             JSON.stringify({
               id,
               privateKeyPkcs8: encodeBase64Url(privateKeyPkcs8),
-              publicKeyCose: encodeBase64Url(publicKeyCose),
+              publicKeyCose: encodeBase64Url(publicKeyMaterial.publicKeyCose),
+              publicKeySpki: encodeBase64Url(publicKeyMaterial.publicKeySpki),
             } satisfies PersistedCredentialState)
           );
         } catch {
@@ -222,17 +305,41 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
           id,
           idBytes,
           privateKey: keyPair.privateKey,
-          publicKeyCose,
+          publicKeyCose: publicKeyMaterial.publicKeyCose,
+          publicKeySpki: publicKeyMaterial.publicKeySpki,
         };
       })();
 
       return credentialStatePromise;
     }
 
-    function createPublicKeyCredential(
+    function createAttestationCredential(
       state: CredentialState,
-      response: AuthenticatorAttestationResponse | AuthenticatorAssertionResponse,
-      responseJson: Record<string, unknown>
+      response: AuthenticatorAttestationResponse,
+      responseJson: SerializedAttestationResponse
+    ): PublicKeyCredential {
+      return {
+        id: state.id,
+        rawId: toArrayBuffer(state.idBytes),
+        type: 'public-key',
+        authenticatorAttachment: 'platform',
+        response,
+        getClientExtensionResults: () => ({}),
+        toJSON: () => ({
+          id: state.id,
+          rawId: encodeBase64Url(state.idBytes),
+          type: 'public-key',
+          authenticatorAttachment: 'platform',
+          clientExtensionResults: {},
+          response: responseJson,
+        }),
+      };
+    }
+
+    function createAssertionCredential(
+      state: CredentialState,
+      response: AuthenticatorAssertionResponse,
+      responseJson: SerializedAssertionResponse
     ): PublicKeyCredential {
       return {
         id: state.id,
@@ -288,18 +395,22 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
       const clientDataBuffer = toArrayBuffer(clientDataJSON);
       const attestationBuffer = toArrayBuffer(attestationObject);
       const authDataBuffer = toArrayBuffer(authData);
+      const publicKeyBuffer = toArrayBuffer(state.publicKeySpki);
       const response: AuthenticatorAttestationResponse = {
         clientDataJSON: clientDataBuffer,
         attestationObject: attestationBuffer,
         getAuthenticatorData: () => authDataBuffer,
-        getPublicKey: () => null,
+        getPublicKey: () => publicKeyBuffer,
         getPublicKeyAlgorithm: () => -7,
         getTransports: () => ['internal'],
       };
 
-      return createPublicKeyCredential(state, response, {
+      return createAttestationCredential(state, response, {
         clientDataJSON: serializeByteLike(clientDataBuffer),
         attestationObject: serializeByteLike(attestationBuffer),
+        authenticatorData: serializeByteLike(authDataBuffer),
+        publicKey: serializeByteLike(publicKeyBuffer),
+        publicKeyAlgorithm: -7,
         transports: ['internal'],
       });
     }
@@ -349,7 +460,7 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
         userHandle: userHandleBuffer,
       };
 
-      return createPublicKeyCredential(state, response, {
+      return createAssertionCredential(state, response, {
         clientDataJSON: serializeByteLike(clientDataBuffer),
         authenticatorData: serializeByteLike(authenticatorDataBuffer),
         signature: serializeByteLike(signatureBuffer),
