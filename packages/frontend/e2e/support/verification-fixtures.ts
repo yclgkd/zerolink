@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const TEST_PRIVATE_KEY_PEM = readFileSync(path.join(__dirname, 'e2e-test-signing.key'), 'utf8');
+const TEST_PRIVATE_KEY_PATH = path.join(__dirname, 'e2e-test-only-signing.key');
+// Intentionally committed test fixture: used only by Playwright release-verification tests.
+const TEST_PRIVATE_KEY_PEM = readFileSync(TEST_PRIVATE_KEY_PATH, 'utf8');
 
 function sha256Hex(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
