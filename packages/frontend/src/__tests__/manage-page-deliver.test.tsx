@@ -849,6 +849,88 @@ describe('ManagePage – deliver actions', () => {
     filePolicySpy.mockRestore();
   });
 
+  it('clears the underlying file input value after successful file delivery', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const filePolicySpy = vi.spyOn(apiClient, 'filePolicy').mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: await filePolicyResponse().json(),
+    });
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+
+    const file = new File(['file-body'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    const input = screen.getByTestId('manage-file-input') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: { files: [file] },
+    });
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      writable: true,
+      value: 'C:\\fakepath\\secret.bin',
+    });
+
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await screen.findByTestId('manage-state-delivered');
+    await waitFor(() => {
+      expect(input.value).toBe('');
+    });
+    filePolicySpy.mockRestore();
+  });
+
+  it('clears the underlying file input value after failed file delivery', async () => {
+    const fetchSpy = getFetchSpy();
+    mockPublicState(fetchSpy, 'locked');
+    deliverSecretMock.mockResolvedValueOnce({
+      ok: false,
+      error: { ok: false, code: 'BAD_REQUEST', stage: 'deliver.commit' },
+    });
+
+    renderManagePage();
+
+    await screen.findByTestId('manage-state-locked');
+    await waitForManageActionsEnabled();
+
+    const filePolicySpy = vi.spyOn(apiClient, 'filePolicy').mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: await filePolicyResponse().json(),
+    });
+    fireEvent.click(screen.getByTestId('manage-mode-file'));
+
+    const file = new File(['file-body'], 'secret.bin', {
+      type: 'application/octet-stream',
+    });
+    const input = screen.getByTestId('manage-file-input') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: { files: [file] },
+    });
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      writable: true,
+      value: 'C:\\fakepath\\secret.bin',
+    });
+
+    fireEvent.click(screen.getByTestId('manage-deliver-button'));
+
+    await screen.findByTestId('manage-action-error');
+    await waitFor(() => {
+      expect(input.value).toBe('');
+    });
+    filePolicySpy.mockRestore();
+  });
+
   it('does not pre-reject larger files before file policy finishes loading', async () => {
     const fetchSpy = getFetchSpy();
     mockPublicState(fetchSpy, 'locked');
