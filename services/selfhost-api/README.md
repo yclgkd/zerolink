@@ -35,25 +35,18 @@ Then run PostgreSQL, migrations, and the API:
 ```bash
 docker run --name zerolink-selfhost-postgres \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_PASSWORD=local-dev-postgres-password \
   -e POSTGRES_DB=zerolink_selfhost \
   -p 5432:5432 \
   -d postgres:16-alpine
 
-docker run --rm \
-  -v "$PWD:/app" \
-  -w /app \
-  --env-file .env \
-  golang:1.24.0 \
-  /bin/bash -lc '/usr/local/go/bin/go run ./cmd/selfhost-migrate'
+set -a
+. ./.env
+set +a
 
-docker run --rm \
-  -v "$PWD:/app" \
-  -w /app \
-  -p 8788:8788 \
-  --env-file .env \
-  golang:1.24.0 \
-  /bin/bash -lc '/usr/local/go/bin/go run ./cmd/selfhost-api'
+go run ./cmd/selfhost-migrate
+
+go run ./cmd/selfhost-api
 ```
 
 Use `SELFHOST_API_RP_ORIGIN=http://localhost:5173` when the frontend is served by local Vite preview/dev with `/api` proxying to the Go service.
