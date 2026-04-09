@@ -1,20 +1,26 @@
 import { createHash } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import {
+  type Base64Url,
   buildCipherBundleAadBytes,
   CHANNEL_STATE,
   type ChannelState,
+  type CipherBundle,
   CompoundBeginRequestSchema,
   CompoundBeginResponseSchema,
   CompoundCommitRequestSchema,
   CompoundCommitResponseSchema,
   CreateBeginRequestSchema,
+  type CreateFinishRequest,
   CreateFinishRequestSchema,
   CreateFinishResponseSchema,
+  type DecryptFetchDeliveryAuth,
   DecryptFetchResponseSchema,
   extractCredentialPublicKeyFromAttestation,
+  type HexString,
   LockBeginRequestSchema,
   LockBeginResponseSchema,
+  type LockCommitRequest,
   LockCommitRequestSchema,
   LockCommitResponseSchema,
   PublicStatusResponseSchema,
@@ -32,46 +38,52 @@ interface ChannelRuntimeState {
   state: ChannelState;
   securityProfile: SecurityProfile;
   adminMode: z.output<typeof CreateFinishRequestSchema>['adminMode'];
-  credentialId?: string;
-  credentialPublicKey?: string;
-  softkeyPubJwk?: z.output<typeof CreateFinishRequestSchema>['softkeyPubJwk'];
+  credentialId?: Base64Url;
+  credentialPublicKey?: Awaited<ReturnType<typeof extractCredentialPublicKeyFromAttestation>>;
+  softkeyPubJwk?: Extract<
+    CreateFinishRequest,
+    { adminMode: 'password' | 'softkey' }
+  >['softkeyPubJwk'];
   version: number;
   lockChallenge?: {
-    id: string;
-    challenge: string;
+    id: Base64Url;
+    challenge: Base64Url;
     expiresAt: number;
   };
-  receiverPubJwk?: z.output<typeof LockCommitRequestSchema>['receiverPubJwk'];
-  receiverPubFpr?: string;
-  lockedAt?: number;
+  receiverPubJwk?: LockCommitRequest['receiverPubJwk'];
+  receiverPubFpr?: LockCommitRequest['receiverPubFpr'];
+  lockedAt?: LockCommitRequest['lockedAt'];
   delivery?: {
-    cipherBundle: Extract<
-      z.output<
-        typeof CompoundCommitRequestSchema | typeof SoftkeyCompoundCommitRequestSchema
-      >['intent'],
-      { op: 'update' }
-    >['cipherBundle'];
-    receiverPubFpr: string;
+    cipherBundle: CipherBundle;
+    receiverPubFpr: HexString;
     cipherVersion: number;
-    deliveryAuth?: z.output<typeof DecryptFetchResponseSchema>['deliveryAuth'];
+    deliveryAuth?: DecryptFetchDeliveryAuth;
     deliveredAt: number;
   };
 }
 
-function b64u(value: string): string {
-  return Buffer.from(value, 'utf8').toString('base64url');
+function b64u(value: string): Base64Url {
+  return Buffer.from(value, 'utf8').toString('base64url') as Base64Url;
 }
 
-function bytesToB64u(value: Uint8Array): string {
-  return Buffer.from(value).toString('base64url');
+function bytesToB64u(value: Uint8Array): Base64Url {
+  return Buffer.from(value).toString('base64url') as Base64Url;
 }
 
 function b64uToBytes(value: string): Uint8Array {
   return Uint8Array.from(Buffer.from(value, 'base64url'));
 }
 
-function sha256Hex(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
+function sha256Hex(bytes: Uint8Array): HexString {
+  return createHash('sha256').update(bytes).digest('hex') as HexString;
+}
+
+function hasInlineCipherBundle(
+  intent: z.output<typeof CompoundCommitRequestSchema>['intent']
+): intent is Extract<z.output<typeof CompoundCommitRequestSchema>['intent'], { op: 'update' }> & {
+  cipherBundle: CipherBundle;
+} {
+  return intent.op === 'update' && intent.cipherBundle !== undefined;
 }
 
 function parseJsonBody(route: Route): Record<string, unknown> | null {
@@ -220,11 +232,11 @@ export async function installStatefulApiMock(
         } catch {
           return badRequest(route);
         }
-        channel.softkeyPubJwk = undefined;
+        delete channel.softkeyPubJwk;
       } else {
         channel.softkeyPubJwk = parsedBody.data.softkeyPubJwk;
-        channel.credentialId = undefined;
-        channel.credentialPublicKey = undefined;
+        delete channel.credentialId;
+        delete channel.credentialPublicKey;
       }
       const payload = {
         ok: true,
@@ -411,7 +423,11 @@ export async function installStatefulApiMock(
         return badRequest(route);
       }
 
-      const normalizedCipherBundle = {
+      if (!hasInlineCipherBundle(parsedBody.data.intent)) {
+        return badRequest(route);
+      }
+
+      const normalizedCipherBundle: CipherBundle = {
         ...parsedBody.data.intent.cipherBundle,
         aad: bytesToB64u(
           buildCipherBundleAadBytes({

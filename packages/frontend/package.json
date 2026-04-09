@@ -15,7 +15,8 @@
     "test:e2e:realtime": "playwright test -c playwright.realtime.config.ts",
     "test:e2e:verification": "playwright test -c playwright.verification.config.ts",
     "test:e2e:smoke": "playwright test -c playwright.smoke.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
+    "typecheck:e2e:support": "tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {
     "@fontsource-variable/sora": "^5.2.8",
@@ -44,6 +45,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",

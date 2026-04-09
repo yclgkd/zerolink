@@ -61,6 +61,9 @@ export async function buildSignedManifestForPreview(
     throw new Error('Could not find module script in HTML — is the preview server running?');
   }
   const entryScriptSrc = scriptMatch[1]; // e.g. "/assets/bootstrap-entry-abc123.js"
+  if (!entryScriptSrc) {
+    throw new Error('Module script src capture group was empty');
+  }
   const entryAssetPath = entryScriptSrc.startsWith('/') ? entryScriptSrc.slice(1) : entryScriptSrc;
 
   // Fetch the entry script to get its real content hash
