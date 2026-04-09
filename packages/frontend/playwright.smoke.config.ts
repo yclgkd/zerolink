@@ -2,6 +2,10 @@ import { defineConfig } from '@playwright/test';
 
 import { chromiumDesktopProject, sharedPlaywrightConfig } from './playwright.shared';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 const { STAGING_URL } = process.env;
 
 export default defineConfig({

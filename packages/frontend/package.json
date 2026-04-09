@@ -15,7 +15,7 @@
     "test:e2e:realtime": "playwright test -c playwright.realtime.config.ts",
     "test:e2e:verification": "playwright test -c playwright.verification.config.ts",
     "test:e2e:smoke": "playwright test -c playwright.smoke.config.ts",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.playwright.json && tsc --noEmit -p e2e/tsconfig.json",
     "typecheck:e2e:support": "tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {

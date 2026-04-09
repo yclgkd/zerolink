@@ -1,5 +1,9 @@
 import { devices, type PlaywrightTestConfig, type ReporterDescription } from '@playwright/test';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 const listReporter: ReporterDescription = ['list'];
 const htmlReporter: ReporterDescription = ['html', { open: 'never' }];
 const { CI } = process.env;
