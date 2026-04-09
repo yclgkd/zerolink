@@ -62,6 +62,10 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
       return Uint8Array.from(bytes).buffer;
     }
 
+    function serializeByteLike(value: ByteLike): string {
+      return encodeBase64Url(toUint8Array(value));
+    }
+
     function encodeBase64Url(bytes: Uint8Array): string {
       let binary = '';
       for (const byte of bytes) {
@@ -225,6 +229,29 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
       return credentialStatePromise;
     }
 
+    function createPublicKeyCredential(
+      state: CredentialState,
+      response: AuthenticatorAttestationResponse | AuthenticatorAssertionResponse,
+      responseJson: Record<string, unknown>
+    ): PublicKeyCredential {
+      return {
+        id: state.id,
+        rawId: toArrayBuffer(state.idBytes),
+        type: 'public-key',
+        authenticatorAttachment: 'platform',
+        response,
+        getClientExtensionResults: () => ({}),
+        toJSON: () => ({
+          id: state.id,
+          rawId: encodeBase64Url(state.idBytes),
+          type: 'public-key',
+          authenticatorAttachment: 'platform',
+          clientExtensionResults: {},
+          response: responseJson,
+        }),
+      };
+    }
+
     async function buildCreateResponse(
       options: CredentialCreationOptions | undefined
     ): Promise<PublicKeyCredential> {
@@ -258,18 +285,23 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
         })
       );
       const attestationObject = buildAttestationObject(authData);
+      const clientDataBuffer = toArrayBuffer(clientDataJSON);
+      const attestationBuffer = toArrayBuffer(attestationObject);
+      const authDataBuffer = toArrayBuffer(authData);
+      const response: AuthenticatorAttestationResponse = {
+        clientDataJSON: clientDataBuffer,
+        attestationObject: attestationBuffer,
+        getAuthenticatorData: () => authDataBuffer,
+        getPublicKey: () => null,
+        getPublicKeyAlgorithm: () => -7,
+        getTransports: () => ['internal'],
+      };
 
-      return {
-        id: state.id,
-        rawId: toArrayBuffer(state.idBytes),
-        type: 'public-key',
-        response: {
-          clientDataJSON: toArrayBuffer(clientDataJSON),
-          attestationObject: toArrayBuffer(attestationObject),
-          getTransports: () => ['internal'],
-        },
-        getClientExtensionResults: () => ({}),
-      } as PublicKeyCredential;
+      return createPublicKeyCredential(state, response, {
+        clientDataJSON: serializeByteLike(clientDataBuffer),
+        attestationObject: serializeByteLike(attestationBuffer),
+        transports: ['internal'],
+      });
     }
 
     async function buildGetResponse(
@@ -306,19 +338,23 @@ export async function installVirtualAuthenticator(page: Page): Promise<VirtualAu
           toArrayBuffer(signedPayload)
         )
       );
+      const clientDataBuffer = toArrayBuffer(clientDataJSON);
+      const authenticatorDataBuffer = toArrayBuffer(authenticatorData);
+      const signatureBuffer = toArrayBuffer(signature);
+      const userHandleBuffer = toArrayBuffer(Uint8Array.of(0x01));
+      const response: AuthenticatorAssertionResponse = {
+        clientDataJSON: clientDataBuffer,
+        authenticatorData: authenticatorDataBuffer,
+        signature: signatureBuffer,
+        userHandle: userHandleBuffer,
+      };
 
-      return {
-        id: state.id,
-        rawId: toArrayBuffer(state.idBytes),
-        type: 'public-key',
-        response: {
-          clientDataJSON: toArrayBuffer(clientDataJSON),
-          authenticatorData: toArrayBuffer(authenticatorData),
-          signature: toArrayBuffer(signature),
-          userHandle: toArrayBuffer(Uint8Array.of(0x01)),
-        },
-        getClientExtensionResults: () => ({}),
-      } as PublicKeyCredential;
+      return createPublicKeyCredential(state, response, {
+        clientDataJSON: serializeByteLike(clientDataBuffer),
+        authenticatorData: serializeByteLike(authenticatorDataBuffer),
+        signature: serializeByteLike(signatureBuffer),
+        userHandle: serializeByteLike(userHandleBuffer),
+      });
     }
 
     if (!navigator.credentials) {
