@@ -9,10 +9,6 @@ on:
     paths-ignore:
       - "docs/**"
       - "**/*.md"
-      - "_project_specs/**"
-      - ".ai/**"
-      - ".agents/**"
-      - ".claude/**"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/workflows/pr-checklist.yml"
       - ".github/workflows/e2e-full.yml"
