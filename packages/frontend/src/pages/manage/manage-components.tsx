@@ -301,6 +301,12 @@ export function FileInput({
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    if (!selectedFile && inputRef.current?.value) {
+      inputRef.current.value = '';
+    }
+  }, [selectedFile]);
+
   function clearSelection(): void {
     if (inputRef.current) {
       inputRef.current.value = '';
