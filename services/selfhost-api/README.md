@@ -40,6 +40,10 @@ docker run --name zerolink-selfhost-postgres \
   -p 5432:5432 \
   -d postgres:16-alpine
 
+set -a
+. ./.env
+set +a
+
 go run ./cmd/selfhost-migrate
 
 go run ./cmd/selfhost-api
