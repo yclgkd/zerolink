@@ -1,20 +1,23 @@
-import { devices, type ReporterDescription } from '@playwright/test';
+import { devices, type PlaywrightTestConfig, type ReporterDescription } from '@playwright/test';
 
 const listReporter: ReporterDescription = ['list'];
 const htmlReporter: ReporterDescription = ['html', { open: 'never' }];
+const { CI } = process.env;
+const isCI = Boolean(CI);
+const sharedUse: NonNullable<PlaywrightTestConfig['use']> = {
+  trace: 'on-first-retry',
+  screenshot: 'only-on-failure',
+  video: 'retain-on-failure',
+};
 
 export const sharedPlaywrightConfig = {
   testDir: './e2e',
   fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [listReporter, htmlReporter] : [listReporter],
-  use: {
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-  },
+  forbidOnly: isCI,
+  retries: isCI ? 1 : 0,
+  ...(isCI ? { workers: 1 } : {}),
+  reporter: isCI ? [listReporter, htmlReporter] : [listReporter],
+  use: sharedUse,
 };
 
 export const chromiumDesktopProject = {
@@ -35,7 +38,7 @@ export function createPlaywrightWebServer(
   return {
     command,
     url,
-    reuseExistingServer: options.reuseExistingServer ?? !process.env.CI,
+    reuseExistingServer: options.reuseExistingServer ?? !isCI,
     timeout,
   };
 }

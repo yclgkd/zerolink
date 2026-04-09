@@ -8,6 +8,6 @@
       "@zerolink/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "vite.config.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "playwright*.ts", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
