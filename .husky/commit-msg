@@ -1,4 +1,1 @@
-# Strip AI co-author trailers before linting
-sed -i '' '/^Co-Authored-By:.*noreply@anthropic\.com/d' "$1"
-
 pnpm commitlint --edit $1
