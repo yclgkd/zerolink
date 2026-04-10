@@ -111,11 +111,71 @@ describe('resolveDeployEnvironment', () => {
 });
 
 describe('resolveDeployTarget', () => {
-  it('maps staging to the staging bucket and zone', () => {
-    expect(resolveDeployTarget('staging')).toEqual({
-      bucketName: 'zerolink-files-staging',
+  it('reads staging bucket and zone from wrangler config', () => {
+    expect(
+      resolveDeployTarget('staging', {
+        wranglerToml: `
+name = "custom-worker"
+
+[[r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "custom-files"
+
+[env.staging]
+routes = [
+  { pattern = "staging.example.com", zone_name = "example.com" },
+  { pattern = "staging.example.com/*", zone_name = "example.com" },
+]
+
+[[env.staging.r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "custom-files-staging"
+`,
+      })
+    ).toEqual({
+      bucketName: 'custom-files-staging',
       label: 'staging',
-      zoneName: 'zerolink.dev',
+      zoneName: 'example.com',
+    });
+  });
+
+  it('allows route-less deployments when the target environment has no routes', () => {
+    expect(
+      resolveDeployTarget('production', {
+        wranglerToml: `
+name = "custom-worker"
+
+[[r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "custom-files"
+`,
+      })
+    ).toEqual({
+      bucketName: 'custom-files',
+      label: 'production',
+      zoneName: null,
+    });
+  });
+
+  it('selects the FILE_BUCKET binding when multiple R2 buckets exist', () => {
+    expect(
+      resolveDeployTarget('production', {
+        wranglerToml: `
+name = "custom-worker"
+
+[[r2_buckets]]
+binding = "OTHER_BUCKET"
+bucket_name = "wrong-bucket"
+
+[[r2_buckets]]
+binding = "FILE_BUCKET"
+bucket_name = "correct-bucket"
+`,
+      })
+    ).toEqual({
+      bucketName: 'correct-bucket',
+      label: 'production',
+      zoneName: null,
     });
   });
 });
@@ -163,6 +223,49 @@ describe('runCloudflareDeployPreflight', () => {
     expect(output).toContain('Workers Routes Write');
     expect(output).toContain('Workers R2 Storage Write');
     expect(output).toContain('All checks passed');
+  });
+
+  it('skips zone and route checks when the environment has no configured routes', async () => {
+    const apiGet = createApiGetMock(async (path) => {
+      if (path === '/user/tokens/verify') {
+        return { errors: [], result: { id: 'token-123', status: 'active' }, success: true };
+      }
+      if (path === '/user/tokens/token-123') {
+        return {
+          errors: [],
+          result: createTokenDetails({ bucketName: 'custom-files' }),
+          success: true,
+        };
+      }
+      if (path === '/accounts/account-123/r2/buckets/custom-files') {
+        return { errors: [], result: { name: 'custom-files' }, success: true };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    let output = '';
+    await runCloudflareDeployPreflight({
+      accountId: 'account-123',
+      apiGet,
+      apiToken: 'token-123',
+      deployEnv: 'production',
+      deployTarget: {
+        bucketName: 'custom-files',
+        label: 'production',
+        zoneName: null,
+      },
+      write: (chunk) => {
+        output += chunk;
+      },
+    });
+
+    expect(apiGet.mock.mock.calls.map(([path]) => path)).toEqual([
+      '/user/tokens/verify',
+      '/user/tokens/token-123',
+      '/accounts/account-123/r2/buckets/custom-files',
+    ]);
+    expect(output).toContain('Skipping Cloudflare zone resolution');
+    expect(output).toContain('Skipping Workers Routes write permission check');
   });
 
   it('falls back to account-owned token inspection when user token introspection fails', async () => {
