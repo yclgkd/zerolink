@@ -92,11 +92,12 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	)
 
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:        logger,
-		Services:      services,
-		AllowedOrigin: cfg.RP.Origin,
-		Realtime:      realtimeHub,
-		FileStore:     fileStore,
+		Logger:            logger,
+		Services:          services,
+		AllowedOrigin:     cfg.RP.Origin,
+		Realtime:          realtimeHub,
+		FileStore:         fileStore,
+		UploadTokenSecret: cfg.File.S3.SecretKey,
 		FilePolicy: httpapi.FilePolicy{
 			MaxFileBytes:            cfg.File.MaxBytes,
 			MultipartThresholdBytes: cfg.File.MultipartThresholdBytes,

@@ -23,10 +23,11 @@ func newProxyTestRouter(fileStore stubFileStore, protocol stubProtocol) http.Han
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	realtimeHub := realtime.NewHub(logger)
 	return NewRouter(Dependencies{
-		Logger:        logger,
-		AllowedOrigin: "http://localhost:5173",
-		Realtime:      realtimeHub,
-		FileStore:     fileStore,
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		FileStore:         fileStore,
+		UploadTokenSecret: testUploadTokenSecret,
 		FilePolicy: FilePolicy{
 			MaxFileBytes:            536_870_912,
 			MultipartThresholdBytes: 2_080_760,
@@ -70,7 +71,7 @@ func TestFileInitiateRouteReturnsRelativeProxyTargetsWhenPresignedDisabled(t *te
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/file/initiate",
-		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":64}`),
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":64}`),
 	)
 	res := httptest.NewRecorder()
 
@@ -100,22 +101,29 @@ func TestFileInitiateRouteReturnsRelativeProxyTargetsWhenPresignedDisabled(t *te
 	}
 }
 
-func TestFileInitiateRouteReturnsRelativeProxyTargetsWhenPresignedEnabled(t *testing.T) {
+func TestFileInitiateRouteReturnsPresignedTargetsWhenPresignedEnabled(t *testing.T) {
 	t.Parallel()
 
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/file/initiate",
-		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":64}`),
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":64}`),
 	)
 	res := httptest.NewRecorder()
 
+	var presignedCalls int
 	newProxyTestRouter(
 		stubFileStore{
 			usePresignedURLs: func() bool { return true },
-			presignedUpload: func(context.Context, string, int, time.Duration) (string, error) {
-				t.Fatal("presigned upload targets should not be issued for file uploads")
-				return "", nil
+			presignedUpload: func(_ context.Context, uploadID string, index int, size int64, _ time.Duration) (string, error) {
+				presignedCalls++
+				if index != 0 {
+					t.Fatalf("index = %d, want 0", index)
+				}
+				if size != 64 {
+					t.Fatalf("size = %d, want 64", size)
+				}
+				return "https://s3.example/upload/" + uploadID, nil
 			},
 		},
 		stubProtocol{
@@ -133,12 +141,12 @@ func TestFileInitiateRouteReturnsRelativeProxyTargetsWhenPresignedEnabled(t *tes
 	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	got := payload.Chunks[0].UploadURL
-	if strings.HasPrefix(got, "/") {
-		t.Fatalf("first upload url = %q, want relative proxy route", got)
+	if presignedCalls != 1 {
+		t.Fatalf("presigned upload calls = %d, want 1", presignedCalls)
 	}
-	if !strings.HasPrefix(got, "file/chunk/") {
-		t.Fatalf("first upload url = %q, want file/chunk/ prefix", got)
+	got := payload.Chunks[0].UploadURL
+	if !strings.HasPrefix(got, "https://s3.example/upload/") {
+		t.Fatalf("first upload url = %q, want presigned upload url", got)
 	}
 }
 
@@ -243,9 +251,10 @@ func TestFileChunkProxyRouteRejectsOversizedChunk(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	realtimeHub := realtime.NewHub(logger)
 	router := NewRouter(Dependencies{
-		Logger:        logger,
-		AllowedOrigin: "http://localhost:5173",
-		Realtime:      realtimeHub,
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		UploadTokenSecret: testUploadTokenSecret,
 		FileStore: stubFileStore{
 			usePresignedURLs: func() bool { return false },
 			putChunk: func(context.Context, string, int, io.Reader, int64) (string, error) {

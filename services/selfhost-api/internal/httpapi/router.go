@@ -26,6 +26,7 @@ type Dependencies struct {
 	AllowedOrigin        string
 	Realtime             *realtime.Hub
 	FileStore            FileStore
+	UploadTokenSecret    string
 	FilePolicy           FilePolicy
 	MaxProtocolBodyBytes int64
 }
@@ -33,7 +34,7 @@ type Dependencies struct {
 type FileStore interface {
 	Initiate(context.Context, string, int) error
 	PutChunk(ctx context.Context, uploadID string, index int, body io.Reader, size int64) (string, error)
-	PresignedUpload(context.Context, string, int, time.Duration) (string, error)
+	PresignedUpload(context.Context, string, int, int64, time.Duration) (string, error)
 	CompleteUpload(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
 	PresignedDownload(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
 	GetChunk(ctx context.Context, key string) (io.ReadCloser, error)
@@ -85,7 +86,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	if maxCompoundCommitBodyBytes <= 0 {
 		maxCompoundCommitBodyBytes = defaultMaxProtocolBodyBytes
 	}
-	proxyTargets := newProxyTargetAuthorizer()
+	proxyTargets := newProxyTargetAuthorizer(deps.UploadTokenSecret)
 
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
@@ -206,6 +207,17 @@ func resolveMaxMultipartCiphertextBytes(maxFileBytes int64, chunkCount int) int6
 	return resolveMaxMultipartPlaintextBytes(maxFileBytes) + int64(chunkCount)*aesGCMTagBytes
 }
 
+func resolveMultipartPlaintextBytes(totalCiphertextBytes int64, chunkCount int) (int64, bool) {
+	if chunkCount <= 0 {
+		return 0, false
+	}
+	totalPlaintextBytes := totalCiphertextBytes - int64(chunkCount)*aesGCMTagBytes
+	if totalPlaintextBytes <= 0 {
+		return 0, false
+	}
+	return totalPlaintextBytes, true
+}
+
 func resolveExpectedChunkCiphertextBytes(
 	totalPlaintextBytes int64,
 	chunkSizeBytes int64,
@@ -268,6 +280,11 @@ func fileInitiateHandler(
 			writeProtocolError(logger, w, err)
 			return
 		}
+		totalPlaintextBytes, ok := resolveMultipartPlaintextBytes(input.TotalCiphertextBytes, input.ChunkCount)
+		if !ok {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes does not match multipart boundaries")
+			return
+		}
 
 		uploadID, err := proxyTargets.IssueUploadSession(
 			input.ChannelUUID,
@@ -286,15 +303,40 @@ func fileInitiateHandler(
 		}
 
 		chunks := make([]filestore.FileUploadChunkTarget, 0, input.ChunkCount)
+		usePresigned := fileStore.UsePresignedURLs()
 		for index := 0; index < input.ChunkCount; index++ {
-			// Uploads always go through the API so deployment chunk limits are
-			// enforced before object storage accepts the bytes.
-			token, err := proxyTargets.IssueUploadTarget(uploadID, index, proxyUploadTargetTTL)
-			if err != nil {
-				writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue upload target")
+			expectedCiphertextBytes, valid := resolveExpectedChunkCiphertextBytes(
+				totalPlaintextBytes,
+				filePolicy.ChunkSizeBytes,
+				input.ChunkCount,
+				index,
+			)
+			if !valid {
+				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes does not match multipart boundaries")
 				return
 			}
-			uploadURL := buildProxyUploadURL(token)
+
+			var uploadURL string
+			if usePresigned {
+				uploadURL, err = fileStore.PresignedUpload(
+					r.Context(),
+					uploadID,
+					index,
+					expectedCiphertextBytes,
+					proxyUploadTargetTTL,
+				)
+				if err != nil {
+					writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+					return
+				}
+			} else {
+				token, err := proxyTargets.IssueUploadTarget(uploadID, index, proxyUploadTargetTTL)
+				if err != nil {
+					writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue upload target")
+					return
+				}
+				uploadURL = buildProxyUploadURL(token)
+			}
 			chunks = append(chunks, filestore.FileUploadChunkTarget{Index: index, UploadURL: uploadURL})
 		}
 
