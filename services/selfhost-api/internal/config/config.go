@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -12,12 +13,13 @@ import (
 )
 
 type Config struct {
-	AppEnv   string
-	LogLevel slog.Level
-	HTTP     HTTPConfig
-	Database DatabaseConfig
-	File     FileConfig
-	RP       RPConfig
+	AppEnv            string
+	LogLevel          slog.Level
+	HTTP              HTTPConfig
+	Database          DatabaseConfig
+	File              FileConfig
+	RP                RPConfig
+	CommitTokenSecret string
 }
 
 type HTTPConfig struct {
@@ -27,6 +29,7 @@ type HTTPConfig struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
+	TrustedProxyCIDRs []netip.Prefix
 }
 
 type DatabaseConfig struct {
@@ -115,13 +118,19 @@ func LoadFromEnv(lookup func(string) (string, bool)) (Config, error) {
 		return Config{}, err
 	}
 
+	commitTokenSecret, err := loadCommitTokenSecret(lookup)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		AppEnv:   appEnv,
-		LogLevel: logLevel,
-		HTTP:     httpCfg,
-		Database: dbCfg,
-		File:     fileCfg,
-		RP:       rpCfg,
+		AppEnv:            appEnv,
+		LogLevel:          logLevel,
+		HTTP:              httpCfg,
+		Database:          dbCfg,
+		File:              fileCfg,
+		RP:                rpCfg,
+		CommitTokenSecret: commitTokenSecret,
 	}, nil
 }
 
@@ -151,6 +160,11 @@ func loadHTTPConfig(lookup func(string) (string, bool)) (HTTPConfig, error) {
 		return HTTPConfig{}, err
 	}
 
+	trustedProxyCIDRs, err := parseProxyCIDRs(envOrDefault(lookup, "SELFHOST_API_TRUSTED_PROXY_CIDRS", ""))
+	if err != nil {
+		return HTTPConfig{}, err
+	}
+
 	return HTTPConfig{
 		BindAddr:          envOrDefault(lookup, "SELFHOST_API_BIND_ADDR", ":8788"),
 		ReadTimeout:       readTimeout,
@@ -158,7 +172,46 @@ func loadHTTPConfig(lookup func(string) (string, bool)) (HTTPConfig, error) {
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 		ShutdownTimeout:   shutdownTimeout,
+		TrustedProxyCIDRs: trustedProxyCIDRs,
 	}, nil
+}
+
+func loadCommitTokenSecret(lookup func(string) (string, bool)) (string, error) {
+	if value, ok := lookup("SELFHOST_API_COMMIT_TOKEN_SECRET"); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value), nil
+	}
+	if value, ok := lookup("COMMIT_TOKEN_SECRET"); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value), nil
+	}
+	return "", fmt.Errorf("SELFHOST_API_COMMIT_TOKEN_SECRET or COMMIT_TOKEN_SECRET is required")
+}
+
+func parseProxyCIDRs(value string) ([]netip.Prefix, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	prefixes := make([]netip.Prefix, 0)
+	for _, segment := range strings.Split(trimmed, ",") {
+		entry := strings.TrimSpace(segment)
+		if entry == "" {
+			continue
+		}
+
+		if addr, err := netip.ParseAddr(entry); err == nil {
+			prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+			continue
+		}
+
+		prefix, err := netip.ParsePrefix(entry)
+		if err != nil {
+			return nil, fmt.Errorf("SELFHOST_API_TRUSTED_PROXY_CIDRS contains invalid CIDR or IP %q", entry)
+		}
+		prefixes = append(prefixes, prefix.Masked())
+	}
+
+	return prefixes, nil
 }
 
 func loadDatabaseConfig(lookup func(string) (string, bool), url string) (DatabaseConfig, error) {

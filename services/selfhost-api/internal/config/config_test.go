@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,8 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 			"SELFHOST_API_FILE_CHUNK_SIZE_BYTES":          "262144",
 			"SELFHOST_API_FILE_MAX_CHUNKS":                "4",
 			"SELFHOST_API_FILE_STORAGE_BACKEND":           "inline",
+			"SELFHOST_API_COMMIT_TOKEN_SECRET":            "test-secret",
+			"SELFHOST_API_TRUSTED_PROXY_CIDRS":            "10.0.0.0/8,127.0.0.1",
 		}
 
 		value, ok := values[key]
@@ -71,6 +74,18 @@ func TestLoadFromEnvSuccess(t *testing.T) {
 	if cfg.File.StorageBackend != "inline" {
 		t.Fatalf("File.StorageBackend = %q, want inline", cfg.File.StorageBackend)
 	}
+	if cfg.CommitTokenSecret != "test-secret" {
+		t.Fatalf("CommitTokenSecret = %q, want test-secret", cfg.CommitTokenSecret)
+	}
+	if len(cfg.HTTP.TrustedProxyCIDRs) != 2 {
+		t.Fatalf("TrustedProxyCIDRs len = %d, want 2", len(cfg.HTTP.TrustedProxyCIDRs))
+	}
+	if cfg.HTTP.TrustedProxyCIDRs[0] != netip.MustParsePrefix("10.0.0.0/8") {
+		t.Fatalf("TrustedProxyCIDRs[0] = %v, want 10.0.0.0/8", cfg.HTTP.TrustedProxyCIDRs[0])
+	}
+	if cfg.HTTP.TrustedProxyCIDRs[1] != netip.MustParsePrefix("127.0.0.1/32") {
+		t.Fatalf("TrustedProxyCIDRs[1] = %v, want 127.0.0.1/32", cfg.HTTP.TrustedProxyCIDRs[1])
+	}
 }
 
 func TestLoadFromEnvCanonicalizesRPOrigin(t *testing.T) {
@@ -78,9 +93,10 @@ func TestLoadFromEnvCanonicalizesRPOrigin(t *testing.T) {
 
 	cfg, err := LoadFromEnv(func(key string) (string, bool) {
 		values := map[string]string{
-			"SELFHOST_API_DATABASE_URL": "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
-			"SELFHOST_API_RP_ID":        "localhost",
-			"SELFHOST_API_RP_ORIGIN":    "HTTPS://Example.COM:443/",
+			"SELFHOST_API_DATABASE_URL":        "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":               "localhost",
+			"SELFHOST_API_RP_ORIGIN":           "HTTPS://Example.COM:443/",
+			"SELFHOST_API_COMMIT_TOKEN_SECRET": "test-secret",
 		}
 		value, ok := values[key]
 		return value, ok
@@ -91,6 +107,49 @@ func TestLoadFromEnvCanonicalizesRPOrigin(t *testing.T) {
 
 	if cfg.RP.Origin != "https://example.com" {
 		t.Fatalf("RP.Origin = %q, want https://example.com", cfg.RP.Origin)
+	}
+}
+
+func TestLoadFromEnvUsesLegacyCommitTokenSecretFallback(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := LoadFromEnv(func(key string) (string, bool) {
+		values := map[string]string{
+			"SELFHOST_API_DATABASE_URL": "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":        "localhost",
+			"SELFHOST_API_RP_ORIGIN":    "http://localhost:5173",
+			"COMMIT_TOKEN_SECRET":       "legacy-secret",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err != nil {
+		t.Fatalf("LoadFromEnv() error = %v", err)
+	}
+	if cfg.CommitTokenSecret != "legacy-secret" {
+		t.Fatalf("CommitTokenSecret = %q, want legacy-secret", cfg.CommitTokenSecret)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidTrustedProxyCIDRs(t *testing.T) {
+	t.Parallel()
+
+	_, err := LoadFromEnv(func(key string) (string, bool) {
+		values := map[string]string{
+			"SELFHOST_API_DATABASE_URL":        "postgres://postgres:postgres@127.0.0.1:5432/zerolink?sslmode=disable",
+			"SELFHOST_API_RP_ID":               "localhost",
+			"SELFHOST_API_RP_ORIGIN":           "http://localhost:5173",
+			"SELFHOST_API_COMMIT_TOKEN_SECRET": "test-secret",
+			"SELFHOST_API_TRUSTED_PROXY_CIDRS": "10.0.0.0/8,not-a-cidr",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil {
+		t.Fatal("LoadFromEnv() error = nil, want invalid trusted proxy error")
+	}
+	if !strings.Contains(err.Error(), "SELFHOST_API_TRUSTED_PROXY_CIDRS") {
+		t.Fatalf("LoadFromEnv() error = %v, want SELFHOST_API_TRUSTED_PROXY_CIDRS mention", err)
 	}
 }
 

@@ -112,6 +112,32 @@ describe('verifyAssertion', () => {
     expect(result).toEqual({ ok: false, error: 'challenge mismatch' });
   });
 
+  it('rejects when signCount does not increase', async () => {
+    const { params } = await buildVerifyParams({
+      signCount: 3,
+      storedSignCount: 3,
+    });
+
+    const result = await verifyAssertion(params);
+    expect(result).toEqual({
+      ok: false,
+      error: 'sign count is not monotonically increasing (possible cloned authenticator)',
+    });
+  });
+
+  it('rejects when signCount rolls back to zero after a non-zero stored counter', async () => {
+    const { params } = await buildVerifyParams({
+      signCount: 0,
+      storedSignCount: 4,
+    });
+
+    const result = await verifyAssertion(params);
+    expect(result).toEqual({
+      ok: false,
+      error: 'sign count is not monotonically increasing (possible cloned authenticator)',
+    });
+  });
+
   it('rejects when signature is tampered', async () => {
     const challenge = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
     const { assertion, publicKeyCose } = await createTamperedAssertion({

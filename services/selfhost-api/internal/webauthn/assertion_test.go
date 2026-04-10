@@ -79,6 +79,39 @@ func TestVerifyAssertionRejectsChallengeMismatch(t *testing.T) {
 	}
 }
 
+func TestVerifyAssertionRejectsSignCountRollback(t *testing.T) {
+	privateKey, storedPublicKey := generateStoredCredential(t)
+	expectedChallenge := []byte("expected-challenge-rollback")
+	clientDataJSON := mustJSON(t, clientData{
+		Type:      "webauthn.get",
+		Origin:    "http://localhost:5173",
+		Challenge: encodeBase64URL(expectedChallenge),
+	})
+	authenticatorData := buildAssertionAuthenticatorData("localhost", 2)
+	signature := signAssertion(t, privateKey, authenticatorData, clientDataJSON)
+
+	_, err := NativeVerifier{}.VerifyAssertion(context.Background(), AssertionInput{
+		ChannelID:               "channel-sign-count",
+		AssertionID:             "credential-rollback",
+		ClientDataJSONB64u:      encodeBase64URL(clientDataJSON),
+		AuthenticatorDataB64u:   encodeBase64URL(authenticatorData),
+		SignatureB64u:           encodeBase64URL(signature),
+		ExpectedRPID:            "localhost",
+		ExpectedOrigin:          "http://localhost:5173",
+		ExpectedChallenge:       expectedChallenge,
+		StoredCredentialID:      "credential-rollback",
+		StoredPublicKey:         storedPublicKey,
+		StoredSignCount:         3,
+		RequireUserVerification: true,
+	})
+	if err == nil {
+		t.Fatal("VerifyAssertion() error = nil, want sign count rollback")
+	}
+	if !strings.Contains(err.Error(), "sign count is not monotonically increasing") {
+		t.Fatalf("VerifyAssertion() error = %v, want sign count rollback", err)
+	}
+}
+
 func generateStoredCredential(t *testing.T) (*ecdsa.PrivateKey, string) {
 	t.Helper()
 

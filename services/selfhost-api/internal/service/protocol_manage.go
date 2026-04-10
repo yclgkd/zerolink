@@ -22,12 +22,14 @@ const (
 )
 
 type LockBeginInput struct {
-	UUID string `json:"uuid"`
+	UUID             string `json:"uuid"`
+	RateLimitSubject string `json:"-"`
 }
 
 type LockBeginOutput struct {
-	OK            bool          `json:"ok"`
-	LockChallenge LockChallenge `json:"lockChallenge"`
+	OK                 bool                `json:"ok"`
+	LockChallenge      LockChallenge       `json:"lockChallenge"`
+	CommitCookieSignal *CommitCookieSignal `json:"-"`
 }
 
 type LockChallenge struct {
@@ -37,20 +39,24 @@ type LockChallenge struct {
 }
 
 type LockCommitInput struct {
-	UUID            string          `json:"uuid"`
-	LockChallengeID string          `json:"lockChallengeId"`
-	LockProof       string          `json:"lockProof"`
-	ReceiverPubJWK  RSAPublicKeyJWK `json:"receiverPubJwk"`
-	ReceiverPubFpr  string          `json:"receiverPubFpr"`
-	LockedAt        int64           `json:"lockedAt"`
+	UUID             string          `json:"uuid"`
+	LockChallengeID  string          `json:"lockChallengeId"`
+	LockProof        string          `json:"lockProof"`
+	ReceiverPubJWK   RSAPublicKeyJWK `json:"receiverPubJwk"`
+	ReceiverPubFpr   string          `json:"receiverPubFpr"`
+	LockedAt         int64           `json:"lockedAt"`
+	RateLimitSubject string          `json:"-"`
+	CommitToken      string          `json:"-"`
 }
 
 type LockCommitOutput struct {
-	OK bool `json:"ok"`
+	OK                 bool                `json:"ok"`
+	CommitCookieSignal *CommitCookieSignal `json:"-"`
 }
 
 type CompoundBeginInput struct {
-	UUID string `json:"uuid"`
+	UUID             string `json:"uuid"`
+	RateLimitSubject string `json:"-"`
 }
 
 type CompoundChallenge struct {
@@ -65,14 +71,15 @@ type PublicKeyCredentialDescriptorJSON struct {
 }
 
 type CompoundBeginOutput struct {
-	OK               bool                                `json:"ok"`
-	Challenge        CompoundChallenge                   `json:"challenge"`
-	AllowCredentials []PublicKeyCredentialDescriptorJSON `json:"allowCredentials,omitempty"`
-	ReceiverPubFpr   string                              `json:"receiverPubFpr,omitempty"`
-	ReceiverPubJWK   *RSAPublicKeyJWK                    `json:"receiverPubJwk,omitempty"`
-	CurrentVersion   int64                               `json:"currentVersion"`
-	SecurityProfile  string                              `json:"securityProfile"`
-	AdminMode        string                              `json:"adminMode"`
+	OK                 bool                                `json:"ok"`
+	Challenge          CompoundChallenge                   `json:"challenge"`
+	AllowCredentials   []PublicKeyCredentialDescriptorJSON `json:"allowCredentials,omitempty"`
+	ReceiverPubFpr     string                              `json:"receiverPubFpr,omitempty"`
+	ReceiverPubJWK     *RSAPublicKeyJWK                    `json:"receiverPubJwk,omitempty"`
+	CurrentVersion     int64                               `json:"currentVersion"`
+	SecurityProfile    string                              `json:"securityProfile"`
+	AdminMode          string                              `json:"adminMode"`
+	CommitCookieSignal *CommitCookieSignal                 `json:"-"`
 }
 
 type AssertionJSON struct {
@@ -127,10 +134,13 @@ type CompoundCommitInput struct {
 	SoftkeySignature string         `json:"softkeySignature,omitempty"`
 	IntentHash       string         `json:"intentHash"`
 	Intent           ManageIntent   `json:"intent"`
+	RateLimitSubject string         `json:"-"`
+	CommitToken      string         `json:"-"`
 }
 
 type CompoundCommitOutput struct {
-	OK bool `json:"ok"`
+	OK                 bool                `json:"ok"`
+	CommitCookieSignal *CommitCookieSignal `json:"-"`
 }
 
 type DecryptFetchOutput struct {
@@ -176,6 +186,15 @@ func (s *ProtocolService) LockBegin(ctx context.Context, input LockBeginInput) (
 			activeChallenge.ExpiresAt.After(now) &&
 			activeChallenge.ChallengeID != nil &&
 			activeChallenge.ChallengeValue != nil {
+			commitCookieSignal, err := s.buildCommitCookieSignal(
+				CommitCookieKindLock,
+				input.UUID,
+				activeChallenge,
+				input.RateLimitSubject,
+			)
+			if err != nil {
+				return err
+			}
 			output = LockBeginOutput{
 				OK: true,
 				LockChallenge: LockChallenge{
@@ -183,11 +202,24 @@ func (s *ProtocolService) LockBegin(ctx context.Context, input LockBeginInput) (
 					Challenge: *activeChallenge.ChallengeValue,
 					ExpiresAt: activeChallenge.ExpiresAt.UTC().UnixMilli(),
 				},
+				CommitCookieSignal: commitCookieSignal,
 			}
 			return nil
 		}
 
-		if err := s.enforceRateLimit(protocolRateLimitLockBegin, input.UUID, now); err != nil {
+		callerKey, err := s.deriveCallerKey(input.RateLimitSubject)
+		if err != nil {
+			return err
+		}
+		if err := s.enforceRateLimit(
+			protocolRateLimitLockBegin,
+			buildProtocolRateLimitSubject(
+				input.UUID,
+				callerKey,
+				protocolRateLimitScopePublic,
+			),
+			now,
+		); err != nil {
 			return err
 		}
 
@@ -201,13 +233,38 @@ func (s *ProtocolService) LockBegin(ctx context.Context, input LockBeginInput) (
 		}
 		expiresAt := now.Add(time.Duration(challengeTTLMS) * time.Millisecond)
 
+		var commitTokenMode *store.CommitTokenMode
+		if s.shouldEnableCommitCookieBinding(input.RateLimitSubject) {
+			mode := store.CommitTokenModeCallerCookieV1
+			commitTokenMode = &mode
+		}
+
 		if _, err := tx.SaveChallenge(ctx, store.ActiveChallenge{
-			Kind:           store.ChallengeKindLock,
-			ChallengeID:    stringPtr(challengeID),
-			ChallengeValue: stringPtr(challengeValue),
-			IssuedAt:       timePtr(now),
-			ExpiresAt:      timePtr(expiresAt),
+			Kind:            store.ChallengeKindLock,
+			ChallengeID:     stringPtr(challengeID),
+			ChallengeValue:  stringPtr(challengeValue),
+			IssuedAt:        timePtr(now),
+			ExpiresAt:       timePtr(expiresAt),
+			CommitTokenMode: commitTokenMode,
 		}); err != nil {
+			return err
+		}
+
+		challengeForSignal := &store.ActiveChallenge{
+			Kind:            store.ChallengeKindLock,
+			ChallengeID:     stringPtr(challengeID),
+			ChallengeValue:  stringPtr(challengeValue),
+			IssuedAt:        timePtr(now),
+			ExpiresAt:       timePtr(expiresAt),
+			CommitTokenMode: commitTokenMode,
+		}
+		commitCookieSignal, err := s.buildCommitCookieSignal(
+			CommitCookieKindLock,
+			input.UUID,
+			challengeForSignal,
+			input.RateLimitSubject,
+		)
+		if err != nil {
 			return err
 		}
 
@@ -218,6 +275,7 @@ func (s *ProtocolService) LockBegin(ctx context.Context, input LockBeginInput) (
 				Challenge: challengeValue,
 				ExpiresAt: expiresAt.UnixMilli(),
 			},
+			CommitCookieSignal: commitCookieSignal,
 		}
 		return nil
 	})
@@ -269,7 +327,22 @@ func (s *ProtocolService) LockCommit(ctx context.Context, input LockCommitInput)
 		if *challenge.ChallengeID != input.LockChallengeID {
 			return challengeInvalid("lock challenge not found")
 		}
-		if err := s.enforceRateLimit(protocolRateLimitLockCommit, input.UUID, now); err != nil {
+		rateLimitSubject, err := s.authorizedRateLimitSubject(
+			CommitCookieKindLock,
+			input.UUID,
+			challenge,
+			input.RateLimitSubject,
+			input.CommitToken,
+			now,
+		)
+		if err != nil {
+			return err
+		}
+		if err := s.enforceRateLimit(
+			protocolRateLimitLockCommit,
+			rateLimitSubject,
+			now,
+		); err != nil {
 			return err
 		}
 
@@ -313,7 +386,13 @@ func (s *ProtocolService) LockCommit(ctx context.Context, input LockCommitInput)
 	}
 
 	s.publishRealtimeState(ctx, publishedState)
-	return LockCommitOutput{OK: true}, nil
+	return LockCommitOutput{
+		OK: true,
+		CommitCookieSignal: &CommitCookieSignal{
+			Action: "clear",
+			Kind:   CommitCookieKindLock,
+		},
+	}, nil
 }
 
 func (s *ProtocolService) CompoundBegin(ctx context.Context, input CompoundBeginInput) (CompoundBeginOutput, error) {
@@ -343,7 +422,19 @@ func (s *ProtocolService) CompoundBegin(ctx context.Context, input CompoundBegin
 			!activeChallenge.ExpiresAt.After(now) ||
 			activeChallenge.ChallengeID == nil ||
 			activeChallenge.ChallengeSeed == nil {
-			if err := s.enforceRateLimit(protocolRateLimitCompoundBegin, input.UUID, now); err != nil {
+			callerKey, err := s.deriveCallerKey(input.RateLimitSubject)
+			if err != nil {
+				return err
+			}
+			if err := s.enforceRateLimit(
+				protocolRateLimitCompoundBegin,
+				buildProtocolRateLimitSubject(
+					input.UUID,
+					callerKey,
+					protocolRateLimitScopePublic,
+				),
+				now,
+			); err != nil {
 				return err
 			}
 			challengeID, err := s.randomBase64URL(compoundChallengeIDBytes)
@@ -356,12 +447,19 @@ func (s *ProtocolService) CompoundBegin(ctx context.Context, input CompoundBegin
 			}
 			expiresAt := now.Add(time.Duration(challengeTTLMS) * time.Millisecond)
 
+			var commitTokenMode *store.CommitTokenMode
+			if s.shouldEnableCommitCookieBinding(input.RateLimitSubject) {
+				mode := store.CommitTokenModeCallerCookieV1
+				commitTokenMode = &mode
+			}
+
 			activeChallenge, err = tx.SaveChallenge(ctx, store.ActiveChallenge{
-				Kind:          store.ChallengeKindCompound,
-				ChallengeID:   stringPtr(challengeID),
-				ChallengeSeed: stringPtr(challengeSeed),
-				IssuedAt:      timePtr(now),
-				ExpiresAt:     timePtr(expiresAt),
+				Kind:            store.ChallengeKindCompound,
+				ChallengeID:     stringPtr(challengeID),
+				ChallengeSeed:   stringPtr(challengeSeed),
+				IssuedAt:        timePtr(now),
+				ExpiresAt:       timePtr(expiresAt),
+				CommitTokenMode: commitTokenMode,
 			})
 			if err != nil {
 				return err
@@ -403,6 +501,17 @@ func (s *ProtocolService) CompoundBegin(ctx context.Context, input CompoundBegin
 			}
 			output.ReceiverPubJWK = &receiverPubJWK
 		}
+
+		commitCookieSignal, err := s.buildCommitCookieSignal(
+			CommitCookieKindCompound,
+			input.UUID,
+			activeChallenge,
+			input.RateLimitSubject,
+		)
+		if err != nil {
+			return err
+		}
+		output.CommitCookieSignal = commitCookieSignal
 
 		return nil
 	})
@@ -477,7 +586,22 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 		if err != nil {
 			return err
 		}
-		if err := s.enforceRateLimit(protocolRateLimitCompoundCommit, input.UUID, now); err != nil {
+		rateLimitSubject, err := s.authorizedRateLimitSubject(
+			CommitCookieKindCompound,
+			input.UUID,
+			challenge,
+			input.RateLimitSubject,
+			input.CommitToken,
+			now,
+		)
+		if err != nil {
+			return err
+		}
+		if err := s.enforceRateLimit(
+			protocolRateLimitCompoundCommit,
+			rateLimitSubject,
+			now,
+		); err != nil {
 			return err
 		}
 
@@ -571,7 +695,13 @@ func (s *ProtocolService) CompoundCommit(ctx context.Context, input CompoundComm
 		s.publishRealtimeState(ctx, publishedState)
 	}
 
-	return CompoundCommitOutput{OK: true}, nil
+	return CompoundCommitOutput{
+		OK: true,
+		CommitCookieSignal: &CommitCookieSignal{
+			Action: "clear",
+			Kind:   CommitCookieKindCompound,
+		},
+	}, nil
 }
 
 func (s *ProtocolService) applyDelivery(

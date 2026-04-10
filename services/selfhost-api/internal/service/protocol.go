@@ -44,11 +44,12 @@ type Protocol interface {
 }
 
 type ProtocolError struct {
-	Code              string
-	Status            int
-	Message           string
-	Cause             error
-	RetryAfterSeconds int
+	Code               string
+	Status             int
+	Message            string
+	Cause              error
+	RetryAfterSeconds  int
+	CommitCookieSignal *CommitCookieSignal
 }
 
 func (e *ProtocolError) Error() string {
@@ -69,11 +70,12 @@ func (e *ProtocolError) Unwrap() error {
 }
 
 type ProtocolConfig struct {
-	RPID      string
-	RPOrigin  string
-	Verifier  webauthn.Verifier
-	Publisher realtime.Publisher
-	File      FilePolicy
+	RPID              string
+	RPOrigin          string
+	CommitTokenSecret string
+	Verifier          webauthn.Verifier
+	Publisher         realtime.Publisher
+	File              FilePolicy
 }
 
 type FilePolicy struct {
@@ -85,15 +87,16 @@ type FilePolicy struct {
 }
 
 type ProtocolService struct {
-	db          *store.Database
-	verifier    webauthn.Verifier
-	rpID        string
-	rpOrigin    string
-	publisher   realtime.Publisher
-	filePolicy  FilePolicy
-	now         func() time.Time
-	randomRead  func([]byte) (int, error)
-	rateLimiter *protocolRateLimiter
+	db                *store.Database
+	verifier          webauthn.Verifier
+	rpID              string
+	rpOrigin          string
+	commitTokenSecret string
+	publisher         realtime.Publisher
+	filePolicy        FilePolicy
+	now               func() time.Time
+	randomRead        func([]byte) (int, error)
+	rateLimiter       *protocolRateLimiter
 }
 
 type CreateBeginInput struct {
@@ -183,15 +186,16 @@ func NewProtocolService(db *store.Database, cfg ProtocolConfig) Protocol {
 	}
 
 	return &ProtocolService{
-		db:          db,
-		verifier:    verifier,
-		rpID:        cfg.RPID,
-		rpOrigin:    strings.TrimRight(cfg.RPOrigin, "/"),
-		publisher:   cfg.Publisher,
-		filePolicy:  cfg.File,
-		now:         func() time.Time { return time.Now().UTC() },
-		randomRead:  rand.Read,
-		rateLimiter: newProtocolRateLimiter(),
+		db:                db,
+		verifier:          verifier,
+		rpID:              cfg.RPID,
+		rpOrigin:          strings.TrimRight(cfg.RPOrigin, "/"),
+		commitTokenSecret: strings.TrimSpace(cfg.CommitTokenSecret),
+		publisher:         cfg.Publisher,
+		filePolicy:        cfg.File,
+		now:               func() time.Time { return time.Now().UTC() },
+		randomRead:        rand.Read,
+		rateLimiter:       newProtocolRateLimiter(),
 	}
 }
 
