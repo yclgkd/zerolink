@@ -43,7 +43,7 @@ import {
   withCommitCookieSignalError,
 } from './SecretVaultCookies.ts';
 import { assertUuidMatch } from './SecretVaultHttp.ts';
-import { enforceRateLimit } from './SecretVaultRateLimit.ts';
+import { buildRateLimitSubject, enforceRateLimit } from './SecretVaultRateLimit.ts';
 import { SecretVaultStateMachine } from './SecretVaultStateMachine.ts';
 import {
   closeAllWebSockets,
@@ -234,7 +234,15 @@ export async function beginCompoundChallengeInternal(
     let challenge = activeChallenge;
 
     if (!challenge) {
-      enforceRateLimit(vc, 'compound_begin', now);
+      enforceRateLimit(
+        vc,
+        'compound_begin',
+        now,
+        buildRateLimitSubject({
+          scope: 'public',
+          callerKey: context.callerKey,
+        })
+      );
 
       const cryptoApi = getCryptoApi();
       const id = encodeBase64Url(
@@ -421,7 +429,16 @@ export async function commitCompoundInternal(
       }
     }
 
-    enforceRateLimit(vc, 'compound_commit', now, tokenHash);
+    enforceRateLimit(
+      vc,
+      'compound_commit',
+      now,
+      buildRateLimitSubject({
+        scope: 'authorized',
+        callerKey: context.callerKey,
+        sessionKey: tokenHash === 'shared' ? undefined : tokenHash,
+      })
+    );
 
     const expectedChallenge =
       intent.op === 'update'

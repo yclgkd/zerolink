@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +15,13 @@ const (
 	protocolRateLimitCompoundBegin  protocolRateLimitedEndpoint = "compound_begin"
 	protocolRateLimitCompoundCommit protocolRateLimitedEndpoint = "compound_commit"
 	protocolRateLimitSweepInterval                              = time.Minute
+)
+
+type protocolRateLimitScope string
+
+const (
+	protocolRateLimitScopePublic     protocolRateLimitScope = "public"
+	protocolRateLimitScopeAuthorized protocolRateLimitScope = "authorized"
 )
 
 type protocolRateLimitConfig struct {
@@ -125,4 +133,17 @@ func ceilDurationSeconds(value time.Duration) int {
 		return 1
 	}
 	return int((value + time.Second - 1) / time.Second)
+}
+
+func buildProtocolRateLimitSubject(
+	uuid string,
+	callerSubject string,
+	scope protocolRateLimitScope,
+) string {
+	normalizedCaller := strings.TrimSpace(callerSubject)
+	if normalizedCaller == "" {
+		normalizedCaller = "anonymous"
+	}
+
+	return fmt.Sprintf("%s:%s:%s", uuid, scope, normalizedCaller)
 }

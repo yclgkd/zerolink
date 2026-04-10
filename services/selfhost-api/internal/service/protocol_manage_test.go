@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -638,6 +639,186 @@ func TestProtocolServiceLockBeginRateLimitsNewChallengeIssuanceWhileAllowingActi
 	}
 }
 
+func TestProtocolServiceLockBeginRateLimitsPerCallerSubject(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+	}).(*ProtocolService)
+
+	currentNow := time.UnixMilli(1_730_000_170_000).UTC()
+	svc.now = func() time.Time { return currentNow }
+
+	uuid := "uuuuuuuuuuuuuuuuuuuuu"
+	createPasswordChannel(t, svc, uuid, currentNow.UnixMilli(), sampleSoftkeyJWK())
+
+	for attempt := 0; attempt < 3; attempt++ {
+		input := LockBeginInput{
+			UUID:             uuid,
+			RateLimitSubject: "203.0.113.10|chromium",
+		}
+		begin, err := svc.LockBegin(context.Background(), input)
+		if err != nil {
+			t.Fatalf("LockBegin() caller A attempt %d error = %v", attempt, err)
+		}
+		if begin.LockChallenge.ID == "" {
+			t.Fatalf("LockBegin() caller A attempt %d returned empty challenge id", attempt)
+		}
+
+		markChallengeConsumedForTest(
+			t,
+			db,
+			uuid,
+			store.ChallengeKindLock,
+			currentNow.Add(time.Second),
+		)
+		currentNow = currentNow.Add(2 * time.Second)
+	}
+
+	_, err := svc.LockBegin(context.Background(), LockBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: "203.0.113.10|chromium",
+	})
+	requireProtocolError(t, err, "RATE_LIMITED", 429)
+
+	if _, err := svc.LockBegin(context.Background(), LockBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: "198.51.100.24|chromium",
+	}); err != nil {
+		t.Fatalf("LockBegin() caller B error = %v", err)
+	}
+}
+
+func TestProtocolServiceLockCommitRejectsMissingCommitTokenWhenCallerCookieBindingEnabled(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:              "localhost",
+		RPOrigin:          "http://localhost:5173",
+		CommitTokenSecret: "test-commit-secret",
+		Verifier:          webauthn.NoopVerifier{},
+	})
+
+	uuid := "yyyyyyyyyyyyyyyyyyyyy"
+	timestamp := time.Now().UTC().UnixMilli()
+	callerSubject := "203.0.113.10|chromium"
+
+	lockKeyB64u := createPasswordChannel(t, svc, uuid, timestamp, sampleSoftkeyJWK())
+	begin, err := svc.LockBegin(context.Background(), LockBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: callerSubject,
+	})
+	if err != nil {
+		t.Fatalf("LockBegin() error = %v", err)
+	}
+	if begin.CommitCookieSignal == nil || begin.CommitCookieSignal.Token == "" {
+		t.Fatal("expected lock begin to return a commit cookie signal")
+	}
+
+	receiverPubJWK, receiverPubFpr := generateReceiverPublicKey(t)
+	lockProof, err := computeLockProof(uuid, begin.LockChallenge.ID, begin.LockChallenge.Challenge, lockKeyB64u)
+	if err != nil {
+		t.Fatalf("computeLockProof() error = %v", err)
+	}
+
+	_, err = svc.LockCommit(context.Background(), LockCommitInput{
+		UUID:             uuid,
+		LockChallengeID:  begin.LockChallenge.ID,
+		LockProof:        lockProof,
+		ReceiverPubJWK:   receiverPubJWK,
+		ReceiverPubFpr:   receiverPubFpr,
+		LockedAt:         timestamp + 1_000,
+		RateLimitSubject: callerSubject,
+	})
+	requireProtocolError(t, err, "CHALLENGE_INVALID", 401)
+
+	var protocolErr *ProtocolError
+	if !errors.As(err, &protocolErr) {
+		t.Fatalf("error = %T, want *ProtocolError", err)
+	}
+	if protocolErr.CommitCookieSignal == nil {
+		t.Fatal("expected protocol error to carry a commit cookie clear signal")
+	}
+	if protocolErr.CommitCookieSignal.Action != "clear" || protocolErr.CommitCookieSignal.Kind != CommitCookieKindLock {
+		t.Fatalf(
+			"CommitCookieSignal = %+v, want clear lock signal",
+			protocolErr.CommitCookieSignal,
+		)
+	}
+}
+
+func TestProtocolServiceLockCommitRateLimitsPerCommitTokenSession(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:              "localhost",
+		RPOrigin:          "http://localhost:5173",
+		CommitTokenSecret: "test-commit-secret",
+		Verifier:          webauthn.NoopVerifier{},
+	}).(*ProtocolService)
+
+	currentNow := time.UnixMilli(1_730_000_180_000).UTC()
+	svc.now = func() time.Time { return currentNow }
+
+	uuid := "zzzzzzzzzzzzzzzzzzzzz"
+	callerSubject := "203.0.113.10|chromium"
+	createPasswordChannel(t, svc, uuid, currentNow.UnixMilli(), sampleSoftkeyJWK())
+
+	firstBegin, err := svc.LockBegin(context.Background(), LockBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: callerSubject,
+	})
+	if err != nil {
+		t.Fatalf("first LockBegin() error = %v", err)
+	}
+	secondBegin, err := svc.LockBegin(context.Background(), LockBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: callerSubject,
+	})
+	if err != nil {
+		t.Fatalf("second LockBegin() error = %v", err)
+	}
+	if firstBegin.LockChallenge.ID != secondBegin.LockChallenge.ID {
+		t.Fatalf("challenge id changed across active reuse: %q vs %q", firstBegin.LockChallenge.ID, secondBegin.LockChallenge.ID)
+	}
+	if firstBegin.CommitCookieSignal == nil || secondBegin.CommitCookieSignal == nil {
+		t.Fatal("expected both lock begin responses to include commit cookie signals")
+	}
+	if firstBegin.CommitCookieSignal.Token == secondBegin.CommitCookieSignal.Token {
+		t.Fatal("expected active challenge reuse to mint distinct commit tokens per session")
+	}
+
+	receiverPubJWK, receiverPubFpr := generateReceiverPublicKey(t)
+	input := LockCommitInput{
+		UUID:             uuid,
+		LockChallengeID:  firstBegin.LockChallenge.ID,
+		LockProof:        "bad-proof",
+		ReceiverPubJWK:   receiverPubJWK,
+		ReceiverPubFpr:   receiverPubFpr,
+		LockedAt:         currentNow.Add(time.Second).UnixMilli(),
+		RateLimitSubject: callerSubject,
+		CommitToken:      firstBegin.CommitCookieSignal.Token,
+	}
+
+	for attempt := 0; attempt < 5; attempt++ {
+		_, err := svc.LockCommit(context.Background(), input)
+		requireProtocolError(t, err, "LOCK_FORBIDDEN", 403)
+	}
+
+	_, err = svc.LockCommit(context.Background(), input)
+	requireProtocolError(t, err, "RATE_LIMITED", 429)
+
+	secondSessionInput := input
+	secondSessionInput.CommitToken = secondBegin.CommitCookieSignal.Token
+	_, err = svc.LockCommit(context.Background(), secondSessionInput)
+	requireProtocolError(t, err, "LOCK_FORBIDDEN", 403)
+}
+
 func TestProtocolServiceCompoundCommitRejectsVersionMismatch(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
@@ -734,6 +915,161 @@ func TestProtocolServiceCompoundCommitRateLimitsRepeatedVerifiedAttempts(t *test
 	currentNow = time.UnixMilli(1_730_000_204_000).UTC()
 	_, err = svc.CompoundCommit(context.Background(), input)
 	requireProtocolError(t, err, "RATE_LIMITED", 429)
+}
+
+func TestProtocolServiceCompoundCommitRateLimitsPerCallerSubject(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+	}).(*ProtocolService)
+
+	currentNow := time.UnixMilli(1_730_000_240_000).UTC()
+	svc.now = func() time.Time { return currentNow }
+
+	uuid := "vvvvvvvvvvvvvvvvvvvvv"
+	softkeyPrivateKey, softkeyPubJWK := generateSoftkeyKeyPair(t)
+	_, receiverPubFpr := createAndLockPasswordChannel(t, svc, uuid, currentNow.UnixMilli(), softkeyPubJWK)
+
+	begin, err := svc.CompoundBegin(context.Background(), CompoundBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: "203.0.113.10|chromium",
+	})
+	if err != nil {
+		t.Fatalf("CompoundBegin() error = %v", err)
+	}
+
+	intent := ManageIntent{
+		Op:             "update",
+		UUID:           uuid,
+		Version:        begin.CurrentVersion,
+		Timestamp:      currentNow.Add(2 * time.Second).UnixMilli(),
+		Nonce:          encodeBase64URL([]byte("nonce-rate-limit-caller")),
+		ReceiverPubFpr: receiverPubFpr,
+		CipherBundle:   buildCipherBundle(t, uuid, begin.CurrentVersion, receiverPubFpr, []byte("ciphertext-caller")),
+		ExpireAt:       json.RawMessage("null"),
+	}
+	intentHash, err := intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("intent.ComputeHash() error = %v", err)
+	}
+	invalidSignature := signSoftkeyPayload(t, softkeyPrivateKey, []byte("wrong-compound-challenge"))
+	input := CompoundCommitInput{
+		AdminMode:        string(store.AdminModePassword),
+		UUID:             uuid,
+		SoftkeySignature: invalidSignature,
+		IntentHash:       intentHash,
+		Intent:           intent,
+		RateLimitSubject: "203.0.113.10|chromium",
+	}
+
+	for attempt := 0; attempt < 10; attempt++ {
+		currentNow = time.UnixMilli(1_730_000_240_000 + int64(3_000+attempt)).UTC()
+		_, err := svc.CompoundCommit(context.Background(), input)
+		requireProtocolError(t, err, "ASSERTION_INVALID", 403)
+	}
+
+	currentNow = time.UnixMilli(1_730_000_244_000).UTC()
+	_, err = svc.CompoundCommit(context.Background(), input)
+	requireProtocolError(t, err, "RATE_LIMITED", 429)
+
+	currentNow = time.UnixMilli(1_730_000_245_000).UTC()
+	otherCallerInput := input
+	otherCallerInput.RateLimitSubject = "198.51.100.24|chromium"
+	otherCallerInput.Intent.Timestamp = currentNow.Add(time.Second).UnixMilli()
+	otherCallerInput.Intent.Nonce = encodeBase64URL([]byte("nonce-rate-limit-caller-b"))
+	otherCallerInput.IntentHash, err = otherCallerInput.Intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("otherCallerInput.Intent.ComputeHash() error = %v", err)
+	}
+
+	_, err = svc.CompoundCommit(context.Background(), otherCallerInput)
+	requireProtocolError(t, err, "ASSERTION_INVALID", 403)
+}
+
+func TestProtocolServiceCompoundCommitRateLimitsPerCommitTokenSession(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:              "localhost",
+		RPOrigin:          "http://localhost:5173",
+		CommitTokenSecret: "test-commit-secret",
+		Verifier:          webauthn.NoopVerifier{},
+	}).(*ProtocolService)
+
+	currentNow := time.UnixMilli(1_730_000_250_000).UTC()
+	svc.now = func() time.Time { return currentNow }
+
+	uuid := "wwwwwwwwwwwwwwwwwwwww"
+	callerSubject := "203.0.113.10|chromium"
+	softkeyPrivateKey, softkeyPubJWK := generateSoftkeyKeyPair(t)
+	_, receiverPubFpr := createAndLockPasswordChannel(t, svc, uuid, currentNow.UnixMilli(), softkeyPubJWK)
+
+	firstBegin, err := svc.CompoundBegin(context.Background(), CompoundBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: callerSubject,
+	})
+	if err != nil {
+		t.Fatalf("first CompoundBegin() error = %v", err)
+	}
+	secondBegin, err := svc.CompoundBegin(context.Background(), CompoundBeginInput{
+		UUID:             uuid,
+		RateLimitSubject: callerSubject,
+	})
+	if err != nil {
+		t.Fatalf("second CompoundBegin() error = %v", err)
+	}
+	if firstBegin.Challenge.ID != secondBegin.Challenge.ID {
+		t.Fatalf("challenge id changed across active reuse: %q vs %q", firstBegin.Challenge.ID, secondBegin.Challenge.ID)
+	}
+	if firstBegin.CommitCookieSignal == nil || secondBegin.CommitCookieSignal == nil {
+		t.Fatal("expected both compound begin responses to include commit cookie signals")
+	}
+	if firstBegin.CommitCookieSignal.Token == secondBegin.CommitCookieSignal.Token {
+		t.Fatal("expected active challenge reuse to mint distinct commit tokens per session")
+	}
+
+	intent := ManageIntent{
+		Op:             "update",
+		UUID:           uuid,
+		Version:        firstBegin.CurrentVersion,
+		Timestamp:      currentNow.Add(2 * time.Second).UnixMilli(),
+		Nonce:          encodeBase64URL([]byte("nonce-rate-limit-token")),
+		ReceiverPubFpr: receiverPubFpr,
+		CipherBundle:   buildCipherBundle(t, uuid, firstBegin.CurrentVersion, receiverPubFpr, []byte("ciphertext-token")),
+		ExpireAt:       json.RawMessage("null"),
+	}
+	intentHash, err := intent.ComputeHash()
+	if err != nil {
+		t.Fatalf("intent.ComputeHash() error = %v", err)
+	}
+	invalidSignature := signSoftkeyPayload(t, softkeyPrivateKey, []byte("wrong-compound-challenge"))
+	input := CompoundCommitInput{
+		AdminMode:        string(store.AdminModePassword),
+		UUID:             uuid,
+		SoftkeySignature: invalidSignature,
+		IntentHash:       intentHash,
+		Intent:           intent,
+		RateLimitSubject: callerSubject,
+		CommitToken:      firstBegin.CommitCookieSignal.Token,
+	}
+
+	for attempt := 0; attempt < 10; attempt++ {
+		_, err := svc.CompoundCommit(context.Background(), input)
+		requireProtocolError(t, err, "ASSERTION_INVALID", 403)
+	}
+
+	_, err = svc.CompoundCommit(context.Background(), input)
+	requireProtocolError(t, err, "RATE_LIMITED", 429)
+
+	secondSessionInput := input
+	secondSessionInput.CommitToken = secondBegin.CommitCookieSignal.Token
+	_, err = svc.CompoundCommit(context.Background(), secondSessionInput)
+	requireProtocolError(t, err, "ASSERTION_INVALID", 403)
 }
 
 func TestProtocolServiceCompoundCommitRejectsNonceReplay(t *testing.T) {

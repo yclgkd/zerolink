@@ -291,6 +291,56 @@ describe('SecretVault compound/delete flow', () => {
     expect(getAlarm()).toBe(Number(expectedNonceExpiry));
   });
 
+  it('rejects a WebAuthn compound commit when signCount rolls back', async () => {
+    const now = 1_730_001_101_000;
+    const lockParams = createCommitLockParams();
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(lockParams);
+    const { state, snapshot } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+    await vault.beginCompoundChallenge(lockedRecord.uuid, now);
+    const intent = createUpdateIntent(
+      lockedRecord.uuid,
+      lockedRecord.version,
+      asUnixMs(now + 1_000),
+      asBase64Url('nonce_sign_count_rollback'),
+      lockParams.receiverPubFpr
+    );
+    const intentHash = await computeIntentHash(toRecord(intent));
+    const assertionFixture = await createMockAssertion({
+      credentialId: (lockedRecord.adminCredential as StoredCredential).credentialId,
+      rpId: RP_ID,
+      rpOrigin: RP_ORIGIN,
+      challenge: await deriveUpdateProofChallengeB64u({
+        uuid: lockedRecord.uuid,
+        intentHash,
+      }),
+      signCount: 2,
+    });
+
+    snapshot.set(CHANNEL_RECORD_KEY, {
+      ...lockedRecord,
+      adminCredential: {
+        ...lockedRecord.adminCredential,
+        publicKey: assertionFixture.publicKeyCose,
+        signCount: 3,
+      },
+    });
+
+    await expect(
+      vault.commitCompound(
+        {
+          uuid: lockedRecord.uuid,
+          assertion: assertionFixture.assertion,
+          intentHash,
+          intent,
+        },
+        now + 1_000
+      )
+    ).rejects.toMatchObject({ code: 'ASSERTION_INVALID' });
+  });
+
   it('rejects update intent when expireAt is a past timestamp', async () => {
     const now = 1_730_001_100_000;
     const lockParams = createCommitLockParams();

@@ -70,10 +70,11 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	protocolService := service.NewProtocolService(
 		db,
 		service.ProtocolConfig{
-			RPID:      cfg.RP.ID,
-			RPOrigin:  cfg.RP.Origin,
-			Verifier:  verifier,
-			Publisher: realtimeHub,
+			RPID:              cfg.RP.ID,
+			RPOrigin:          cfg.RP.Origin,
+			CommitTokenSecret: cfg.CommitTokenSecret,
+			Verifier:          verifier,
+			Publisher:         realtimeHub,
 			File: service.FilePolicy{
 				MaxFileBytes:            cfg.File.MaxBytes,
 				MultipartThresholdBytes: cfg.File.MultipartThresholdBytes,
@@ -104,6 +105,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			MaxChunks:               cfg.File.MaxChunks,
 			MultipartSupported:      cfg.File.MultipartSupported,
 		},
+		TrustedProxyCIDRs:    cfg.HTTP.TrustedProxyCIDRs,
 		MaxProtocolBodyBytes: resolveMaxProtocolBodyBytes(min(cfg.File.MaxBytes, cfg.File.MultipartThresholdBytes)),
 	})
 

@@ -26,7 +26,7 @@ import {
   withCommitCookieSignalError,
 } from './SecretVaultCookies.ts';
 import { assertUuidMatch, assertWaitingState } from './SecretVaultHttp.ts';
-import { enforceRateLimit } from './SecretVaultRateLimit.ts';
+import { buildRateLimitSubject, enforceRateLimit } from './SecretVaultRateLimit.ts';
 import { SecretVaultStateMachine } from './SecretVaultStateMachine.ts';
 import { loadActiveRecord, saveRecord, scheduleNextAlarm } from './SecretVaultStorage.ts';
 import {
@@ -162,7 +162,15 @@ export async function beginLockChallengeInternal(
       };
     }
 
-    enforceRateLimit(vc, 'lock_begin', now);
+    enforceRateLimit(
+      vc,
+      'lock_begin',
+      now,
+      buildRateLimitSubject({
+        scope: 'public',
+        callerKey: context.callerKey,
+      })
+    );
 
     const cryptoApi = getCryptoApi();
     const id = encodeBase64Url(cryptoApi.getRandomValues(new Uint8Array(LOCK_CHALLENGE_ID_BYTES)));
@@ -259,7 +267,16 @@ export async function commitLockChallengeInternal(
       commitToken: context.commitToken,
     });
 
-    enforceRateLimit(vc, 'lock_commit', now, tokenHash);
+    enforceRateLimit(
+      vc,
+      'lock_commit',
+      now,
+      buildRateLimitSubject({
+        scope: 'authorized',
+        callerKey: context.callerKey,
+        sessionKey: tokenHash === 'shared' ? undefined : tokenHash,
+      })
+    );
 
     const expectedProof = await sha256Hex([
       toUtf8Bytes(DOMAIN.LOCK_PROOF),
