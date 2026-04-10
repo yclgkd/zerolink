@@ -797,7 +797,7 @@ func TestProtocolServiceLockCommitRateLimitsPerCommitTokenSession(t *testing.T) 
 	input := LockCommitInput{
 		UUID:             uuid,
 		LockChallengeID:  firstBegin.LockChallenge.ID,
-		LockProof:        "bad-proof",
+		LockProof:        strings.Repeat("0", 64),
 		ReceiverPubJWK:   receiverPubJWK,
 		ReceiverPubFpr:   receiverPubFpr,
 		LockedAt:         currentNow.Add(time.Second).UnixMilli(),
