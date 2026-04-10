@@ -72,6 +72,11 @@ jobs:
               esac
             fi
 
+            if [[ "$file" != */* && "$file" == *.md ]]; then
+              run_node=true
+              continue
+            fi
+
             case "$file" in
               packages/*|protocol-fixtures/*|scripts/*|docs/*|docs/**|.husky/*|.husky/**|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|vitest.config.ts|biome.json|commitlint.config.js)
                 run_node=true
