@@ -671,6 +671,176 @@ func TestFileInitiateRouteRejectsUnknownChannel(t *testing.T) {
 	}
 }
 
+func TestFileInitiateRouteRejectsExcessiveTotalCiphertextBytes(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":`+strconv.FormatInt(resolveMaxMultipartCiphertextBytes(32, 1)+1, 10)+`}`),
+	)
+	res := httptest.NewRecorder()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FileStore:     stubFileStore{},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            32,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+					return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+				},
+			},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFileCompleteHandlerRejectsExpiredUploadSession(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proxyTargets := newProxyTargetAuthorizer()
+	baseTime := time.Unix(1_730_000_000, 0).UTC()
+	proxyTargets.now = func() time.Time { return baseTime }
+	uploadID, err := proxyTargets.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 1, 24, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+	proxyTargets.now = func() time.Time { return baseTime.Add(2 * time.Minute) }
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":8,"totalCiphertextBytes":24,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				t.Fatal("completeUpload should not be called for an expired upload session")
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		proxyTargets,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFileCompleteHandlerRejectsChunkCountMismatch(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proxyTargets := newProxyTargetAuthorizer()
+	uploadID, err := proxyTargets.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 2, 40, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":24,"totalCiphertextBytes":40,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				t.Fatal("completeUpload should not be called when chunk count mismatches the upload session")
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		proxyTargets,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFileCompleteHandlerRejectsInvalidFinalChunkBoundary(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proxyTargets := newProxyTargetAuthorizer()
+	uploadID, err := proxyTargets.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 2, 40, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":8,"totalCiphertextBytes":40,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"},{"index":1,"etag":"etag-1","ciphertextBytes":16,"ciphertextHash":"`+strings.Repeat("b", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				t.Fatal("completeUpload should not be called for invalid multipart boundaries")
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		proxyTargets,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
 func TestAPIOptionsPreflightReturnsConfiguredCORSHeaders(t *testing.T) {
 	t.Parallel()
 

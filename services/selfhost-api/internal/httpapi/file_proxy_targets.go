@@ -18,6 +18,13 @@ type proxyUploadTarget struct {
 	expiresAt time.Time
 }
 
+type uploadSession struct {
+	channelUUID          string
+	chunkCount           int
+	totalCiphertextBytes int64
+	expiresAt            time.Time
+}
+
 type proxyDownloadTarget struct {
 	storageKey string
 	expiresAt  time.Time
@@ -26,6 +33,7 @@ type proxyDownloadTarget struct {
 type proxyTargetAuthorizer struct {
 	mu        sync.Mutex
 	now       func() time.Time
+	sessions  map[string]uploadSession
 	uploads   map[string]proxyUploadTarget
 	downloads map[string]proxyDownloadTarget
 }
@@ -33,9 +41,35 @@ type proxyTargetAuthorizer struct {
 func newProxyTargetAuthorizer() *proxyTargetAuthorizer {
 	return &proxyTargetAuthorizer{
 		now:       time.Now,
+		sessions:  make(map[string]uploadSession),
 		uploads:   make(map[string]proxyUploadTarget),
 		downloads: make(map[string]proxyDownloadTarget),
 	}
+}
+
+func (a *proxyTargetAuthorizer) IssueUploadSession(
+	channelUUID string,
+	chunkCount int,
+	totalCiphertextBytes int64,
+	ttl time.Duration,
+) (string, error) {
+	uploadID, err := filestore.NewUploadID()
+	if err != nil {
+		return "", err
+	}
+
+	session := uploadSession{
+		channelUUID:          channelUUID,
+		chunkCount:           chunkCount,
+		totalCiphertextBytes: totalCiphertextBytes,
+		expiresAt:            a.expiresAt(ttl, proxyUploadTargetTTL),
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pruneExpiredLocked(a.now())
+	a.sessions[uploadID] = session
+	return uploadID, nil
 }
 
 func (a *proxyTargetAuthorizer) IssueUploadTarget(uploadID string, index int, ttl time.Duration) (string, error) {
@@ -53,6 +87,14 @@ func (a *proxyTargetAuthorizer) IssueDownloadTarget(storageKey string, ttl time.
 		expiresAt:  a.expiresAt(ttl, proxyDownloadTargetTTL),
 	}
 	return a.storeDownloadTarget(target)
+}
+
+func (a *proxyTargetAuthorizer) UploadSession(uploadID string) (uploadSession, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pruneExpiredLocked(a.now())
+	session, ok := a.sessions[uploadID]
+	return session, ok
 }
 
 func (a *proxyTargetAuthorizer) UploadTarget(token string) (proxyUploadTarget, bool) {
@@ -77,6 +119,7 @@ func (a *proxyTargetAuthorizer) ConsumeDownloadTarget(token string) (proxyDownlo
 func (a *proxyTargetAuthorizer) RevokeUpload(uploadID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	delete(a.sessions, uploadID)
 	for token, target := range a.uploads {
 		if target.uploadID == uploadID {
 			delete(a.uploads, token)
@@ -116,6 +159,11 @@ func (a *proxyTargetAuthorizer) storeDownloadTarget(target proxyDownloadTarget) 
 }
 
 func (a *proxyTargetAuthorizer) pruneExpiredLocked(now time.Time) {
+	for uploadID, session := range a.sessions {
+		if !session.expiresAt.After(now) {
+			delete(a.sessions, uploadID)
+		}
+	}
 	for token, target := range a.uploads {
 		if !target.expiresAt.After(now) {
 			delete(a.uploads, token)

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -68,6 +69,9 @@ const (
 	accessControlAllowMethods      = "GET,POST,PUT,OPTIONS"
 	defaultMaxProtocolBodyBytes    = 64 * 1024
 	maxWebSocketClientMessageBytes = defaultMaxProtocolBodyBytes
+	fileEnvelopeFixedBytes         = int64(8)
+	fileHeaderMaxBytes             = int64(16 * 1024)
+	aesGCMTagBytes                 = int64(16)
 )
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -87,7 +91,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
 	mux.HandleFunc("/api/file_policy", methodOnly(http.MethodGet, logger, filePolicyHandler(deps.FilePolicy, logger)))
 	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, proxyTargets, logger, maxCompoundCommitBodyBytes)))
-	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, proxyTargets, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger, maxCompoundCommitBodyBytes)))
 	mux.HandleFunc("/api/file/chunk/{token}", methodOnly(http.MethodPut, logger, fileChunkProxyHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger)))
 	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, proxyTargets, logger)))
 	mux.HandleFunc("/api/file/download/{token}", methodOnly(http.MethodGet, logger, fileDownloadProxyHandler(deps.FileStore, proxyTargets, logger)))
@@ -194,6 +198,34 @@ func filePolicyHandler(filePolicy FilePolicy, logger *slog.Logger) http.HandlerF
 	}
 }
 
+func resolveMaxMultipartPlaintextBytes(maxFileBytes int64) int64 {
+	return maxFileBytes + fileEnvelopeFixedBytes + fileHeaderMaxBytes
+}
+
+func resolveMaxMultipartCiphertextBytes(maxFileBytes int64, chunkCount int) int64 {
+	return resolveMaxMultipartPlaintextBytes(maxFileBytes) + int64(chunkCount)*aesGCMTagBytes
+}
+
+func resolveExpectedChunkCiphertextBytes(
+	totalPlaintextBytes int64,
+	chunkSizeBytes int64,
+	chunkCount int,
+	index int,
+) (int64, bool) {
+	if index < 0 || index >= chunkCount {
+		return 0, false
+	}
+	if index < chunkCount-1 {
+		return chunkSizeBytes + aesGCMTagBytes, true
+	}
+
+	lastChunkPlaintextBytes := totalPlaintextBytes - int64(chunkCount-1)*chunkSizeBytes
+	if lastChunkPlaintextBytes <= 0 || lastChunkPlaintextBytes > chunkSizeBytes {
+		return 0, false
+	}
+	return lastChunkPlaintextBytes + aesGCMTagBytes, true
+}
+
 func fileInitiateHandler(
 	protocolService service.Protocol,
 	fileStore FileStore,
@@ -228,40 +260,41 @@ func fileInitiateHandler(
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunkCount exceeds deployment file policy")
 			return
 		}
+		if input.TotalCiphertextBytes > resolveMaxMultipartCiphertextBytes(filePolicy.MaxFileBytes, input.ChunkCount) {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes exceeds deployment file policy")
+			return
+		}
 		if _, err := protocolService.PublicStatus(r.Context(), input.ChannelUUID); err != nil {
 			writeProtocolError(logger, w, err)
 			return
 		}
 
-		uploadID, err := filestore.NewUploadID()
+		uploadID, err := proxyTargets.IssueUploadSession(
+			input.ChannelUUID,
+			input.ChunkCount,
+			input.TotalCiphertextBytes,
+			proxyUploadTargetTTL,
+		)
 		if err != nil {
 			writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate upload id")
 			return
 		}
 		if err := fileStore.Initiate(r.Context(), uploadID, input.ChunkCount); err != nil {
+			proxyTargets.RevokeUpload(uploadID)
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
 
 		chunks := make([]filestore.FileUploadChunkTarget, 0, input.ChunkCount)
-		usePresigned := fileStore.UsePresignedURLs()
 		for index := 0; index < input.ChunkCount; index++ {
-			var uploadURL string
-			if usePresigned {
-				u, err := fileStore.PresignedUpload(r.Context(), uploadID, index, 15*time.Minute)
-				if err != nil {
-					writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-					return
-				}
-				uploadURL = u
-			} else {
-				token, err := proxyTargets.IssueUploadTarget(uploadID, index, proxyUploadTargetTTL)
-				if err != nil {
-					writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue upload target")
-					return
-				}
-				uploadURL = buildProxyUploadURL(token)
+			// Uploads always go through the API so deployment chunk limits are
+			// enforced before object storage accepts the bytes.
+			token, err := proxyTargets.IssueUploadTarget(uploadID, index, proxyUploadTargetTTL)
+			if err != nil {
+				writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue upload target")
+				return
 			}
+			uploadURL := buildProxyUploadURL(token)
 			chunks = append(chunks, filestore.FileUploadChunkTarget{Index: index, UploadURL: uploadURL})
 		}
 
@@ -275,6 +308,7 @@ func fileInitiateHandler(
 
 func fileCompleteHandler(
 	fileStore FileStore,
+	filePolicy FilePolicy,
 	proxyTargets *proxyTargetAuthorizer,
 	logger *slog.Logger,
 	maxProtocolBodyBytes int64,
@@ -292,6 +326,51 @@ func fileCompleteHandler(
 		if err := input.Validate(); err != nil {
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
+		}
+		session, ok := proxyTargets.UploadSession(input.UploadID)
+		if !ok {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "upload session expired or not found")
+			return
+		}
+		if input.ChunkSizeBytes != filePolicy.ChunkSizeBytes {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunkSizeBytes exceeds deployment file policy")
+			return
+		}
+		if int64(session.chunkCount) > filePolicy.MaxChunks {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunkCount exceeds deployment file policy")
+			return
+		}
+		if input.TotalPlaintextBytes > resolveMaxMultipartPlaintextBytes(filePolicy.MaxFileBytes) {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalPlaintextBytes exceeds deployment file policy")
+			return
+		}
+		if input.TotalCiphertextBytes != input.TotalPlaintextBytes+int64(session.chunkCount)*aesGCMTagBytes {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes does not match multipart boundaries")
+			return
+		}
+		if len(input.Chunks) != session.chunkCount {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunkCount does not match upload session")
+			return
+		}
+		if input.TotalCiphertextBytes != session.totalCiphertextBytes {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes does not match upload session")
+			return
+		}
+		for index, chunk := range input.Chunks {
+			if chunk.Index != index {
+				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunks must be ordered")
+				return
+			}
+			expectedCiphertextBytes, valid := resolveExpectedChunkCiphertextBytes(
+				input.TotalPlaintextBytes,
+				input.ChunkSizeBytes,
+				session.chunkCount,
+				chunk.Index,
+			)
+			if !valid || chunk.CiphertextBytes != expectedCiphertextBytes {
+				writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunks do not match multipart boundaries")
+				return
+			}
 		}
 
 		fileRef, err := fileStore.CompleteUpload(r.Context(), input)
@@ -386,9 +465,29 @@ func fileChunkProxyHandler(
 			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "upload target not found")
 			return
 		}
-		body := http.MaxBytesReader(w, r.Body, filePolicy.ChunkSizeBytes+1024)
+		session, ok := proxyTargets.UploadSession(target.uploadID)
+		if !ok || target.index >= session.chunkCount {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "upload target not found")
+			return
+		}
+		body := http.MaxBytesReader(w, r.Body, filePolicy.ChunkSizeBytes+aesGCMTagBytes)
 		defer body.Close()
-		etag, err := fileStore.PutChunk(r.Context(), target.uploadID, target.index, body, r.ContentLength)
+		payload, err := io.ReadAll(body)
+		if err != nil {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunk exceeds deployment file policy")
+			return
+		}
+		if len(payload) == 0 {
+			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "chunk body is required")
+			return
+		}
+		etag, err := fileStore.PutChunk(
+			r.Context(),
+			target.uploadID,
+			target.index,
+			bytes.NewReader(payload),
+			int64(len(payload)),
+		)
 		if err != nil {
 			writeError(logger, w, http.StatusBadGateway, "STORAGE_ERROR", err.Error())
 			return

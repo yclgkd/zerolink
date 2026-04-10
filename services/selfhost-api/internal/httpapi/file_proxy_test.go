@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/realtime"
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/service"
@@ -75,6 +76,48 @@ func TestFileInitiateRouteReturnsRelativeProxyTargetsWhenPresignedDisabled(t *te
 
 	newProxyTestRouter(
 		stubFileStore{usePresignedURLs: func() bool { return false }},
+		stubProtocol{
+			publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+				return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+			},
+		},
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", res.Code, res.Body.String())
+	}
+
+	var payload filestore.FileUploadInitiateResponse
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	got := payload.Chunks[0].UploadURL
+	if strings.HasPrefix(got, "/") {
+		t.Fatalf("first upload url = %q, want relative proxy route", got)
+	}
+	if !strings.HasPrefix(got, "file/chunk/") {
+		t.Fatalf("first upload url = %q, want file/chunk/ prefix", got)
+	}
+}
+
+func TestFileInitiateRouteReturnsRelativeProxyTargetsWhenPresignedEnabled(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":64}`),
+	)
+	res := httptest.NewRecorder()
+
+	newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return true },
+			presignedUpload: func(context.Context, string, int, time.Duration) (string, error) {
+				t.Fatal("presigned upload targets should not be issued for file uploads")
+				return "", nil
+			},
+		},
 		stubProtocol{
 			publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
 				return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
@@ -191,6 +234,71 @@ func TestFileChunkProxyRouteAcceptsIssuedTarget(t *testing.T) {
 	}
 	if uploadRes.Header().Get("ETag") != "etag-issued" {
 		t.Fatalf("ETag = %q, want etag-issued", uploadRes.Header().Get("ETag"))
+	}
+}
+
+func TestFileChunkProxyRouteRejectsOversizedChunk(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:        logger,
+		AllowedOrigin: "http://localhost:5173",
+		Realtime:      realtimeHub,
+		FileStore: stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			putChunk: func(context.Context, string, int, io.Reader, int64) (string, error) {
+				t.Fatal("putChunk should not be called for oversized chunks")
+				return "", nil
+			},
+		},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+					return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+				},
+			},
+			logger,
+		),
+	})
+
+	initiateReq := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":24}`),
+	)
+	initiateRes := httptest.NewRecorder()
+	router.ServeHTTP(initiateRes, initiateReq)
+	if initiateRes.Code != http.StatusOK {
+		t.Fatalf("initiate status = %d, want 200: %s", initiateRes.Code, initiateRes.Body.String())
+	}
+
+	var payload filestore.FileUploadInitiateResponse
+	if err := json.Unmarshal(initiateRes.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode initiate response: %v", err)
+	}
+
+	uploadReq := httptest.NewRequest(
+		http.MethodPut,
+		"/api/"+payload.Chunks[0].UploadURL,
+		strings.NewReader(strings.Repeat("x", 25)),
+	)
+	uploadRes := httptest.NewRecorder()
+	router.ServeHTTP(uploadRes, uploadReq)
+
+	if uploadRes.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", uploadRes.Code, uploadRes.Body.String())
 	}
 }
 
