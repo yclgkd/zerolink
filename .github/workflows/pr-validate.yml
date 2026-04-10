@@ -6,14 +6,10 @@ on:
       - main
     types: [opened, edited, synchronize, reopened, ready_for_review]
     paths-ignore:
-      - "docs/**"
-      - "*.md"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/workflows/deploy.yml"
       - ".github/workflows/e2e-full.yml"
       - ".github/workflows/pr-checklist.yml"
-      - ".husky/**"
-      - "commitlint.config.js"
       - ".gitignore"
       - ".env.example"
   merge_group:
@@ -77,7 +73,7 @@ jobs:
             fi
 
             case "$file" in
-              packages/*|protocol-fixtures/*|scripts/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|vitest.config.ts|biome.json)
+              packages/*|protocol-fixtures/*|scripts/*|docs/*|docs/**|.husky/*|.husky/**|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|vitest.config.ts|biome.json|commitlint.config.js)
                 run_node=true
                 ;;
             esac
@@ -111,6 +107,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Type check
         run: pnpm typecheck

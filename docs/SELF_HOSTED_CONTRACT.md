@@ -102,6 +102,7 @@ token, the client must call `/api/file/fetch/:uuid` again to obtain a fresh targ
 | `METHOD_NOT_ALLOWED` | `405` | Worker router | Wrong HTTP verb; `Allow` header is set |
 | `NOT_FOUND` | `404` | Worker router or DO | Unknown API route, missing channel, finalized terminal state, or `/api/file/fetch/:uuid` when no multipart file payload is available |
 | `BAD_REQUEST` | `400` | File coordination routes / S3 metadata validation | Invalid file-policy input, malformed multipart metadata, missing chunks, or S3 presign/stat validation failure |
+| `STORAGE_ERROR` | `502` | Self-host file proxy routes | Proxied upload/download could not reach the configured object storage backend |
 | `NOT_IMPLEMENTED` | `501` | Worker router | Placeholder route matched but no implementation exists |
 | `INTERNAL_ERROR` | `500` | Worker or DO | Unexpected exception or invalid upstream response |
 | `RATE_LIMITED` | `429` | DO | Application-layer throttling; `Retry-After` may be present |

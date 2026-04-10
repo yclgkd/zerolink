@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +8,7 @@ export type DeployEnvironment = 'production' | 'staging';
 interface DeployTarget {
   bucketName: string;
   label: DeployEnvironment;
-  zoneName: string;
+  zoneName: string | null;
 }
 
 interface CloudflareApiErrorDetail {
@@ -100,23 +101,13 @@ export interface CloudflareDeployPreflightOptions {
   apiGet?: CloudflareApiGet;
   apiRequest?: CloudflareApiRequest;
   apiToken: string;
+  deployTarget?: DeployTarget;
   deployEnv: DeployEnvironment;
   write?: (chunk: string) => void;
 }
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
-const DEPLOY_TARGETS: Record<DeployEnvironment, DeployTarget> = {
-  production: {
-    bucketName: 'zerolink-files',
-    label: 'production',
-    zoneName: 'zerolink.dev',
-  },
-  staging: {
-    bucketName: 'zerolink-files-staging',
-    label: 'staging',
-    zoneName: 'zerolink.dev',
-  },
-};
+const DEFAULT_WRANGLER_CONFIG_URL = new URL('../packages/backend/wrangler.toml', import.meta.url);
 const TOKEN_INSPECTION_STRATEGIES: TokenInspectionStrategy[] = [
   {
     detailsPath: (_accountId, tokenId) => `/user/tokens/${tokenId}`,
@@ -302,8 +293,172 @@ export function resolveDeployEnvironment(
   throw new Error(`Unsupported deploy environment "${candidate}". Use "production" or "staging".`);
 }
 
-export function resolveDeployTarget(deployEnv: DeployEnvironment): DeployTarget {
-  return DEPLOY_TARGETS[deployEnv];
+function stripTomlComments(line: string): string {
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+
+    if (char === '"' && !escaped) {
+      inString = !inString;
+    }
+
+    if (char === '#' && !inString) {
+      return line.slice(0, index);
+    }
+
+    escaped = char === '\\' && !escaped;
+    if (char !== '\\') {
+      escaped = false;
+    }
+  }
+
+  return line;
+}
+
+function extractTomlString(source: string, key: string): string | null {
+  const matcher = new RegExp(`${key}\\s*=\\s*"([^"]+)"`);
+  return source.match(matcher)?.[1] ?? null;
+}
+
+function parseWranglerTargets(wranglerToml: string): Record<DeployEnvironment, DeployTarget> {
+  const targets: Record<DeployEnvironment, DeployTarget> = {
+    production: {
+      bucketName: '',
+      label: 'production',
+      zoneName: null,
+    },
+    staging: {
+      bucketName: '',
+      label: 'staging',
+      zoneName: null,
+    },
+  };
+
+  let currentSection = 'root';
+  let activeRouteTarget: DeployEnvironment | null = null;
+  let routeBuffer = '';
+  let activeBucketTarget: DeployEnvironment | null = null;
+  let activeBucketBinding: string | null = null;
+  let activeBucketName: string | null = null;
+
+  const flushRoutes = (): void => {
+    if (!activeRouteTarget) {
+      return;
+    }
+
+    const zoneName = extractTomlString(routeBuffer, 'zone_name');
+    if (zoneName) {
+      targets[activeRouteTarget].zoneName = zoneName;
+    }
+
+    activeRouteTarget = null;
+    routeBuffer = '';
+  };
+
+  const flushBucket = (): void => {
+    if (!activeBucketTarget) {
+      return;
+    }
+
+    if (
+      activeBucketBinding === 'FILE_BUCKET' &&
+      activeBucketName &&
+      !targets[activeBucketTarget].bucketName
+    ) {
+      targets[activeBucketTarget].bucketName = activeBucketName;
+    }
+
+    activeBucketTarget = null;
+    activeBucketBinding = null;
+    activeBucketName = null;
+  };
+
+  for (const rawLine of wranglerToml.split(/\r?\n/u)) {
+    const line = stripTomlComments(rawLine).trim();
+    if (!line) {
+      continue;
+    }
+
+    if (activeRouteTarget) {
+      routeBuffer += `\n${line}`;
+      if (line.includes(']')) {
+        flushRoutes();
+      }
+      continue;
+    }
+
+    if (line.startsWith('[[') && line.endsWith(']]')) {
+      flushBucket();
+      currentSection = line.slice(2, -2).trim();
+      activeBucketTarget =
+        currentSection === 'r2_buckets'
+          ? 'production'
+          : currentSection === 'env.staging.r2_buckets'
+            ? 'staging'
+            : null;
+      continue;
+    }
+
+    if (line.startsWith('[') && line.endsWith(']')) {
+      flushBucket();
+      currentSection = line.slice(1, -1).trim();
+      continue;
+    }
+
+    if (line.startsWith('routes')) {
+      const target =
+        currentSection === 'root'
+          ? 'production'
+          : currentSection === 'env.staging'
+            ? 'staging'
+            : null;
+      if (!target) {
+        continue;
+      }
+
+      activeRouteTarget = target;
+      routeBuffer = line;
+      if (line.includes(']')) {
+        flushRoutes();
+      }
+      continue;
+    }
+
+    if (activeBucketTarget) {
+      if (line.startsWith('binding')) {
+        activeBucketBinding = extractTomlString(line, 'binding');
+        continue;
+      }
+
+      if (line.startsWith('bucket_name')) {
+        activeBucketName = extractTomlString(line, 'bucket_name');
+      }
+    }
+  }
+
+  flushRoutes();
+  flushBucket();
+  return targets;
+}
+
+export function resolveDeployTarget(
+  deployEnv: DeployEnvironment,
+  options?: {
+    wranglerToml?: string;
+  }
+): DeployTarget {
+  const wranglerToml = options?.wranglerToml ?? readFileSync(DEFAULT_WRANGLER_CONFIG_URL, 'utf8');
+  const target = parseWranglerTargets(wranglerToml)[deployEnv];
+
+  if (!target.bucketName) {
+    throw new Error(
+      `Unable to resolve the R2 bucket for ${deployEnv} from packages/backend/wrangler.toml.`
+    );
+  }
+
+  return target;
 }
 
 function collectGrantedResourceKeys(
@@ -479,10 +634,18 @@ async function inspectCurrentToken(
 }
 
 async function resolveZoneId(
-  zoneName: string,
+  zoneName: string | null,
   apiGet: CloudflareApiGet,
   write: (chunk: string) => void
-): Promise<string> {
+): Promise<string | null> {
+  if (!zoneName) {
+    out(
+      write,
+      '[2/6] Skipping Cloudflare zone resolution because no routes are configured for this environment.'
+    );
+    return null;
+  }
+
   out(write, '[2/6] Resolving Cloudflare zone...');
 
   let envelope: CloudflareApiEnvelope<CloudflareZoneSummary[]>;
@@ -546,11 +709,19 @@ async function verifyWorkersScriptsApiReachable(
 }
 
 function verifyWorkersRoutesWritePermission(
-  zoneId: string,
-  zoneName: string,
+  zoneId: string | null,
+  zoneName: string | null,
   policies: CloudflareTokenPolicy[],
   write: (chunk: string) => void
 ): void {
+  if (!zoneId || !zoneName) {
+    out(
+      write,
+      '[4/6] Skipping Workers Routes write permission check because no routes are configured for this environment.'
+    );
+    return;
+  }
+
   out(write, '[4/6] Validating Workers Routes write permission...');
 
   assertPermissionGranted(policies, {
@@ -566,11 +737,19 @@ function verifyWorkersRoutesWritePermission(
 }
 
 async function verifyWorkersRoutesApiReachable(
-  zoneId: string,
-  zoneName: string,
+  zoneId: string | null,
+  zoneName: string | null,
   apiGet: CloudflareApiGet,
   write: (chunk: string) => void
 ): Promise<void> {
+  if (!zoneId || !zoneName) {
+    out(
+      write,
+      '[4/6] Skipping Workers Routes API reachability check because no routes are configured for this environment.'
+    );
+    return;
+  }
+
   out(write, '[4/6] Checking Workers Routes API reachability (best effort)...');
 
   try {
@@ -665,7 +844,7 @@ export async function runCloudflareDeployPreflight(
   options: CloudflareDeployPreflightOptions
 ): Promise<void> {
   const write = options.write ?? ((chunk: string) => process.stdout.write(chunk));
-  const target = resolveDeployTarget(options.deployEnv);
+  const target = options.deployTarget ?? resolveDeployTarget(options.deployEnv);
   const apiRequest =
     options.apiRequest ?? createCloudflareApiRequest(options.accountId, options.apiToken);
   const apiGet = options.apiGet ?? createCloudflareApiGet(apiRequest);

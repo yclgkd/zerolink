@@ -102,6 +102,7 @@
 | `METHOD_NOT_ALLOWED` | `405` | Worker router | HTTP 方法不对；会带 `Allow` 头 |
 | `NOT_FOUND` | `404` | Worker router 或 DO | 路由不存在、channel 不存在、终态已 finalize，或 `/api/file/fetch/:uuid` 当前没有 multipart 文件载荷 |
 | `BAD_REQUEST` | `400` | 文件协调路由 / S3 元数据校验 | 文件策略输入非法、multipart 元数据格式错误、chunk 缺失，或 S3 预签名/Stat 校验失败 |
+| `STORAGE_ERROR` | `502` | self-host 文件代理路由 | 代理上传/下载无法访问当前配置的对象存储后端 |
 | `NOT_IMPLEMENTED` | `501` | Worker router | 命中占位路由但未实现 |
 | `INTERNAL_ERROR` | `500` | Worker 或 DO | 未预期异常或上游响应无效 |
 | `RATE_LIMITED` | `429` | DO | 应用层限流；可能带 `Retry-After` |
