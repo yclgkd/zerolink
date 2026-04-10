@@ -1,4 +1,5 @@
 import {
+  AES_GCM,
   type Base64Url,
   FileFetchResponseSchema,
   FileUploadCompleteRequestSchema,
@@ -8,7 +9,7 @@ import {
   type UnixMs,
   type UUID,
 } from '@zerolink/shared';
-import { resolveFilePolicy } from './file-policy.ts';
+import { resolveFilePolicy, resolveInlineFilePlaintextBytes } from './file-policy.ts';
 import {
   buildMultipartChunkStorageKey,
   buildMultipartFileRef,
@@ -22,6 +23,8 @@ import {
   parseFileUploadId,
 } from './file-storage.ts';
 import type { Env } from './worker.ts';
+
+const AES_GCM_TAG_BYTES = AES_GCM.TAG_LENGTH_BITS / 8;
 
 function buildHeaders(): Headers {
   return new Headers({
@@ -43,6 +46,86 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 function errorResponse(code: string, status: number): Response {
   return jsonResponse({ ok: false, code }, status);
+}
+
+export async function readRequestBytesUpToLimit(
+  request: Request,
+  limit: number
+): Promise<Uint8Array | null> {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new Error('limit must be a positive integer');
+  }
+
+  const contentLengthHeader = request.headers.get('Content-Length');
+  if (contentLengthHeader != null && contentLengthHeader.trim() !== '') {
+    const contentLength = Number.parseInt(contentLengthHeader, 10);
+    if (!Number.isNaN(contentLength) && contentLength > limit) {
+      return null;
+    }
+  }
+
+  if (!request.body) {
+    return new Uint8Array();
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value || value.byteLength === 0) {
+        continue;
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > limit) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const output = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+function resolveMaxMultipartCiphertextBytes(maxFileBytes: number, chunkCount: number): number {
+  return resolveInlineFilePlaintextBytes(maxFileBytes) + chunkCount * AES_GCM_TAG_BYTES;
+}
+
+function resolveExpectedChunkCiphertextBytes(
+  totalPlaintextBytes: number,
+  chunkSizeBytes: number,
+  chunkCount: number,
+  index: number
+): number | null {
+  if (!Number.isInteger(index) || index < 0 || index >= chunkCount) {
+    return null;
+  }
+
+  if (index < chunkCount - 1) {
+    return chunkSizeBytes + AES_GCM_TAG_BYTES;
+  }
+
+  const lastChunkPlaintextBytes = totalPlaintextBytes - (chunkCount - 1) * chunkSizeBytes;
+  if (lastChunkPlaintextBytes <= 0 || lastChunkPlaintextBytes > chunkSizeBytes) {
+    return null;
+  }
+
+  return lastChunkPlaintextBytes + AES_GCM_TAG_BYTES;
 }
 
 async function readJsonBody(request: Request): Promise<unknown | null> {
@@ -120,6 +203,12 @@ export async function handleFileUploadInitiate(request: Request, env: Env): Prom
   if (parsed.data.chunkCount > policy.maxChunks) {
     return errorResponse('BAD_REQUEST', 400);
   }
+  if (
+    parsed.data.totalCiphertextBytes >
+    resolveMaxMultipartCiphertextBytes(policy.maxFileBytes, parsed.data.chunkCount)
+  ) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
   try {
     if (!(await channelExists(env, parsed.data.channelUuid))) {
       return errorResponse('NOT_FOUND', 404);
@@ -151,7 +240,7 @@ export async function handleFileChunkUpload(
   uploadId: string,
   index: number
 ): Promise<Response> {
-  if (!env.FILE_BUCKET || !request.body) {
+  if (!env.FILE_BUCKET) {
     return errorResponse('BAD_REQUEST', 400);
   }
 
@@ -168,8 +257,21 @@ export async function handleFileChunkUpload(
     return errorResponse('BAD_REQUEST', 400);
   }
 
+  const policy = resolveFilePolicy(env);
+  const chunkBody = await readRequestBytesUpToLimit(
+    request,
+    policy.chunkSizeBytes + AES_GCM_TAG_BYTES
+  );
+  if (chunkBody == null) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+  const chunkBytes = chunkBody.byteLength;
+  if (chunkBytes <= 0 || chunkBytes > policy.chunkSizeBytes + AES_GCM_TAG_BYTES) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
   const storageKey = buildMultipartChunkStorageKey(uuid, uploadId as Base64Url, index);
-  const uploadedObject = await env.FILE_BUCKET.put(storageKey, request.body, {
+  const uploadedObject = await env.FILE_BUCKET.put(storageKey, chunkBody, {
     httpMetadata: {
       contentType: 'application/octet-stream',
     },
@@ -205,6 +307,24 @@ export async function handleFileUploadComplete(request: Request, env: Env): Prom
   if (!uploadSession) {
     return errorResponse('BAD_REQUEST', 400);
   }
+  if (Number(uploadSession.expiresAt) < Date.now()) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+
+  const policy = resolveFilePolicy(env);
+  if (parsed.data.chunkSizeBytes !== policy.chunkSizeBytes) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+  if (uploadSession.chunkCount > policy.maxChunks) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
+  if (
+    parsed.data.totalPlaintextBytes > resolveInlineFilePlaintextBytes(policy.maxFileBytes) ||
+    parsed.data.totalCiphertextBytes !==
+      parsed.data.totalPlaintextBytes + uploadSession.chunkCount * AES_GCM_TAG_BYTES
+  ) {
+    return errorResponse('BAD_REQUEST', 400);
+  }
 
   if (
     uploadSession.chunkCount !== parsed.data.chunks.length ||
@@ -224,6 +344,16 @@ export async function handleFileUploadComplete(request: Request, env: Env): Prom
   }> = [];
 
   for (const chunk of sortedChunks) {
+    const expectedCiphertextBytes = resolveExpectedChunkCiphertextBytes(
+      parsed.data.totalPlaintextBytes,
+      parsed.data.chunkSizeBytes,
+      uploadSession.chunkCount,
+      chunk.index
+    );
+    if (expectedCiphertextBytes == null || chunk.ciphertextBytes !== expectedCiphertextBytes) {
+      return errorResponse('BAD_REQUEST', 400);
+    }
+
     const storageKey = buildMultipartChunkStorageKey(
       uploadSession.channelUuid,
       parsed.data.uploadId as Base64Url,

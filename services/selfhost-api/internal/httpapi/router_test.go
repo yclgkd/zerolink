@@ -21,6 +21,8 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
+const testUploadTokenSecret = "test-upload-token-secret"
+
 type stubChecker struct {
 	err error
 }
@@ -40,7 +42,7 @@ type stubProtocol struct {
 type stubFileStore struct {
 	initiate          func(context.Context, string, int) error
 	putChunk          func(context.Context, string, int, io.Reader, int64) (string, error)
-	presignedUpload   func(context.Context, string, int, time.Duration) (string, error)
+	presignedUpload   func(context.Context, string, int, int64, time.Duration) (string, error)
 	completeUpload    func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error)
 	getChunk          func(context.Context, string) (io.ReadCloser, error)
 	presignedDownload func(context.Context, filestore.MultipartFileRef, int, time.Duration) (string, error)
@@ -158,11 +160,11 @@ func (s stubFileStore) Initiate(ctx context.Context, uploadID string, chunkCount
 	return s.initiate(ctx, uploadID, chunkCount)
 }
 
-func (s stubFileStore) PresignedUpload(ctx context.Context, uploadID string, index int, ttl time.Duration) (string, error) {
+func (s stubFileStore) PresignedUpload(ctx context.Context, uploadID string, index int, size int64, ttl time.Duration) (string, error) {
 	if s.presignedUpload == nil {
 		return "https://s3.example/upload", nil
 	}
-	return s.presignedUpload(ctx, uploadID, index, ttl)
+	return s.presignedUpload(ctx, uploadID, index, size, ttl)
 }
 
 func (s stubFileStore) CompleteUpload(ctx context.Context, req filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
@@ -227,6 +229,7 @@ func newTestRouterWithLoggerAndTrustedProxies(
 		Logger:            logger,
 		AllowedOrigin:     "http://localhost:5173",
 		Realtime:          realtimeHub,
+		UploadTokenSecret: testUploadTokenSecret,
 		TrustedProxyCIDRs: trustedProxyCIDRs,
 		FilePolicy: FilePolicy{
 			MaxFileBytes:            2_097_152,
@@ -749,26 +752,33 @@ func TestFileInitiateRouteAcceptsNanoIDUUIDAndReturnsTargets(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/file/initiate",
-		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":64}`),
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":2,"totalCiphertextBytes":41}`),
 	)
 	res := httptest.NewRecorder()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	realtimeHub := realtime.NewHub(logger)
 	router := NewRouter(Dependencies{
-		Logger:        logger,
-		AllowedOrigin: "http://localhost:5173",
-		Realtime:      realtimeHub,
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		UploadTokenSecret: testUploadTokenSecret,
 		FileStore: stubFileStore{
-			presignedUpload: func(_ context.Context, uploadID string, index int, _ time.Duration) (string, error) {
+			presignedUpload: func(_ context.Context, uploadID string, index int, size int64, _ time.Duration) (string, error) {
+				if index == 0 && size != 24 {
+					t.Fatalf("chunk 0 size = %d, want 24", size)
+				}
+				if index == 1 && size != 17 {
+					t.Fatalf("chunk 1 size = %d, want 17", size)
+				}
 				return "https://s3.example/upload/" + uploadID + "/" + strconv.Itoa(index), nil
 			},
 		},
 		FilePolicy: FilePolicy{
-			MaxFileBytes:            536_870_912,
-			MultipartThresholdBytes: 2_080_760,
-			ChunkSizeBytes:          4 * 1024 * 1024,
-			MaxChunks:               128,
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
 			MultipartSupported:      true,
 		},
 		Services: service.New(
@@ -815,10 +825,11 @@ func TestFileInitiateRouteRejectsUnknownChannel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	realtimeHub := realtime.NewHub(logger)
 	router := NewRouter(Dependencies{
-		Logger:        logger,
-		AllowedOrigin: "http://localhost:5173",
-		Realtime:      realtimeHub,
-		FileStore:     stubFileStore{},
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		FileStore:         stubFileStore{},
+		UploadTokenSecret: testUploadTokenSecret,
 		FilePolicy: FilePolicy{
 			MaxFileBytes:            536_870_912,
 			MultipartThresholdBytes: 2_080_760,
@@ -847,6 +858,230 @@ func TestFileInitiateRouteRejectsUnknownChannel(t *testing.T) {
 
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", res.Code)
+	}
+}
+
+func TestFileInitiateRouteRejectsExcessiveTotalCiphertextBytes(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":`+strconv.FormatInt(resolveMaxMultipartCiphertextBytes(32, 1)+1, 10)+`}`),
+	)
+	res := httptest.NewRecorder()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		FileStore:         stubFileStore{},
+		UploadTokenSecret: testUploadTokenSecret,
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            32,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+					return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+				},
+			},
+			logger,
+		),
+	})
+
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFileCompleteHandlerRejectsExpiredUploadSession(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proxyTargets := newProxyTargetAuthorizer(testUploadTokenSecret)
+	baseTime := time.Unix(1_730_000_000, 0).UTC()
+	proxyTargets.now = func() time.Time { return baseTime }
+	uploadID, err := proxyTargets.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 1, 24, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+	proxyTargets.now = func() time.Time { return baseTime.Add(2 * time.Minute) }
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":8,"totalCiphertextBytes":24,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				t.Fatal("completeUpload should not be called for an expired upload session")
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		proxyTargets,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFileCompleteHandlerAcceptsSignedUploadSessionAcrossAuthorizers(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	issuer := newProxyTargetAuthorizer(testUploadTokenSecret)
+	baseTime := time.Unix(1_730_000_000, 0).UTC()
+	issuer.now = func() time.Time { return baseTime }
+	uploadID, err := issuer.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 2, 41, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+
+	validator := newProxyTargetAuthorizer(testUploadTokenSecret)
+	validator.now = func() time.Time { return baseTime.Add(30 * time.Second) }
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":9,"totalCiphertextBytes":41,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"},{"index":1,"etag":"etag-1","ciphertextBytes":17,"ciphertextHash":"`+strings.Repeat("b", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	completeCalled := false
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(_ context.Context, input filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				completeCalled = true
+				if input.UploadID != uploadID {
+					t.Fatalf("uploadID = %q, want %q", input.UploadID, uploadID)
+				}
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		validator,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", res.Code, res.Body.String())
+	}
+	if !completeCalled {
+		t.Fatal("completeUpload was not called")
+	}
+}
+
+func TestFileCompleteHandlerRejectsChunkCountMismatch(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proxyTargets := newProxyTargetAuthorizer(testUploadTokenSecret)
+	uploadID, err := proxyTargets.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 2, 40, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":24,"totalCiphertextBytes":40,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				t.Fatal("completeUpload should not be called when chunk count mismatches the upload session")
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		proxyTargets,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
+	}
+}
+
+func TestFileCompleteHandlerRejectsInvalidFinalChunkBoundary(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	proxyTargets := newProxyTargetAuthorizer(testUploadTokenSecret)
+	uploadID, err := proxyTargets.IssueUploadSession("aaaaaaaaaaaaaaaaaaaaa", 2, 40, time.Minute)
+	if err != nil {
+		t.Fatalf("issue upload session: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/complete",
+		strings.NewReader(`{"uploadId":"`+uploadID+`","baseIv":"YmFzZV9pdg","encContentKey":"ZW5jX2NvbnRlbnRfa2V5","chunkSizeBytes":8,"totalPlaintextBytes":8,"totalCiphertextBytes":40,"chunks":[{"index":0,"etag":"etag-0","ciphertextBytes":24,"ciphertextHash":"`+strings.Repeat("a", 64)+`"},{"index":1,"etag":"etag-1","ciphertextBytes":16,"ciphertextHash":"`+strings.Repeat("b", 64)+`"}]}`),
+	)
+	res := httptest.NewRecorder()
+
+	fileCompleteHandler(
+		stubFileStore{
+			completeUpload: func(context.Context, filestore.FileUploadCompleteRequest) (filestore.MultipartFileRef, error) {
+				t.Fatal("completeUpload should not be called for invalid multipart boundaries")
+				return filestore.MultipartFileRef{}, nil
+			},
+		},
+		FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		proxyTargets,
+		logger,
+		defaultMaxProtocolBodyBytes,
+	).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.Code, res.Body.String())
 	}
 }
 

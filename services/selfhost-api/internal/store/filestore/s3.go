@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -200,19 +202,24 @@ func (s *Store) PutChunk(ctx context.Context, uploadID string, index int, body i
 	return normalizeETag(info.ETag), nil
 }
 
-func (s *Store) PresignedUpload(ctx context.Context, uploadID string, index int, ttl time.Duration) (string, error) {
+func (s *Store) PresignedUpload(ctx context.Context, uploadID string, index int, size int64, ttl time.Duration) (string, error) {
 	if err := validateUploadID(uploadID); err != nil {
 		return "", err
 	}
 	if index < 0 {
 		return "", errors.New("chunk index must be non-negative")
 	}
+	if size <= 0 {
+		return "", errors.New("chunk size must be positive")
+	}
 	if ttl <= 0 {
 		ttl = defaultUploadURLTTL
 	}
 
 	objectKey := uploadObjectKey(uploadID, index)
-	u, err := s.presignTarget().PresignedPutObject(ctx, s.bucket, objectKey, ttl)
+	headers := http.Header{}
+	headers.Set("Content-Length", strconv.FormatInt(size, 10))
+	u, err := s.presignTarget().PresignHeader(ctx, http.MethodPut, s.bucket, objectKey, ttl, nil, headers)
 	if err != nil {
 		return "", fmt.Errorf("presign upload chunk %d: %w", index, err)
 	}
