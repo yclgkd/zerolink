@@ -97,6 +97,40 @@ describe('SecretVault lock challenge flow', () => {
     });
   });
 
+  it('isolates lock_begin buckets by caller key', async () => {
+    const now = 1_730_000_110_000;
+    const record = createChannelRecord(CHANNEL_STATE.WAITING);
+    const { state, snapshot } = createMockState(record);
+    const vault = new SecretVault(state, env);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const issued = await vault.beginLockChallenge(record.uuid, now + attempt * 2_000, {
+        callerKey: CALLER_KEY_A,
+      });
+      snapshot.set(LOCK_CHALLENGE_KEY, {
+        ...(snapshot.get(LOCK_CHALLENGE_KEY) as StoredLockChallenge),
+        consumedAt: asUnixMs(now + attempt * 2_000 + 1_000),
+      });
+      expect(issued.id).toBeTruthy();
+    }
+
+    const callerAError = await vault
+      .beginLockChallenge(record.uuid, now + 7_000, {
+        callerKey: CALLER_KEY_A,
+      })
+      .catch((caught) => caught);
+
+    expect(callerAError).toBeInstanceOf(RateLimitError);
+
+    await expect(
+      vault.beginLockChallenge(record.uuid, now + 8_000, {
+        callerKey: CALLER_KEY_B,
+      })
+    ).resolves.toMatchObject({
+      id: expect.any(String),
+    });
+  });
+
   it('does not spend lock_commit quota before a valid challenge is resolved', async () => {
     const now = 1_730_000_100_000;
     const record = createChannelRecord(CHANNEL_STATE.WAITING);
@@ -372,6 +406,44 @@ describe('SecretVault lock challenge flow', () => {
       vault.beginCompoundChallenge(lockedRecord.uuid, now + 60_001)
     ).resolves.toMatchObject({
       currentVersion: lockedRecord.version,
+    });
+  });
+
+  it('isolates compound_begin buckets by caller key', async () => {
+    const now = 1_730_001_050_000;
+    const lockedRecord = new SecretVaultStateMachine(
+      createChannelRecord(CHANNEL_STATE.WAITING)
+    ).commitLock(createCommitLockParams());
+    const { state, snapshot } = createMockState(lockedRecord);
+    const vault = new SecretVault(state, env);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const issued = await vault.beginCompoundChallenge(lockedRecord.uuid, now + attempt * 2_000, {
+        callerKey: CALLER_KEY_A,
+      });
+      snapshot.set(COMPOUND_CHALLENGE_KEY, {
+        ...(snapshot.get(COMPOUND_CHALLENGE_KEY) as StoredCompoundChallenge),
+        consumedAt: asUnixMs(now + attempt * 2_000 + 1_000),
+      });
+      expect(issued.challenge.id).toBeTruthy();
+    }
+
+    const callerAError = await vault
+      .beginCompoundChallenge(lockedRecord.uuid, now + 7_000, {
+        callerKey: CALLER_KEY_A,
+      })
+      .catch((caught) => caught);
+
+    expect(callerAError).toBeInstanceOf(RateLimitError);
+
+    await expect(
+      vault.beginCompoundChallenge(lockedRecord.uuid, now + 8_000, {
+        callerKey: CALLER_KEY_B,
+      })
+    ).resolves.toMatchObject({
+      challenge: expect.objectContaining({
+        id: expect.any(String),
+      }),
     });
   });
 

@@ -78,7 +78,12 @@ docker compose --profile storage -f docker-compose.yml -f docker-compose.build.y
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` 是总文件上限；`SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` 仍受历史 inline envelope 上限约束，因为这个字段还保留在共享 file-policy 合约里
 - `SELFHOST_API_S3_*` 配置 S3 兼容存储连接；使用内置 Garage 容器时，已默认指向 `garage:3900` 和 `zerolink-files` bucket
 
-如果你修改了端口或主机名，先同步更新 `SELFHOST_API_RP_ORIGIN`，再测试 WebAuthn。
+如果你修改了对外主机名，测试 WebAuthn 前要同时更新 `SELFHOST_API_RP_ID` 和
+`SELFHOST_API_RP_ORIGIN`。其中 `SELFHOST_API_RP_ID` 必须是用户浏览器里实际访问的公网主机名，
+不带协议和端口。
+
+WebAuthn 在非 `localhost` 场景下要求使用 `https://`。只有本地开发的 `localhost` 才能使用
+明文 `http://`。
 
 ## 存储配置
 
@@ -165,3 +170,6 @@ docker compose down
 ```bash
 docker compose down -v
 ```
+
+`docker compose down -v` 会删除默认栈里两个 named volume：`postgres-data` 和 `garage-data`。
+这不仅会清空数据库，也会删除 Garage 中保存的加密 multipart 文件分片。

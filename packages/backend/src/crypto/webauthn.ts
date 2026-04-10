@@ -221,14 +221,12 @@ export async function verifyAssertion(params: WebAuthnVerifyParams): Promise<Web
     return { ok: false, error: 'signature verification failed' };
   }
 
-  // Step 6: signCount check (log regression, don't hard-block per PRD H.5)
-  if (
-    newSignCount > 0 &&
-    storedCredential.signCount > 0 &&
-    newSignCount <= storedCredential.signCount
-  ) {
-    // Potential cloned authenticator — log but don't reject
-    // In production this would trigger an alert
+  // Step 6: Reject signCount rollback to avoid silently accepting cloned authenticators.
+  if (storedCredential.signCount > 0 && newSignCount <= storedCredential.signCount) {
+    return {
+      ok: false,
+      error: 'sign count is not monotonically increasing (possible cloned authenticator)',
+    };
   }
 
   return { ok: true, newSignCount };

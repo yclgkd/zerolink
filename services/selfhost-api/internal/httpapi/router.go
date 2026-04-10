@@ -8,7 +8,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +30,7 @@ type Dependencies struct {
 	FileStore            FileStore
 	UploadTokenSecret    string
 	FilePolicy           FilePolicy
+	TrustedProxyCIDRs    []netip.Prefix
 	MaxProtocolBodyBytes int64
 }
 
@@ -75,6 +78,124 @@ const (
 	aesGCMTagBytes                 = int64(16)
 )
 
+func buildCallerRateLimitSubject(r *http.Request, trustedProxyCIDRs []netip.Prefix) string {
+	return extractCallerIP(r, trustedProxyCIDRs) + "|" + normalizeUserAgentFamily(r.UserAgent())
+}
+
+func remoteAddrIP(remoteAddr string) (netip.Addr, bool) {
+	normalized := strings.TrimSpace(remoteAddr)
+	if normalized == "" {
+		return netip.Addr{}, false
+	}
+	if host, _, err := net.SplitHostPort(normalized); err == nil && host != "" {
+		normalized = host
+	}
+	ip, err := netip.ParseAddr(normalized)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return ip.Unmap(), true
+}
+
+func isTrustedProxy(remoteAddr string, trustedProxyCIDRs []netip.Prefix) bool {
+	ip, ok := remoteAddrIP(remoteAddr)
+	if !ok {
+		return false
+	}
+	for _, prefix := range trustedProxyCIDRs {
+		if prefix.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractCallerIP(r *http.Request, trustedProxyCIDRs []netip.Prefix) string {
+	if r == nil {
+		return "unknown"
+	}
+
+	if isTrustedProxy(r.RemoteAddr, trustedProxyCIDRs) {
+		for _, header := range []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"} {
+			value := strings.TrimSpace(r.Header.Get(header))
+			if value == "" {
+				continue
+			}
+			if header == "X-Forwarded-For" {
+				parts := strings.Split(value, ",")
+				value = strings.TrimSpace(parts[0])
+			}
+			if ip, err := netip.ParseAddr(value); err == nil {
+				return ip.Unmap().String()
+			}
+		}
+	}
+
+	if ip, ok := remoteAddrIP(r.RemoteAddr); ok {
+		return ip.String()
+	}
+	return "unknown"
+}
+
+func isSecureRequest(r *http.Request, trustedProxyCIDRs []netip.Prefix) bool {
+	if r != nil && r.TLS != nil {
+		return true
+	}
+	if r == nil || !isTrustedProxy(r.RemoteAddr, trustedProxyCIDRs) {
+		return false
+	}
+
+	forwardedProto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if forwardedProto == "" {
+		return false
+	}
+	return strings.EqualFold(strings.Split(forwardedProto, ",")[0], "https")
+}
+
+func applyCommitCookieSignal(
+	w http.ResponseWriter,
+	signal *service.CommitCookieSignal,
+	uuid string,
+	secure bool,
+) {
+	for _, cookie := range service.BuildCommitCookies(signal, uuid, secure) {
+		http.SetCookie(w, cookie)
+	}
+}
+
+func normalizeUserAgentFamily(userAgent string) string {
+	normalized := strings.ToLower(strings.TrimSpace(userAgent))
+	if normalized == "" {
+		return "unknown"
+	}
+	if strings.Contains(normalized, "curl/") {
+		return "curl"
+	}
+	if strings.Contains(normalized, "edg/") || strings.Contains(normalized, "edga/") || strings.Contains(normalized, "edgios/") {
+		return "edge"
+	}
+	looksLikeAndroidWebView := strings.Contains(normalized, "android") &&
+		(strings.Contains(normalized, "; wv)") ||
+			strings.Contains(normalized, " version/") ||
+			(strings.Contains(normalized, "version/") && strings.Contains(normalized, "chrome/")))
+	if looksLikeAndroidWebView {
+		return "android-webview"
+	}
+	if strings.Contains(normalized, "firefox/") || strings.Contains(normalized, "fxios/") {
+		return "firefox"
+	}
+	if strings.Contains(normalized, "chrome/") || strings.Contains(normalized, "chromium/") || strings.Contains(normalized, "crios/") {
+		return "chromium"
+	}
+	if strings.Contains(normalized, "safari/") || strings.Contains(normalized, "iphone") || strings.Contains(normalized, "ipad") || strings.Contains(normalized, "macintosh") {
+		return "safari"
+	}
+	if strings.HasPrefix(normalized, "mozilla/") {
+		return "other"
+	}
+	return "unknown"
+}
+
 func NewRouter(deps Dependencies) http.Handler {
 	logger := deps.Logger
 	if logger == nil {
@@ -105,7 +226,20 @@ func NewRouter(deps Dependencies) http.Handler {
 			)
 			continue
 		}
-		mux.HandleFunc(route.Pattern, methodOnly(route.Method, logger, protocolHandler(route.Name, deps.Services.Protocol, logger, maxCompoundCommitBodyBytes)))
+		mux.HandleFunc(
+			route.Pattern,
+			methodOnly(
+				route.Method,
+				logger,
+				protocolHandler(
+					route.Name,
+					deps.Services.Protocol,
+					logger,
+					deps.TrustedProxyCIDRs,
+					maxCompoundCommitBodyBytes,
+				),
+			),
+		)
 	}
 
 	mux.HandleFunc("/", notFound(logger))
@@ -155,7 +289,13 @@ func protocolPlaceholder(routeName string, logger *slog.Logger) http.HandlerFunc
 	}
 }
 
-func protocolHandler(routeName string, protocolService service.Protocol, logger *slog.Logger, maxCompoundCommitBodyBytes int64) http.HandlerFunc {
+func protocolHandler(
+	routeName string,
+	protocolService service.Protocol,
+	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
+	maxCompoundCommitBodyBytes int64,
+) http.HandlerFunc {
 	if protocolService == nil {
 		return protocolPlaceholder(routeName, logger)
 	}
@@ -166,15 +306,15 @@ func protocolHandler(routeName string, protocolService service.Protocol, logger 
 	case "create_finish":
 		return createFinishHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "lock_begin":
-		return lockBeginHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
+		return lockBeginHandler(protocolService, logger, trustedProxyCIDRs, defaultMaxProtocolBodyBytes)
 	case "lock_commit":
-		return lockCommitHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
+		return lockCommitHandler(protocolService, logger, trustedProxyCIDRs, defaultMaxProtocolBodyBytes)
 	case "compound_begin":
-		return compoundBeginHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
+		return compoundBeginHandler(protocolService, logger, trustedProxyCIDRs, defaultMaxProtocolBodyBytes)
 	case "compound_commit":
-		return compoundCommitHandler(protocolService, logger, false, maxCompoundCommitBodyBytes)
+		return compoundCommitHandler(protocolService, logger, trustedProxyCIDRs, false, maxCompoundCommitBodyBytes)
 	case "delete_commit":
-		return compoundCommitHandler(protocolService, logger, true, defaultMaxProtocolBodyBytes)
+		return compoundCommitHandler(protocolService, logger, trustedProxyCIDRs, true, defaultMaxProtocolBodyBytes)
 	case "public_status":
 		return publicStatusHandler(protocolService, logger)
 	case "decrypt_fetch":
@@ -678,7 +818,12 @@ func publicStatusHandler(protocolService service.Protocol, logger *slog.Logger) 
 	}
 }
 
-func lockBeginHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func lockBeginHandler(
+	protocolService service.Protocol,
+	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.LockBeginInput
 		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
@@ -689,18 +834,26 @@ func lockBeginHandler(protocolService service.Protocol, logger *slog.Logger, max
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
 			return
 		}
+		input.RateLimitSubject = buildCallerRateLimitSubject(r, trustedProxyCIDRs)
+		secure := isSecureRequest(r, trustedProxyCIDRs)
 
 		output, err := protocolService.LockBegin(r.Context(), input)
 		if err != nil {
-			writeProtocolError(logger, w, err)
+			writeProtocolErrorWithCommitCookie(logger, w, err, input.UUID, secure)
 			return
 		}
+		applyCommitCookieSignal(w, output.CommitCookieSignal, input.UUID, secure)
 
 		writeJSON(logger, w, http.StatusOK, output)
 	}
 }
 
-func lockCommitHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func lockCommitHandler(
+	protocolService service.Protocol,
+	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.LockCommitInput
 		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
@@ -711,18 +864,27 @@ func lockCommitHandler(protocolService service.Protocol, logger *slog.Logger, ma
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
 			return
 		}
+		input.RateLimitSubject = buildCallerRateLimitSubject(r, trustedProxyCIDRs)
+		input.CommitToken = service.ReadCommitToken(r, service.CommitCookieKindLock)
+		secure := isSecureRequest(r, trustedProxyCIDRs)
 
 		output, err := protocolService.LockCommit(r.Context(), input)
 		if err != nil {
-			writeProtocolError(logger, w, err)
+			writeProtocolErrorWithCommitCookie(logger, w, err, input.UUID, secure)
 			return
 		}
+		applyCommitCookieSignal(w, output.CommitCookieSignal, input.UUID, secure)
 
 		writeJSON(logger, w, http.StatusOK, output)
 	}
 }
 
-func compoundBeginHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func compoundBeginHandler(
+	protocolService service.Protocol,
+	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.CompoundBeginInput
 		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
@@ -733,12 +895,15 @@ func compoundBeginHandler(protocolService service.Protocol, logger *slog.Logger,
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
 			return
 		}
+		input.RateLimitSubject = buildCallerRateLimitSubject(r, trustedProxyCIDRs)
+		secure := isSecureRequest(r, trustedProxyCIDRs)
 
 		output, err := protocolService.CompoundBegin(r.Context(), input)
 		if err != nil {
-			writeProtocolError(logger, w, err)
+			writeProtocolErrorWithCommitCookie(logger, w, err, input.UUID, secure)
 			return
 		}
+		applyCommitCookieSignal(w, output.CommitCookieSignal, input.UUID, secure)
 
 		writeJSON(logger, w, http.StatusOK, output)
 	}
@@ -747,6 +912,7 @@ func compoundBeginHandler(protocolService service.Protocol, logger *slog.Logger,
 func compoundCommitHandler(
 	protocolService service.Protocol,
 	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
 	deleteOnly bool,
 	maxProtocolBodyBytes int64,
 ) http.HandlerFunc {
@@ -764,12 +930,16 @@ func compoundCommitHandler(
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "delete alias requires delete intent")
 			return
 		}
+		input.RateLimitSubject = buildCallerRateLimitSubject(r, trustedProxyCIDRs)
+		input.CommitToken = service.ReadCommitToken(r, service.CommitCookieKindCompound)
+		secure := isSecureRequest(r, trustedProxyCIDRs)
 
 		output, err := protocolService.CompoundCommit(r.Context(), input)
 		if err != nil {
-			writeProtocolError(logger, w, err)
+			writeProtocolErrorWithCommitCookie(logger, w, err, input.UUID, secure)
 			return
 		}
+		applyCommitCookieSignal(w, output.CommitCookieSignal, input.UUID, secure)
 
 		writeJSON(logger, w, http.StatusOK, output)
 	}
@@ -815,6 +985,20 @@ func writeProtocolError(logger *slog.Logger, w http.ResponseWriter, err error) {
 
 	logger.Error("protocol request failed", "status", http.StatusInternalServerError, "error", err)
 	writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "unexpected internal error")
+}
+
+func writeProtocolErrorWithCommitCookie(
+	logger *slog.Logger,
+	w http.ResponseWriter,
+	err error,
+	uuid string,
+	secure bool,
+) {
+	var protocolErr *service.ProtocolError
+	if errors.As(err, &protocolErr) && protocolErr.CommitCookieSignal != nil && uuid != "" {
+		applyCommitCookieSignal(w, protocolErr.CommitCookieSignal, uuid, secure)
+	}
+	writeProtocolError(logger, w, err)
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *slog.Logger, maxBytes int64) bool {

@@ -80,7 +80,12 @@ Then open:
 - `SELFHOST_API_FILE_MAX_BYTES=536870912` sets the overall file ceiling, while `SELFHOST_API_FILE_MULTIPART_THRESHOLD_BYTES=2080760` remains capped by the historical inline envelope limit because the field is still part of the shared file-policy contract
 - `SELFHOST_API_S3_*` configures the S3-compatible storage connection; when using the bundled Garage container, these already point at `garage:3900` and the default `zerolink-files` bucket
 
-If you change the exposed port or hostname, update `SELFHOST_API_RP_ORIGIN` before relying on WebAuthn flows.
+If you change the exposed hostname, update both `SELFHOST_API_RP_ID` and
+`SELFHOST_API_RP_ORIGIN` before relying on WebAuthn flows. `SELFHOST_API_RP_ID` must be the
+exact public hostname users see in the browser, without protocol or port.
+
+WebAuthn requires `https://` on non-`localhost` origins. Plain `http://` works only for local
+development on `localhost`.
 
 ## Storage Configuration
 
@@ -167,3 +172,6 @@ To remove local database state too:
 ```bash
 docker compose down -v
 ```
+
+`docker compose down -v` removes **both** named volumes in the default stack: `postgres-data` and
+`garage-data`. That deletes database state and any encrypted multipart file chunks stored in Garage.

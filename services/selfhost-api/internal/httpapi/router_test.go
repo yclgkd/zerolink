@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strconv"
 	"strings"
 	"testing"
@@ -214,12 +215,22 @@ func newTestRouter(checker stubChecker, protocol stubProtocol) http.Handler {
 }
 
 func newTestRouterWithLogger(checker stubChecker, protocol stubProtocol, logger *slog.Logger) http.Handler {
+	return newTestRouterWithLoggerAndTrustedProxies(checker, protocol, logger, nil)
+}
+
+func newTestRouterWithLoggerAndTrustedProxies(
+	checker stubChecker,
+	protocol stubProtocol,
+	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
+) http.Handler {
 	realtimeHub := realtime.NewHub(logger)
 	return NewRouter(Dependencies{
 		Logger:            logger,
 		AllowedOrigin:     "http://localhost:5173",
 		Realtime:          realtimeHub,
 		UploadTokenSecret: testUploadTokenSecret,
+		TrustedProxyCIDRs: trustedProxyCIDRs,
 		FilePolicy: FilePolicy{
 			MaxFileBytes:            2_097_152,
 			MultipartThresholdBytes: 2_097_152,
@@ -235,6 +246,174 @@ func newTestRouterWithLogger(checker stubChecker, protocol stubProtocol, logger 
 			logger,
 		),
 	})
+}
+
+func TestBuildCallerRateLimitSubjectPrefersForwardedIPAndNormalizesUserAgent(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/lock_begin/abcdefghijklmnopqrstu", nil)
+	req.RemoteAddr = "10.0.0.25:4321"
+	req.Header.Set("X-Forwarded-For", "198.51.100.7, 10.0.0.25")
+	req.Header.Set(
+		"User-Agent",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36",
+	)
+
+	if got := buildCallerRateLimitSubject(req, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}); got != "198.51.100.7|chromium" {
+		t.Fatalf("buildCallerRateLimitSubject() = %q, want %q", got, "198.51.100.7|chromium")
+	}
+}
+
+func TestBuildCallerRateLimitSubjectIgnoresForwardedHeadersFromUntrustedRemote(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/lock_begin/abcdefghijklmnopqrstu", nil)
+	req.RemoteAddr = "203.0.113.99:4321"
+	req.Header.Set("X-Forwarded-For", "198.51.100.7")
+	req.Header.Set("User-Agent", "curl/8.7.1")
+
+	if got := buildCallerRateLimitSubject(req, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}); got != "203.0.113.99|curl" {
+		t.Fatalf("buildCallerRateLimitSubject() = %q, want %q", got, "203.0.113.99|curl")
+	}
+}
+
+func TestLockBeginRouteInjectsCallerRateLimitSubject(t *testing.T) {
+	var captured service.LockBeginInput
+	router := newTestRouter(stubChecker{}, stubProtocol{
+		lockBegin: func(_ context.Context, input service.LockBeginInput) (service.LockBeginOutput, error) {
+			captured = input
+			return service.LockBeginOutput{
+				OK: true,
+				LockChallenge: service.LockChallenge{
+					ID:        "challenge-id",
+					Challenge: "challenge-value",
+					ExpiresAt: 1_730_000_000_000,
+				},
+			}, nil
+		},
+	})
+
+	body := bytes.NewBufferString(`{"uuid":"abcdefghijklmnopqrstu"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/lock_begin/abcdefghijklmnopqrstu", body)
+	req.RemoteAddr = "203.0.113.10:5000"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "curl/8.7.1")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if captured.RateLimitSubject != "203.0.113.10|curl" {
+		t.Fatalf("RateLimitSubject = %q, want %q", captured.RateLimitSubject, "203.0.113.10|curl")
+	}
+}
+
+func TestLockBeginRouteUsesTrustedForwardedIPAndSetsCommitCookie(t *testing.T) {
+	trustedProxyCIDRs := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+	var captured service.LockBeginInput
+	router := newTestRouterWithLoggerAndTrustedProxies(
+		stubChecker{},
+		stubProtocol{
+			lockBegin: func(_ context.Context, input service.LockBeginInput) (service.LockBeginOutput, error) {
+				captured = input
+				return service.LockBeginOutput{
+					OK: true,
+					LockChallenge: service.LockChallenge{
+						ID:        "challenge-id",
+						Challenge: "challenge-value",
+						ExpiresAt: 1_730_000_000_000,
+					},
+					CommitCookieSignal: &service.CommitCookieSignal{
+						Action: "set",
+						Kind:   service.CommitCookieKindLock,
+						Token:  "commit-token-1",
+						Exp:    1_730_000_000_000,
+					},
+				}, nil
+			},
+		},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		trustedProxyCIDRs,
+	)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/lock_begin/abcdefghijklmnopqrstu",
+		bytes.NewBufferString(`{"uuid":"abcdefghijklmnopqrstu"}`),
+	)
+	req.RemoteAddr = "10.0.0.25:4321"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", "198.51.100.7, 10.0.0.25")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set(
+		"User-Agent",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36",
+	)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if captured.RateLimitSubject != "198.51.100.7|chromium" {
+		t.Fatalf("RateLimitSubject = %q, want %q", captured.RateLimitSubject, "198.51.100.7|chromium")
+	}
+
+	setCookies := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
+	if !strings.Contains(setCookies, "zl-lock-commit=commit-token-1") {
+		t.Fatalf("Set-Cookie = %q, want commit token cookie", setCookies)
+	}
+	if !strings.Contains(setCookies, "Path=/api/lock_commit/abcdefghijklmnopqrstu") {
+		t.Fatalf("Set-Cookie = %q, want lock commit path", setCookies)
+	}
+	if !strings.Contains(setCookies, "Secure") {
+		t.Fatalf("Set-Cookie = %q, want Secure attribute", setCookies)
+	}
+}
+
+func TestLockCommitRouteReadsCommitCookieAndClearsItOnProtocolError(t *testing.T) {
+	var captured service.LockCommitInput
+	router := newTestRouter(stubChecker{}, stubProtocol{
+		lockCommit: func(_ context.Context, input service.LockCommitInput) (service.LockCommitOutput, error) {
+			captured = input
+			return service.LockCommitOutput{}, &service.ProtocolError{
+				Code:    "CHALLENGE_INVALID",
+				Status:  http.StatusUnauthorized,
+				Message: "commit token invalid",
+				CommitCookieSignal: &service.CommitCookieSignal{
+					Action: "clear",
+					Kind:   service.CommitCookieKindLock,
+				},
+			}
+		},
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/lock_commit/abcdefghijklmnopqrstu",
+		bytes.NewBufferString(`{"uuid":"abcdefghijklmnopqrstu","lockChallengeId":"challenge-id","lockProof":"bad-proof","receiverPubJwk":{"kty":"RSA","alg":"RSA-OAEP-256","n":"bm8","e":"AQAB","ext":true,"key_ops":["encrypt"]},"receiverPubFpr":"`+strings.Repeat("a", 64)+`","lockedAt":1730000000000}`),
+	)
+	req.RemoteAddr = "203.0.113.10:4321"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "curl/8.7.1")
+	req.AddCookie(&http.Cookie{Name: "zl-lock-commit", Value: "commit-token-1"})
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+	if captured.CommitToken != "commit-token-1" {
+		t.Fatalf("CommitToken = %q, want %q", captured.CommitToken, "commit-token-1")
+	}
+
+	setCookies := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
+	if !strings.Contains(setCookies, "zl-lock-commit=") {
+		t.Fatalf("Set-Cookie = %q, want cleared lock commit cookie", setCookies)
+	}
+	if !strings.Contains(setCookies, "Max-Age=0") {
+		t.Fatalf("Set-Cookie = %q, want Max-Age=0", setCookies)
+	}
 }
 
 func TestFilePolicyRouteReturnsConfiguredPolicy(t *testing.T) {
