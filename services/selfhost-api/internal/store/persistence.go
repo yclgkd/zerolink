@@ -20,9 +20,10 @@ import (
 const advisoryLockNamespace = "zerolink/selfhost/channel"
 
 type ChannelTx struct {
-	queries   *sqlcgen.Queries
-	channelID string
-	db        *Database
+	queries     *sqlcgen.Queries
+	channelID   string
+	db          *Database
+	afterCommit []func(context.Context)
 }
 
 func (d *Database) WithChannelTx(
@@ -68,6 +69,8 @@ func (d *Database) WithChannelTx(
 		return fmt.Errorf("commit channel transaction: %w", err)
 	}
 
+	channelTx.runAfterCommit(context.WithoutCancel(ctx))
+
 	return nil
 }
 
@@ -82,6 +85,16 @@ func (tx *ChannelTx) GetChannel(ctx context.Context) (*Channel, error) {
 
 	channel := channelFromSQL(row)
 	return &channel, nil
+}
+
+func (tx *ChannelTx) runAfterCommit(ctx context.Context) {
+	if tx == nil {
+		return
+	}
+	for _, fn := range tx.afterCommit {
+		fn(ctx)
+	}
+	tx.afterCommit = nil
 }
 
 func (tx *ChannelTx) LoadActiveChannel(ctx context.Context, now time.Time) (*Channel, error) {
@@ -318,16 +331,26 @@ func (tx *ChannelTx) deleteMultipartUpload(ctx context.Context) {
 		slog.Default().Error("decode multipart fileRef failed", "channel_id", tx.channelID, "error", err)
 		return
 	}
-	if err := tx.db.multipartCleaner.DeleteUpload(ctx, fileRef); err != nil {
-		slog.Default().Error("delete multipart upload failed", "channel_id", tx.channelID, "error", err)
-	}
+	_ = tx.DeleteMultipartUpload(ctx, fileRef)
 }
 
 func (tx *ChannelTx) DeleteMultipartUpload(ctx context.Context, fileRef filestore.MultipartFileRef) error {
 	if tx == nil || tx.db == nil || tx.db.multipartCleaner == nil {
 		return nil
 	}
-	return tx.db.multipartCleaner.DeleteUpload(ctx, fileRef)
+
+	cleanupRef := fileRef
+	cleanupRef.Chunks = append([]filestore.MultipartFileRefChunk(nil), fileRef.Chunks...)
+	channelID := tx.channelID
+	cleaner := tx.db.multipartCleaner
+
+	tx.afterCommit = append(tx.afterCommit, func(ctx context.Context) {
+		if err := cleaner.DeleteUpload(ctx, cleanupRef); err != nil {
+			slog.Default().Error("delete multipart upload failed", "channel_id", channelID, "error", err)
+		}
+	})
+
+	return nil
 }
 
 func (d *Database) SweepExpiredChannels(ctx context.Context, now time.Time) (int64, error) {
