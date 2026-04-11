@@ -6,23 +6,28 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/store/filestore"
 )
 
 const (
-	proxyUploadTargetTTL   = 15 * time.Minute
-	proxyDownloadTargetTTL = 5 * time.Minute
-	uploadSessionTokenV1   = "1"
-	uploadSessionDomain    = "zerolink:selfhost:file-upload:"
+	proxyUploadTargetTTL    = 15 * time.Minute
+	proxyDownloadTargetTTL  = 5 * time.Minute
+	uploadSessionTokenV1    = "1"
+	uploadSessionDomain     = "zerolink:selfhost:file-upload:"
+	uploadTargetTokenV1     = "1"
+	uploadTargetTokenDomain = "zerolink:selfhost:file-upload-target:"
+	downloadTargetTokenV1   = "1"
+	downloadTargetDomain    = "zerolink:selfhost:file-download-target:"
 )
 
 type proxyUploadTarget struct {
-	uploadID  string
-	index     int
-	expiresAt time.Time
+	uploadID    string
+	channelUUID string
+	index       int
+	issuedAt    time.Time
+	expiresAt   time.Time
 }
 
 type uploadSession struct {
@@ -44,25 +49,45 @@ type uploadSessionToken struct {
 	Nonce                string `json:"nonce"`
 }
 
+type proxyUploadTargetToken struct {
+	V           string `json:"v"`
+	UploadID    string `json:"uploadId"`
+	ChannelUUID string `json:"channelUuid"`
+	Index       int    `json:"index"`
+	IssuedAt    int64  `json:"issuedAt"`
+	ExpiresAt   int64  `json:"expiresAt"`
+}
+
 type proxyDownloadTarget struct {
-	storageKey string
-	expiresAt  time.Time
+	channelUUID    string
+	cipherVersion  int64
+	index          int
+	storageKey     string
+	ciphertextHash string
+	issuedAt       time.Time
+	expiresAt      time.Time
+}
+
+type proxyDownloadTargetToken struct {
+	V              string `json:"v"`
+	ChannelUUID    string `json:"channelUuid"`
+	CipherVersion  int64  `json:"cipherVersion"`
+	Index          int    `json:"index"`
+	StorageKey     string `json:"storageKey"`
+	CiphertextHash string `json:"ciphertextHash"`
+	IssuedAt       int64  `json:"issuedAt"`
+	ExpiresAt      int64  `json:"expiresAt"`
 }
 
 type proxyTargetAuthorizer struct {
-	mu        sync.Mutex
-	now       func() time.Time
-	secret    []byte
-	uploads   map[string]proxyUploadTarget
-	downloads map[string]proxyDownloadTarget
+	now    func() time.Time
+	secret []byte
 }
 
 func newProxyTargetAuthorizer(secret string) *proxyTargetAuthorizer {
 	return &proxyTargetAuthorizer{
-		now:       time.Now,
-		secret:    []byte(secret),
-		uploads:   make(map[string]proxyUploadTarget),
-		downloads: make(map[string]proxyDownloadTarget),
+		now:    time.Now,
+		secret: []byte(secret),
 	}
 }
 
@@ -89,112 +114,82 @@ func (a *proxyTargetAuthorizer) IssueUploadSession(
 }
 
 func (a *proxyTargetAuthorizer) IssueUploadTarget(uploadID string, index int, ttl time.Duration) (string, error) {
-	target := proxyUploadTarget{
-		uploadID:  uploadID,
-		index:     index,
-		expiresAt: a.expiresAt(ttl, proxyUploadTargetTTL),
+	session, ok := a.parseUploadSession(uploadID)
+	if !ok {
+		return "", errors.New("upload session invalid")
 	}
-	return a.storeUploadTarget(target)
+
+	expiresAt := a.expiresAt(ttl, proxyUploadTargetTTL)
+	if expiresAt.After(session.expiresAt) {
+		expiresAt = session.expiresAt
+	}
+
+	target := proxyUploadTarget{
+		uploadID:    uploadID,
+		channelUUID: session.channelUUID,
+		index:       index,
+		issuedAt:    a.now().UTC(),
+		expiresAt:   expiresAt,
+	}
+	return a.signUploadTarget(target)
 }
 
-func (a *proxyTargetAuthorizer) IssueDownloadTarget(storageKey string, ttl time.Duration) (string, error) {
+func (a *proxyTargetAuthorizer) IssueDownloadTarget(
+	channelUUID string,
+	cipherVersion int64,
+	index int,
+	storageKey string,
+	ciphertextHash string,
+	ttl time.Duration,
+) (string, error) {
 	target := proxyDownloadTarget{
-		storageKey: storageKey,
-		expiresAt:  a.expiresAt(ttl, proxyDownloadTargetTTL),
+		channelUUID:    channelUUID,
+		cipherVersion:  cipherVersion,
+		index:          index,
+		storageKey:     storageKey,
+		ciphertextHash: ciphertextHash,
+		issuedAt:       a.now().UTC(),
+		expiresAt:      a.expiresAt(ttl, proxyDownloadTargetTTL),
 	}
-	return a.storeDownloadTarget(target)
+	return a.signDownloadTarget(target)
 }
 
 func (a *proxyTargetAuthorizer) UploadSession(uploadID string) (uploadSession, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	now := a.now()
-	a.pruneExpiredLocked(now)
 	session, ok := a.parseUploadSession(uploadID)
-	if !ok || !session.expiresAt.After(now) {
+	if !ok || !session.expiresAt.After(a.now()) {
 		return uploadSession{}, false
 	}
 	return session, true
 }
 
 func (a *proxyTargetAuthorizer) UploadTarget(token string) (proxyUploadTarget, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.pruneExpiredLocked(a.now())
-	target, ok := a.uploads[token]
-	return target, ok
+	target, ok := a.parseUploadTarget(token)
+	if !ok || !target.expiresAt.After(a.now()) {
+		return proxyUploadTarget{}, false
+	}
+	return target, true
 }
 
-func (a *proxyTargetAuthorizer) ConsumeDownloadTarget(token string) (proxyDownloadTarget, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.pruneExpiredLocked(a.now())
-	target, ok := a.downloads[token]
-	if ok {
-		delete(a.downloads, token)
+func (a *proxyTargetAuthorizer) DownloadTarget(token string) (proxyDownloadTarget, bool) {
+	target, ok := a.parseDownloadTarget(token)
+	if !ok || !target.expiresAt.After(a.now()) {
+		return proxyDownloadTarget{}, false
 	}
-	return target, ok
+	return target, true
 }
 
-func (a *proxyTargetAuthorizer) RevokeUpload(uploadID string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for token, target := range a.uploads {
-		if target.uploadID == uploadID {
-			delete(a.uploads, token)
-		}
-	}
+func (a *proxyTargetAuthorizer) RevokeUpload(_ string) {
 }
 
 func (a *proxyTargetAuthorizer) expiresAt(ttl time.Duration, fallback time.Duration) time.Time {
 	if ttl <= 0 {
 		ttl = fallback
 	}
-	return a.now().Add(ttl)
-}
-
-func (a *proxyTargetAuthorizer) storeUploadTarget(target proxyUploadTarget) (string, error) {
-	token, err := filestore.NewUploadID()
-	if err != nil {
-		return "", err
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.pruneExpiredLocked(a.now())
-	a.uploads[token] = target
-	return token, nil
-}
-
-func (a *proxyTargetAuthorizer) storeDownloadTarget(target proxyDownloadTarget) (string, error) {
-	token, err := filestore.NewUploadID()
-	if err != nil {
-		return "", err
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.pruneExpiredLocked(a.now())
-	a.downloads[token] = target
-	return token, nil
-}
-
-func (a *proxyTargetAuthorizer) pruneExpiredLocked(now time.Time) {
-	for token, target := range a.uploads {
-		if !target.expiresAt.After(now) {
-			delete(a.uploads, token)
-		}
-	}
-	for token, target := range a.downloads {
-		if !target.expiresAt.After(now) {
-			delete(a.downloads, token)
-		}
-	}
+	return a.now().Add(ttl).UTC()
 }
 
 func (a *proxyTargetAuthorizer) signUploadSession(session uploadSession) (string, error) {
-	if len(a.secret) == 0 {
-		return "", errors.New("upload token secret is required")
-	}
-	tokenPayload, err := json.Marshal(uploadSessionToken{
+	tokenPayload := uploadSessionToken{
 		V:                    uploadSessionTokenV1,
 		ChannelUUID:          session.channelUUID,
 		ChunkCount:           session.chunkCount,
@@ -202,55 +197,39 @@ func (a *proxyTargetAuthorizer) signUploadSession(session uploadSession) (string
 		IssuedAt:             session.issuedAt.UnixMilli(),
 		ExpiresAt:            session.expiresAt.UnixMilli(),
 		Nonce:                session.nonce,
-	})
-	if err != nil {
-		return "", err
 	}
+	return a.signToken(uploadSessionDomain, tokenPayload)
+}
 
-	mac := hmac.New(sha256.New, a.secret)
-	_, _ = mac.Write([]byte(uploadSessionDomain))
-	_, _ = mac.Write(tokenPayload)
-	signature := mac.Sum(nil)
+func (a *proxyTargetAuthorizer) signUploadTarget(target proxyUploadTarget) (string, error) {
+	tokenPayload := proxyUploadTargetToken{
+		V:           uploadTargetTokenV1,
+		UploadID:    target.uploadID,
+		ChannelUUID: target.channelUUID,
+		Index:       target.index,
+		IssuedAt:    target.issuedAt.UnixMilli(),
+		ExpiresAt:   target.expiresAt.UnixMilli(),
+	}
+	return a.signToken(uploadTargetTokenDomain, tokenPayload)
+}
 
-	tokenBytes := make([]byte, len(tokenPayload)+1+len(signature))
-	copy(tokenBytes, tokenPayload)
-	tokenBytes[len(tokenPayload)] = 0
-	copy(tokenBytes[len(tokenPayload)+1:], signature)
-	return base64.RawURLEncoding.EncodeToString(tokenBytes), nil
+func (a *proxyTargetAuthorizer) signDownloadTarget(target proxyDownloadTarget) (string, error) {
+	tokenPayload := proxyDownloadTargetToken{
+		V:              downloadTargetTokenV1,
+		ChannelUUID:    target.channelUUID,
+		CipherVersion:  target.cipherVersion,
+		Index:          target.index,
+		StorageKey:     target.storageKey,
+		CiphertextHash: target.ciphertextHash,
+		IssuedAt:       target.issuedAt.UnixMilli(),
+		ExpiresAt:      target.expiresAt.UnixMilli(),
+	}
+	return a.signToken(downloadTargetDomain, tokenPayload)
 }
 
 func (a *proxyTargetAuthorizer) parseUploadSession(uploadID string) (uploadSession, bool) {
-	if len(a.secret) == 0 {
-		return uploadSession{}, false
-	}
-
-	tokenBytes, err := base64.RawURLEncoding.DecodeString(uploadID)
-	if err != nil {
-		return uploadSession{}, false
-	}
-
-	separatorIndex := -1
-	for index, value := range tokenBytes {
-		if value == 0 {
-			separatorIndex = index
-			break
-		}
-	}
-	if separatorIndex <= 0 || separatorIndex >= len(tokenBytes)-1 {
-		return uploadSession{}, false
-	}
-
-	payload := tokenBytes[:separatorIndex]
-	signature := tokenBytes[separatorIndex+1:]
-	mac := hmac.New(sha256.New, a.secret)
-	_, _ = mac.Write([]byte(uploadSessionDomain))
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return uploadSession{}, false
-	}
-
 	var token uploadSessionToken
-	if err := json.Unmarshal(payload, &token); err != nil {
+	if !a.parseToken(uploadSessionDomain, uploadID, &token) {
 		return uploadSession{}, false
 	}
 	if token.V != uploadSessionTokenV1 ||
@@ -272,6 +251,115 @@ func (a *proxyTargetAuthorizer) parseUploadSession(uploadID string) (uploadSessi
 	}, true
 }
 
+func (a *proxyTargetAuthorizer) parseUploadTarget(token string) (proxyUploadTarget, bool) {
+	var payload proxyUploadTargetToken
+	if !a.parseToken(uploadTargetTokenDomain, token, &payload) {
+		return proxyUploadTarget{}, false
+	}
+	if payload.V != uploadTargetTokenV1 ||
+		!isChannelUUIDToken(payload.ChannelUUID) ||
+		payload.Index < 0 ||
+		payload.ExpiresAt <= payload.IssuedAt {
+		return proxyUploadTarget{}, false
+	}
+
+	uploadSession, ok := a.parseUploadSession(payload.UploadID)
+	if !ok ||
+		uploadSession.channelUUID != payload.ChannelUUID ||
+		payload.Index >= uploadSession.chunkCount ||
+		time.UnixMilli(payload.ExpiresAt).UTC().After(uploadSession.expiresAt) {
+		return proxyUploadTarget{}, false
+	}
+
+	return proxyUploadTarget{
+		uploadID:    payload.UploadID,
+		channelUUID: payload.ChannelUUID,
+		index:       payload.Index,
+		issuedAt:    time.UnixMilli(payload.IssuedAt).UTC(),
+		expiresAt:   time.UnixMilli(payload.ExpiresAt).UTC(),
+	}, true
+}
+
+func (a *proxyTargetAuthorizer) parseDownloadTarget(token string) (proxyDownloadTarget, bool) {
+	var payload proxyDownloadTargetToken
+	if !a.parseToken(downloadTargetDomain, token, &payload) {
+		return proxyDownloadTarget{}, false
+	}
+	if payload.V != downloadTargetTokenV1 ||
+		!isChannelUUIDToken(payload.ChannelUUID) ||
+		payload.CipherVersion < 0 ||
+		payload.Index < 0 ||
+		payload.StorageKey == "" ||
+		!isHexStringToken(payload.CiphertextHash, 64) ||
+		payload.ExpiresAt <= payload.IssuedAt {
+		return proxyDownloadTarget{}, false
+	}
+
+	return proxyDownloadTarget{
+		channelUUID:    payload.ChannelUUID,
+		cipherVersion:  payload.CipherVersion,
+		index:          payload.Index,
+		storageKey:     payload.StorageKey,
+		ciphertextHash: payload.CiphertextHash,
+		issuedAt:       time.UnixMilli(payload.IssuedAt).UTC(),
+		expiresAt:      time.UnixMilli(payload.ExpiresAt).UTC(),
+	}, true
+}
+
+func (a *proxyTargetAuthorizer) signToken(domain string, payload any) (string, error) {
+	if len(a.secret) == 0 {
+		return "", errors.New("upload token secret is required")
+	}
+	tokenPayload, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	mac := hmac.New(sha256.New, a.secret)
+	_, _ = mac.Write([]byte(domain))
+	_, _ = mac.Write(tokenPayload)
+	signature := mac.Sum(nil)
+
+	tokenBytes := make([]byte, len(tokenPayload)+1+len(signature))
+	copy(tokenBytes, tokenPayload)
+	tokenBytes[len(tokenPayload)] = 0
+	copy(tokenBytes[len(tokenPayload)+1:], signature)
+	return base64.RawURLEncoding.EncodeToString(tokenBytes), nil
+}
+
+func (a *proxyTargetAuthorizer) parseToken(domain string, token string, payload any) bool {
+	if len(a.secret) == 0 {
+		return false
+	}
+
+	tokenBytes, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return false
+	}
+
+	separatorIndex := -1
+	for index, value := range tokenBytes {
+		if value == 0 {
+			separatorIndex = index
+			break
+		}
+	}
+	if separatorIndex <= 0 || separatorIndex >= len(tokenBytes)-1 {
+		return false
+	}
+
+	encodedPayload := tokenBytes[:separatorIndex]
+	signature := tokenBytes[separatorIndex+1:]
+	mac := hmac.New(sha256.New, a.secret)
+	_, _ = mac.Write([]byte(domain))
+	_, _ = mac.Write(encodedPayload)
+	if !hmac.Equal(signature, mac.Sum(nil)) {
+		return false
+	}
+
+	return json.Unmarshal(encodedPayload, payload) == nil
+}
+
 func isBase64URLToken(value string) bool {
 	if value == "" {
 		return false
@@ -290,6 +378,21 @@ func isChannelUUIDToken(value string) bool {
 		case r >= 'a' && r <= 'z':
 		case r >= '0' && r <= '9':
 		case r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isHexStringToken(value string, length int) bool {
+	if len(value) != length {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'f':
 		default:
 			return false
 		}

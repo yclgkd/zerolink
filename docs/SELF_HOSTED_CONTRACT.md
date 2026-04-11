@@ -73,18 +73,19 @@ Output encoding varies per function:
 | `/api/public/:uuid` | `GET` | none | `PublicStatusResponseSchema` | `apiClient.publicStatus()` and polling fallback | Active-channel public snapshot only; once a channel is tombstoned or lazily purged, canonical external behavior is `404 NOT_FOUND` rather than a `200` terminal snapshot |
 | `/api/decrypt_fetch/:uuid` | `GET` | none | `DecryptFetchResponseSchema` | `apiClient.decryptFetch()` | Returns decrypt payload after delivery; the response includes exactly one of `cipherBundle` or `fileRef`, and `cipherVersion` is the delivered payload version (`record.version - 1` in the current DO implementation), not the raw channel record version |
 | `/api/file_policy` | `GET` | none | `FilePolicyResponseSchema` | `apiClient.filePolicy()` | Returns deployment file ceilings, legacy inline compatibility bounds, chunk sizing, and multipart capability; frontend uses this to validate whether file delivery is available and to configure upload/chunking limits |
-| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | When `S3_PUBLIC_ENDPOINT` is set, returns S3 presigned PUT URLs per chunk; when unset, returns relative API-proxied `file/chunk/<token>` targets with short-lived in-memory authorization, and the Go API streams chunk bytes on behalf of the browser |
+| `/api/file/initiate` | `POST` | `FileUploadInitiateRequestSchema` | `FileUploadInitiateResponseSchema` | `apiClient.fileUploadInitiate()` | When `S3_PUBLIC_ENDPOINT` is set, returns S3 presigned PUT URLs per chunk; when unset, returns relative API-proxied `file/chunk/<token>` targets backed by short-lived signed authorization bound to the current upload session, and the Go API streams chunk bytes on behalf of the browser |
 | `/api/file/complete` | `POST` | `FileUploadCompleteRequestSchema` | `FileUploadCompleteResponseSchema` | `apiClient.fileUploadComplete()` | Validates uploaded chunk metadata and returns the typed `fileRef` later embedded in `compound_commit` |
-| `/api/file/fetch/:uuid` | `GET` | none | `FileFetchResponseSchema` | `apiClient.fileFetch()` | For delivered multipart payloads, returns one download URL per chunk (presigned S3 when `S3_PUBLIC_ENDPOINT` is set, relative API-proxied single-use `file/download/<token>` targets when unset); inline payloads continue through `decrypt_fetch` only |
+| `/api/file/fetch/:uuid` | `GET` | none | `FileFetchResponseSchema` | `apiClient.fileFetch()` | For delivered multipart payloads, returns one download URL per chunk (presigned S3 when `S3_PUBLIC_ENDPOINT` is set, relative API-proxied short-lived signed `file/download/<token>` targets when unset); inline payloads continue through `decrypt_fetch` only |
 | `/api/ws/:uuid` | `GET` + WebSocket upgrade | `WsClientMessageSchema` after subscribe | `WsServerMessageSchema` | `ChannelSync.connect()` | Upgrade must reject non-WS requests with `426` + `{ ok: false, code: "BAD_REQUEST" }` today |
 
 When `SELFHOST_API_S3_PUBLIC_ENDPOINT` is set (external S3 reachable by the browser), chunk bytes
 go directly to S3 presigned URLs returned by `/api/file/initiate` and `/api/file/fetch/:uuid`.
-When unset (e.g., Docker-internal Garage), the Go API issues short-lived opaque proxy targets under
+When unset (e.g., Docker-internal Garage), the Go API issues short-lived signed proxy targets under
 `/api/file/chunk/{token}` (PUT) and `/api/file/download/{token}` (GET). The browser receives those
-targets as relative `file/...` URLs so custom API base paths still work, and direct storage keys are
-not exposed through the proxy path. Download proxy targets are single-use: once a GET consumes the
-token, the client must call `/api/file/fetch/:uuid` again to obtain a fresh target if it needs to retry.
+targets as relative `file/...` URLs so custom API base paths still work. Upload targets are bound to
+the current signed upload session, and download targets are bound to the current channel/file version
+plus chunk metadata so deletion or replacement immediately invalidates older targets without relying on
+process-local state.
 
 ### Multipart Delivery Overlay
 

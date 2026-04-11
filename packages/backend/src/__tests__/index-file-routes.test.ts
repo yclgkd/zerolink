@@ -1,17 +1,46 @@
-import type { MultipartFileRef, UnixMs, UUID } from '@zerolink/shared';
+import type { Base64Url, HexString, MultipartFileRef, UnixMs, UUID } from '@zerolink/shared';
 import { describe, expect, it } from 'vitest';
 import { resolveInlineFilePlaintextBytes } from '../file-policy.ts';
 import { readRequestBytesUpToLimit } from '../file-routes.ts';
-import { createFileUploadId } from '../file-storage.ts';
+import { createFileDownloadToken, createFileUploadId } from '../file-storage.ts';
 import { createMockEnv, dispatch, VALID_UUID } from './helpers/worker-fixtures.ts';
 
-function makeCiphertextHash(char: string): string {
-  return char.repeat(64);
+function asBase64Url(value: string): Base64Url {
+  return value as Base64Url;
+}
+
+function makeCiphertextHash(char: string): HexString {
+  return char.repeat(64) as HexString;
+}
+
+function buildMultipartFileRef(
+  storageKey: string,
+  ciphertextHash: HexString,
+  ciphertextBytes = 24
+): MultipartFileRef {
+  return {
+    storageBackend: 'r2',
+    chunkSizeBytes: 8,
+    chunkCount: 1,
+    totalPlaintextBytes: 8,
+    totalCiphertextBytes: ciphertextBytes,
+    baseIv: asBase64Url('base_iv'),
+    encContentKey: asBase64Url('enc_content_key'),
+    chunks: [
+      {
+        index: 0,
+        storageKey,
+        ciphertextBytes,
+        ciphertextHash,
+      },
+    ],
+  };
 }
 
 describe('backend worker routing — file upload and fetch routes', () => {
   it('handles multipart initiate, chunk upload, completion, fetch, and download', async () => {
     let currentFileRef: MultipartFileRef | null = null;
+    let currentCipherVersion = 0;
     const { env, calls } = createMockEnv(async (request) => {
       if (request.url.endsWith('/get_public_state')) {
         return new Response(
@@ -36,6 +65,7 @@ describe('backend worker routing — file upload and fetch routes', () => {
             ok: true,
             payloadTransport: 'multipart',
             fileRef: currentFileRef,
+            cipherVersion: currentCipherVersion,
           }),
           { status: 200 }
         );
@@ -128,6 +158,7 @@ describe('backend worker routing — file upload and fetch routes', () => {
     expect(completePayload.fileRef.chunks).toHaveLength(2);
 
     currentFileRef = completePayload.fileRef;
+    currentCipherVersion = 0;
 
     const fetchResponse = await dispatch(env, `/api/file/fetch/${VALID_UUID}`, 'GET');
     const fetchPayload = (await fetchResponse.json()) as {
@@ -158,8 +189,9 @@ describe('backend worker routing — file upload and fetch routes', () => {
     expect(downloadResponse.status).toBe(200);
     expect(await downloadResponse.text()).toBe(chunk0Body);
 
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     expect(calls[1]?.pathname).toBe('/get_file_payload');
+    expect(calls[2]?.pathname).toBe('/get_file_payload');
   });
 
   it('rejects initiate requests that exceed deployment max file policy', async () => {
@@ -404,5 +436,192 @@ describe('backend worker routing — file upload and fetch routes', () => {
 
     expect(response.status).toBe(400);
     expect(payload.code).toBe('BAD_REQUEST');
+  });
+
+  it('invalidates old download tokens after a file replacement', async () => {
+    let currentFileRef = buildMultipartFileRef(
+      'files/original-upload/0000.bin',
+      makeCiphertextHash('a')
+    );
+    let currentCipherVersion = 0;
+    const { env } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_file_payload')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            payloadTransport: 'multipart',
+            fileRef: currentFileRef,
+            cipherVersion: currentCipherVersion,
+          }),
+          { status: 200 }
+        );
+      }
+      if (request.url.endsWith('/get_public_state')) {
+        return new Response(
+          JSON.stringify({ ok: true, state: 'locked', securityProfile: 'secure' }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    const originalChunk = currentFileRef.chunks[0];
+    expect(originalChunk).toBeDefined();
+    if (!originalChunk) {
+      throw new Error('expected original chunk');
+    }
+    await env.FILE_BUCKET?.put(originalChunk.storageKey, 'original-chunk');
+
+    const fetchResponse = await dispatch(env, `/api/file/fetch/${VALID_UUID}`, 'GET');
+    const fetchPayload = (await fetchResponse.json()) as {
+      ok: true;
+      chunks: Array<{ index: number; downloadUrl: string }>;
+    };
+    const initialChunk = fetchPayload.chunks[0];
+    expect(initialChunk).toBeDefined();
+    if (!initialChunk) {
+      throw new Error('expected initial download target');
+    }
+    const oldDownloadUrl = new URL(initialChunk.downloadUrl, 'https://example.test');
+
+    currentFileRef = buildMultipartFileRef(
+      'files/replaced-upload/0000.bin',
+      makeCiphertextHash('b')
+    );
+    currentCipherVersion = 1;
+    await env.FILE_BUCKET?.delete('files/original-upload/0000.bin');
+    const replacedChunk = currentFileRef.chunks[0];
+    expect(replacedChunk).toBeDefined();
+    if (!replacedChunk) {
+      throw new Error('expected replaced chunk');
+    }
+    await env.FILE_BUCKET?.put(replacedChunk.storageKey, 'replaced-chunk');
+
+    const oldDownloadResponse = await dispatch(
+      env,
+      `${oldDownloadUrl.pathname}${oldDownloadUrl.search}`,
+      'GET'
+    );
+    const oldPayload = (await oldDownloadResponse.json()) as { ok: false; code: string };
+
+    expect(oldDownloadResponse.status).toBe(404);
+    expect(oldPayload.code).toBe('NOT_FOUND');
+  });
+
+  it('invalidates old download tokens after channel deletion', async () => {
+    let currentFileRef: MultipartFileRef | null = buildMultipartFileRef(
+      'files/deleted-upload/0000.bin',
+      makeCiphertextHash('c')
+    );
+    const { env } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_file_payload')) {
+        if (!currentFileRef) {
+          return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND' }), { status: 404 });
+        }
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            payloadTransport: 'multipart',
+            fileRef: currentFileRef,
+            cipherVersion: 0,
+          }),
+          { status: 200 }
+        );
+      }
+      if (request.url.endsWith('/get_public_state')) {
+        return new Response(
+          JSON.stringify({ ok: true, state: 'locked', securityProfile: 'secure' }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    const deletedChunk = currentFileRef.chunks[0];
+    expect(deletedChunk).toBeDefined();
+    if (!deletedChunk) {
+      throw new Error('expected deleted-channel chunk');
+    }
+    await env.FILE_BUCKET?.put(deletedChunk.storageKey, 'deleted-chunk');
+
+    const fetchResponse = await dispatch(env, `/api/file/fetch/${VALID_UUID}`, 'GET');
+    const fetchPayload = (await fetchResponse.json()) as {
+      ok: true;
+      chunks: Array<{ index: number; downloadUrl: string }>;
+    };
+    const deletedDownloadTarget = fetchPayload.chunks[0];
+    expect(deletedDownloadTarget).toBeDefined();
+    if (!deletedDownloadTarget) {
+      throw new Error('expected deleted-channel download target');
+    }
+    const oldDownloadUrl = new URL(deletedDownloadTarget.downloadUrl, 'https://example.test');
+
+    currentFileRef = null;
+    await env.FILE_BUCKET?.delete('files/deleted-upload/0000.bin');
+
+    const oldDownloadResponse = await dispatch(
+      env,
+      `${oldDownloadUrl.pathname}${oldDownloadUrl.search}`,
+      'GET'
+    );
+    const oldPayload = (await oldDownloadResponse.json()) as { ok: false; code: string };
+
+    expect(oldDownloadResponse.status).toBe(404);
+    expect(oldPayload.code).toBe('NOT_FOUND');
+  });
+
+  it('rejects download tokens whose storage binding does not match the current fileRef', async () => {
+    const currentFileRef = buildMultipartFileRef(
+      'files/current-upload/0000.bin',
+      makeCiphertextHash('d')
+    );
+    const { env } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_file_payload')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            payloadTransport: 'multipart',
+            fileRef: currentFileRef,
+            cipherVersion: 0,
+          }),
+          { status: 200 }
+        );
+      }
+      if (request.url.endsWith('/get_public_state')) {
+        return new Response(
+          JSON.stringify({ ok: true, state: 'locked', securityProfile: 'secure' }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    const boundChunk = currentFileRef.chunks[0];
+    expect(boundChunk).toBeDefined();
+    if (!boundChunk) {
+      throw new Error('expected bound chunk');
+    }
+    await env.FILE_BUCKET?.put(boundChunk.storageKey, 'bound-chunk');
+
+    const forgedToken = await createFileDownloadToken(env.COMMIT_TOKEN_SECRET, {
+      v: '2',
+      channelUuid: VALID_UUID as UUID,
+      version: 0,
+      index: 0,
+      storageKey: 'files/forged-upload/0000.bin',
+      ciphertextHash: boundChunk.ciphertextHash,
+      issuedAt: 1_730_000_000_000 as UnixMs,
+      expiresAt: 4_730_000_000_000 as UnixMs,
+    });
+
+    const response = await dispatch(
+      env,
+      `/api/file/dl/${VALID_UUID}/0?token=${forgedToken}`,
+      'GET'
+    );
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(404);
+    expect(payload.code).toBe('NOT_FOUND');
   });
 });

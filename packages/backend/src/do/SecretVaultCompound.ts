@@ -35,7 +35,7 @@ import {
 } from '../crypto/bytes.ts';
 import { verifySoftkeySignature } from '../crypto/softkey.ts';
 import { verifyAssertion } from '../crypto/webauthn.ts';
-import { assertMultipartChunksExist } from '../file-storage.ts';
+import { assertMultipartChunksExist, deleteMultipartChunks } from '../file-storage.ts';
 import {
   buildCommitCookieSignal,
   shouldClearCommitCookie,
@@ -70,6 +70,19 @@ interface BeginRequestContext {
 
 interface CommitRequestContext extends BeginRequestContext {
   commitToken: string | undefined;
+}
+
+function shouldDeletePreviousFileRef(
+  previousFileRef: ChannelRecord['fileRef'],
+  nextFileRef: ChannelRecord['fileRef']
+): previousFileRef is NonNullable<ChannelRecord['fileRef']> {
+  if (!previousFileRef) {
+    return false;
+  }
+  if (!nextFileRef) {
+    return true;
+  }
+  return JSON.stringify(previousFileRef) !== JSON.stringify(nextFileRef);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +337,7 @@ export async function commitCompoundInternal(
 ): Promise<{ commitCookieSignal?: CommitCookieSignal }> {
   await vc.ctx.blockConcurrencyWhile(async () => {
     const record = await loadActiveRecord(vc, now);
+    const previousFileRef = record.fileRef;
     assertUuidMatch(record.uuid, params.uuid);
 
     const { intent } = params;
@@ -566,6 +580,17 @@ export async function commitCompoundInternal(
           };
 
     await saveRecord(vc, updatedRecord);
+
+    if (shouldDeletePreviousFileRef(previousFileRef, updatedRecord.fileRef)) {
+      await deleteMultipartChunks(vc.env.FILE_BUCKET, previousFileRef).catch((error: unknown) => {
+        // biome-ignore lint/suspicious/noConsole: best-effort cleanup failure should be visible in worker logs
+        console.error('failed to delete superseded multipart chunks', {
+          uuid: record.uuid,
+          error,
+        });
+      });
+    }
+
     await scheduleNextAlarm(vc, now);
 
     // Broadcast DELIVERED state to connected clients (e.g., receiver's SharePage)

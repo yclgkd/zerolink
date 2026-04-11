@@ -21,6 +21,15 @@ import (
 	"github.com/yclgkd/ZeroLink/services/selfhost-api/internal/webauthn"
 )
 
+type recordingMultipartCleaner struct {
+	deleted []filestore.MultipartFileRef
+}
+
+func (c *recordingMultipartCleaner) DeleteUpload(_ context.Context, fileRef filestore.MultipartFileRef) error {
+	c.deleted = append(c.deleted, fileRef)
+	return nil
+}
+
 func TestProtocolServicePasswordHappyPathLockDeliverDecrypt(t *testing.T) {
 	db := openTestDatabase(t)
 	resetTestTables(t, db)
@@ -341,6 +350,130 @@ func TestProtocolServiceMultipartFileRefHappyPath(t *testing.T) {
 	}
 	if decryptFetch.FileRef.Chunks[0].StorageKey != fileRef.Chunks[0].StorageKey {
 		t.Fatalf("decryptFetch.FileRef.Chunks[0].StorageKey = %q, want %q", decryptFetch.FileRef.Chunks[0].StorageKey, fileRef.Chunks[0].StorageKey)
+	}
+}
+
+func TestProtocolServiceMultipartReplacementCleansPreviousUpload(t *testing.T) {
+	db := openTestDatabase(t)
+	resetTestTables(t, db)
+
+	cleaner := &recordingMultipartCleaner{}
+	db.SetMultipartCleaner(cleaner)
+
+	svc := NewProtocolService(db, ProtocolConfig{
+		RPID:     "localhost",
+		RPOrigin: "http://localhost:5173",
+		Verifier: webauthn.NoopVerifier{},
+		File: FilePolicy{
+			MaxFileBytes:            1_048_576,
+			MultipartThresholdBytes: 1_048_576,
+			ChunkSizeBytes:          262_144,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+	})
+
+	ctx := context.Background()
+	timestamp := time.Now().UTC().UnixMilli()
+	uuid := "ppppppppppppppppppppp"
+	softkeyPrivateKey, softkeyPubJWK := generateSoftkeyKeyPair(t)
+	_, receiverPubFpr := createAndLockPasswordChannel(t, svc, uuid, timestamp, softkeyPubJWK)
+
+	commitFileDelivery := func(version int64, nonce string, ts int64, fileRef filestore.MultipartFileRef) {
+		t.Helper()
+
+		compoundBegin, err := svc.CompoundBegin(ctx, CompoundBeginInput{UUID: uuid})
+		if err != nil {
+			t.Fatalf("CompoundBegin() error = %v", err)
+		}
+
+		intent := ManageIntent{
+			Op:             "update",
+			UUID:           uuid,
+			Version:        version,
+			Timestamp:      ts,
+			Nonce:          encodeBase64URL([]byte(nonce)),
+			ReceiverPubFpr: receiverPubFpr,
+			PayloadKind:    "file",
+			FileRef:        &fileRef,
+			ExpireAt:       json.RawMessage("null"),
+		}
+		intentHash, err := intent.ComputeHash()
+		if err != nil {
+			t.Fatalf("intent.ComputeHash() error = %v", err)
+		}
+		expectedChallenge, err := computeExpectedCompoundChallengeBytes(
+			uuid,
+			intentHash,
+			&store.ActiveChallenge{
+				ChallengeID:   stringPtr(compoundBegin.Challenge.ID),
+				ChallengeSeed: stringPtr(compoundBegin.Challenge.Seed),
+			},
+			intent.Op,
+		)
+		if err != nil {
+			t.Fatalf("computeExpectedCompoundChallengeBytes() error = %v", err)
+		}
+		signature := signSoftkeyPayload(t, softkeyPrivateKey, expectedChallenge)
+
+		if _, err := svc.CompoundCommit(ctx, CompoundCommitInput{
+			AdminMode:        string(store.AdminModePassword),
+			UUID:             uuid,
+			SoftkeySignature: signature,
+			IntentHash:       intentHash,
+			Intent:           intent,
+		}); err != nil {
+			t.Fatalf("CompoundCommit() error = %v", err)
+		}
+	}
+
+	firstFileRef := filestore.MultipartFileRef{
+		StorageBackend:       filestore.FileStorageBackendS3,
+		ChunkSizeBytes:       262_144,
+		ChunkCount:           1,
+		TotalPlaintextBytes:  64,
+		TotalCiphertextBytes: 80,
+		BaseIV:               encodeBase64URL([]byte("base-iv-1")),
+		EncContentKey:        encodeBase64URL([]byte("enc-key-1")),
+		Chunks: []filestore.MultipartFileRefChunk{
+			{
+				Index:           0,
+				StorageKey:      "files/upload-1/0000.bin",
+				CiphertextBytes: 80,
+				CiphertextHash:  strings.Repeat("a", 64),
+			},
+		},
+	}
+	secondFileRef := filestore.MultipartFileRef{
+		StorageBackend:       filestore.FileStorageBackendS3,
+		ChunkSizeBytes:       262_144,
+		ChunkCount:           1,
+		TotalPlaintextBytes:  96,
+		TotalCiphertextBytes: 112,
+		BaseIV:               encodeBase64URL([]byte("base-iv-2")),
+		EncContentKey:        encodeBase64URL([]byte("enc-key-2")),
+		Chunks: []filestore.MultipartFileRefChunk{
+			{
+				Index:           0,
+				StorageKey:      "files/upload-2/0000.bin",
+				CiphertextBytes: 112,
+				CiphertextHash:  strings.Repeat("b", 64),
+			},
+		},
+	}
+
+	commitFileDelivery(0, "nonce-manage-file-cleanup-1", timestamp+2_000, firstFileRef)
+	commitFileDelivery(1, "nonce-manage-file-cleanup-2", timestamp+4_000, secondFileRef)
+
+	if len(cleaner.deleted) != 1 {
+		t.Fatalf("deleted uploads = %d, want 1", len(cleaner.deleted))
+	}
+	if cleaner.deleted[0].Chunks[0].StorageKey != firstFileRef.Chunks[0].StorageKey {
+		t.Fatalf(
+			"deleted storageKey = %q, want %q",
+			cleaner.deleted[0].Chunks[0].StorageKey,
+			firstFileRef.Chunks[0].StorageKey,
+		)
 	}
 }
 

@@ -323,6 +323,13 @@ func (tx *ChannelTx) deleteMultipartUpload(ctx context.Context) {
 	}
 }
 
+func (tx *ChannelTx) DeleteMultipartUpload(ctx context.Context, fileRef filestore.MultipartFileRef) error {
+	if tx == nil || tx.db == nil || tx.db.multipartCleaner == nil {
+		return nil
+	}
+	return tx.db.multipartCleaner.DeleteUpload(ctx, fileRef)
+}
+
 func (d *Database) SweepExpiredChannels(ctx context.Context, now time.Time) (int64, error) {
 	now = now.UTC()
 	queries := sqlcgen.New(d.pool)

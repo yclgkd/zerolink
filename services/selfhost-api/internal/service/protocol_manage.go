@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -716,6 +717,7 @@ func (s *ProtocolService) applyDelivery(
 	if expireAt != nil {
 		expiresAt = unixMilliToTime(*expireAt)
 	}
+	previousFileRef := bytes.Clone(channel.FileRef)
 
 	updateProof, err := buildStoredUpdateDeliveryProofJSON(resolveChannelAdminMode(channel), input)
 	if err != nil {
@@ -748,6 +750,9 @@ func (s *ProtocolService) applyDelivery(
 	if _, err := tx.SaveChannel(ctx, *channel); err != nil {
 		return err
 	}
+	if err := s.deleteSupersededMultipartUpload(ctx, tx, previousFileRef, channel.FileRef); err != nil {
+		return err
+	}
 	if _, err := tx.MarkChallengeConsumed(ctx, store.ChallengeKindCompound, now); err != nil {
 		return err
 	}
@@ -760,6 +765,29 @@ func (s *ProtocolService) applyDelivery(
 		return err
 	}
 
+	return nil
+}
+
+func (s *ProtocolService) deleteSupersededMultipartUpload(
+	ctx context.Context,
+	tx *store.ChannelTx,
+	previousFileRefJSON []byte,
+	nextFileRefJSON []byte,
+) error {
+	if tx == nil || len(previousFileRefJSON) == 0 {
+		return nil
+	}
+	if len(nextFileRefJSON) > 0 && bytes.Equal(previousFileRefJSON, nextFileRefJSON) {
+		return nil
+	}
+
+	var previousFileRef filestore.MultipartFileRef
+	if err := json.Unmarshal(previousFileRefJSON, &previousFileRef); err != nil {
+		return fmt.Errorf("decode superseded multipart fileRef: %w", err)
+	}
+	if err := tx.DeleteMultipartUpload(ctx, previousFileRef); err != nil {
+		return fmt.Errorf("delete superseded multipart upload: %w", err)
+	}
 	return nil
 }
 
