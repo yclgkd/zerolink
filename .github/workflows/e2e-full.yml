@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       suites:
-        description: "Suites to run (all, mock, realtime, verification)"
+        description: "Suites to run (all, mock-smoke, realtime, protocol, release-verification)"
         required: false
         default: "all"
 
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   e2e-mock:
-    name: E2E Mock
+    name: E2E UI Smoke (Mock API)
     if: >-
       github.event_name == 'schedule' ||
       github.event.inputs.suites == 'all' ||
@@ -46,8 +46,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
-      - name: Run mock E2E tests
-        run: pnpm --filter @zerolink/frontend test:e2e:mock
+      - name: Run mock-backed UI smoke tests
+        run: pnpm --filter @zerolink/frontend test:e2e:ui-smoke
 
   e2e-realtime:
     name: E2E Realtime
@@ -84,8 +84,64 @@ jobs:
       - name: Run realtime E2E smoke tests
         run: pnpm --filter @zerolink/frontend test:e2e:realtime
 
+  protocol-regression:
+    name: Protocol Regression
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event.inputs.suites == 'all' ||
+      contains(github.event.inputs.suites, 'protocol')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zerolink_selfhost
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zerolink_selfhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: services/selfhost-api/go.mod
+          cache-dependency-path: services/selfhost-api/go.sum
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run worker protocol regression suite
+        run: pnpm test:protocol:worker
+
+      - name: Run self-hosted protocol regression suite
+        env:
+          SELFHOST_API_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/zerolink_selfhost?sslmode=disable
+        run: pnpm test:protocol:selfhost
+
   e2e-verification:
-    name: E2E Verification
+    name: Release Verification Gate
     if: >-
       github.event_name == 'schedule' ||
       github.event.inputs.suites == 'all' ||
@@ -116,5 +172,5 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/frontend
 
-      - name: Run verification E2E tests
-        run: pnpm --filter @zerolink/frontend test:e2e:verification
+      - name: Run release verification gate tests
+        run: pnpm --filter @zerolink/frontend test:e2e:release-verification

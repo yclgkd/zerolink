@@ -23,24 +23,22 @@ export interface MockAssertionResult {
   publicKeyCose: Base64Url;
 }
 
-/**
- * Creates a real WebAuthn-like assertion using a P-256 keypair.
- * Signs authenticatorData || SHA-256(clientDataJSON) with the private key.
- * Returns the assertion and a COSE CBOR-encoded public key matching production storage format.
- */
-export async function createMockAssertion(
-  params: MockAssertionParams
-): Promise<MockAssertionResult> {
-  const { credentialId, rpId, rpOrigin, challenge, signCount, authenticatorFlags = 0x05 } = params;
+export interface MockAuthenticator {
+  credentialId: Base64Url;
+  /** COSE CBOR-encoded public key — matches what verifyAttestation stores in production. */
+  publicKeyCose: Base64Url;
+  signAssertion(params: Omit<MockAssertionParams, 'credentialId'>): Promise<AssertionJSON>;
+}
 
-  // Generate a P-256 keypair
+async function createP256KeyMaterial(): Promise<{
+  keyPair: CryptoKeyPair;
+  publicKeyCose: Base64Url;
+}> {
   const keyPair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
     'sign',
     'verify',
   ]);
 
-  // Export JWK to extract x/y coordinates, then construct COSE key (EC2 / ES256 / P-256).
-  // This matches the CBOR-encoded credentialPublicKey stored by verifyAttestation in production.
   const jwk = (await crypto.subtle.exportKey('jwk', keyPair.publicKey)) as {
     x: string;
     y: string;
@@ -48,40 +46,46 @@ export async function createMockAssertion(
   const xBytes = decodeBase64Url(jwk.x as Base64Url);
   const yBytes = decodeBase64Url(jwk.y as Base64Url);
   const coseMap = new Map<number, unknown>([
-    [1, 2], // kty = EC (2)
-    [3, -7], // alg = ES256 (-7)
-    [-1, 1], // crv = P-256 (1)
+    [1, 2],
+    [3, -7],
+    [-1, 1],
     [-2, xBytes],
     [-3, yBytes],
   ]);
-  const publicKeyCose = encodeBase64Url(encode(coseMap));
 
-  // Build clientDataJSON
+  return {
+    keyPair,
+    publicKeyCose: encodeBase64Url(encode(coseMap)),
+  };
+}
+
+async function signAssertionWithKeyPair(
+  keyPair: CryptoKeyPair,
+  params: MockAssertionParams
+): Promise<AssertionJSON> {
+  const { credentialId, rpId, rpOrigin, challenge, signCount, authenticatorFlags = 0x05 } = params;
+
   const clientData = {
     type: 'webauthn.get',
-    challenge: challenge,
+    challenge,
     origin: rpOrigin,
     crossOrigin: false,
   };
   const clientDataJSON = new TextEncoder().encode(JSON.stringify(clientData));
   const clientDataB64 = encodeBase64Url(clientDataJSON);
 
-  // Build authenticatorData:
-  //   rpIdHash (32 bytes) || flags (1 byte) || signCount (4 bytes big-endian)
   const rpIdHash = new Uint8Array(
     await crypto.subtle.digest('SHA-256', toArrayBufferBytes(toUtf8Bytes(rpId)))
   );
-  const flags = authenticatorFlags; // Defaults to UP + UV
   const signCountBytes = new Uint8Array(4);
   new DataView(signCountBytes.buffer).setUint32(0, signCount, false);
 
   const authenticatorData = new Uint8Array(37);
   authenticatorData.set(rpIdHash, 0);
-  authenticatorData[32] = flags;
+  authenticatorData[32] = authenticatorFlags;
   authenticatorData.set(signCountBytes, 33);
   const authenticatorDataB64 = encodeBase64Url(authenticatorData);
 
-  // Sign: authenticatorData || SHA-256(clientDataJSON)
   const clientDataHash = new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataJSON));
   const signedData = new Uint8Array(authenticatorData.byteLength + clientDataHash.byteLength);
   signedData.set(authenticatorData, 0);
@@ -90,20 +94,57 @@ export async function createMockAssertion(
   const derSignature = new Uint8Array(
     await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keyPair.privateKey, signedData)
   );
-  const signatureB64 = encodeBase64Url(derSignature);
 
-  const assertion: AssertionJSON = {
+  return {
     id: credentialId,
     rawId: credentialId,
     type: 'public-key',
     response: {
       clientDataJSON: clientDataB64,
       authenticatorData: authenticatorDataB64,
-      signature: signatureB64,
+      signature: encodeBase64Url(derSignature),
     },
   };
+}
 
-  return { assertion, publicKeyCose };
+/**
+ * Creates a reusable mock authenticator that can sign multiple assertions
+ * while keeping the same credential public key.
+ */
+export async function createMockAuthenticator(credentialId: Base64Url): Promise<MockAuthenticator> {
+  const { keyPair, publicKeyCose } = await createP256KeyMaterial();
+
+  return {
+    credentialId,
+    publicKeyCose,
+    async signAssertion(params) {
+      return signAssertionWithKeyPair(keyPair, { ...params, credentialId });
+    },
+  };
+}
+
+/**
+ * Creates a real WebAuthn-like assertion using a P-256 keypair.
+ * Signs authenticatorData || SHA-256(clientDataJSON) with the private key.
+ * Returns the assertion and a COSE CBOR-encoded public key matching production storage format.
+ */
+export async function createMockAssertion(
+  params: MockAssertionParams
+): Promise<MockAssertionResult> {
+  const authenticator = await createMockAuthenticator(params.credentialId);
+  const signParams: Omit<MockAssertionParams, 'credentialId'> = {
+    rpId: params.rpId,
+    rpOrigin: params.rpOrigin,
+    challenge: params.challenge,
+    signCount: params.signCount,
+    ...(params.authenticatorFlags !== undefined
+      ? { authenticatorFlags: params.authenticatorFlags }
+      : {}),
+  };
+  return {
+    assertion: await authenticator.signAssertion(signParams),
+    publicKeyCose: authenticator.publicKeyCose,
+  };
 }
 
 /**
