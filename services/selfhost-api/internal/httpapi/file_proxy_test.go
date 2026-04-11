@@ -245,6 +245,81 @@ func TestFileChunkProxyRouteAcceptsIssuedTarget(t *testing.T) {
 	}
 }
 
+func TestFileChunkProxyRouteAcceptsSignedTargetAcrossRouters(t *testing.T) {
+	t.Parallel()
+
+	putCalled := false
+	routerA := newProxyTestRouter(
+		stubFileStore{usePresignedURLs: func() bool { return false }},
+		stubProtocol{
+			publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+				return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+			},
+		},
+	)
+	routerB := newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			putChunk: func(_ context.Context, uploadID string, index int, body io.Reader, size int64) (string, error) {
+				putCalled = true
+				if uploadID == "" {
+					t.Fatal("uploadID = empty, want signed upload id")
+				}
+				if index != 0 {
+					t.Fatalf("index = %d, want 0", index)
+				}
+				payload, err := io.ReadAll(body)
+				if err != nil {
+					t.Fatalf("read body: %v", err)
+				}
+				if !bytes.Equal(payload, []byte("chunk-body")) {
+					t.Fatalf("body = %q, want chunk-body", payload)
+				}
+				if size != int64(len("chunk-body")) {
+					t.Fatalf("size = %d, want %d", size, len("chunk-body"))
+				}
+				return "etag-issued", nil
+			},
+		},
+		stubProtocol{
+			publicStatus: func(_ context.Context, _ string) (service.PublicStatusOutput, error) {
+				return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+			},
+		},
+	)
+
+	initiateReq := httptest.NewRequest(
+		http.MethodPost,
+		"/api/file/initiate",
+		strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":32}`),
+	)
+	initiateRes := httptest.NewRecorder()
+	routerA.ServeHTTP(initiateRes, initiateReq)
+	if initiateRes.Code != http.StatusOK {
+		t.Fatalf("initiate status = %d, want 200: %s", initiateRes.Code, initiateRes.Body.String())
+	}
+
+	var payload filestore.FileUploadInitiateResponse
+	if err := json.Unmarshal(initiateRes.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode initiate response: %v", err)
+	}
+
+	uploadReq := httptest.NewRequest(
+		http.MethodPut,
+		"/api/"+payload.Chunks[0].UploadURL,
+		strings.NewReader("chunk-body"),
+	)
+	uploadRes := httptest.NewRecorder()
+	routerB.ServeHTTP(uploadRes, uploadReq)
+
+	if !putCalled {
+		t.Fatal("putChunk was not called for a cross-router signed target")
+	}
+	if uploadRes.Code != http.StatusOK {
+		t.Fatalf("upload status = %d, want 200: %s", uploadRes.Code, uploadRes.Body.String())
+	}
+}
+
 func TestFileChunkProxyRouteRejectsOversizedChunk(t *testing.T) {
 	t.Parallel()
 
@@ -368,7 +443,7 @@ func TestFileFetchRouteReturnsRelativeProxyDownloadTarget(t *testing.T) {
 	}
 }
 
-func TestFileDownloadProxyRouteConsumesIssuedTarget(t *testing.T) {
+func TestFileDownloadProxyRouteRevalidatesIssuedTarget(t *testing.T) {
 	t.Parallel()
 
 	router := newProxyTestRouter(
@@ -417,8 +492,218 @@ func TestFileDownloadProxyRouteConsumesIssuedTarget(t *testing.T) {
 	secondRes := httptest.NewRecorder()
 	router.ServeHTTP(secondRes, secondReq)
 
-	if secondRes.Code != http.StatusNotFound {
-		t.Fatalf("second status = %d, want 404", secondRes.Code)
+	if secondRes.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want 200: %s", secondRes.Code, secondRes.Body.String())
+	}
+}
+
+func TestFileDownloadProxyRouteAcceptsSignedTargetAcrossRouters(t *testing.T) {
+	t.Parallel()
+
+	routerA := newProxyTestRouter(
+		stubFileStore{usePresignedURLs: func() bool { return false }},
+		stubProtocol{
+			decryptFetch: func(_ context.Context, _ string) (service.DecryptFetchOutput, error) {
+				fileRef := newProxyFileRef()
+				return service.DecryptFetchOutput{OK: true, FileRef: &fileRef}, nil
+			},
+		},
+	)
+	routerB := newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			getChunk: func(_ context.Context, key string) (io.ReadCloser, error) {
+				if key != "files/upload-1/0000.bin" {
+					t.Fatalf("key = %q, want files/upload-1/0000.bin", key)
+				}
+				return io.NopCloser(strings.NewReader("chunk-data")), nil
+			},
+		},
+		stubProtocol{
+			decryptFetch: func(_ context.Context, _ string) (service.DecryptFetchOutput, error) {
+				fileRef := newProxyFileRef()
+				return service.DecryptFetchOutput{OK: true, FileRef: &fileRef}, nil
+			},
+		},
+	)
+
+	fetchReq := httptest.NewRequest(http.MethodGet, "/api/file/fetch/aaaaaaaaaaaaaaaaaaaaa", nil)
+	fetchRes := httptest.NewRecorder()
+	routerA.ServeHTTP(fetchRes, fetchReq)
+	if fetchRes.Code != http.StatusOK {
+		t.Fatalf("fetch status = %d, want 200: %s", fetchRes.Code, fetchRes.Body.String())
+	}
+
+	var payload filestore.FileFetchResponse
+	if err := json.Unmarshal(fetchRes.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode fetch response: %v", err)
+	}
+
+	downloadReq := httptest.NewRequest(http.MethodGet, "/api/"+payload.Chunks[0].DownloadURL, nil)
+	downloadRes := httptest.NewRecorder()
+	routerB.ServeHTTP(downloadRes, downloadReq)
+
+	if downloadRes.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", downloadRes.Code, downloadRes.Body.String())
+	}
+	if downloadRes.Body.String() != "chunk-data" {
+		t.Fatalf("body = %q, want chunk-data", downloadRes.Body.String())
+	}
+}
+
+func TestFileDownloadProxyRouteRejectsSupersededTarget(t *testing.T) {
+	t.Parallel()
+
+	currentFileRef := newProxyFileRef()
+	currentCipherVersion := int64(0)
+	router := newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			getChunk: func(context.Context, string) (io.ReadCloser, error) {
+				t.Fatal("getChunk should not be called for a superseded download target")
+				return nil, nil
+			},
+		},
+		stubProtocol{
+			decryptFetch: func(_ context.Context, _ string) (service.DecryptFetchOutput, error) {
+				return service.DecryptFetchOutput{
+					OK:            true,
+					FileRef:       &currentFileRef,
+					CipherVersion: currentCipherVersion,
+				}, nil
+			},
+		},
+	)
+
+	fetchReq := httptest.NewRequest(http.MethodGet, "/api/file/fetch/aaaaaaaaaaaaaaaaaaaaa", nil)
+	fetchRes := httptest.NewRecorder()
+	router.ServeHTTP(fetchRes, fetchReq)
+	if fetchRes.Code != http.StatusOK {
+		t.Fatalf("fetch status = %d, want 200: %s", fetchRes.Code, fetchRes.Body.String())
+	}
+
+	var payload filestore.FileFetchResponse
+	if err := json.Unmarshal(fetchRes.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode fetch response: %v", err)
+	}
+
+	currentFileRef = filestore.MultipartFileRef{
+		StorageBackend:       filestore.FileStorageBackendS3,
+		ChunkSizeBytes:       32,
+		ChunkCount:           1,
+		TotalPlaintextBytes:  16,
+		TotalCiphertextBytes: 32,
+		BaseIV:               "YmFzZS1pdg",
+		EncContentKey:        "ZW5jLWtleQ",
+		Chunks: []filestore.MultipartFileRefChunk{
+			{
+				Index:           0,
+				StorageKey:      "files/upload-2/0000.bin",
+				CiphertextBytes: 32,
+				CiphertextHash:  strings.Repeat("b", 64),
+			},
+		},
+	}
+	currentCipherVersion = 1
+
+	downloadReq := httptest.NewRequest(http.MethodGet, "/api/"+payload.Chunks[0].DownloadURL, nil)
+	downloadRes := httptest.NewRecorder()
+	router.ServeHTTP(downloadRes, downloadReq)
+
+	if downloadRes.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", downloadRes.Code)
+	}
+}
+
+func TestFileDownloadProxyRouteRejectsDeletedTarget(t *testing.T) {
+	t.Parallel()
+
+	var currentFileRef *filestore.MultipartFileRef
+	fileRef := newProxyFileRef()
+	currentFileRef = &fileRef
+	router := newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			getChunk: func(context.Context, string) (io.ReadCloser, error) {
+				t.Fatal("getChunk should not be called for a deleted download target")
+				return nil, nil
+			},
+		},
+		stubProtocol{
+			decryptFetch: func(_ context.Context, _ string) (service.DecryptFetchOutput, error) {
+				if currentFileRef == nil {
+					return service.DecryptFetchOutput{}, &service.ProtocolError{
+						Code:    "NOT_FOUND",
+						Status:  http.StatusNotFound,
+						Message: "channel not found",
+					}
+				}
+				return service.DecryptFetchOutput{OK: true, FileRef: currentFileRef}, nil
+			},
+		},
+	)
+
+	fetchReq := httptest.NewRequest(http.MethodGet, "/api/file/fetch/aaaaaaaaaaaaaaaaaaaaa", nil)
+	fetchRes := httptest.NewRecorder()
+	router.ServeHTTP(fetchRes, fetchReq)
+	if fetchRes.Code != http.StatusOK {
+		t.Fatalf("fetch status = %d, want 200: %s", fetchRes.Code, fetchRes.Body.String())
+	}
+
+	var payload filestore.FileFetchResponse
+	if err := json.Unmarshal(fetchRes.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode fetch response: %v", err)
+	}
+
+	currentFileRef = nil
+
+	downloadReq := httptest.NewRequest(http.MethodGet, "/api/"+payload.Chunks[0].DownloadURL, nil)
+	downloadRes := httptest.NewRecorder()
+	router.ServeHTTP(downloadRes, downloadReq)
+
+	if downloadRes.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", downloadRes.Code)
+	}
+}
+
+func TestFileDownloadProxyRouteRejectsForgedStorageBinding(t *testing.T) {
+	t.Parallel()
+
+	authorizer := newProxyTargetAuthorizer(testUploadTokenSecret)
+	token, err := authorizer.IssueDownloadTarget(
+		"aaaaaaaaaaaaaaaaaaaaa",
+		0,
+		0,
+		"files/forged-upload/0000.bin",
+		strings.Repeat("a", 64),
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("issue download target: %v", err)
+	}
+
+	router := newProxyTestRouter(
+		stubFileStore{
+			usePresignedURLs: func() bool { return false },
+			getChunk: func(context.Context, string) (io.ReadCloser, error) {
+				t.Fatal("getChunk should not be called for a forged storage binding")
+				return nil, nil
+			},
+		},
+		stubProtocol{
+			decryptFetch: func(_ context.Context, _ string) (service.DecryptFetchOutput, error) {
+				fileRef := newProxyFileRef()
+				return service.DecryptFetchOutput{OK: true, FileRef: &fileRef}, nil
+			},
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/file/download/"+token, nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", res.Code)
 	}
 }
 

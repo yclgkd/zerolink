@@ -216,7 +216,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger, maxCompoundCommitBodyBytes)))
 	mux.HandleFunc("/api/file/chunk/{token}", methodOnly(http.MethodPut, logger, fileChunkProxyHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger)))
 	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, proxyTargets, logger)))
-	mux.HandleFunc("/api/file/download/{token}", methodOnly(http.MethodGet, logger, fileDownloadProxyHandler(deps.FileStore, proxyTargets, logger)))
+	mux.HandleFunc("/api/file/download/{token}", methodOnly(http.MethodGet, logger, fileDownloadProxyHandler(deps.Services.Protocol, deps.FileStore, proxyTargets, logger)))
 
 	for _, route := range protocol.RouteSpecs() {
 		if route.Name == "ws" {
@@ -607,7 +607,14 @@ func fileFetchHandler(
 				}
 				downloadURL = u
 			} else {
-				token, err := proxyTargets.IssueDownloadTarget(chunk.StorageKey, proxyDownloadTargetTTL)
+				token, err := proxyTargets.IssueDownloadTarget(
+					r.PathValue("uuid"),
+					output.CipherVersion,
+					chunk.Index,
+					chunk.StorageKey,
+					chunk.CiphertextHash,
+					proxyDownloadTargetTTL,
+				)
 				if err != nil {
 					writeError(logger, w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue download target")
 					return
@@ -680,21 +687,42 @@ func fileChunkProxyHandler(
 }
 
 func fileDownloadProxyHandler(
+	protocolService service.Protocol,
 	fileStore FileStore,
 	proxyTargets *proxyTargetAuthorizer,
 	logger *slog.Logger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if protocolService == nil {
+			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "protocol service is not configured")
+			return
+		}
 		if fileStore == nil {
 			writeError(logger, w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "file storage backend is not configured")
 			return
 		}
-		target, ok := proxyTargets.ConsumeDownloadTarget(r.PathValue("token"))
+		target, ok := proxyTargets.DownloadTarget(r.PathValue("token"))
 		if !ok {
 			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "download target not found")
 			return
 		}
-		rc, err := fileStore.GetChunk(r.Context(), target.storageKey)
+
+		output, err := protocolService.DecryptFetch(r.Context(), target.channelUUID)
+		if err != nil || output.FileRef == nil || output.CipherVersion != target.cipherVersion {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "download target not found")
+			return
+		}
+		if target.index >= len(output.FileRef.Chunks) {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "download target not found")
+			return
+		}
+		chunk := output.FileRef.Chunks[target.index]
+		if chunk.StorageKey != target.storageKey || chunk.CiphertextHash != target.ciphertextHash {
+			writeError(logger, w, http.StatusNotFound, "NOT_FOUND", "download target not found")
+			return
+		}
+
+		rc, err := fileStore.GetChunk(r.Context(), chunk.StorageKey)
 		if err != nil {
 			writeError(logger, w, http.StatusBadGateway, "STORAGE_ERROR", err.Error())
 			return

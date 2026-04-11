@@ -27,10 +27,12 @@ export interface FileUploadSession {
 }
 
 export interface FileDownloadSession {
-  v: '1';
+  v: '1' | '2';
   channelUuid: UUID;
+  version?: number;
   index: number;
   storageKey: string;
+  ciphertextHash?: HexString;
   issuedAt: UnixMs;
   expiresAt: UnixMs;
 }
@@ -54,8 +56,10 @@ interface SerializedFileUploadSessionRecord {
 interface SerializedFileDownloadSessionRecord {
   v: unknown;
   channelUuid: unknown;
+  version: unknown;
   index: unknown;
   storageKey: unknown;
+  ciphertextHash: unknown;
   issuedAt: unknown;
   expiresAt: unknown;
 }
@@ -66,6 +70,7 @@ const FILE_UPLOAD_TOKEN_DOMAIN = 'zl-file-upload-v1\0';
 const FILE_DOWNLOAD_TOKEN_DOMAIN = 'zl-file-download-v1\0';
 export const FILE_UPLOAD_TTL_MS = 15 * 60 * 1000;
 export const FILE_DOWNLOAD_TTL_MS = 5 * 60 * 1000;
+const HEX_64_REGEX = /^[a-f0-9]{64}$/u;
 
 function serializeFileUploadSession(session: FileUploadSession): string {
   return JSON.stringify({
@@ -82,8 +87,10 @@ function serializeFileDownloadSession(session: FileDownloadSession): string {
   return JSON.stringify({
     v: session.v,
     channelUuid: session.channelUuid,
+    version: session.version,
     index: session.index,
     storageKey: session.storageKey,
+    ciphertextHash: session.ciphertextHash,
     issuedAt: session.issuedAt,
     expiresAt: session.expiresAt,
   });
@@ -140,13 +147,15 @@ function parseFileDownloadSession(value: unknown): FileDownloadSession | null {
   const record = value as SerializedFileDownloadSessionRecord;
   const v = record.v;
   const channelUuid = record.channelUuid;
+  const version = record.version;
   const index = record.index;
   const storageKey = record.storageKey;
+  const ciphertextHash = record.ciphertextHash;
   const issuedAt = record.issuedAt;
   const expiresAt = record.expiresAt;
 
   if (
-    v !== '1' ||
+    (v !== '1' && v !== '2') ||
     typeof channelUuid !== 'string' ||
     channelUuid.length === 0 ||
     typeof index !== 'number' ||
@@ -162,6 +171,29 @@ function parseFileDownloadSession(value: unknown): FileDownloadSession | null {
     expiresAt < 0
   ) {
     return null;
+  }
+
+  if (v === '2') {
+    if (
+      typeof version !== 'number' ||
+      !Number.isInteger(version) ||
+      version < 0 ||
+      typeof ciphertextHash !== 'string' ||
+      !HEX_64_REGEX.test(ciphertextHash)
+    ) {
+      return null;
+    }
+
+    return {
+      v: '2',
+      channelUuid: channelUuid as UUID,
+      version,
+      index,
+      storageKey,
+      ciphertextHash: ciphertextHash as HexString,
+      issuedAt: issuedAt as UnixMs,
+      expiresAt: expiresAt as UnixMs,
+    };
   }
 
   return {

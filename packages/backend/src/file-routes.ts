@@ -136,7 +136,15 @@ async function readJsonBody(request: Request): Promise<unknown | null> {
   }
 }
 
-async function forwardFilePayloadLookup(env: Env, uuid: string): Promise<MultipartFileRef | null> {
+interface FilePayloadLookupResult {
+  fileRef: MultipartFileRef;
+  cipherVersion: number;
+}
+
+async function forwardFilePayloadLookup(
+  env: Env,
+  uuid: string
+): Promise<FilePayloadLookupResult | null> {
   const durableObjectId = env.SECRET_VAULT.idFromName(uuid);
   const stub = env.SECRET_VAULT.get(durableObjectId);
   const response = await stub.fetch('https://secret-vault.internal/get_file_payload', {
@@ -151,6 +159,7 @@ async function forwardFilePayloadLookup(env: Env, uuid: string): Promise<Multipa
     ok?: boolean;
     fileRef?: MultipartFileRef;
     payloadTransport?: string;
+    cipherVersion?: number;
   } | null;
   if (
     !response.ok ||
@@ -160,8 +169,15 @@ async function forwardFilePayloadLookup(env: Env, uuid: string): Promise<Multipa
   ) {
     return null;
   }
+  const cipherVersion = payload.cipherVersion;
+  if (typeof cipherVersion !== 'number' || !Number.isInteger(cipherVersion) || cipherVersion < 0) {
+    return null;
+  }
 
-  return payload.fileRef;
+  return {
+    fileRef: payload.fileRef,
+    cipherVersion,
+  };
 }
 
 async function channelExists(env: Env, uuid: string): Promise<boolean> {
@@ -386,8 +402,8 @@ export async function handleFileUploadComplete(request: Request, env: Env): Prom
 }
 
 export async function handleFileFetch(env: Env, uuid: string): Promise<Response> {
-  const fileRef = await forwardFilePayloadLookup(env, uuid);
-  if (!fileRef) {
+  const filePayload = await forwardFilePayloadLookup(env, uuid);
+  if (!filePayload) {
     return errorResponse('CHANNEL_NOT_MULTIPART', 409);
   }
 
@@ -395,15 +411,17 @@ export async function handleFileFetch(env: Env, uuid: string): Promise<Response>
   const response = FileFetchResponseSchema.parse({
     ok: true,
     chunks: await Promise.all(
-      fileRef.chunks.map(async (chunk) => ({
+      filePayload.fileRef.chunks.map(async (chunk) => ({
         index: chunk.index,
         downloadUrl: `/api/file/dl/${uuid}/${chunk.index}?token=${await createFileDownloadToken(
           env.COMMIT_TOKEN_SECRET,
           {
-            v: '1',
+            v: '2',
             channelUuid: uuid as UUID,
+            version: filePayload.cipherVersion,
             index: chunk.index,
             storageKey: chunk.storageKey,
+            ciphertextHash: chunk.ciphertextHash,
             issuedAt: now,
             expiresAt: (Number(now) + FILE_DOWNLOAD_TTL_MS) as UnixMs,
           }
@@ -437,7 +455,24 @@ export async function handleFileDownload(
     return errorResponse('NOT_FOUND', 404);
   }
 
-  const object = await env.FILE_BUCKET.get(downloadSession.storageKey);
+  const filePayload = await forwardFilePayloadLookup(env, uuid);
+  if (
+    !filePayload ||
+    (downloadSession.v === '2' && filePayload.cipherVersion !== downloadSession.version)
+  ) {
+    return errorResponse('NOT_FOUND', 404);
+  }
+
+  const currentChunk = filePayload.fileRef.chunks[downloadSession.index];
+  if (
+    !currentChunk ||
+    currentChunk.storageKey !== downloadSession.storageKey ||
+    (downloadSession.v === '2' && currentChunk.ciphertextHash !== downloadSession.ciphertextHash)
+  ) {
+    return errorResponse('NOT_FOUND', 404);
+  }
+
+  const object = await env.FILE_BUCKET.get(currentChunk.storageKey);
   if (!object) {
     return errorResponse('NOT_FOUND', 404);
   }
