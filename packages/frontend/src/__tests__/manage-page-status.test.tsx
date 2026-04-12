@@ -227,7 +227,7 @@ describe('ManagePage – public status and waiting state', () => {
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(
-        new URL(`/s/${VALID_UUID}`, window.location.origin).href
+        new URL(`/s/${VALID_UUID}#k=bW9ja19sb2NrX3NlY3JldA`, window.location.origin).href
       );
     });
   });

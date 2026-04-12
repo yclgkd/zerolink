@@ -29,6 +29,7 @@ describe('persistCreatedShareLink', () => {
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(String(raw));
     expect(parsed.url).toBe(SANITIZED_SHARE_URL);
+    expect(parsed.lockSecret).toBe('bW9ja19sb2NrX3NlY3JldA');
     expect(typeof parsed.ts).toBe('number');
     expect(parsed.ttl).toBe(ENTRY_TTL);
   });
@@ -55,7 +56,7 @@ describe('persistCreatedShareLink', () => {
 describe('readCreatedShareLink', () => {
   it('returns the URL when a valid non-expired entry exists', () => {
     persistCreatedShareLink(SHARE_URL, ENTRY_TTL);
-    expect(readCreatedShareLink(UUID)).toBe(SANITIZED_SHARE_URL);
+    expect(readCreatedShareLink(UUID)).toBe(SHARE_URL);
   });
 
   it('returns null when no entry exists for the uuid', () => {
@@ -72,7 +73,7 @@ describe('readCreatedShareLink', () => {
     const now = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(now + CHANNEL_TTL_MS.ONE_HOUR + 1);
 
-    expect(readCreatedShareLink(UUID)).toBe(SANITIZED_SHARE_URL);
+    expect(readCreatedShareLink(UUID)).toBe(SHARE_URL);
   });
 
   it('returns null and removes the entry when TTL has expired', () => {
@@ -122,10 +123,23 @@ describe('readCreatedShareLink', () => {
       JSON.stringify({ url: SHARE_URL, ts: Date.now(), ttl: ENTRY_TTL })
     );
 
-    expect(readCreatedShareLink(UUID)).toBe(SANITIZED_SHARE_URL);
+    expect(readCreatedShareLink(UUID)).toBe(SHARE_URL);
     expect(
-      JSON.parse(String(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`))).url
-    ).toBe(SANITIZED_SHARE_URL);
+      JSON.parse(String(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)))
+    ).toMatchObject({
+      url: SANITIZED_SHARE_URL,
+      lockSecret: 'bW9ja19sb2NrX3NlY3JldA',
+    });
+  });
+
+  it('returns null and removes entries that no longer have enough data to rebuild the receiver link', () => {
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${UUID}`,
+      JSON.stringify({ url: SANITIZED_SHARE_URL, ts: Date.now(), ttl: ENTRY_TTL })
+    );
+
+    expect(readCreatedShareLink(UUID)).toBeNull();
+    expect(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)).toBeNull();
   });
 });
 
