@@ -111,6 +111,11 @@ type FileFetchResponse struct {
 	Chunks []FileDownloadChunkTarget `json:"chunks"`
 }
 
+type ChunkObject struct {
+	Key          string
+	LastModified time.Time
+}
+
 type Store struct {
 	client         *minio.Client
 	presignClient  *minio.Client
@@ -329,6 +334,45 @@ func (s *Store) DeleteUpload(ctx context.Context, fileRef MultipartFileRef) erro
 		if err := s.client.RemoveObject(ctx, s.bucket, chunk.StorageKey, minio.RemoveObjectOptions{}); err != nil {
 			errs = append(errs, fmt.Errorf("delete chunk %d: %w", chunk.Index, err))
 		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (s *Store) ListChunkObjects(ctx context.Context) ([]ChunkObject, error) {
+	objects := make([]ChunkObject, 0)
+	for object := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    chunkObjectPrefix + "/",
+		Recursive: true,
+	}) {
+		if object.Err != nil {
+			return nil, fmt.Errorf("list chunk objects: %w", object.Err)
+		}
+		objects = append(objects, ChunkObject{
+			Key:          object.Key,
+			LastModified: object.LastModified.UTC(),
+		})
+	}
+	return objects, nil
+}
+
+func (s *Store) DeleteObjects(ctx context.Context, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	objectsCh := make(chan minio.ObjectInfo, len(keys))
+	for _, key := range keys {
+		objectsCh <- minio.ObjectInfo{Key: key}
+	}
+	close(objectsCh)
+
+	var errs []error
+	for removeErr := range s.client.RemoveObjects(ctx, s.bucket, objectsCh, minio.RemoveObjectsOptions{}) {
+		if removeErr.Err == nil {
+			continue
+		}
+		errs = append(errs, fmt.Errorf("delete chunk %s: %w", removeErr.ObjectName, removeErr.Err))
 	}
 
 	return errors.Join(errs...)

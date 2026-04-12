@@ -27,6 +27,7 @@ type Runtime struct {
 	server          *http.Server
 	shutdownTimeout time.Duration
 	db              *store.Database
+	multipartStore  store.MultipartChunkStore
 	realtime        realtime.Publisher
 	logger          *slog.Logger
 }
@@ -48,6 +49,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 	verifier := webauthn.NewVerifier()
 
 	var fileStore httpapi.FileStore
+	var multipartStore store.MultipartChunkStore
 	if cfg.File.StorageBackend == "s3" {
 		s3Store, err := filestore.NewS3(ctx, filestore.Config{
 			Endpoint:       cfg.File.S3.Endpoint,
@@ -62,6 +64,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 			return nil, fmt.Errorf("init file storage: %w", err)
 		}
 		fileStore = s3Store
+		multipartStore = s3Store
 	}
 	if fileStore != nil {
 		db.SetMultipartCleaner(fileStore)
@@ -125,12 +128,17 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime,
 		server:          server,
 		shutdownTimeout: cfg.HTTP.ShutdownTimeout,
 		db:              db,
+		multipartStore:  multipartStore,
 		realtime:        realtimeHub,
 		logger:          logger,
 	}, nil
 }
 
 func (r *Runtime) Run(ctx context.Context) error {
+	if r.multipartStore != nil {
+		go r.runMaintenanceLoop(ctx)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- r.server.ListenAndServe()
