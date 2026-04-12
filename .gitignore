@@ -16,6 +16,7 @@ deploy/selfhost/release-context/
 
 # Testing
 coverage/
+services/selfhost-api/coverage.out
 .nyc_output/
 playwright-report/
 test-results/
