@@ -981,8 +981,64 @@ func TestFileInitiateRouteRateLimitsPerCallerAndChannel(t *testing.T) {
 		t.Fatalf("other caller status = %d, want 200: %s", otherCallerRes.Code, otherCallerRes.Body.String())
 	}
 
-	if publicStatusCalls != fileInitiateRateLimitConfig.maxRequests+1 {
-		t.Fatalf("publicStatusCalls = %d, want %d", publicStatusCalls, fileInitiateRateLimitConfig.maxRequests+1)
+	if publicStatusCalls != fileInitiateRateLimitConfig.maxRequests+2 {
+		t.Fatalf("publicStatusCalls = %d, want %d", publicStatusCalls, fileInitiateRateLimitConfig.maxRequests+2)
+	}
+}
+
+func TestFileInitiateRouteDoesNotRateLimitUnknownChannel(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		UploadTokenSecret: testUploadTokenSecret,
+		TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")},
+		FileStore:         stubFileStore{},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(context.Context, string) (service.PublicStatusOutput, error) {
+					return service.PublicStatusOutput{}, &service.ProtocolError{
+						Code:    "NOT_FOUND",
+						Status:  http.StatusNotFound,
+						Message: "channel not found",
+					}
+				},
+			},
+			logger,
+		),
+	})
+
+	for attempt := 0; attempt <= fileInitiateRateLimitConfig.maxRequests; attempt++ {
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/api/file/initiate",
+			strings.NewReader(`{"channelUuid":"aaaaaaaaaaaaaaaaaaaaa","chunkCount":1,"totalCiphertextBytes":24}`),
+		)
+		req.RemoteAddr = "10.0.0.25:4321"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", "198.51.100.7")
+		req.Header.Set("User-Agent", "curl/8.7.1")
+		res := httptest.NewRecorder()
+
+		router.ServeHTTP(res, req)
+
+		if res.Code != http.StatusNotFound {
+			t.Fatalf("attempt %d status = %d, want 404: %s", attempt+1, res.Code, res.Body.String())
+		}
 	}
 }
 

@@ -419,14 +419,14 @@ func fileInitiateHandler(
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes exceeds deployment file policy")
 			return
 		}
+		if _, err := protocolService.PublicStatus(r.Context(), input.ChannelUUID); err != nil {
+			writeProtocolError(logger, w, err)
+			return
+		}
 		rateLimitSubject := input.ChannelUUID + ":public:" + buildCallerRateLimitSubject(r, trustedProxyCIDRs)
 		if retryAfterSeconds, limited := rateLimiter.Enforce(rateLimitSubject, time.Now(), fileInitiateRateLimitConfig); limited {
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
 			writeError(logger, w, http.StatusTooManyRequests, "RATE_LIMITED", "file initiate rate limit exceeded")
-			return
-		}
-		if _, err := protocolService.PublicStatus(r.Context(), input.ChannelUUID); err != nil {
-			writeProtocolError(logger, w, err)
 			return
 		}
 		totalPlaintextBytes, ok := resolveMultipartPlaintextBytes(input.TotalCiphertextBytes, input.ChunkCount)

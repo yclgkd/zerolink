@@ -318,6 +318,14 @@ export async function handleFileUploadInitiate(request: Request, env: Env): Prom
   ) {
     return errorResponse('BAD_REQUEST', 400);
   }
+  try {
+    if (!(await channelExists(env, parsed.data.channelUuid))) {
+      return errorResponse('NOT_FOUND', 404);
+    }
+  } catch {
+    return errorResponse('INTERNAL_ERROR', 500);
+  }
+
   const now = Date.now() as UnixMs;
   const callerKey = await computeCallerKey(
     env.COMMIT_TOKEN_SECRET,
@@ -333,14 +341,6 @@ export async function handleFileUploadInitiate(request: Request, env: Env): Prom
     return errorResponse('RATE_LIMITED', 429, {
       'Retry-After': String(retryAfterSeconds),
     });
-  }
-
-  try {
-    if (!(await channelExists(env, parsed.data.channelUuid))) {
-      return errorResponse('NOT_FOUND', 404);
-    }
-  } catch {
-    return errorResponse('INTERNAL_ERROR', 500);
   }
 
   const uploadId = await createFileUploadId(env.COMMIT_TOKEN_SECRET, {
