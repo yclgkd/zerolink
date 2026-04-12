@@ -78,6 +78,52 @@ const API_PREFIX = '/api';
 const ALLOW_METHODS = 'GET,POST,PUT,OPTIONS';
 const ALLOW_HEADERS = 'Content-Type, Authorization';
 const CORS_ALLOW_ORIGIN = '*';
+const CREATE_BEGIN_RATE_LIMIT_MAX_REQUESTS = 10;
+const CREATE_BEGIN_RATE_LIMIT_WINDOW_MS = 60_000;
+
+const createBeginRateLimitWindows = new WeakMap<
+  Env,
+  Map<string, { count: number; windowStart: number }>
+>();
+
+function getCreateBeginRateLimitWindows(
+  env: Env
+): Map<string, { count: number; windowStart: number }> {
+  const existing = createBeginRateLimitWindows.get(env);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Map<string, { count: number; windowStart: number }>();
+  createBeginRateLimitWindows.set(env, created);
+  return created;
+}
+
+function enforceCreateBeginRateLimit(env: Env, subject: string, now: number): number | null {
+  const windows = getCreateBeginRateLimitWindows(env);
+
+  for (const [key, window] of windows.entries()) {
+    if (now - window.windowStart >= CREATE_BEGIN_RATE_LIMIT_WINDOW_MS) {
+      windows.delete(key);
+    }
+  }
+
+  const existing = windows.get(subject);
+  if (!existing || now - existing.windowStart >= CREATE_BEGIN_RATE_LIMIT_WINDOW_MS) {
+    windows.set(subject, { count: 1, windowStart: now });
+    return null;
+  }
+
+  if (existing.count >= CREATE_BEGIN_RATE_LIMIT_MAX_REQUESTS) {
+    return Math.max(
+      1,
+      Math.ceil((existing.windowStart + CREATE_BEGIN_RATE_LIMIT_WINDOW_MS - now) / 1000)
+    );
+  }
+
+  existing.count += 1;
+  return null;
+}
 const LOCK_BEGIN_PATH = /^\/api\/lock_begin\/([^/]+)$/u;
 const LOCK_COMMIT_PATH = /^\/api\/lock_commit\/([^/]+)$/u;
 const COMPOUND_BEGIN_PATH = /^\/api\/manage\/compound_begin\/([^/]+)$/u;
@@ -114,8 +160,8 @@ function buildApiHeaders(): Headers {
   });
 }
 
-function jsonApiResponse(payload: unknown, status: number, headers?: Headers): Response {
-  const resolvedHeaders = headers ?? buildApiHeaders();
+function jsonApiResponse(payload: unknown, status: number, headers?: HeadersInit): Response {
+  const resolvedHeaders = new Headers(headers ?? buildApiHeaders());
   resolvedHeaders.set('Content-Type', 'application/json; charset=utf-8');
 
   return new Response(JSON.stringify(payload), {
@@ -124,7 +170,7 @@ function jsonApiResponse(payload: unknown, status: number, headers?: Headers): R
   });
 }
 
-function errorResponse(code: string, status: number, headers?: Headers): Response {
+function errorResponse(code: string, status: number, headers?: HeadersInit): Response {
   return jsonApiResponse(
     {
       ok: false,
@@ -352,6 +398,19 @@ async function handleCreateBegin(
 
   if (parsed.data.uuid !== pathnameUuid) {
     return errorResponse('BAD_REQUEST', 400);
+  }
+
+  // Limit channel creation per caller at ingress so rotating UUIDs cannot bypass the bucket.
+  const callerKey = await computeCallerKey(
+    env.COMMIT_TOKEN_SECRET,
+    request.headers.get('CF-Connecting-IP'),
+    request.headers.get('User-Agent')
+  );
+  const retryAfterSeconds = enforceCreateBeginRateLimit(env, callerKey, Date.now());
+  if (retryAfterSeconds !== null) {
+    return errorResponse('RATE_LIMITED', 429, {
+      'Retry-After': String(retryAfterSeconds),
+    });
   }
 
   return forwardToSecretVault(env, request, pathnameUuid, '/create_begin', parsed.data);

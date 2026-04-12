@@ -132,6 +132,74 @@ describe('backend worker routing — lock begin/commit forwarding + cookie signa
     expect(calls[0]?.pathname).toBe('/create_begin');
   });
 
+  it('rate limits create_begin requests per caller across uuids', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: true, creationOptions: { publicKey: {} } }), {
+        status: 200,
+      });
+    });
+
+    const sharedHeaders = {
+      'CF-Connecting-IP': '198.51.100.42',
+      'User-Agent': 'curl/8.7.1',
+    };
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const uuid = `aaaaaaaaaaaaaaaaaaaa${String.fromCharCode(97 + attempt)}`;
+      const response = await dispatch(
+        env,
+        `/api/create_begin/${uuid}`,
+        'POST',
+        {
+          uuid,
+          timestamp: 1_730_000_000_000,
+          securityProfile: 'quick',
+        },
+        false,
+        sharedHeaders
+      );
+      expect(response.status).toBe(200);
+    }
+
+    const limitedResponse = await dispatch(
+      env,
+      '/api/create_begin/bbbbbbbbbbbbbbbbbbbbb',
+      'POST',
+      {
+        uuid: 'bbbbbbbbbbbbbbbbbbbbb',
+        timestamp: 1_730_000_000_000,
+        securityProfile: 'quick',
+      },
+      false,
+      sharedHeaders
+    );
+    const limitedPayload = (await limitedResponse.json()) as ApiErrorResponse;
+
+    expect(limitedResponse.status).toBe(429);
+    expect(limitedPayload.code).toBe('RATE_LIMITED');
+    expect(limitedResponse.headers.get('Retry-After')).toBeTruthy();
+    expect(calls).toHaveLength(10);
+
+    const otherCallerResponse = await dispatch(
+      env,
+      '/api/create_begin/ccccccccccccccccccccc',
+      'POST',
+      {
+        uuid: 'ccccccccccccccccccccc',
+        timestamp: 1_730_000_000_000,
+        securityProfile: 'quick',
+      },
+      false,
+      {
+        'CF-Connecting-IP': '198.51.100.43',
+        'User-Agent': 'curl/8.7.1',
+      }
+    );
+
+    expect(otherCallerResponse.status).toBe(200);
+    expect(calls).toHaveLength(11);
+  });
+
   it('forwards create_finish request to SecretVault DO', async () => {
     const { env, calls } = createMockEnv(async () => {
       return new Response(JSON.stringify({ ok: true, shareUrl: '/s/abc', manageUrl: '/m/abc' }), {

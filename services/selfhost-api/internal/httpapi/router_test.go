@@ -591,6 +591,70 @@ func TestCreateBeginRouteReturnsProtocolPayload(t *testing.T) {
 	}
 }
 
+func TestCreateBeginRouteRateLimitsPerCaller(t *testing.T) {
+	t.Parallel()
+
+	trustedProxyCIDRs := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+	createBeginCalls := 0
+	router := newTestRouterWithLoggerAndTrustedProxies(
+		stubChecker{},
+		stubProtocol{
+			createBegin: func(_ context.Context, input service.CreateBeginInput) (service.CreateBeginOutput, error) {
+				createBeginCalls++
+				return service.CreateBeginOutput{
+					OK: true,
+					CreationOptions: map[string]any{
+						"challenge": input.UUID,
+					},
+				}, nil
+			},
+		},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		trustedProxyCIDRs,
+	)
+
+	makeRequest := func(callerIP string, uuid string) *http.Request {
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/api/create_begin/"+uuid,
+			strings.NewReader(`{"uuid":"`+uuid+`","timestamp":1730000000000,"securityProfile":"quick","ttl":3600000}`),
+		)
+		req.RemoteAddr = "10.0.0.25:4321"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", callerIP)
+		req.Header.Set("User-Agent", "curl/8.7.1")
+		return req
+	}
+
+	for attempt := 0; attempt < createBeginRateLimitConfig.maxRequests; attempt++ {
+		uuid := "aaaaaaaaaaaaaaaaaaaa" + string(rune('a'+attempt))
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, makeRequest("198.51.100.7", uuid))
+		if res.Code != http.StatusOK {
+			t.Fatalf("attempt %d status = %d, want 200: %s", attempt+1, res.Code, res.Body.String())
+		}
+	}
+
+	limitedRes := httptest.NewRecorder()
+	router.ServeHTTP(limitedRes, makeRequest("198.51.100.7", "bbbbbbbbbbbbbbbbbbbbb"))
+	if limitedRes.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited status = %d, want 429: %s", limitedRes.Code, limitedRes.Body.String())
+	}
+	if limitedRes.Header().Get("Retry-After") == "" {
+		t.Fatal("Retry-After header = empty, want rate limit hint")
+	}
+
+	otherCallerRes := httptest.NewRecorder()
+	router.ServeHTTP(otherCallerRes, makeRequest("198.51.100.8", "ccccccccccccccccccccc"))
+	if otherCallerRes.Code != http.StatusOK {
+		t.Fatalf("other caller status = %d, want 200: %s", otherCallerRes.Code, otherCallerRes.Body.String())
+	}
+
+	if createBeginCalls != createBeginRateLimitConfig.maxRequests+1 {
+		t.Fatalf("createBeginCalls = %d, want %d", createBeginCalls, createBeginRateLimitConfig.maxRequests+1)
+	}
+}
+
 func TestCreateBeginRouteRejectsPathBodyMismatch(t *testing.T) {
 	t.Parallel()
 
