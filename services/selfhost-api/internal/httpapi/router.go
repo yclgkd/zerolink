@@ -208,6 +208,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		maxCompoundCommitBodyBytes = defaultMaxProtocolBodyBytes
 	}
 	proxyTargets := newProxyTargetAuthorizer(deps.UploadTokenSecret)
+	createBeginRateLimiter := newRequestRateLimiter()
 	fileInitiateRateLimiter := newRequestRateLimiter()
 
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
@@ -237,6 +238,7 @@ func NewRouter(deps Dependencies) http.Handler {
 					deps.Services.Protocol,
 					logger,
 					deps.TrustedProxyCIDRs,
+					createBeginRateLimiter,
 					maxCompoundCommitBodyBytes,
 				),
 			),
@@ -295,6 +297,7 @@ func protocolHandler(
 	protocolService service.Protocol,
 	logger *slog.Logger,
 	trustedProxyCIDRs []netip.Prefix,
+	createBeginRateLimiter *requestRateLimiter,
 	maxCompoundCommitBodyBytes int64,
 ) http.HandlerFunc {
 	if protocolService == nil {
@@ -303,7 +306,7 @@ func protocolHandler(
 
 	switch routeName {
 	case "create_begin":
-		return createBeginHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
+		return createBeginHandler(protocolService, logger, trustedProxyCIDRs, createBeginRateLimiter, defaultMaxProtocolBodyBytes)
 	case "create_finish":
 		return createFinishHandler(protocolService, logger, defaultMaxProtocolBodyBytes)
 	case "lock_begin":
@@ -799,7 +802,13 @@ func writeJSON(logger *slog.Logger, w http.ResponseWriter, status int, payload a
 	}
 }
 
-func createBeginHandler(protocolService service.Protocol, logger *slog.Logger, maxProtocolBodyBytes int64) http.HandlerFunc {
+func createBeginHandler(
+	protocolService service.Protocol,
+	logger *slog.Logger,
+	trustedProxyCIDRs []netip.Prefix,
+	rateLimiter *requestRateLimiter,
+	maxProtocolBodyBytes int64,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input service.CreateBeginInput
 		if !decodeJSONBody(w, r, &input, logger, maxProtocolBodyBytes) {
@@ -808,6 +817,13 @@ func createBeginHandler(protocolService service.Protocol, logger *slog.Logger, m
 
 		if input.UUID != r.PathValue("uuid") {
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "path/body uuid mismatch")
+			return
+		}
+		// Channel creation abuse is caller-scoped, so enforce before the request reaches per-UUID service state.
+		rateLimitSubject := buildCallerRateLimitSubject(r, trustedProxyCIDRs)
+		if retryAfterSeconds, limited := rateLimiter.Enforce(rateLimitSubject, time.Now(), createBeginRateLimitConfig); limited {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
+			writeError(logger, w, http.StatusTooManyRequests, "RATE_LIMITED", "create begin rate limit exceeded")
 			return
 		}
 

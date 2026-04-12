@@ -29,6 +29,11 @@ var fileInitiateRateLimitConfig = requestRateLimitConfig{
 	window:      time.Minute,
 }
 
+var createBeginRateLimitConfig = requestRateLimitConfig{
+	maxRequests: 10,
+	window:      time.Minute,
+}
+
 func newRequestRateLimiter() *requestRateLimiter {
 	return &requestRateLimiter{
 		buckets: make(map[string]requestRateLimitBucket),
