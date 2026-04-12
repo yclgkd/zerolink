@@ -208,11 +208,12 @@ func NewRouter(deps Dependencies) http.Handler {
 		maxCompoundCommitBodyBytes = defaultMaxProtocolBodyBytes
 	}
 	proxyTargets := newProxyTargetAuthorizer(deps.UploadTokenSecret)
+	fileInitiateRateLimiter := newRequestRateLimiter()
 
 	mux.HandleFunc("/healthz", methodOnly(http.MethodGet, logger, healthHandler(deps.Services.Health.Live, logger)))
 	mux.HandleFunc("/readyz", methodOnly(http.MethodGet, logger, readyHandler(deps.Services.Health, logger)))
 	mux.HandleFunc("/api/file_policy", methodOnly(http.MethodGet, logger, filePolicyHandler(deps.FilePolicy, logger)))
-	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, proxyTargets, logger, maxCompoundCommitBodyBytes)))
+	mux.HandleFunc("/api/file/initiate", methodOnly(http.MethodPost, logger, fileInitiateHandler(deps.Services.Protocol, deps.FileStore, deps.FilePolicy, proxyTargets, deps.TrustedProxyCIDRs, fileInitiateRateLimiter, logger, maxCompoundCommitBodyBytes)))
 	mux.HandleFunc("/api/file/complete", methodOnly(http.MethodPost, logger, fileCompleteHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger, maxCompoundCommitBodyBytes)))
 	mux.HandleFunc("/api/file/chunk/{token}", methodOnly(http.MethodPut, logger, fileChunkProxyHandler(deps.FileStore, deps.FilePolicy, proxyTargets, logger)))
 	mux.HandleFunc("/api/file/fetch/{uuid}", methodOnly(http.MethodGet, logger, fileFetchHandler(deps.Services.Protocol, deps.FileStore, proxyTargets, logger)))
@@ -383,6 +384,8 @@ func fileInitiateHandler(
 	fileStore FileStore,
 	filePolicy FilePolicy,
 	proxyTargets *proxyTargetAuthorizer,
+	trustedProxyCIDRs []netip.Prefix,
+	rateLimiter *requestRateLimiter,
 	logger *slog.Logger,
 	maxProtocolBodyBytes int64,
 ) http.HandlerFunc {
@@ -414,6 +417,12 @@ func fileInitiateHandler(
 		}
 		if input.TotalCiphertextBytes > resolveMaxMultipartCiphertextBytes(filePolicy.MaxFileBytes, input.ChunkCount) {
 			writeError(logger, w, http.StatusBadRequest, "BAD_REQUEST", "totalCiphertextBytes exceeds deployment file policy")
+			return
+		}
+		rateLimitSubject := input.ChannelUUID + ":public:" + buildCallerRateLimitSubject(r, trustedProxyCIDRs)
+		if retryAfterSeconds, limited := rateLimiter.Enforce(rateLimitSubject, time.Now(), fileInitiateRateLimitConfig); limited {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
+			writeError(logger, w, http.StatusTooManyRequests, "RATE_LIMITED", "file initiate rate limit exceeded")
 			return
 		}
 		if _, err := protocolService.PublicStatus(r.Context(), input.ChannelUUID); err != nil {

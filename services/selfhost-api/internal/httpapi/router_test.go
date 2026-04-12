@@ -906,6 +906,86 @@ func TestFileInitiateRouteRejectsExcessiveTotalCiphertextBytes(t *testing.T) {
 	}
 }
 
+func TestFileInitiateRouteRateLimitsPerCallerAndChannel(t *testing.T) {
+	t.Parallel()
+
+	const channelUUID = "aaaaaaaaaaaaaaaaaaaaa"
+
+	var publicStatusCalls int
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	realtimeHub := realtime.NewHub(logger)
+	router := NewRouter(Dependencies{
+		Logger:            logger,
+		AllowedOrigin:     "http://localhost:5173",
+		Realtime:          realtimeHub,
+		UploadTokenSecret: testUploadTokenSecret,
+		TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")},
+		FileStore:         stubFileStore{},
+		FilePolicy: FilePolicy{
+			MaxFileBytes:            64,
+			MultipartThresholdBytes: 16,
+			ChunkSizeBytes:          8,
+			MaxChunks:               4,
+			MultipartSupported:      true,
+		},
+		Services: service.New(
+			stubChecker{},
+			webauthn.NoopVerifier{},
+			realtimeHub,
+			stubProtocol{
+				publicStatus: func(_ context.Context, uuid string) (service.PublicStatusOutput, error) {
+					publicStatusCalls++
+					if uuid != channelUUID {
+						t.Fatalf("unexpected uuid %q", uuid)
+					}
+					return service.PublicStatusOutput{OK: true, State: "locked", AdminMode: "password", SecurityProfile: "quick"}, nil
+				},
+			},
+			logger,
+		),
+	})
+
+	makeRequest := func(callerIP string) *http.Request {
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/api/file/initiate",
+			strings.NewReader(`{"channelUuid":"`+channelUUID+`","chunkCount":1,"totalCiphertextBytes":24}`),
+		)
+		req.RemoteAddr = "10.0.0.25:4321"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", callerIP)
+		req.Header.Set("User-Agent", "curl/8.7.1")
+		return req
+	}
+
+	for attempt := 0; attempt < fileInitiateRateLimitConfig.maxRequests; attempt++ {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, makeRequest("198.51.100.7"))
+		if res.Code != http.StatusOK {
+			t.Fatalf("attempt %d status = %d, want 200: %s", attempt+1, res.Code, res.Body.String())
+		}
+	}
+
+	limitedRes := httptest.NewRecorder()
+	router.ServeHTTP(limitedRes, makeRequest("198.51.100.7"))
+	if limitedRes.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited status = %d, want 429: %s", limitedRes.Code, limitedRes.Body.String())
+	}
+	if limitedRes.Header().Get("Retry-After") == "" {
+		t.Fatal("Retry-After header = empty, want rate limit hint")
+	}
+
+	otherCallerRes := httptest.NewRecorder()
+	router.ServeHTTP(otherCallerRes, makeRequest("198.51.100.8"))
+	if otherCallerRes.Code != http.StatusOK {
+		t.Fatalf("other caller status = %d, want 200: %s", otherCallerRes.Code, otherCallerRes.Body.String())
+	}
+
+	if publicStatusCalls != fileInitiateRateLimitConfig.maxRequests+1 {
+		t.Fatalf("publicStatusCalls = %d, want %d", publicStatusCalls, fileInitiateRateLimitConfig.maxRequests+1)
+	}
+}
+
 func TestFileCompleteHandlerRejectsExpiredUploadSession(t *testing.T) {
 	t.Parallel()
 

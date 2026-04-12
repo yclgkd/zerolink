@@ -9,6 +9,7 @@ import {
   type UnixMs,
   type UUID,
 } from '@zerolink/shared';
+import { computeCallerKey } from './commitTokens.ts';
 import { resolveFilePolicy, resolveInlineFilePlaintextBytes } from './file-policy.ts';
 import {
   buildMultipartChunkStorageKey,
@@ -25,6 +26,12 @@ import {
 import type { Env } from './worker.ts';
 
 const AES_GCM_TAG_BYTES = AES_GCM.TAG_LENGTH_BITS / 8;
+const FILE_UPLOAD_INITIATE_RATE_LIMIT_MAX_REQUESTS = 10;
+const FILE_UPLOAD_INITIATE_RATE_LIMIT_WINDOW_MS = 60_000;
+const fileUploadInitiateRateLimitWindows = new WeakMap<
+  Env,
+  Map<string, { count: number; windowStart: number }>
+>();
 
 function buildHeaders(): Headers {
   return new Headers({
@@ -38,14 +45,19 @@ function buildHeaders(): Headers {
   });
 }
 
-function jsonResponse(payload: unknown, status = 200): Response {
+function jsonResponse(payload: unknown, status = 200, extraHeaders?: HeadersInit): Response {
   const headers = buildHeaders();
+  if (extraHeaders) {
+    for (const [name, value] of new Headers(extraHeaders).entries()) {
+      headers.set(name, value);
+    }
+  }
   headers.set('Content-Type', 'application/json; charset=utf-8');
   return new Response(JSON.stringify(payload), { status, headers });
 }
 
-function errorResponse(code: string, status: number): Response {
-  return jsonResponse({ ok: false, code }, status);
+function errorResponse(code: string, status: number, extraHeaders?: HeadersInit): Response {
+  return jsonResponse({ ok: false, code }, status, extraHeaders);
 }
 
 export async function readRequestBytesUpToLimit(
@@ -126,6 +138,51 @@ function resolveExpectedChunkCiphertextBytes(
   }
 
   return lastChunkPlaintextBytes + AES_GCM_TAG_BYTES;
+}
+
+function getFileUploadInitiateRateLimitWindows(
+  env: Env
+): Map<string, { count: number; windowStart: number }> {
+  const existing = fileUploadInitiateRateLimitWindows.get(env);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Map<string, { count: number; windowStart: number }>();
+  fileUploadInitiateRateLimitWindows.set(env, created);
+  return created;
+}
+
+function sweepExpiredFileUploadInitiateRateLimitWindows(
+  windows: Map<string, { count: number; windowStart: number }>,
+  now: number
+): void {
+  for (const [key, window] of windows.entries()) {
+    if (now - window.windowStart >= FILE_UPLOAD_INITIATE_RATE_LIMIT_WINDOW_MS) {
+      windows.delete(key);
+    }
+  }
+}
+
+function enforceFileUploadInitiateRateLimit(env: Env, subject: string, now: number): number | null {
+  const windows = getFileUploadInitiateRateLimitWindows(env);
+  sweepExpiredFileUploadInitiateRateLimitWindows(windows, now);
+
+  const existing = windows.get(subject);
+  if (!existing || now - existing.windowStart >= FILE_UPLOAD_INITIATE_RATE_LIMIT_WINDOW_MS) {
+    windows.set(subject, { count: 1, windowStart: now });
+    return null;
+  }
+
+  if (existing.count >= FILE_UPLOAD_INITIATE_RATE_LIMIT_MAX_REQUESTS) {
+    return Math.max(
+      1,
+      Math.ceil((existing.windowStart + FILE_UPLOAD_INITIATE_RATE_LIMIT_WINDOW_MS - now) / 1000)
+    );
+  }
+
+  existing.count += 1;
+  return null;
 }
 
 async function readJsonBody(request: Request): Promise<unknown | null> {
@@ -261,6 +318,23 @@ export async function handleFileUploadInitiate(request: Request, env: Env): Prom
   ) {
     return errorResponse('BAD_REQUEST', 400);
   }
+  const now = Date.now() as UnixMs;
+  const callerKey = await computeCallerKey(
+    env.COMMIT_TOKEN_SECRET,
+    request.headers.get('CF-Connecting-IP'),
+    request.headers.get('User-Agent')
+  );
+  const retryAfterSeconds = enforceFileUploadInitiateRateLimit(
+    env,
+    `${parsed.data.channelUuid}:public:${callerKey}`,
+    Number(now)
+  );
+  if (retryAfterSeconds !== null) {
+    return errorResponse('RATE_LIMITED', 429, {
+      'Retry-After': String(retryAfterSeconds),
+    });
+  }
+
   try {
     if (!(await channelExists(env, parsed.data.channelUuid))) {
       return errorResponse('NOT_FOUND', 404);
@@ -269,7 +343,6 @@ export async function handleFileUploadInitiate(request: Request, env: Env): Prom
     return errorResponse('INTERNAL_ERROR', 500);
   }
 
-  const now = Date.now() as UnixMs;
   const uploadId = await createFileUploadId(env.COMMIT_TOKEN_SECRET, {
     v: '1',
     channelUuid: parsed.data.channelUuid,
