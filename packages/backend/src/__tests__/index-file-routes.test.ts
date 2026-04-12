@@ -624,4 +624,41 @@ describe('backend worker routing — file upload and fetch routes', () => {
     expect(response.status).toBe(404);
     expect(payload.code).toBe('NOT_FOUND');
   });
+
+  it('preserves upstream not-found errors instead of masking them as multipart mismatches', async () => {
+    const { env } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_file_payload')) {
+        return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND' }), { status: 404 });
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    const response = await dispatch(env, `/api/file/fetch/${VALID_UUID}`, 'GET');
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(404);
+    expect(payload.code).toBe('NOT_FOUND');
+  });
+
+  it('returns CHANNEL_NOT_MULTIPART only when the delivered payload is actually inline', async () => {
+    const { env } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_file_payload')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            payloadTransport: 'inline',
+            cipherVersion: 1,
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    const response = await dispatch(env, `/api/file/fetch/${VALID_UUID}`, 'GET');
+    const payload = (await response.json()) as { ok: false; code: string };
+
+    expect(response.status).toBe(409);
+    expect(payload.code).toBe('CHANNEL_NOT_MULTIPART');
+  });
 });

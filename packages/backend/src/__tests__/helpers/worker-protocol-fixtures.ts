@@ -123,6 +123,7 @@ export function asCallerHeaders(cookieHeader?: string | null): Record<string, st
   };
 
   if (cookieHeader) {
+    // biome-ignore lint/complexity/useLiteralKeys: HeadersInit uses the canonical Cookie casing.
     headers['Cookie'] = cookieHeader;
   }
 

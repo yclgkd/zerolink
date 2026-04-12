@@ -8,6 +8,11 @@ interface CachedEntry {
   ttl: ChannelTtlMs;
 }
 
+interface ParsedShareUrl {
+  uuid: string;
+  sanitizedUrl: string;
+}
+
 function getSessionStorage(): Storage | null {
   if (typeof window === 'undefined') {
     return null;
@@ -24,7 +29,7 @@ function getShareLinkSessionStorageKey(uuid: string): string {
   return `${SHARE_LINK_SESSION_STORAGE_PREFIX}${uuid}`;
 }
 
-function extractUuidFromShareUrl(shareUrlWithFragment: string): string | null {
+function parseShareUrl(shareUrlWithFragment: string): ParsedShareUrl | null {
   if (typeof window === 'undefined') {
     return null;
   }
@@ -32,22 +37,30 @@ function extractUuidFromShareUrl(shareUrlWithFragment: string): string | null {
   try {
     const url = new URL(shareUrlWithFragment, window.location.origin);
     const match = /^\/s\/([^/]+)$/u.exec(url.pathname);
-    return match?.[1] ?? null;
+    const uuid = match?.[1] ?? null;
+    if (!uuid) {
+      return null;
+    }
+
+    return {
+      uuid,
+      sanitizedUrl: `${url.pathname}${url.search}`,
+    };
   } catch {
     return null;
   }
 }
 
 export function persistCreatedShareLink(shareUrlWithFragment: string, ttl: ChannelTtlMs): void {
-  const uuid = extractUuidFromShareUrl(shareUrlWithFragment);
+  const parsedShareUrl = parseShareUrl(shareUrlWithFragment);
   const storage = getSessionStorage();
-  if (!uuid || !storage) {
+  if (!parsedShareUrl || !storage) {
     return;
   }
 
   try {
-    const entry: CachedEntry = { url: shareUrlWithFragment, ts: Date.now(), ttl };
-    storage.setItem(getShareLinkSessionStorageKey(uuid), JSON.stringify(entry));
+    const entry: CachedEntry = { url: parsedShareUrl.sanitizedUrl, ts: Date.now(), ttl };
+    storage.setItem(getShareLinkSessionStorageKey(parsedShareUrl.uuid), JSON.stringify(entry));
   } catch {
     // Ignore storage failures so create success stays usable in restricted environments.
   }
@@ -80,12 +93,28 @@ export function readCreatedShareLink(uuid?: string): string | null {
         Number.isFinite(entry.ttl) &&
         entry.ttl > 0
       ) {
+        const parsedShareUrl = parseShareUrl(entry.url);
+        if (!parsedShareUrl || parsedShareUrl.uuid !== uuid) {
+          storage.removeItem(getShareLinkSessionStorageKey(uuid));
+          return null;
+        }
         if (Date.now() - entry.ts > entry.ttl) {
           storage.removeItem(getShareLinkSessionStorageKey(uuid));
           return null;
         }
 
-        return entry.url;
+        if (entry.url !== parsedShareUrl.sanitizedUrl) {
+          storage.setItem(
+            getShareLinkSessionStorageKey(uuid),
+            JSON.stringify({
+              url: parsedShareUrl.sanitizedUrl,
+              ts: entry.ts,
+              ttl: entry.ttl,
+            } satisfies CachedEntry)
+          );
+        }
+
+        return parsedShareUrl.sanitizedUrl;
       }
     }
 
