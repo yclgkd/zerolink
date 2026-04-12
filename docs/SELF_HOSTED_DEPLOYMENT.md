@@ -39,6 +39,10 @@ The bundled `.env.example` defaults to `SELFHOST_API_FILE_STORAGE_BACKEND=s3`, w
 multipart file delivery up to `512 MiB` with `4 MiB` encrypted chunks via the bundled Garage
 container (started by the `storage` profile).
 
+It also includes a development placeholder for `SELFHOST_API_COMMIT_TOKEN_SECRET`, which the
+self-hosted API requires for commit-cookie binding and signed file upload/download tokens. Replace
+that placeholder before exposing the stack to any non-local environment.
+
 The default Compose file pulls these public images:
 
 - `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
@@ -73,6 +77,7 @@ Then open:
 
 - `SELFHOST_API_RP_ID=localhost`
 - `SELFHOST_API_RP_ORIGIN=http://localhost:8080`
+- `SELFHOST_API_COMMIT_TOKEN_SECRET` is required for commit-cookie binding and signed file upload/download tokens; generate a fresh 32-byte hex value with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` before any non-local deployment
 - `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` selects which GHCR namespace `migrate`, `api`, and `web` pull from
 - `ZEROLINK_IMAGE_TAG=latest` selects the published image tag used by `migrate`, `api`, and `web`
 - `SELFHOST_API_DATABASE_URL` already targets the Compose `db` service by default
@@ -103,6 +108,7 @@ docker compose --profile storage up -d
 ```
 
 - **Credentials**: See `.env.example` for the Garage access key and secret key. **Change these before exposing the service**.
+- **Application secret**: Set `SELFHOST_API_COMMIT_TOKEN_SECRET` to a fresh random 32-byte hex value before any non-local deployment.
 - **Data Location**: Encrypted file parts reside in the `garage-data` volume on the host. Back up this volume along with `postgres-data` to preserve your state.
 - Garage is optional. If you use an external S3 provider, just run `docker compose up -d` without the `storage` profile.
 
