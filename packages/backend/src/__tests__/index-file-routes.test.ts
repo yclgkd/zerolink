@@ -254,6 +254,125 @@ describe('backend worker routing — file upload and fetch routes', () => {
     expect(payload.code).toBe('BAD_REQUEST');
   });
 
+  it('rate limits initiate requests per caller and channel', async () => {
+    const { env, calls } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_public_state')) {
+        return new Response(
+          JSON.stringify({ ok: true, state: 'locked', securityProfile: 'secure' }),
+          {
+            status: 200,
+          }
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    env.FILE_MULTIPART_SUPPORTED = 'true';
+    env.FILE_MAX_BYTES = 32;
+    env.FILE_MULTIPART_THRESHOLD_BYTES = 16;
+    env.FILE_CHUNK_SIZE_BYTES = 8;
+    env.FILE_MAX_CHUNKS = 4;
+
+    const sharedHeaders = {
+      'CF-Connecting-IP': '198.51.100.42',
+      'User-Agent': 'curl/8.7.1',
+    };
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const response = await dispatch(
+        env,
+        '/api/file/initiate',
+        'POST',
+        {
+          channelUuid: VALID_UUID,
+          chunkCount: 1,
+          totalCiphertextBytes: 24,
+        },
+        false,
+        sharedHeaders
+      );
+      expect(response.status).toBe(200);
+    }
+
+    const limitedResponse = await dispatch(
+      env,
+      '/api/file/initiate',
+      'POST',
+      {
+        channelUuid: VALID_UUID,
+        chunkCount: 1,
+        totalCiphertextBytes: 24,
+      },
+      false,
+      sharedHeaders
+    );
+    const limitedPayload = (await limitedResponse.json()) as { ok: false; code: string };
+
+    expect(limitedResponse.status).toBe(429);
+    expect(limitedResponse.headers.get('Retry-After')).toBeTruthy();
+    expect(limitedPayload.code).toBe('RATE_LIMITED');
+
+    const otherCallerResponse = await dispatch(
+      env,
+      '/api/file/initiate',
+      'POST',
+      {
+        channelUuid: VALID_UUID,
+        chunkCount: 1,
+        totalCiphertextBytes: 24,
+      },
+      false,
+      {
+        'CF-Connecting-IP': '198.51.100.43',
+        'User-Agent': 'curl/8.7.1',
+      }
+    );
+
+    expect(otherCallerResponse.status).toBe(200);
+    expect(calls).toHaveLength(12);
+  });
+
+  it('does not rate limit initiate requests for unknown channels', async () => {
+    const { env, calls } = createMockEnv(async (request) => {
+      if (request.url.endsWith('/get_public_state')) {
+        return new Response(JSON.stringify({ ok: false, code: 'NOT_FOUND' }), {
+          status: 404,
+        });
+      }
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), { status: 500 });
+    });
+
+    env.FILE_MULTIPART_SUPPORTED = 'true';
+    env.FILE_MAX_BYTES = 32;
+    env.FILE_MULTIPART_THRESHOLD_BYTES = 16;
+    env.FILE_CHUNK_SIZE_BYTES = 8;
+    env.FILE_MAX_CHUNKS = 4;
+
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const response = await dispatch(
+        env,
+        '/api/file/initiate',
+        'POST',
+        {
+          channelUuid: VALID_UUID,
+          chunkCount: 1,
+          totalCiphertextBytes: 24,
+        },
+        false,
+        {
+          'CF-Connecting-IP': '198.51.100.42',
+          'User-Agent': 'curl/8.7.1',
+        }
+      );
+      const payload = (await response.json()) as { ok: false; code: string };
+
+      expect(response.status).toBe(404);
+      expect(payload.code).toBe('NOT_FOUND');
+    }
+
+    expect(calls).toHaveLength(11);
+  });
+
   it('rejects chunk uploads larger than deployment chunk size', async () => {
     const { env } = createMockEnv(async (request) => {
       if (request.url.endsWith('/get_public_state')) {
