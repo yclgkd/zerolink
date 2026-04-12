@@ -38,6 +38,9 @@ docker compose --profile storage up -d
 `.env.example` 默认使用 `SELFHOST_API_FILE_STORAGE_BACKEND=s3`，通过内置的 Garage 容器（由
 `storage` profile 启动）开启 multipart 文件传输，默认总文件上限 `512 MiB`、分片大小 `4 MiB`。
 
+`.env.example` 还包含一个开发用占位值 `SELFHOST_API_COMMIT_TOKEN_SECRET`。self-host API 会用它做
+commit-cookie 绑定以及文件上传/下载 token 签名；如果要暴露到任何非本地环境，必须先替换成你自己的随机密钥。
+
 默认 Compose 会拉取以下公开镜像：
 
 - `${ZEROLINK_IMAGE_REPOSITORY:-ghcr.io/yclgkd}/zerolink-api:${ZEROLINK_IMAGE_TAG:-latest}`
@@ -71,6 +74,7 @@ docker compose --profile storage -f docker-compose.yml -f docker-compose.build.y
 
 - `SELFHOST_API_RP_ID=localhost`
 - `SELFHOST_API_RP_ORIGIN=http://localhost:8080`
+- `SELFHOST_API_COMMIT_TOKEN_SECRET` 是必填项，用于 commit-cookie 绑定和文件上传/下载 token 签名；在任何非本地部署前，请用 `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` 生成新的 32 字节 hex 值替换它
 - `ZEROLINK_IMAGE_REPOSITORY=ghcr.io/yclgkd` 控制 `migrate`、`api`、`web` 默认从哪个 GHCR namespace 拉取镜像
 - `ZEROLINK_IMAGE_TAG=latest` 控制 `migrate`、`api`、`web` 默认拉取的发布镜像 tag
 - 默认 `SELFHOST_API_DATABASE_URL` 已指向 Compose 里的 `db` 服务
@@ -101,6 +105,7 @@ docker compose --profile storage up -d
 ```
 
 - **凭证**：参见 `.env.example` 中的 Garage access key 和 secret key。**在将服务暴露到公网前务必修改**。
+- **应用密钥**：在任何非本地部署前，请把 `SELFHOST_API_COMMIT_TOKEN_SECRET` 替换成新的随机 32 字节 hex 值。
 - **数据位置**：加密后的文件分片存储在宿主机的 `garage-data` volume 中。如需备份或迁移，请将它与 `postgres-data` 一同打包。
 - Garage 是可选的。如果你使用外部 S3 提供商，只需运行 `docker compose up -d`（不带 `storage` profile）。
 
