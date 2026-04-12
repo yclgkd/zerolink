@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.6.0](https://github.com/yclgkd/ZeroLink/compare/v0.5.0...v0.6.0) (2026-04-12)
+
+
+### Features
+
+* add footer source code link ([#250](https://github.com/yclgkd/ZeroLink/issues/250)) ([446421a](https://github.com/yclgkd/ZeroLink/commit/446421a032be584ffade5fe72e3ff85c2d39f4d6))
+
+
+### Bug Fixes
+
+* add selfhost multipart orphan gc ([#271](https://github.com/yclgkd/ZeroLink/issues/271)) ([a30cc39](https://github.com/yclgkd/ZeroLink/commit/a30cc392aa9800c5861dc1528b08bbd76db71bb5))
+* align deploy tooling and CI ([#263](https://github.com/yclgkd/ZeroLink/issues/263)) ([704f81d](https://github.com/yclgkd/ZeroLink/commit/704f81d0ae6e9a27dafcd933269d9c3c74c33031))
+* align manage password gating ([#252](https://github.com/yclgkd/ZeroLink/issues/252)) ([b2e7656](https://github.com/yclgkd/ZeroLink/commit/b2e7656844465ed09f9df13b7f19d460fe6ca2e9))
+* close secondary gaps and harden runtime edges ([#267](https://github.com/yclgkd/ZeroLink/issues/267)) ([2879dde](https://github.com/yclgkd/ZeroLink/commit/2879dde9e1dbc4f6a4b5cfb1d9ce42619b907095))
+* document selfhost commit secret ([a4bbbaf](https://github.com/yclgkd/ZeroLink/commit/a4bbbafe8dbc7921c48197d7b8f7519415354e13))
+* enforce multipart upload policy ([#262](https://github.com/yclgkd/ZeroLink/issues/262)) ([63ee01c](https://github.com/yclgkd/ZeroLink/commit/63ee01c7890c31736d922b0cf6ea3277474f537c))
+* harden authn and abuse controls ([#264](https://github.com/yclgkd/ZeroLink/issues/264)) ([9ea5892](https://github.com/yclgkd/ZeroLink/commit/9ea5892908c178e361ca788a0d85616055684250))
+* prevent white flash by deferring clearBootstrapBodyStyles until after app loads ([#239](https://github.com/yclgkd/ZeroLink/issues/239)) ([03fe0e7](https://github.com/yclgkd/ZeroLink/commit/03fe0e7c20e9a6e3f08f9d2a3f4ca10291bc41b7))
+* rate limit create begin ([#269](https://github.com/yclgkd/ZeroLink/issues/269)) ([edf05b0](https://github.com/yclgkd/ZeroLink/commit/edf05b01edfaa889a9b67c2c67bf33640328b6d0))
+* rate limit file initiate endpoints ([#268](https://github.com/yclgkd/ZeroLink/issues/268)) ([e0321a0](https://github.com/yclgkd/ZeroLink/commit/e0321a01d999fbffb01a37d0de3c0610dae3cf1d))
+* redesign file token and reference binding ([037b677](https://github.com/yclgkd/ZeroLink/commit/037b677a547faf09906d651302c097273c36399d))
+* remove deprecated tsconfig baseUrl ([#249](https://github.com/yclgkd/ZeroLink/issues/249)) ([10ce59e](https://github.com/yclgkd/ZeroLink/commit/10ce59ef75843a928766edcf93d7d326d3e89853))
+* reset file input after delivery ([#253](https://github.com/yclgkd/ZeroLink/issues/253)) ([931695b](https://github.com/yclgkd/ZeroLink/commit/931695b9345da3cfcba6f7dd41446ac603dd9ba9))
+* stabilize realtime websocket e2e ([#270](https://github.com/yclgkd/ZeroLink/issues/270)) ([58cf430](https://github.com/yclgkd/ZeroLink/commit/58cf430c3a16c9bea4a4bbee5c99e9d0e10bb262))
+* stage channel delete flow ([#251](https://github.com/yclgkd/ZeroLink/issues/251)) ([07f167e](https://github.com/yclgkd/ZeroLink/commit/07f167e1863c037288f8914cfa7c9f95c6055f79))
+* typecheck e2e support helpers ([#258](https://github.com/yclgkd/ZeroLink/issues/258)) ([034b04e](https://github.com/yclgkd/ZeroLink/commit/034b04ed8c6292dd4af0cef259d2d33a1f0f4f5f))
+* typecheck Playwright config files ([#259](https://github.com/yclgkd/ZeroLink/issues/259)) ([c44256e](https://github.com/yclgkd/ZeroLink/commit/c44256e35fd09c848c3f2d19474ec1a42995cd36))
+
 ## [0.5.0](https://github.com/yclgkd/ZeroLink/compare/v0.4.0...v0.5.0) (2026-04-02)
 
 
