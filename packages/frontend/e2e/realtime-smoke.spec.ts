@@ -1,5 +1,16 @@
 import { expect, type Page, test } from '@playwright/test';
 
+function normalizeRuntimeUrl(page: Page, rawUrl: string): string {
+  // Wrangler local rewrites the worker-side origin to the configured route host,
+  // so create_finish emits zerolink.dev URLs even though Playwright drives 127.0.0.1.
+  const runtimeOrigin = new URL(page.url()).origin;
+  const normalized = new URL(rawUrl, runtimeOrigin);
+  const runtimeBase = new URL(runtimeOrigin);
+  normalized.protocol = runtimeBase.protocol;
+  normalized.host = runtimeBase.host;
+  return normalized.toString();
+}
+
 async function createQuickChannel(
   senderPage: Page
 ): Promise<{ manageUrl: string; shareUrl: string }> {
@@ -23,7 +34,10 @@ async function createQuickChannel(
     throw new Error('Missing share or manage URL');
   }
 
-  return { manageUrl, shareUrl };
+  return {
+    manageUrl: normalizeRuntimeUrl(senderPage, manageUrl),
+    shareUrl: normalizeRuntimeUrl(senderPage, shareUrl),
+  };
 }
 
 async function lockQuickChannel(
