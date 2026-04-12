@@ -723,7 +723,8 @@ describe('CreatePage integration', () => {
     expect(raw).toBeTruthy();
 
     const parsed = JSON.parse(String(raw));
-    expect(parsed.url).toBe('/s/aaaaaaaaaaaaaaaaaaaaa#k=bW9ja19sb2NrX3NlY3JldA');
+    expect(parsed.url).toBe('/s/aaaaaaaaaaaaaaaaaaaaa');
+    expect(parsed.lockSecret).toBe('bW9ja19sb2NrX3NlY3JldA');
     expect(parsed.ttl).toBe(CHANNEL_TTL_MS.SEVEN_DAYS);
   });
 

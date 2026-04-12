@@ -93,6 +93,7 @@ describe('backend worker routing — public/read routes', () => {
     });
 
     const response = await dispatch(env, `/api/ws/${VALID_UUID}`, 'GET', undefined, false, {
+      Origin: 'https://zerolink.test',
       Upgrade: 'websocket',
     });
     const payload = (await response.json()) as ApiErrorResponse;
@@ -103,5 +104,23 @@ describe('backend worker routing — public/read routes', () => {
     expect(calls[0]?.pathname).toBe('/ws');
     expect(calls[0]?.method).toBe('GET');
     expect(calls[0]?.body).toBeNull();
+  });
+
+  it('rejects websocket upgrades from unexpected origins before reaching the Durable Object', async () => {
+    const { env, calls } = createMockEnv(async () => {
+      return new Response(JSON.stringify({ ok: false, code: 'UNEXPECTED' }), {
+        status: 500,
+      });
+    });
+
+    const response = await dispatch(env, `/api/ws/${VALID_UUID}`, 'GET', undefined, false, {
+      Origin: 'https://attacker.test',
+      Upgrade: 'websocket',
+    });
+    const payload = (await response.json()) as ApiErrorResponse;
+
+    expect(response.status).toBe(403);
+    expect(payload).toEqual({ ok: false, code: 'NOT_ALLOWED' });
+    expect(calls).toHaveLength(0);
   });
 });

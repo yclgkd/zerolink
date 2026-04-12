@@ -10,6 +10,7 @@ import {
 
 const UUID = '550e8400-e29b-41d4-a716-446655440000';
 const SHARE_URL = `/s/${UUID}#k=bW9ja19sb2NrX3NlY3JldA`;
+const SANITIZED_SHARE_URL = `/s/${UUID}`;
 const ENTRY_TTL = CHANNEL_TTL_MS.SEVEN_DAYS;
 
 beforeEach(() => {
@@ -27,7 +28,8 @@ describe('persistCreatedShareLink', () => {
     const raw = window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(String(raw));
-    expect(parsed.url).toBe(SHARE_URL);
+    expect(parsed.url).toBe(SANITIZED_SHARE_URL);
+    expect(parsed.lockSecret).toBe('bW9ja19sb2NrX3NlY3JldA');
     expect(typeof parsed.ts).toBe('number');
     expect(parsed.ttl).toBe(ENTRY_TTL);
   });
@@ -113,6 +115,31 @@ describe('readCreatedShareLink', () => {
     });
 
     expect(readCreatedShareLink(UUID)).toBeNull();
+  });
+
+  it('sanitizes legacy cached URLs that still include a sensitive fragment', () => {
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${UUID}`,
+      JSON.stringify({ url: SHARE_URL, ts: Date.now(), ttl: ENTRY_TTL })
+    );
+
+    expect(readCreatedShareLink(UUID)).toBe(SHARE_URL);
+    expect(
+      JSON.parse(String(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)))
+    ).toMatchObject({
+      url: SANITIZED_SHARE_URL,
+      lockSecret: 'bW9ja19sb2NrX3NlY3JldA',
+    });
+  });
+
+  it('returns null and removes entries that no longer have enough data to rebuild the receiver link', () => {
+    window.sessionStorage.setItem(
+      `zerolink:created-share-link:${UUID}`,
+      JSON.stringify({ url: SANITIZED_SHARE_URL, ts: Date.now(), ttl: ENTRY_TTL })
+    );
+
+    expect(readCreatedShareLink(UUID)).toBeNull();
+    expect(window.sessionStorage.getItem(`zerolink:created-share-link:${UUID}`)).toBeNull();
   });
 });
 

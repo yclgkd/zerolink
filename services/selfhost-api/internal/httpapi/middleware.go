@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -90,13 +92,20 @@ func loggingMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
 }
 
 func recoverMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
+				stack := debug.Stack()
+				panicText := fmt.Sprint(recovered)
 				logger.Error(
 					"panic recovered",
-					"panic", fmt.Sprint(recovered),
-					"stack", string(debug.Stack()),
+					"panic_type", fmt.Sprintf("%T", recovered),
+					"panic_fingerprint", fingerprintString(panicText),
+					"stack_fingerprint", fingerprintBytes(stack),
 					"method", r.Method,
 					"path", r.URL.Path,
 				)
@@ -109,4 +118,13 @@ func recoverMiddleware(next http.Handler, logger *slog.Logger) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func fingerprintString(value string) string {
+	return fingerprintBytes([]byte(value))
+}
+
+func fingerprintBytes(value []byte) string {
+	sum := sha256.Sum256(value)
+	return hex.EncodeToString(sum[:8])
 }

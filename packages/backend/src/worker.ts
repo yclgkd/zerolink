@@ -49,6 +49,24 @@ function isValidUuid(value: string): boolean {
   return UUID_REGEX.test(value);
 }
 
+function normalizeOrigin(value: string | null): string {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value.trim().replace(/\/+$/u, '');
+  }
+}
+
+function isAllowedWebSocketOrigin(request: Request, env: Env): boolean {
+  const requestOrigin = normalizeOrigin(request.headers.get('Origin'));
+  const allowedOrigin = normalizeOrigin(env.RP_ORIGIN);
+  return requestOrigin.length > 0 && allowedOrigin.length > 0 && requestOrigin === allowedOrigin;
+}
+
 type ApiMethod = 'GET' | 'POST' | 'PUT';
 
 interface ApiRoute {
@@ -485,6 +503,9 @@ async function handleApiRequest(request: Request, pathname: string, env: Env): P
     if (!isValidUuid(uuid)) return errorResponse('BAD_REQUEST', 400);
     if (request.headers.get('Upgrade') !== 'websocket') {
       return errorResponse('BAD_REQUEST', 426);
+    }
+    if (!isAllowedWebSocketOrigin(request, env)) {
+      return errorResponse('NOT_ALLOWED', 403);
     }
     return forwardWebSocketUpgrade(env, uuid, request);
   }

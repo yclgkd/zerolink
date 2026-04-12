@@ -136,15 +136,27 @@ async function readJsonBody(request: Request): Promise<unknown | null> {
   }
 }
 
-interface FilePayloadLookupResult {
+interface FilePayloadLookupSuccess {
   fileRef: MultipartFileRef;
   cipherVersion: number;
 }
 
-async function forwardFilePayloadLookup(
-  env: Env,
-  uuid: string
-): Promise<FilePayloadLookupResult | null> {
+interface FilePayloadLookupError {
+  status: number;
+  code: string;
+}
+
+type FilePayloadLookupResult =
+  | {
+      ok: true;
+      data: FilePayloadLookupSuccess;
+    }
+  | {
+      ok: false;
+      error: FilePayloadLookupError;
+    };
+
+async function forwardFilePayloadLookup(env: Env, uuid: string): Promise<FilePayloadLookupResult> {
   const durableObjectId = env.SECRET_VAULT.idFromName(uuid);
   const stub = env.SECRET_VAULT.get(durableObjectId);
   const response = await stub.fetch('https://secret-vault.internal/get_file_payload', {
@@ -157,26 +169,50 @@ async function forwardFilePayloadLookup(
 
   const payload = (await response.json().catch(() => null)) as {
     ok?: boolean;
+    code?: string;
     fileRef?: MultipartFileRef;
     payloadTransport?: string;
     cipherVersion?: number;
   } | null;
-  if (
-    !response.ok ||
-    !payload?.ok ||
-    payload.payloadTransport !== 'multipart' ||
-    !payload.fileRef
-  ) {
-    return null;
+
+  if (!response.ok || !payload?.ok) {
+    return {
+      ok: false,
+      error: {
+        status: response.status,
+        code:
+          typeof payload?.code === 'string' && payload.code.length > 0
+            ? payload.code
+            : 'INTERNAL_ERROR',
+      },
+    };
+  }
+  if (payload.payloadTransport !== 'multipart' || !payload.fileRef) {
+    return {
+      ok: false,
+      error: {
+        status: 409,
+        code: 'CHANNEL_NOT_MULTIPART',
+      },
+    };
   }
   const cipherVersion = payload.cipherVersion;
   if (typeof cipherVersion !== 'number' || !Number.isInteger(cipherVersion) || cipherVersion < 0) {
-    return null;
+    return {
+      ok: false,
+      error: {
+        status: 500,
+        code: 'INTERNAL_ERROR',
+      },
+    };
   }
 
   return {
-    fileRef: payload.fileRef,
-    cipherVersion,
+    ok: true,
+    data: {
+      fileRef: payload.fileRef,
+      cipherVersion,
+    },
   };
 }
 
@@ -403,22 +439,22 @@ export async function handleFileUploadComplete(request: Request, env: Env): Prom
 
 export async function handleFileFetch(env: Env, uuid: string): Promise<Response> {
   const filePayload = await forwardFilePayloadLookup(env, uuid);
-  if (!filePayload) {
-    return errorResponse('CHANNEL_NOT_MULTIPART', 409);
+  if (!filePayload.ok) {
+    return errorResponse(filePayload.error.code, filePayload.error.status);
   }
 
   const now = Date.now() as UnixMs;
   const response = FileFetchResponseSchema.parse({
     ok: true,
     chunks: await Promise.all(
-      filePayload.fileRef.chunks.map(async (chunk) => ({
+      filePayload.data.fileRef.chunks.map(async (chunk) => ({
         index: chunk.index,
         downloadUrl: `/api/file/dl/${uuid}/${chunk.index}?token=${await createFileDownloadToken(
           env.COMMIT_TOKEN_SECRET,
           {
             v: '2',
             channelUuid: uuid as UUID,
-            version: filePayload.cipherVersion,
+            version: filePayload.data.cipherVersion,
             index: chunk.index,
             storageKey: chunk.storageKey,
             ciphertextHash: chunk.ciphertextHash,
@@ -457,13 +493,13 @@ export async function handleFileDownload(
 
   const filePayload = await forwardFilePayloadLookup(env, uuid);
   if (
-    !filePayload ||
-    (downloadSession.v === '2' && filePayload.cipherVersion !== downloadSession.version)
+    !filePayload.ok ||
+    (downloadSession.v === '2' && filePayload.data.cipherVersion !== downloadSession.version)
   ) {
     return errorResponse('NOT_FOUND', 404);
   }
 
-  const currentChunk = filePayload.fileRef.chunks[downloadSession.index];
+  const currentChunk = filePayload.data.fileRef.chunks[downloadSession.index];
   if (
     !currentChunk ||
     currentChunk.storageKey !== downloadSession.storageKey ||
