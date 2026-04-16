@@ -1,10 +1,10 @@
 module github.com/yclgkd/ZeroLink/services/selfhost-api
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/gorilla/websocket v1.5.3
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.9.0
 	github.com/minio/minio-go/v7 v7.0.99
 )
 
