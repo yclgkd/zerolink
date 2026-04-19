@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/yclgkd/ZeroLink/compare/v0.6.0...v0.6.1) (2026-04-19)
+
+
+### Bug Fixes
+
+* align README selfhost quick start with deployment guide ([#274](https://github.com/yclgkd/ZeroLink/issues/274)) ([3ff7bb5](https://github.com/yclgkd/ZeroLink/commit/3ff7bb52de324983e5d5a3139b768163023b0f4a))
+
 ## [0.6.0](https://github.com/yclgkd/ZeroLink/compare/v0.5.0...v0.6.0) (2026-04-12)
 
 
