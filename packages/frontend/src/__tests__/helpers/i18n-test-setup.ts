@@ -1,7 +1,7 @@
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-import { de, en, ja, zh } from '../../locales';
+import { de, en, fr, ja, zh } from '../../locales';
 
 /**
  * Initialise i18next synchronously with English as the fixed language for tests.
@@ -21,6 +21,7 @@ if (!i18next.isInitialized) {
       zh: { translation: zh },
       ja: { translation: ja },
       de: { translation: de },
+      fr: { translation: fr },
     },
   });
 }

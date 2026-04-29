@@ -10,6 +10,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'zh', label: '中文', triggerLabel: '中文' },
   { code: 'ja', label: '日本語', triggerLabel: '日本語' },
   { code: 'de', label: 'Deutsch', triggerLabel: 'DE' },
+  { code: 'fr', label: 'Français', triggerLabel: 'FR' },
 ] as const;
 
 function resolveActiveLanguage(language?: string) {
