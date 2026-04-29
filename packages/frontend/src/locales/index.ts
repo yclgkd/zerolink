@@ -1,3 +1,4 @@
+export { default as de } from './de';
 export type { Translation } from './en';
 export { default as en } from './en';
 export { default as ja } from './ja';
