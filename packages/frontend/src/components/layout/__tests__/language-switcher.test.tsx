@@ -32,6 +32,7 @@ describe('LanguageSwitcher', () => {
     expect(screen.getByRole('menu')).toBeInTheDocument();
     expect(screen.getByTestId('lang-switcher-en')).toBeInTheDocument();
     expect(screen.getByTestId('lang-switcher-zh')).toBeInTheDocument();
+    expect(screen.getByTestId('lang-switcher-ja')).toBeInTheDocument();
 
     // Toggle off
     fireEvent.click(trigger);
@@ -109,6 +110,7 @@ describe('LanguageSwitcher', () => {
     const menu = screen.getByRole('menu');
     const enOption = screen.getByTestId('lang-switcher-en');
     const zhOption = screen.getByTestId('lang-switcher-zh');
+    const jaOption = screen.getByTestId('lang-switcher-ja');
 
     // Initial focus should be EN (if language is EN)
     expect(document.activeElement).toBe(enOption);
@@ -117,13 +119,17 @@ describe('LanguageSwitcher', () => {
     fireEvent.keyDown(menu, { key: 'ArrowDown', code: 'ArrowDown' });
     expect(document.activeElement).toBe(zhOption);
 
+    // Arrow down again moves to JA
+    fireEvent.keyDown(menu, { key: 'ArrowDown', code: 'ArrowDown' });
+    expect(document.activeElement).toBe(jaOption);
+
     // Arrow down again wraps to EN
     fireEvent.keyDown(menu, { key: 'ArrowDown', code: 'ArrowDown' });
     expect(document.activeElement).toBe(enOption);
 
-    // Arrow up wraps to ZH
+    // Arrow up wraps to JA
     fireEvent.keyDown(menu, { key: 'ArrowUp', code: 'ArrowUp' });
-    expect(document.activeElement).toBe(zhOption);
+    expect(document.activeElement).toBe(jaOption);
 
     vi.useRealTimers();
   });

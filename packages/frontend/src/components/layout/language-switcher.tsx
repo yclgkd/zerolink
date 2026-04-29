@@ -6,16 +6,24 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 
 const SUPPORTED_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'zh', label: '中文' },
+  { code: 'en', label: 'English', triggerLabel: 'EN' },
+  { code: 'zh', label: '中文', triggerLabel: '中文' },
+  { code: 'ja', label: '日本語', triggerLabel: '日本語' },
 ] as const;
+
+function resolveActiveLanguage(language?: string) {
+  const normalized = language?.toLowerCase() ?? '';
+  return (
+    SUPPORTED_LANGUAGES.find(
+      ({ code }) => normalized === code || normalized.startsWith(`${code}-`)
+    ) ?? SUPPORTED_LANGUAGES[0]
+  );
+}
 
 export function LanguageSwitcher() {
   const { i18n, t } = useTranslation();
   const currentLang = i18n.resolvedLanguage ?? i18n.language;
-  const isZh = currentLang.startsWith('zh');
-  const activeLang = isZh ? 'zh' : 'en';
-  const activeLabel = activeLang === 'zh' ? '中文' : 'EN';
+  const activeLanguage = resolveActiveLanguage(currentLang);
 
   const [open, setOpen] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; right: number }>({
@@ -119,7 +127,7 @@ export function LanguageSwitcher() {
         type="button"
       >
         <Languages aria-hidden="true" className="size-4" />
-        {activeLabel}
+        {activeLanguage.triggerLabel}
       </button>
 
       {open
@@ -134,10 +142,10 @@ export function LanguageSwitcher() {
             >
               {SUPPORTED_LANGUAGES.map(({ code, label }) => (
                 <button
-                  aria-checked={activeLang === code}
+                  aria-checked={activeLanguage.code === code}
                   className={cn(
                     'w-full px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:bg-white/10',
-                    activeLang === code
+                    activeLanguage.code === code
                       ? 'font-medium text-primary'
                       : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
                   )}
