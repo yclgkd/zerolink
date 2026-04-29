@@ -78,7 +78,7 @@ jobs:
             fi
 
             case "$file" in
-              packages/*|protocol-fixtures/*|scripts/*|docs/*|docs/**|.husky/*|.husky/**|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|vitest.config.ts|biome.json|commitlint.config.js)
+              packages/*|protocol-fixtures/*|scripts/*|docs/*|docs/**|.husky/*|.husky/**|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig*.json|vitest.config.ts|biome.json|commitlint.config.js|version.txt)
                 run_node=true
                 ;;
             esac
