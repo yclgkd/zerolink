@@ -2,14 +2,14 @@ import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 
-import { en, ja, zh } from './locales';
+import { de, en, ja, zh } from './locales';
 
 void i18next
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh', 'ja'],
+    supportedLngs: ['en', 'zh', 'ja', 'de'],
     nonExplicitSupportedLngs: true,
     interpolation: {
       escapeValue: false,
@@ -23,6 +23,7 @@ void i18next
       en: { translation: en },
       zh: { translation: zh },
       ja: { translation: ja },
+      de: { translation: de },
     },
   });
 
