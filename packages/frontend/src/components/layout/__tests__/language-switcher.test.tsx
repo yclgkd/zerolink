@@ -36,6 +36,7 @@ describe('LanguageSwitcher', () => {
     expect(screen.getByTestId('lang-switcher-de')).toBeInTheDocument();
     expect(screen.getByTestId('lang-switcher-fr')).toBeInTheDocument();
     expect(screen.getByTestId('lang-switcher-es')).toBeInTheDocument();
+    expect(screen.getByTestId('lang-switcher-ru')).toBeInTheDocument();
 
     // Toggle off
     fireEvent.click(trigger);

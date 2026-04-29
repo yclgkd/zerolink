@@ -12,6 +12,7 @@ const SUPPORTED_LANGUAGES = [
   { code: 'de', label: 'Deutsch', triggerLabel: 'DE' },
   { code: 'fr', label: 'Français', triggerLabel: 'FR' },
   { code: 'es', label: 'Español', triggerLabel: 'ES' },
+  { code: 'ru', label: 'Русский', triggerLabel: 'RU' },
 ] as const;
 
 function resolveActiveLanguage(language?: string) {
