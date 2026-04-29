@@ -10,6 +10,9 @@ import { LanguageSwitcher } from '../language-switcher';
 describe('LanguageSwitcher', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('renders trigger with current active language label', () => {
@@ -70,6 +73,28 @@ describe('LanguageSwitcher', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
+  it('keeps the dropdown compact and inside the viewport', () => {
+    vi.stubGlobal('innerWidth', 390);
+    render(<LanguageSwitcher />);
+    const trigger = screen.getByTestId('lang-switcher-trigger');
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      bottom: 188,
+      height: 40,
+      left: 41,
+      right: 109,
+      toJSON: () => ({}),
+      top: 148,
+      width: 68,
+      x: 41,
+      y: 148,
+    });
+
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole('menu');
+    expect(menu).toHaveStyle({ left: '8px', top: '194px', width: '144px' });
+  });
+
   it('changes language and closes dropdown when selecting an option', () => {
     void i18next.changeLanguage('en');
     render(<LanguageSwitcher />);
@@ -98,8 +123,6 @@ describe('LanguageSwitcher', () => {
 
     const zhOption = screen.getByTestId('lang-switcher-zh');
     expect(document.activeElement).toBe(zhOption);
-
-    vi.useRealTimers();
   });
 
   it('supports ArrowDown and ArrowUp navigation correctly', async () => {
@@ -129,8 +152,6 @@ describe('LanguageSwitcher', () => {
     // Arrow up wraps to the final option
     fireEvent.keyDown(menu, { key: 'ArrowUp', code: 'ArrowUp' });
     expect(document.activeElement).toBe(items.at(-1));
-
-    vi.useRealTimers();
   });
 
   it('closes dropdown and focuses trigger when pressing Tab', async () => {
@@ -148,7 +169,5 @@ describe('LanguageSwitcher', () => {
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
-
-    vi.useRealTimers();
   });
 });

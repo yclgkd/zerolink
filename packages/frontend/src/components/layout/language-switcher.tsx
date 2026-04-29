@@ -15,6 +15,10 @@ const SUPPORTED_LANGUAGES = [
   { code: 'ru', label: 'Русский', triggerLabel: 'RU' },
 ] as const;
 
+const MENU_WIDTH_PX = 144;
+const MENU_VIEWPORT_PADDING_PX = 8;
+const MENU_VERTICAL_OFFSET_PX = 6;
+
 function resolveActiveLanguage(language?: string) {
   const normalized = language?.toLowerCase() ?? '';
   return (
@@ -30,9 +34,10 @@ export function LanguageSwitcher() {
   const activeLanguage = resolveActiveLanguage(currentLang);
 
   const [open, setOpen] = useState(false);
-  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; right: number }>({
+  const [dropdownStyle, setDropdownStyle] = useState<{ left: number; top: number; width: number }>({
+    left: 0,
     top: 0,
-    right: 0,
+    width: MENU_WIDTH_PX,
   });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -40,9 +45,15 @@ export function LanguageSwitcher() {
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
+    const width = Math.min(MENU_WIDTH_PX, window.innerWidth - MENU_VIEWPORT_PADDING_PX * 2);
+    const left = Math.min(
+      Math.max(MENU_VIEWPORT_PADDING_PX, rect.right - width),
+      window.innerWidth - width - MENU_VIEWPORT_PADDING_PX
+    );
     setDropdownStyle({
-      top: rect.bottom + 6,
-      right: window.innerWidth - rect.right,
+      left,
+      top: rect.bottom + MENU_VERTICAL_OFFSET_PX,
+      width,
     });
   }, [open]);
 
@@ -137,12 +148,12 @@ export function LanguageSwitcher() {
       {open
         ? createPortal(
             <div
-              className="fixed z-[9999] min-w-[7rem] overflow-hidden rounded-xl border border-border/60 bg-slate-900/95 py-1 shadow-xl shadow-black/40 backdrop-blur-sm"
+              className="fixed z-[9999] overflow-hidden rounded-xl border border-border/60 bg-slate-900/95 py-1 shadow-xl shadow-black/40 backdrop-blur-sm"
               onKeyDown={handleMenuKeyDown}
               ref={dropdownRef}
               aria-label={t('lang.menuLabel')}
               role="menu"
-              style={{ top: dropdownStyle.top, right: dropdownStyle.right }}
+              style={dropdownStyle}
             >
               {SUPPORTED_LANGUAGES.map(({ code, label }) => (
                 <button
