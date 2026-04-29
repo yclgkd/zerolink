@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.2](https://github.com/yclgkd/ZeroLink/compare/v0.6.1...v0.6.2) (2026-04-29)
+
+
+### Features
+
+* add icon logo ([3f38fae](https://github.com/yclgkd/ZeroLink/commit/3f38fae199ce2c2d9747bdc77c975e738d4cb9dd))
+
+
+### Miscellaneous Chores
+
+* release 0.6.2 ([8950970](https://github.com/yclgkd/ZeroLink/commit/8950970f370564df68c5b63625f10390da6a3b6f))
+
 ## [0.6.1](https://github.com/yclgkd/ZeroLink/compare/v0.6.0...v0.6.1) (2026-04-19)
 
 
