@@ -1,5 +1,5 @@
 import { ROUTE_PATTERN } from '@zerolink/shared';
-import { AlertTriangle, Link2, X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RouteObject } from 'react-router-dom';
@@ -127,9 +127,7 @@ function AppShellLayout(): ReactElement {
       <Card className="sticky top-3 z-50 border-white/8 bg-slate-950/74 shadow-[0_18px_40px_rgb(2_8_23_/_0.22)] backdrop-blur-lg md:top-4">
         <CardHeader className="gap-3 py-4 md:flex-row md:items-center md:justify-between md:gap-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/22 bg-primary/10 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]">
-              <Link2 aria-hidden="true" className="size-5 text-primary" />
-            </div>
+            <img alt="" aria-hidden="true" className="size-10 shrink-0" src="/zerolink-icon.svg" />
             <div>
               <CardTitle asChild className="text-[1.95rem] tracking-tight md:text-[2.35rem]">
                 <h1>
