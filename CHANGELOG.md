@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.0](https://github.com/yclgkd/ZeroLink/compare/v0.6.2...v0.7.0) (2026-04-29)
+
+
+### Features
+
+* add French locale ([#285](https://github.com/yclgkd/ZeroLink/issues/285)) ([edf7a96](https://github.com/yclgkd/ZeroLink/commit/edf7a961197b063d9c66c5dc0653226ec0448c9b))
+* add German locale ([#284](https://github.com/yclgkd/ZeroLink/issues/284)) ([558e74c](https://github.com/yclgkd/ZeroLink/commit/558e74ce0bf5e8f7934555111ba8cf0bbbdcd2d8))
+* add Japanese locale ([#282](https://github.com/yclgkd/ZeroLink/issues/282)) ([0d202f2](https://github.com/yclgkd/ZeroLink/commit/0d202f2d2df6e0624d52b193dcd7aa7b316be030))
+* add Russian locale ([#287](https://github.com/yclgkd/ZeroLink/issues/287)) ([688fd50](https://github.com/yclgkd/ZeroLink/commit/688fd5043ed7de97c9be7b99feab03ffb6deec11))
+* add Spanish locale ([#286](https://github.com/yclgkd/ZeroLink/issues/286)) ([95900ce](https://github.com/yclgkd/ZeroLink/commit/95900cefe4840f0b6ac108659c8a3f0e91a7e547))
+
+
+### Bug Fixes
+
+* constrain language menu width ([#288](https://github.com/yclgkd/ZeroLink/issues/288)) ([c8ef9af](https://github.com/yclgkd/ZeroLink/commit/c8ef9afb34561c4ea834965f57f3f8a274fd3e61))
+
 ## [0.6.2](https://github.com/yclgkd/ZeroLink/compare/v0.6.1...v0.6.2) (2026-04-29)
 
 
