@@ -365,6 +365,7 @@ const ru: Translation = {
     filesLabel: 'Проверенные файлы',
     publisherKeyLabel: 'Отпечаток ключа издателя',
     signatureLabel: 'Подпись',
+    externalLinkLabel: 'откроется в новой вкладке',
   },
 };
 

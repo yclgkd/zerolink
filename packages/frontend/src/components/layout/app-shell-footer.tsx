@@ -2,7 +2,7 @@ import { ArrowUpRight, Github } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const REPOSITORY_URL = 'https://github.com/yclgkd/ZeroLink';
+import { REPOSITORY_URL } from '../../lib/repository';
 
 export function AppShellFooter(): ReactElement {
   const { t } = useTranslation();

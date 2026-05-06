@@ -1,6 +1,8 @@
+import { ExternalLink } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { REPOSITORY_URL } from '../lib/repository';
 import { getVerifiedReleaseSnapshot } from '../release/runtime';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -21,19 +23,52 @@ function formatBuildDate(value: string): string {
   })} UTC`;
 }
 
-function DetailRow({
-  label,
-  value,
-  code = false,
-}: {
+function getReleaseTag(version: string): string {
+  return version.startsWith('v') ? version : `v${version}`;
+}
+
+function getReleaseUrl(version: string): string {
+  return `${REPOSITORY_URL}/releases/tag/${encodeURIComponent(getReleaseTag(version))}`;
+}
+
+function getCommitUrl(commitHash: string): string {
+  return `${REPOSITORY_URL}/commit/${encodeURIComponent(commitHash)}`;
+}
+
+type DetailRowProps = {
   label: string;
   value: string;
-  code?: boolean;
-}) {
+} & (
+  | {
+      href: string;
+      externalLinkLabel: string;
+      code?: never;
+    }
+  | {
+      code?: boolean;
+      href?: never;
+      externalLinkLabel?: never;
+    }
+);
+
+function DetailRow(props: DetailRowProps) {
+  const { label, value } = props;
+
   return (
     <div className="space-y-1">
       <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-      {code ? (
+      {'href' in props ? (
+        <a
+          aria-label={`${value} ${props.externalLinkLabel}`}
+          className="inline-flex max-w-full items-center gap-1 rounded-sm text-sm font-medium text-foreground underline decoration-primary/45 underline-offset-4 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          href={props.href}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <span className="min-w-0 break-all">{value}</span>
+          <ExternalLink aria-hidden="true" className="size-3 shrink-0 opacity-70" />
+        </a>
+      ) : props.code ? (
         <code className="block break-all rounded bg-secondary/40 px-2 py-1 text-sm leading-6 text-foreground">
           {value}
         </code>
@@ -90,12 +125,22 @@ export function ManifestInfo(): ReactElement | null {
         {expanded ? (
           <div className="grid gap-3 rounded-2xl border border-border/60 bg-secondary/20 p-3 md:grid-cols-2">
             <DetailRow label={t('manifest.statusLabel')} value={t('manifest.verifiedBadge')} />
-            <DetailRow label={t('manifest.versionLabel')} value={snapshot.version} />
+            <DetailRow
+              externalLinkLabel={t('manifest.externalLinkLabel')}
+              href={getReleaseUrl(snapshot.version)}
+              label={t('manifest.versionLabel')}
+              value={snapshot.version}
+            />
             <DetailRow
               label={t('manifest.buildDateLabel')}
               value={formatBuildDate(snapshot.buildTime)}
             />
-            <DetailRow label={t('manifest.commitLabel')} value={snapshot.commitHash} />
+            <DetailRow
+              externalLinkLabel={t('manifest.externalLinkLabel')}
+              href={getCommitUrl(snapshot.commitHash)}
+              label={t('manifest.commitLabel')}
+              value={snapshot.commitHash}
+            />
             <DetailRow label={t('manifest.manifestHashLabel')} value={snapshot.manifestHash} code />
             <DetailRow label={t('manifest.filesLabel')} value={`${snapshot.verifiedFileCount}`} />
             <DetailRow

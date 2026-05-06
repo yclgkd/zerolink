@@ -372,6 +372,7 @@ const fr: Translation = {
     filesLabel: 'Fichiers vérifiés',
     publisherKeyLabel: 'Empreinte de la clé de publication',
     signatureLabel: 'Signature',
+    externalLinkLabel: 's’ouvre dans un nouvel onglet',
   },
 };
 
