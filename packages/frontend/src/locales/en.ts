@@ -354,6 +354,7 @@ const en = {
     filesLabel: 'Verified files',
     publisherKeyLabel: 'Publisher key fingerprint',
     signatureLabel: 'Signature',
+    externalLinkLabel: 'opens in a new tab',
   },
 };
 

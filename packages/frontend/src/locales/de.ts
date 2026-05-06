@@ -368,6 +368,7 @@ const de: Translation = {
     filesLabel: 'Verifizierte Dateien',
     publisherKeyLabel: 'Publisher-Key-Fingerprint',
     signatureLabel: 'Signatur',
+    externalLinkLabel: 'wird in einem neuen Tab geöffnet',
   },
 };
 

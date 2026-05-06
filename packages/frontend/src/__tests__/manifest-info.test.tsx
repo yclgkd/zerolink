@@ -78,8 +78,20 @@ describe('ManifestInfo', () => {
 
     expect(screen.getByText('App version')).toBeTruthy();
     expect(screen.getByText('1.2.3')).toBeTruthy();
+    const releaseLink = screen.getByRole('link', { name: '1.2.3 opens in a new tab' });
+    expect(releaseLink.getAttribute('href')).toBe(
+      'https://github.com/yclgkd/ZeroLink/releases/tag/v1.2.3'
+    );
+    expect(releaseLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(releaseLink.getAttribute('target')).toBe('_blank');
     expect(screen.getByText('Commit')).toBeTruthy();
     expect(screen.getByText('abc1234')).toBeTruthy();
+    const commitLink = screen.getByRole('link', { name: 'abc1234 opens in a new tab' });
+    expect(commitLink.getAttribute('href')).toBe(
+      'https://github.com/yclgkd/ZeroLink/commit/abc1234'
+    );
+    expect(commitLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(commitLink.getAttribute('target')).toBe('_blank');
     expect(screen.getByText('Manifest hash')).toBeTruthy();
     expect(screen.getByText('Publisher key fingerprint')).toBeTruthy();
     expect(screen.getByText('Verified files')).toBeTruthy();

@@ -332,6 +332,7 @@ const zh: Translation = {
     filesLabel: '已验证文件',
     publisherKeyLabel: '发布者密钥指纹',
     signatureLabel: '签名',
+    externalLinkLabel: '将在新标签页打开',
   },
 };
 

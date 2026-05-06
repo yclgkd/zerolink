@@ -368,6 +368,7 @@ const es: Translation = {
     filesLabel: 'Archivos verificados',
     publisherKeyLabel: 'Huella de la clave del publicador',
     signatureLabel: 'Firma',
+    externalLinkLabel: 'se abre en una pestaña nueva',
   },
 };
 

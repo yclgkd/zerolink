@@ -355,6 +355,7 @@ const ja: Translation = {
     filesLabel: '検証済みファイル',
     publisherKeyLabel: '発行者キーのフィンガープリント',
     signatureLabel: '署名',
+    externalLinkLabel: '新しいタブで開きます',
   },
 };
 
