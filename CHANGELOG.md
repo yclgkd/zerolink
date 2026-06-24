@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0](https://github.com/yclgkd/zerolink/compare/v0.7.0...v0.8.0) (2026-06-24)
+
+
+### Features
+
+* link release metadata ([1414592](https://github.com/yclgkd/zerolink/commit/1414592ce425fe8a453a22a6575f3813bda97c86))
+
+
+### Bug Fixes
+
+* pin esbuild to patched version ([#294](https://github.com/yclgkd/zerolink/issues/294)) ([3b7b7b1](https://github.com/yclgkd/zerolink/commit/3b7b7b19c1a208b615794f7852e6418cf6da602d))
+* pin ws to patched version ([a512f0e](https://github.com/yclgkd/zerolink/commit/a512f0eb0779c564af56a3965b6383d491725df7))
+* update fast-uri override ([4e5413f](https://github.com/yclgkd/zerolink/commit/4e5413fcb191016fad80731377608f99fc9f3bc3))
+
 ## [0.7.0](https://github.com/yclgkd/ZeroLink/compare/v0.6.2...v0.7.0) (2026-04-29)
 
 
