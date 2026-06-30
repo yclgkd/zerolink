@@ -125,4 +125,4 @@ openssl pkey -in keys/manifest-signing.pub -pubin -outform DER | sha256sum
 
 ## 报告问题
 
-若已发布版本的验证失败，请在 <https://github.com/yclgkd/ZeroLink/security> 提交安全问题。
+若已发布版本的验证失败，请在 <https://github.com/yclgkd/zerolink/security> 提交安全问题。
