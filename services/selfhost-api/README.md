@@ -78,5 +78,10 @@ docker run --rm \
 With Docker Compose packaging:
 
 ```bash
-docker compose -f deploy/selfhost/docker-compose.yml up --build
+cd ../..
+cp deploy/selfhost/.env.example deploy/selfhost/.env
+docker compose --profile storage \
+  -f deploy/selfhost/docker-compose.yml \
+  -f deploy/selfhost/docker-compose.build.yml \
+  up --build
 ```

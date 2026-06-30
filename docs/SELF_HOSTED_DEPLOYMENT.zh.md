@@ -26,10 +26,10 @@
 export ZEROLINK_VERSION=YOUR_RELEASE_VERSION
 mkdir zerolink-selfhost
 cd zerolink-selfhost
-curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
-curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/garage.toml"
-curl -fsSLO "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/garage-init.sh"
-curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/ZeroLink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/zerolink/v${ZEROLINK_VERSION}/deploy/selfhost/docker-compose.yml"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/zerolink/v${ZEROLINK_VERSION}/deploy/selfhost/garage.toml"
+curl -fsSLO "https://raw.githubusercontent.com/yclgkd/zerolink/v${ZEROLINK_VERSION}/deploy/selfhost/garage-init.sh"
+curl -fsSLo .env.example "https://raw.githubusercontent.com/yclgkd/zerolink/v${ZEROLINK_VERSION}/deploy/selfhost/.env.example"
 cp .env.example .env
 sed -i.bak "s/^ZEROLINK_IMAGE_TAG=.*/ZEROLINK_IMAGE_TAG=${ZEROLINK_VERSION}/" .env && rm .env.bak
 docker compose --profile storage up -d
@@ -54,8 +54,8 @@ commit-cookie 绑定以及文件上传/下载 token 签名；如果要暴露到�
 如果你希望直接从当前源码 checkout 构建镜像，而不是拉取 GHCR 制品：
 
 ```bash
-git clone https://github.com/yclgkd/ZeroLink.git
-cd ZeroLink/deploy/selfhost
+git clone https://github.com/yclgkd/zerolink.git
+cd zerolink/deploy/selfhost
 cp .env.example .env
 docker compose --profile storage -f docker-compose.yml -f docker-compose.build.yml up --build
 ```

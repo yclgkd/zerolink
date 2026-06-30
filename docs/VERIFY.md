@@ -145,4 +145,4 @@ If the signing key is rotated, a new public key will be committed to `keys/manif
 
 ## Reporting issues
 
-If verification fails for a published release, please open a security issue at <https://github.com/yclgkd/ZeroLink/security>.
+If verification fails for a published release, please open a security issue at <https://github.com/yclgkd/zerolink/security>.

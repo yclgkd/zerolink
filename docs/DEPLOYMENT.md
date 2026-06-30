@@ -77,8 +77,8 @@ Frontend SPA    ──→        Worker (zerolink-api)
 ### Step 1: Clone the repository and install dependencies
 
 ```bash
-git clone https://github.com/yclgkd/ZeroLink.git
-cd ZeroLink
+git clone https://github.com/yclgkd/zerolink.git
+cd zerolink
 pnpm install --frozen-lockfile
 ```
 

@@ -11,8 +11,8 @@ Thank you for your interest in contributing to ZeroLink! This guide will help yo
 ## Getting Started
 
 ```bash
-git clone https://github.com/yclgkd/ZeroLink.git
-cd ZeroLink
+git clone https://github.com/yclgkd/zerolink.git
+cd zerolink
 pnpm install
 pnpm dev
 ```
