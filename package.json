@@ -61,13 +61,13 @@
       "@babel/core": "7.29.7",
       "browserslist": "4.28.7",
       "esbuild": "0.28.1",
-      "fast-uri": "3.1.7",
+      "fast-uri": "3.1.8",
       "fflate": "0.8.3",
       "js-yaml": "4.3.2",
       "picomatch": "4.0.4",
       "postcss": "8.5.23",
       "sharp": "0.35.4",
-      "undici": "7.29.0",
+      "undici": "7.29.1",
       "ws": "8.21.0",
       "yaml": "2.8.3"
     }
