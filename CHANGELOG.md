@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/yclgkd/zerolink/compare/v0.8.0...v0.8.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* bump vulnerable dependencies ([#306](https://github.com/yclgkd/zerolink/issues/306)) ([d06e281](https://github.com/yclgkd/zerolink/commit/d06e281a726ebaf6ad441f14b31b6e5876e40b8b))
+* **deps:** patch sharp librsvg vulnerability ([#317](https://github.com/yclgkd/zerolink/issues/317)) ([0d61d94](https://github.com/yclgkd/zerolink/commit/0d61d94a314c56234e28157888ddab8e2f7b1010))
+* **deps:** patch source-map-js denial of service ([#316](https://github.com/yclgkd/zerolink/issues/316)) ([d83a52d](https://github.com/yclgkd/zerolink/commit/d83a52dad16a22171b46bf2c2e7fe076979bf85f))
+* patch js-yaml merge resource limits ([#313](https://github.com/yclgkd/zerolink/issues/313)) ([134684a](https://github.com/yclgkd/zerolink/commit/134684a02819f875bb1f152809e46a03428ade01))
+* patch nine dependency security advisories ([b62a561](https://github.com/yclgkd/zerolink/commit/b62a561ebc41db2cd63a12ac01aedb474479ccc4))
+* patch sharp libheif vulnerabilities ([#312](https://github.com/yclgkd/zerolink/issues/312)) ([c69b834](https://github.com/yclgkd/zerolink/commit/c69b8344a0bf198135972f3f40c9611e17aed5f7))
+* upgrade fast-uri to patched version ([#314](https://github.com/yclgkd/zerolink/issues/314)) ([a872202](https://github.com/yclgkd/zerolink/commit/a872202c1206ab8da1f0ad475a9d69c39c9533a7))
+* upgrade vulnerable transitive dependencies ([#315](https://github.com/yclgkd/zerolink/issues/315)) ([e6e2b79](https://github.com/yclgkd/zerolink/commit/e6e2b794cf7edacb0098908c07d403f293b59d17))
+
 ## [0.8.0](https://github.com/yclgkd/zerolink/compare/v0.7.0...v0.8.0) (2026-07-28)
 
 
