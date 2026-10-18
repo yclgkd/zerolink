@@ -66,7 +66,7 @@
       "js-yaml": "4.3.2",
       "picomatch": "4.0.4",
       "postcss": "8.5.23",
-      "sharp": "0.35.4",
+      "sharp": "0.35.5",
       "source-map-js": "1.2.2",
       "undici": "7.29.1",
       "ws": "8.21.0",
