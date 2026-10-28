@@ -19,7 +19,7 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "cborg": "^4.5.8",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
